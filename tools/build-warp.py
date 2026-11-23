@@ -42,7 +42,7 @@ def project_raw(lon, lat):
 # Ellipses must stay inside the map vertically and must not reach the seam (lon -169).
 LENSES = [
     ("Europe", 12, 49, 3.2, 38, 24),
-    ("Japan/Korea", 135, 36, 3.2, 17, 15),
+    ("Japan/Korea", 136, 37, 2.2, 22, 17),  # gentler: keep Honshu/Kyushu/Shikoku recognizable
     ("East China", 114, 30, 2.2, 18, 15),
     ("US East/Midwest", -84, 39, 2.4, 26, 16),
     ("India", 78, 21, 1.9, 16, 15),

@@ -30,7 +30,7 @@ import {
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const round1 = (v) => Math.round(v * 10) / 10;
-const roundHalf = (v) => Math.round(v);
+const roundHalf = (v) => Math.round(v * 2) / 2;
 
 // ------------------------------------------------------------------ deterministic rng
 function mulberry32(seed) {
@@ -188,22 +188,62 @@ if (!Array.isArray(cities) || cities.length === 0) throw new Error('cities.json 
 const trueProjected = cities.map((c) => project(c.lon, c.lat));
 let projected = trueProjected.map(([x, y]) => [x, y]);
 
+// Find the source land polygon containing a warped map point.
+function landPolygonAt(x, y) {
+  const [lon, lat] = unproject(x, y);
+  const cx = Math.max(0, Math.min(GRID_COLS - 1, Math.floor(wrapX(x) / GRID)));
+  const cy = Math.max(0, Math.min(GRID_ROWS - 1, Math.floor(y / GRID)));
+  const candidates = landIndex.get(cy * GRID_COLS + cx);
+  if (!candidates) return -1;
+  for (const pi of candidates) {
+    let inBox = false;
+    for (const [x0, x1, y0, y1] of landBoxes[pi]) {
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) { inBox = true; break; }
+    }
+    if (inBox && geoContains(sourcePolygons[pi], [lon, lat])) return pi;
+  }
+  return -1;
+}
+
+function snapToLand(x, y) {
+  const direct = landPolygonAt(x, y);
+  if (direct >= 0) return { x, y, home: direct };
+  for (let r = 1; r <= 8; r += 1) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const nx = wrapX(x + Math.cos(a) * r), ny = y + Math.sin(a) * r;
+      if (ny < 0 || ny > MAP_H) continue;
+      const home = landPolygonAt(nx, ny);
+      if (home >= 0) return { x: nx, y: ny, home };
+    }
+  }
+  return { x, y, home: -1 };
+}
+
+const RESTRICTED_COUNTRIES = new Set(['JP', 'KR', 'TW']);
+const isRestricted = (i) => RESTRICTED_COUNTRIES.has(cities[i].country);
+
 // Schematic station relaxation: subway/Momotetsu-style spacing on top of the
-// warped geography, with a spring back to the true position and a 220-unit cap.
-function relaxStations(start) {
+// warped geography, with a spring back to the true position. Japan/Korea/Taiwan
+// are capped at 35 units and accept ~55 spacing so islands stay intact.
+function relaxStations(start, homes) {
   const n = start.length;
   const pos = start.map(([x, y]) => ({ x, y, ox: x, oy: y }));
-  const need = (i, j) => (cities[i].tier === 1 || cities[j].tier === 1 ? 120 : 100);
+  const need = (i, j) => {
+    if (isRestricted(i) || isRestricted(j)) return 55;
+    return cities[i].tier === 1 || cities[j].tier === 1 ? 120 : 100;
+  };
+  const displacementCap = (i) => (isRestricted(i) ? 35 : 220);
   const relaxLandCache = new Map();
-  const landOK = (x, y, port) => {
-    const key = `${Math.round(x)},${Math.round(y)},${port ? 1 : 0}`;
+  const landOK = (i, x, y) => {
+    const key = `${i}:${Math.round(x)},${Math.round(y)}`;
     if (relaxLandCache.has(key)) return relaxLandCache.get(key);
-    let ok = isLandAt(x, y);
-    if (!ok && port) {
-      for (let k = 0; k < 8; k++) {
-        const a = (k / 8) * Math.PI * 2;
-        if (isLandAt(wrapX(x + Math.cos(a) * 25), y + Math.sin(a) * 25)) { ok = true; break; }
-      }
+    let ok;
+    if (homes[i] >= 0) {
+      const [lon, lat] = unproject(x, y);
+      ok = geoContains(sourcePolygons[homes[i]], [lon, lat]);
+    } else {
+      ok = isLandAt(x, y);
     }
     relaxLandCache.set(key, ok);
     return ok;
@@ -229,27 +269,35 @@ function relaxStations(start) {
     if (violations === 0) break;
     for (let i = 0; i < n; i++) {
       const p = pos[i];
+      const cap = displacementCap(i);
+      const stepLimit = isRestricted(i) ? 12 : 20;
       fx[i] += (p.ox - p.x) * 0.02;
       fy[i] += (p.oy - p.y) * 0.02;
-      const stepX = clamp(fx[i], -20, 20), stepY = clamp(fy[i], -20, 20);
+      const stepX = clamp(fx[i], -stepLimit, stepLimit), stepY = clamp(fy[i], -stepLimit, stepLimit);
+      // Cap displacement FIRST, then test the exact final candidate for land.
       let nx = p.x + stepX, ny = p.y + stepY;
-      if (!landOK(nx, ny, cities[i].port)) {
-        const len = Math.hypot(stepX, stepY) || 1;
+      let cdx = wrapDx(p.ox, nx), cdy = ny - p.oy;
+      let cd = Math.hypot(cdx, cdy);
+      if (cd > cap) { nx = p.ox + (cdx / cd) * cap; ny = p.oy + (cdy / cd) * cap; }
+      if (!landOK(i, nx, ny)) {
         let found = false;
         for (const angle of [0.6, -0.6, 1.2, -1.2]) {
           const ca = Math.cos(angle), sa = Math.sin(angle);
-          const tx = p.x + (stepX * ca - stepY * sa);
-          const ty = p.y + (stepX * sa + stepY * ca);
-          if (landOK(tx, ty, cities[i].port)) { nx = tx; ny = ty; found = true; break; }
+          let tx = p.x + (stepX * ca - stepY * sa);
+          let ty = p.y + (stepX * sa + stepY * ca);
+          const tdx = wrapDx(p.ox, tx), tdy = ty - p.oy;
+          const td = Math.hypot(tdx, tdy);
+          if (td > cap) { tx = p.ox + (tdx / td) * cap; ty = p.oy + (tdy / td) * cap; }
+          if (landOK(i, tx, ty)) { nx = tx; ny = ty; found = true; break; }
         }
-        if (!found) { nx = p.x + (p.ox - p.x) * 0.20; ny = p.y + (p.oy - p.y) * 0.20; }
-        if (!landOK(nx, ny, cities[i].port)) { nx = p.x; ny = p.y; }
+        if (!found) {
+          nx = p.ox + (wrapDx(p.ox, p.x) * 0.7);
+          ny = p.oy + (p.y - p.oy) * 0.7;
+          if (!landOK(i, nx, ny)) { nx = p.x; ny = p.y; }
+        }
       }
-      let dx = wrapDx(p.ox, nx), dy = ny - p.oy;
-      const d = Math.hypot(dx, dy);
-      if (d > 220) { dx = (dx / d) * 220; dy = (dy / d) * 220; }
-      p.x = wrapX(p.ox + dx);
-      p.y = p.oy + dy;
+      p.x = wrapX(nx);
+      p.y = ny;
     }
   }
   let maxDisp = 0;
@@ -278,9 +326,39 @@ function regionSpacing(points) {
   return out;
 }
 
+const homes = new Array(cities.length).fill(-1);
+let snapped = 0;
+const landStart = trueProjected.map(([x, y], i) => {
+  const s = snapToLand(x, y);
+  if (s.home !== landPolygonAt(x, y)) snapped++;
+  homes[i] = s.home;
+  return [s.x, s.y];
+});
 const beforeSpacing = regionSpacing(trueProjected);
-const relaxed = relaxStations(trueProjected);
+const relaxed = relaxStations(landStart, homes);
 projected = relaxed.positions;
+// Exact post-check: snap any residual off-island station back onto its home polygon.
+const homeContains = (i, x, y) => {
+  if (homes[i] < 0) return isLandAt(x, y);
+  const [lon, lat] = unproject(x, y);
+  return geoContains(sourcePolygons[homes[i]], [lon, lat]);
+};
+let islandRepairs = 0;
+for (let i = 0; i < cities.length; i++) {
+  if (homes[i] < 0 || homeContains(i, projected[i][0], projected[i][1])) continue;
+  let fixed = null;
+  for (let r = 1; r <= 8 && !fixed; r++) {
+    for (let k = 0; k < 32; k++) {
+      const a = (k / 32) * Math.PI * 2;
+      const x = wrapX(projected[i][0] + Math.cos(a) * r);
+      const y = projected[i][1] + Math.sin(a) * r;
+      if (y < 0 || y > MAP_H) continue;
+      if (homeContains(i, x, y)) { fixed = [x, y]; break; }
+    }
+  }
+  projected[i] = fixed || landStart[i];
+  islandRepairs++;
+}
 const afterSpacing = regionSpacing(projected);
 console.log('station relaxation:');
 for (const region of [...beforeSpacing.keys()].sort()) {
@@ -293,7 +371,14 @@ for (let i = 0; i < cities.length; i++) {
     if (Math.hypot(wrapDx(projected[i][0], projected[j][0]), projected[i][1] - projected[j][1]) < 100) stationPairsUnder100++;
   }
 }
+const islandFailures = [];
+for (let i = 0; i < cities.length; i++) {
+  if (homes[i] < 0) { islandFailures.push(`${cities[i].id}:no-home`); continue; }
+  const [lon, lat] = unproject(projected[i][0], projected[i][1]);
+  if (!geoContains(sourcePolygons[homes[i]], [lon, lat])) islandFailures.push(`${cities[i].id}:off-home`);
+}
 console.log(`  max displacement ${relaxed.maxDisp.toFixed(1)}, unresolved pair constraints ${relaxed.violations}, station pairs <100: ${stationPairsUnder100}`);
+console.log(`  island integrity: ${cities.length - islandFailures.length}/${cities.length} on their home land polygon (${snapped} land-snapped, ${islandRepairs} repaired; ${islandFailures.length ? islandFailures.join(', ') : 'all OK'})`);
 const cityIndex = new Map(cities.map((c, i) => [c.id, i]));
 
 // ------------------------------------------------------------------ Delaunay
@@ -538,6 +623,16 @@ const FORCED_LINKS = [
   ['nuuk', 'reykjavik', 'sea'], ['bergen', 'tromso', 'sea'],
   ['tromso', 'kiruna', 'rail'], ['kiruna', 'rovaniemi', 'rail'],
   ['rovaniemi', 'murmansk', 'rail'],
+  // Japan/Korea/Taiwan land chains (stations and track stay on their islands)
+  ['sapporo', 'hakodate', 'rail'], ['sapporo', 'sendai', 'rail'], ['sendai', 'tokyo', 'rail'],
+  ['tokyo', 'yokohama', 'rail'], ['tokyo', 'nagoya', 'rail'],
+  ['nagoya', 'kyoto', 'rail'], ['kyoto', 'osaka', 'rail'],
+  ['osaka', 'kobe', 'rail'], ['kobe', 'okayama', 'rail'],
+  ['okayama', 'hiroshima', 'rail'], ['hiroshima', 'fukuoka', 'rail'],
+  ['fukuoka', 'kumamoto', 'rail'], ['kumamoto', 'kagoshima', 'rail'],
+  ['kumamoto', 'nagasaki', 'rail'], ['fukuoka', 'nagasaki', 'rail'],
+  ['matsuyama', 'takamatsu', 'rail'], ['takamatsu', 'okayama', 'rail'],
+  ['seoul', 'busan', 'rail'], ['taipei', 'kaohsiung', 'rail'],
 ];
 const forcedKeys = new Set();
 for (const [aId, bId, mode] of FORCED_LINKS) {
@@ -726,7 +821,6 @@ const corridors = [
   ['sydney', 'auckland', 'sea'],      // curated Tasman lane
   ['melbourne', 'hobart', 'sea'],     // Bass Strait ferry
   ['suva', 'auckland', 'sea'],        // Pacific alternative
-  ['suva', 'cebu', 'sea'],            // Oceania <-> SE Asia (open Pacific)
   ['tokyo', 'honolulu', 'sea'],       // Trans-Pacific Japan <-> Hawaii
   ['honolulu', 'san-francisco', 'sea'], // Hawaii <-> North America
 ];
@@ -1483,31 +1577,76 @@ for (let pi = 0; pi < sourcePolygons.length; pi++) {
     const rawArea = Math.abs(ringArea(outerRaw));
     if (rawArea < 2) continue;
 
-    const containsCity = cityPoints.some(([cx, cy]) => {
+    const cityHits = [];
+    for (const [cx, cy] of cityPoints) {
       for (const m of [-1, 0, 1]) {
         const px = cx + m * MAP_W;
         if (!pointInRing(px, cy, outerRaw)) continue;
         let inHole = false;
         for (let h = 1; h < clipped.length; h++) if (pointInRing(px, cy, clipped[h])) { inHole = true; break; }
-        if (!inHole) return true;
+        if (!inHole) cityHits.push([px, cy]);
       }
-      return false;
-    });
+    }
+    const containsCity = cityHits.length > 0;
     if (rawArea < 24 && !containsCity) continue;
     if (rawArea < 24 && containsCity) tinyKept++;
 
-    const outer = cleanRing(normalizeOrientation(simplify(outerRaw, 3.0), true));
-    if (outer.length < 4) continue;
-    const rings = [outer];
-    for (let h = 1; h < clipped.length; h++) {
-      const holeArea = Math.abs(ringArea(clipped[h]));
-      if (holeArea < 16) continue;
-      const hole = cleanRing(normalizeOrientation(simplify(clipped[h], 3.0), false));
-      if (hole.length >= 4) rings.push(hole);
+    const buildRings = (tol) => {
+      const outer = cleanRing(normalizeOrientation(simplify(outerRaw, tol), true));
+      if (outer.length < 4) return null;
+      const rings = [outer];
+      for (let h = 1; h < clipped.length; h++) {
+        const holeArea = Math.abs(ringArea(clipped[h]));
+        if (holeArea < 16) continue;
+        const hole = cleanRing(normalizeOrientation(simplify(clipped[h], tol), false));
+        if (hole.length >= 4) rings.push(hole);
+      }
+      return rings;
+    };
+    // Any polygon containing a station must not simplify that station into the sea.
+    let rings = null;
+    for (const tol of [3.0, 1.5, 0.75, 0.25, 0]) {
+      const candidate = buildRings(tol);
+      if (!candidate) continue;
+      const allOnLand = cityHits.every(([px, py]) => {
+        if (!pointInRing(px, py, candidate[0])) return false;
+        for (let h = 1; h < candidate.length; h++) if (pointInRing(px, py, candidate[h])) return false;
+        return true;
+      });
+      if (allOnLand || !containsCity) { rings = candidate; break; }
     }
+    if (!rings) rings = buildRings(0);
+    if (!rings) continue;
     landPolygons.push(rings);
   }
 }
+// Last-mile visual snap: a station must sit inside the simplified rendered land,
+// even when the coastline mesh cuts a bay by a fraction of a unit.
+function pointInLandPolygons(x, y, polygons) {
+  for (const poly of polygons) {
+    let inside = false;
+    for (const ring of poly) if (pointInRing(x, y, ring)) inside = !inside;
+    if (inside) return true;
+  }
+  return false;
+}
+let cityLandSnaps = 0;
+for (const n of nodes) {
+  if (n.realm !== undefined || n.kind !== 'city') continue;
+  if (pointInLandPolygons(n.x, n.y, landPolygons)) continue;
+  let fixed = null;
+  for (let r = 0.5; r <= 24 && !fixed; r += 0.25) {
+    for (let k = 0; k < 32; k++) {
+      const a = (k / 32) * Math.PI * 2;
+      const x = wrapX(n.x + Math.cos(a) * r), y = n.y + Math.sin(a) * r;
+      if (y < 0 || y > MAP_H) continue;
+      if (pointInLandPolygons(x, y, landPolygons)) { fixed = [round1(x), round1(y)]; break; }
+    }
+  }
+  if (fixed) { n.x = fixed[0]; n.y = fixed[1]; cityLandSnaps++; }
+}
+if (cityLandSnaps) console.log(`  city land snaps: ${cityLandSnaps}`);
+
 const landOut = { w: MAP_W, h: MAP_H, polygons: landPolygons.map((poly) => poly.map((ring) => ring.flat())) };
 let seamJumps = 0, outOfBounds = 0;
 for (const rings of landPolygons) {
