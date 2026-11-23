@@ -36,6 +36,9 @@ BGM は Kevin MacLeod (incompetech.com) の楽曲を Creative Commons: By Attrib
 | `piper` | Sneaky Snitch |
 | `yearend` | Local Forecast - Elevator |
 | `result` | Wallpaper |
+| `realm_heaven` | Angel Share |
+| `realm_hell` | Hall of the Mountain King |
+| `realm_space` | Space 1990-B |
 
 - "Fluffing a Duck" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
   出典: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100768
@@ -72,6 +75,15 @@ BGM は Kevin MacLeod (incompetech.com) の楽曲を Creative Commons: By Attrib
   ダウンロード日: 2026-11-23
 - "Wallpaper" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
   出典: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100843
+  ダウンロード日: 2026-11-23
+- "Angel Share" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
+  出典: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700021
+  ダウンロード日: 2026-11-23
+- "Hall of the Mountain King" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
+  出典: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200072
+  ダウンロード日: 2026-11-23
+- "Space 1990-B" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
+  出典: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200109
   ダウンロード日: 2026-11-23
 
 ライセンス確認: https://incompetech.com/music/royalty-free/licenses/ および https://incompetech.com/music/royalty-free/faq.html （2026-11-23 取得）。

@@ -132,6 +132,31 @@ const TRACKS = [
     bpm: 92,
     fallback: { style: 'soft', bpm: 92, key: 'G', mode: 'major', progression: 'I V vi IV', seed: 22 },
   },
+  {
+    id: 'realm_heaven',
+    isrc: 'USUAN1700021',
+    title: 'Angel Share',
+    fit: 'heaven realm, airy angelic chorus with a comic build',
+    bpm: 85,
+    fallback: { style: 'soft', bpm: 85, key: 'C', mode: 'major', progression: 'I IV V I', seed: 31 },
+  },
+  {
+    id: 'realm_hell',
+    isrc: 'USUAN1200072',
+    title: 'Hall of the Mountain King',
+    fit: 'hell realm, comic-sinister chase',
+    bpm: 160,
+    startSeconds: 96,
+    fallback: { style: 'drive', bpm: 160, key: 'D', mode: 'minor', progression: 'i VI III VII', seed: 32 },
+  },
+  {
+    id: 'realm_space',
+    isrc: 'USUAN1200109',
+    title: 'Space 1990-B',
+    fit: 'space business zone, warm synth groove',
+    bpm: 82,
+    fallback: { style: 'chip', bpm: 82, key: 'A', mode: 'minor', progression: 'i VI III VII', seed: 33 },
+  },
 ];
 
 async function run(command, args, options = {}) {
@@ -226,12 +251,16 @@ async function analyzeTrack(track, sourceFile) {
     return rms > 0 ? 20 * Math.log10(rms) : Number.NEGATIVE_INFINITY;
   };
 
-  const headDb = db(offsetSamples, offsetSamples + window);
+  const requestedStart = Math.min(
+    pcm.length - window,
+    Math.max(offsetSamples, Math.round((track.startSeconds ?? 0) * ANALYSIS_RATE)),
+  );
+  const headDb = db(requestedStart, requestedStart + window);
   let best = null;
   for (const bars of LOOP_CANDIDATE_BARS) {
     const loopLength = (bars * 4 * 60) / track.bpm;
     if (!Number.isFinite(loopLength) || loopLength <= 0) continue;
-    const end = offsetSamples + Math.round(loopLength * ANALYSIS_RATE);
+    const end = requestedStart + Math.round(loopLength * ANALYSIS_RATE);
     if (end + Math.round(CROSSFADE_SECONDS * ANALYSIS_RATE) > pcm.length) continue;
     const preDb = db(end - window, end);
     const postDb = db(end, end + window);
@@ -245,7 +274,7 @@ async function analyzeTrack(track, sourceFile) {
   if (!best) {
     const fallbackLength = Math.min(
       (LOOP_BARS * 4 * 60) / track.bpm,
-      pcm.length / ANALYSIS_RATE - CROSSFADE_SECONDS - 0.25,
+      (pcm.length - requestedStart) / ANALYSIS_RATE - CROSSFADE_SECONDS - 0.25,
     );
     best = {
       bars: LOOP_BARS,
@@ -257,7 +286,7 @@ async function analyzeTrack(track, sourceFile) {
   }
 
   return {
-    offset: offsetSamples / ANALYSIS_RATE,
+    offset: requestedStart / ANALYSIS_RATE,
     loopLength: best.loopLength,
     bars: best.bars,
     headDb,

@@ -58,5 +58,20 @@
     "file": "bgm/result.mp3",
     "loopStart": 0,
     "loopEnd": 73.043
+  },
+  "realm_heaven": {
+    "file": "bgm/realm_heaven.mp3",
+    "loopStart": 0,
+    "loopEnd": 98.824
+  },
+  "realm_hell": {
+    "file": "bgm/realm_hell.mp3",
+    "loopStart": 0,
+    "loopEnd": 45
+  },
+  "realm_space": {
+    "file": "bgm/realm_space.mp3",
+    "loopStart": 0,
+    "loopEnd": 99.512
   }
 }

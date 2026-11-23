@@ -111,6 +111,44 @@ const SFX_RECIPES = {
     { preset: 'hurt', pitch: 1.5, gainDb: -6, delayMs: 15, seed: 292 },
   ],
   chat: [{ preset: 'ui_confirm', pitch: 1.5, gainDb: -4, seed: 301 }],
+  shop_bell: [
+    { preset: 'ui_confirm', pitch: 2.0, seed: 311 },
+    { preset: 'coin', pitch: 1.9, gainDb: -6, delayMs: 35, seed: 312 },
+  ],
+  tornado: [
+    { preset: 'swing', pitch: 0.5, gainDb: 5, seed: 321 },
+    { preset: 'swing', pitch: 0.75, gainDb: -1, delayMs: 250, seed: 322 },
+    { preset: 'explosion', pitch: 0.55, gainDb: -12, delayMs: 120, seed: 323 },
+  ],
+  portal: [
+    { preset: 'powerup', pitch: 1.35, seed: 331 },
+    { preset: 'laser', pitch: 1.6, gainDb: -4, delayMs: 40, seed: 332 },
+    { preset: 'blip', pitch: 2.2, gainDb: -8, delayMs: 140, seed: 333 },
+  ],
+  rocket_launch: [
+    { preset: 'explosion', pitch: 0.5, gainDb: -4, seed: 341 },
+    { preset: 'powerup', pitch: 0.6, gainDb: -2, delayMs: 60, seed: 342 },
+    { preset: 'shoot', pitch: 0.7, gainDb: -8, delayMs: 150, seed: 343 },
+  ],
+  train_horn: [
+    { preset: 'death', pitch: 0.35, seed: 351 },
+    { preset: 'death', pitch: 0.44, gainDb: -3, delayMs: 30, seed: 352 },
+    { preset: 'powerup', pitch: 0.3, gainDb: -6, seed: 353 },
+  ],
+  ship_horn: [
+    { preset: 'death', pitch: 0.22, seed: 361 },
+    { preset: 'death', pitch: 0.28, gainDb: -2, delayMs: 60, seed: 362 },
+    { preset: 'explosion', pitch: 0.4, gainDb: -16, delayMs: 40, seed: 363 },
+  ],
+  plane_whoosh: [
+    { preset: 'swing', pitch: 1.0, gainDb: 3, seed: 371 },
+    { preset: 'shoot', pitch: 1.1, gainDb: -4, delayMs: 80, seed: 372 },
+  ],
+  roulette_tick: [{ preset: 'ui_click', pitch: 2.2, gainDb: -2, seed: 381 }],
+  roulette_stop: [
+    { preset: 'impact', pitch: 1.15, seed: 391 },
+    { preset: 'ui_confirm', pitch: 0.75, gainDb: -5, delayMs: 25, seed: 392 },
+  ],
 };
 
 async function run(command, args) {

@@ -43,6 +43,18 @@
 
 必要なら `too-big-to-fail` も `piper` に寄せられるが、危機の派手さを優先して `event_crisis` を推奨。
 
+## 異世界（天国・地獄・宇宙）
+
+`docs/DESIGN.md` §10 の異世界にいる間は、その realm の BGM を常時使う。
+
+| realm | BgmName |
+|---|---|
+| `heaven` | `realm_heaven` |
+| `hell` | `realm_hell` |
+| `space` | `realm_space` |
+
+イベントパネルを開いている間は `bgmForEvent()` の結果（`event_*` / `piper`）を優先し、閉じたら realm の BGM に戻す。
+
 ## それ以外
 
 上表に無いイベントは `kind` 既定のまま。`kind: "fable"` の童話回は `event_fable`、`kind: "history"` は `event_history`、`kind: "news"` は `event_news`。

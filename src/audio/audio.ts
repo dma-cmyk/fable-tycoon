@@ -37,6 +37,15 @@ const SFX_NAMES = [
   'throw',
   'hit',
   'chat',
+  'shop_bell',
+  'tornado',
+  'portal',
+  'rocket_launch',
+  'train_horn',
+  'ship_horn',
+  'plane_whoosh',
+  'roulette_tick',
+  'roulette_stop',
 ] as const;
 
 const BGM_NAMES = [
@@ -52,6 +61,9 @@ const BGM_NAMES = [
   'piper',
   'yearend',
   'result',
+  'realm_heaven',
+  'realm_hell',
+  'realm_space',
 ] as const;
 
 export type SfxName = (typeof SFX_NAMES)[number];
