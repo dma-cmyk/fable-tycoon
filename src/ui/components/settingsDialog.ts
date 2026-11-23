@@ -46,7 +46,7 @@ export function openSettingsDialog(modal: ModalHost): void {
   }
 
   const speedSeg = h('div', { class: 'seg', attrs: { role: 'group', 'aria-label': '演出速度' } });
-  for (const speed of [1, 2, 4] as const) {
+  for (const speed of [1, 2, 4, 8] as const) {
     speedSeg.append(
       h('button', {
         class: 'seg-btn',

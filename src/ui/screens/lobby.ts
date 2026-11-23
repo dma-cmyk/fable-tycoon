@@ -2,7 +2,7 @@ import { Audio } from '../../audio/audio';
 import type { EmoteEvent, LobbyView, SeatInfo, ServerMsg } from '../../net/protocol';
 import type { ConnectionState, Session } from '../../net/session-types';
 import { avatar, clear, h, iconButton, type ModalHost, type ToastHost } from '../dom';
-import { characterSprite, charsById, emotesById } from '../format';
+import { characterSprite, charsById, displayPlayerName, emotesById } from '../format';
 import { readMute, uiSettings, writeMute, type MuteFlags } from '../settings';
 import { ChatPanel, type ChatSeatInfo } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
@@ -488,7 +488,7 @@ export class LobbyScreen implements ScreenHandle {
         h(
           'div',
           { class: 'lobby-seat-names' },
-          h('strong', { class: 'lobby-seat-name', text: seat.kind === 'open' ? '空き席' : seat.name }),
+          h('strong', { class: 'lobby-seat-name', text: seat.kind === 'open' ? '空き席' : displayPlayerName({ name: seat.name, characterId: seat.characterId ?? undefined, isCpu: seat.kind === 'cpu' }) }),
           h('span', {
             class: 'lobby-seat-character muted',
             text: character
@@ -529,7 +529,7 @@ export class LobbyScreen implements ScreenHandle {
       toasts: this.options.toast,
       session: this.options.session,
       seat: seat.index,
-      name: seat.name,
+      name: displayPlayerName({ name: seat.name, characterId: seat.characterId ?? undefined, isCpu: seat.kind === 'cpu' }),
       characterId: seat.characterId,
       color: (seat.characterId ? charsById.get(seat.characterId)?.color : undefined) ?? '#9fb3d9',
       canReport: seat.kind === 'human' && seat.index !== this.mySeat,

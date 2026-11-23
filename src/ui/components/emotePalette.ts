@@ -2,7 +2,7 @@ import { Audio } from '../../audio/audio';
 import { GAME_DATA } from '../../data/index';
 import type { EmoteCategory, EmoteDef } from '../../core/types';
 import { COMM } from '../../net/protocol';
-import { avatar, h } from '../dom';
+import { avatar, h, uiIcon } from '../dom';
 import { characterSprite, charsById } from '../format';
 
 export interface EmoteSeatInfo {
@@ -77,7 +77,7 @@ export class EmotePalette {
         attrs: { type: 'button', 'aria-label': 'エモートをひらく', title: 'エモート' },
         on: { click: () => this.toggle() },
       },
-      h('span', { class: 'comm-fab-icon', text: '😆', attrs: { 'aria-hidden': 'true' } }),
+      uiIcon('emote', '😆', 'comm-fab-icon'),
       h('span', { class: 'comm-fab-label', text: 'エモート' }),
       h('span', { class: 'comm-fab-ring', attrs: { 'aria-hidden': 'true' } }),
     );

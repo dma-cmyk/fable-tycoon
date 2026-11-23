@@ -14,6 +14,7 @@ import {
   assetUrl,
   characterSprite,
   charsById,
+  displayPlayerName,
   citiesById,
   cityNodeId,
   emotesById,
@@ -32,8 +33,8 @@ import {
   seatColor,
   speakerName,
 } from '../format';
-import { avatar, h, iconButton, type ModalHandle } from '../dom';
-import { uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
+import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
+import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
@@ -125,6 +126,7 @@ export class GameScreen implements ScreenHandle {
   private yearEnd: YearEndHandle | null = null;
   private shop: ShopHandle | null = null;
   private bulkBuyCityId: string | null = null;
+  private cityPick: { cardId: string; options: Set<string> } | null = null;
   private viewRealm: MapViewId = 'world';
   private manualView = false;
   private playerRealm: RealmId | 'world' = 'world';
@@ -212,6 +214,8 @@ export class GameScreen implements ScreenHandle {
   private readonly stepsCounter: HTMLElement;
   private readonly destArrow: HTMLElement;
   private readonly confettiHost: HTMLElement;
+  private readonly cityPickBanner: HTMLElement;
+  private readonly cityPickText: HTMLElement;
   private readonly portraitRank: HTMLElement;
 
   constructor(options: GameScreenOptions) {
@@ -300,6 +304,23 @@ export class GameScreen implements ScreenHandle {
     );
     this.stepsCounter = h('div', { class: 'steps-counter', attrs: { hidden: 'hidden' } });
     this.confettiHost = h('div', { class: 'confetti-host', attrs: { 'aria-hidden': 'true' } });
+    this.cityPickText = h('span', { class: 'city-pick-text', text: '地図の都市をタップして対象を選ぶ' });
+    this.cityPickBanner = h(
+      'div',
+      { class: 'city-pick-banner', attrs: { hidden: 'hidden', role: 'status' } },
+      this.cityPickText,
+      h('button', {
+        class: 'btn btn-ghost btn-small',
+        text: 'やめる',
+        attrs: { type: 'button' },
+        on: {
+          click: () => {
+            this.clearCityPick();
+            this.sendAction({ t: 'cancel' });
+          },
+        },
+      }),
+    );
     this.destArrow = h(
       'div',
       { class: 'dest-arrow', attrs: { hidden: 'hidden', 'aria-hidden': 'true' } },
@@ -322,9 +343,9 @@ export class GameScreen implements ScreenHandle {
       h(
         'div',
         { class: 'top-actions' },
-        iconButton('☰', 'メニュー', () => this.openMenu(), { class: 'top-action' }),
-        iconButton('⚙️', '設定', () => this.app.openSettings(), { class: 'top-action' }),
-        iconButton('❓', 'ヘルプ', () => this.app.openHelp(), { class: 'top-action' }),
+        iconButton('menu', 'メニュー', () => this.openMenu(), { class: 'top-action' }),
+        iconButton('gear', '設定', () => this.app.openSettings(), { class: 'top-action' }),
+        iconButton('help', 'ヘルプ', () => this.app.openHelp(), { class: 'top-action' }),
       ),
     );
 
@@ -383,16 +404,16 @@ export class GameScreen implements ScreenHandle {
       this.primaryLabel,
     );
     this.cardBadge = h('span', { class: 'icon-btn-badge', text: '0', attrs: { hidden: 'hidden' } });
-    const cardButton = iconButton('🃏', 'カード', () => this.openHand(), { class: 'hud-icon' });
+    const cardButton = iconButton('cards', 'カード', () => this.openHand(), { class: 'hud-icon' });
     cardButton.append(this.cardBadge);
     const iconRow = h(
       'div',
       { class: 'hud-icons' },
       cardButton,
-      iconButton('🏙️', '物件情報', () => this.openCatalog(), { class: 'hud-icon' }),
-      iconButton('🎯', '目的地', () => this.openDestination(), { class: 'hud-icon' }),
-      iconButton('🗺️', '全体地図', () => this.openMapViewDialog(), { class: 'hud-icon' }),
-      iconButton('📜', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
+      iconButton('property', '物件情報', () => this.openCatalog(), { class: 'hud-icon' }),
+      iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon' }),
+      iconButton('globe', '全体地図', () => this.openMapViewDialog(), { class: 'hud-icon' }),
+      iconButton('menu', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
     );
     this.moveOptionsHost = h('div', { class: 'move-options', attrs: { hidden: 'hidden' } });
     this.bottomBar = h('div', { class: 'game-bottom-bar' }, this.moveOptionsHost, h('div', { class: 'bottom-primary-row' }, this.primary, iconRow));
@@ -525,6 +546,7 @@ export class GameScreen implements ScreenHandle {
       this.stepsCounter,
       this.destArrow,
       this.confettiHost,
+      this.cityPickBanner,
       this.skipHint,
       this.loading,
       this.chat.panel,
@@ -532,7 +554,7 @@ export class GameScreen implements ScreenHandle {
     );
 
     this.fxPlayer = new FxPlayer({
-      settings: () => uiSettings(),
+      settings: () => effectiveUiSettings(),
       handleFx: (fx, state, control) => this.handleFx(fx, state, control),
       applyState: (state, deadline) => this.applyState(state, deadline),
       setBusy: (busy) => {
@@ -588,6 +610,7 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.monthFlipTimer);
     window.clearTimeout(this.stepsTimer);
     window.clearTimeout(this.rouletteTimer);
+    this.clearCityPick();
     window.clearInterval(this.rouletteInterval);
     this.rouletteFinish?.(true);
     Audio.stopVoice();
@@ -853,7 +876,7 @@ export class GameScreen implements ScreenHandle {
         'button',
         {
           class: `rank-row ${isActor ? 'is-current' : ''} ${isMine ? 'is-mine' : ''}`.trim(),
-          attrs: { type: 'button', 'aria-label': `${player.name} の詳細`, style: `--seat-color:${seatColor(player.id)}` },
+          attrs: { type: 'button', 'aria-label': `${displayName} の詳細`, style: `--seat-color:${seatColor(player.id)}` },
           dataset: { seat: String(player.id) },
           on: { click: () => this.openRoster() },
         },
@@ -884,6 +907,7 @@ export class GameScreen implements ScreenHandle {
           h(
             'span',
             { class: 'rank-money-line' },
+            uiIcon('coins', '🪙', 'rank-coin'),
             h('span', { class: 'rank-money', text: '' }),
             state.piper.holder === player.id
               ? h('span', { class: 'rank-piper', text: `🎺 Lv${state.piper.level}` })
@@ -898,7 +922,7 @@ export class GameScreen implements ScreenHandle {
           {
             class: 'rank-menu',
             role: 'button',
-            attrs: { 'aria-label': `${player.name} のメニュー`, tabindex: '0' },
+            attrs: { 'aria-label': `${displayName} のメニュー`, tabindex: '0' },
             on: {
               click: (event) => {
                 event.stopPropagation();
@@ -951,7 +975,7 @@ export class GameScreen implements ScreenHandle {
       this.portraitImage.src = src;
       this.portraitImage.alt = character.nameJa;
     }
-    this.portraitName.textContent = player.name;
+    this.portraitName.textContent = displayPlayerName(player);
     this.portraitSub.textContent = `${character.nameJa} ・ ${character.origin}`;
     this.portraitHost.dataset.seat = String(player.id);
     const rank = [...state.players]
@@ -976,10 +1000,11 @@ export class GameScreen implements ScreenHandle {
         'div',
         { class: 'money-head' },
         avatar(characterSprite(character), character?.color ?? playerColor(player), 34),
+        uiIcon('moneybag', '💰', 'money-head-icon'),
         h(
           'div',
           { class: 'money-head-text' },
-          h('span', { class: 'money-name', text: player.name }),
+          h('span', { class: 'money-name', text: displayPlayerName(player) }),
           h('span', {
             class: 'money-role',
             text: seat === actor ? '手番プレイヤー' : 'あなた',
@@ -1157,6 +1182,13 @@ export class GameScreen implements ScreenHandle {
 
     if (state.phase.t === 'buy') {
       const cityId = state.phase.cityId;
+      if (!citiesById.has(cityId)) {
+        if (canAct && !this.actionPending) {
+          this.app.toasts.show('この駅は開業準備中です。手番を終了します。', 'warn', 3000);
+          this.sendAction({ t: 'end_buy' });
+        }
+        return;
+      }
       if (!this.citySheet || this.citySheetCityId !== cityId || !this.citySheetBuyMode) {
         this.citySheet?.close();
         this.citySheetCityId = cityId;
@@ -1273,6 +1305,10 @@ export class GameScreen implements ScreenHandle {
 
   private updateTransientDialog(state: GameState, canAct: boolean): void {
     const phase = state.phase;
+    if (this.cityPick) {
+      if (phase.t === 'card_target' && phase.cardId === this.cityPick.cardId) return;
+      this.clearCityPick();
+    }
     const wanted: TransientKind | null =
       phase.t === 'card_target' ? 'target' : phase.t === 'discard' ? 'discard' : phase.t === 'sell' ? 'sell' : null;
     if (!wanted) {
@@ -1295,6 +1331,15 @@ export class GameScreen implements ScreenHandle {
         options: phase.options,
         onTarget: (target) => this.sendAction({ t: 'card_target', target }),
         onCancel: () => this.sendAction({ t: 'cancel' }),
+        onPickOnMap: () => {
+          const cityTargets = phase.options.filter((target) => nodesById.get(target)?.kind === 'city');
+          this.cityPick = { cardId: phase.cardId, options: new Set(cityTargets) };
+          this.transient?.handle.close();
+          this.transient = null;
+          this.cityPickText.textContent = `${cityTargets.length} 都市から地図で選択`;
+          this.cityPickBanner.hidden = false;
+          this.app.toasts.show('地図の光っている都市をタップしてください', 'info', 3200);
+        },
       });
       this.transient = { kind: 'target', cardId: phase.cardId, handle };
     } else if (wanted === 'discard' && phase.t === 'discard') {
@@ -1432,9 +1477,9 @@ export class GameScreen implements ScreenHandle {
         ? h('img', { attrs: { src: characterSprite(character), alt: '', draggable: 'false' } })
         : h('span', { text: '？' }),
     );
-    this.playerPlateName.textContent = player.isCpu ? character?.nameJa ?? player.name : player.name;
+    this.playerPlateName.textContent = displayPlayerName(player);
     this.playerPlateSub.textContent = player.id === actor ? '手番プレイヤー' : 'あなた';
-    this.playerPlate.setAttribute('aria-label', `${player.name} の詳細`);
+    this.playerPlate.setAttribute('aria-label', `${displayPlayerName(player)} の詳細`);
     this.setCounter(this.playerPlateCash, `plate:${player.id}:cash`, player.cash, formatOku);
   }
 
@@ -1775,6 +1820,7 @@ export class GameScreen implements ScreenHandle {
       stopped = true;
       window.clearInterval(interval);
       window.clearTimeout(this.rouletteTimer);
+    this.clearCityPick();
       this.rouletteOverlay.classList.remove('is-spinning');
       this.rouletteOverlay.classList.add('is-result');
       paint(city);
@@ -1795,6 +1841,11 @@ export class GameScreen implements ScreenHandle {
     this.rouletteOverlay.hidden = true;
     this.rouletteOverlay.classList.remove('is-result');
     this.rouletteFinish = null;
+  }
+
+  private clearCityPick(): void {
+    this.cityPick = null;
+    this.cityPickBanner.hidden = true;
   }
 
   private openHand(): void {
@@ -1880,6 +1931,20 @@ export class GameScreen implements ScreenHandle {
   private onCityTap(cityId: string): void {
     const state = this.state;
     if (!state) return;
+    if (!citiesById.has(cityId)) {
+      this.app.toasts.show('この駅は開業準備中です', 'warn');
+      return;
+    }
+    if (this.cityPick) {
+      const nodeId = cityNodeId(cityId);
+      if (this.cityPick.options.has(nodeId)) {
+        this.clearCityPick();
+        this.sendAction({ t: 'card_target', target: nodeId });
+      } else {
+        this.app.toasts.show('その都市は対象に選べません。光っている都市をタップしてください。', 'warn', 2600);
+      }
+      return;
+    }
     if (state.phase.t === 'choose_dest' && this.interactiveNow()) {
       // Let the map's move-picker handle the tap; opening the sheet here would fight it.
       return;
@@ -1913,7 +1978,7 @@ export class GameScreen implements ScreenHandle {
       toasts: this.app.toasts,
       session: this.session,
       seat,
-      name: player?.name ?? lobbySeat?.name ?? `席 ${seat + 1}`,
+      name: displayPlayerName(player) || lobbySeat?.name || `席 ${seat + 1}`,
       characterId: player?.characterId ?? lobbySeat?.characterId ?? null,
       color: player ? playerColor(player) : '#9fb3d9',
       canReport: this.session.mode === 'online' && seat !== this.mySeat && !!player && !player.isCpu,
@@ -2042,7 +2107,8 @@ export class GameScreen implements ScreenHandle {
       onTitle: () => this.app.goTitle(),
       onRematch: () => this.app.rematch(),
     });
-    this.el.append(this.resultScreen.el);
+    this.app.toasts.el.replaceChildren();
+    document.body.append(this.resultScreen.el);
     this.setBgm('result');
     this.skipHint.hidden = true;
   }
@@ -2352,7 +2418,7 @@ export class GameScreen implements ScreenHandle {
     this.portraitBaseSrc = base;
     if (!this.portraitImage.classList.contains('is-mood')) this.portraitImage.src = base;
     this.portraitImage.alt = character.nameJa;
-    this.portraitName.textContent = player.name;
+    this.portraitName.textContent = displayPlayerName(player);
     this.portraitSub.textContent = `${character.nameJa} ・ ${character.origin}`;
     this.portraitHost.dataset.seat = String(playerId);
   }
@@ -2482,7 +2548,7 @@ export class GameScreen implements ScreenHandle {
     const player = state?.players[playerId];
     const character = player ? charsById.get(player.characterId) : undefined;
     if (!player || !character) return;
-    this.handoffName.textContent = `${player.name} の番です`;
+    this.handoffName.textContent = `${displayPlayerName(player)} の番です`;
     this.handoffAvatar.replaceChildren(
       h('img', { attrs: { src: characterSprite(character), alt: '', draggable: 'false' } }),
     );
@@ -2493,6 +2559,7 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.monthFlipTimer);
     window.clearTimeout(this.stepsTimer);
     window.clearTimeout(this.rouletteTimer);
+    this.clearCityPick();
     window.clearInterval(this.rouletteInterval);
     this.rouletteFinish?.(true);
     this.handoffTimer = window.setTimeout(() => {
@@ -2524,7 +2591,7 @@ export class GameScreen implements ScreenHandle {
       const cash = player.cash;
       return {
         seat: player.id,
-        name: player.name,
+        name: displayPlayerName(player),
         characterId: player.characterId,
         color: character?.color ?? playerColor(player),
         cash,
@@ -2549,7 +2616,7 @@ export class GameScreen implements ScreenHandle {
     const lobbySeat = this.lobby?.seats[seat];
     const character = player ? charsById.get(player.characterId) : lobbySeat?.characterId ? charsById.get(lobbySeat.characterId) : undefined;
     return {
-      name: player?.name ?? lobbySeat?.name ?? `席 ${seat + 1}`,
+      name: displayPlayerName(player) || lobbySeat?.name || `席 ${seat + 1}`,
       characterId: player?.characterId ?? lobbySeat?.characterId ?? null,
       color: character?.color ?? '#9fb3d9',
     };
@@ -2581,13 +2648,14 @@ export class GameScreen implements ScreenHandle {
   }
 
   private playerName(playerId: number): string {
-    return this.state?.players[playerId]?.name ?? `プレイヤー${playerId + 1}`;
+    const player = this.state?.players[playerId];
+    return displayPlayerName(player) || `プレイヤー${playerId + 1}`;
   }
 
   private actorLabel(playerId: number): string {
     const player = this.state?.players[playerId];
     if (!player) return `プレイヤー${playerId + 1}`;
-    return `${player.name}${player.isCpu ? '（CPU）' : ''}`;
+    return `${displayPlayerName(player)}${player.isCpu ? '（CPU）' : ''}`;
   }
 
   private muteOf(seat: number): MuteFlags {

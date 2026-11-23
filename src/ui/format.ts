@@ -262,3 +262,12 @@ export function transportSummary(path: string[]): { rail: number; sea: number } 
   }
   return { rail, sea };
 }
+
+/** Player-facing name: CPU players are always named after their fairy-tale character. */
+export function displayPlayerName(
+  player: { name: string; characterId?: string; isCpu?: boolean } | null | undefined,
+): string {
+  if (!player) return 'プレイヤー';
+  if (!player.isCpu) return player.name;
+  return (player.characterId ? charsById.get(player.characterId)?.nameJa : undefined) ?? player.name;
+}

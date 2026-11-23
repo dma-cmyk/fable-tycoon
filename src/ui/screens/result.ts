@@ -6,6 +6,7 @@ import { avatar, h } from '../dom';
 import {
   characterSprite,
   charsById,
+  displayPlayerName,
   formatOku,
   playerColor,
 } from '../format';
@@ -38,6 +39,7 @@ export class ResultScreen {
     const winner = state.players[ranking[0]];
     const loser = state.players[ranking[ranking.length - 1]];
     const winnerCharacter = winner ? charsById.get(winner.characterId) : undefined;
+    const winnerDisplayName = winner ? displayPlayerName(winner) : '—';
     const winnerNet = winner ? netWorth(GAME_DATA, state, winner.id) : 0;
 
     const podium = h('div', { class: 'result-podium' });
@@ -45,6 +47,7 @@ export class ResultScreen {
       const player = state.players[playerId];
       if (!player) return;
       const character = charsById.get(player.characterId);
+      const displayName = displayPlayerName(player);
       const net = netWorth(GAME_DATA, state, playerId);
       const income = annualIncome(GAME_DATA, state, playerId);
       podium.append(
@@ -59,9 +62,8 @@ export class ResultScreen {
             h(
               'div',
               { class: 'result-row-name' },
-              h('strong', { text: player.name }),
-              h('span', { class: 'muted', text: character?.nameJa ?? '' }),
-              player.isCpu ? h('span', { class: 'badge', text: 'CPU' }) : null,
+              h('strong', { text: displayName }),
+              h('span', { class: 'muted', text: player.isCpu ? `CPU ・ ${character?.originRegion ?? ''}` : character?.nameJa ?? '' }),
             ),
             h(
               'div',
@@ -129,8 +131,8 @@ export class ResultScreen {
               'div',
               { class: 'result-winner-text' },
               h('span', { class: 'result-crown-big', text: '👑', attrs: { 'aria-hidden': 'true' } }),
-              h('h2', { class: 'result-winner-name', text: winner?.name ?? '—' }),
-              h('p', { class: 'result-winner-char', text: winnerCharacter ? `${winnerCharacter.nameJa}（${winnerCharacter.origin}）` : '' }),
+              h('h2', { class: 'result-winner-name', text: winnerDisplayName }),
+              h('p', { class: 'result-winner-char', text: winnerCharacter ? (winner?.isCpu ? `CPU ・ ${winnerCharacter.originRegion}` : `${winnerCharacter.nameJa}（${winnerCharacter.origin}）`) : '' }),
               h('p', { class: 'result-winner-net', text: `総資産 ${formatOku(winnerNet)}` }),
             ),
           ),
@@ -187,6 +189,7 @@ export class ResultScreen {
   }
 
   destroy(): void {
+    this.el.remove();
     this.resizeObserver?.disconnect();
     for (const timeout of this.timeouts) window.clearTimeout(timeout);
     Audio.stopVoice();

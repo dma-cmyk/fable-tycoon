@@ -1,6 +1,6 @@
 /** Client-only preferences: presentation speed, chat visibility, per-seat mute. */
 
-export type FxSpeed = 1 | 2 | 4;
+export type FxSpeed = 1 | 2 | 4 | 8;
 
 export interface UiSettings {
   fxSpeed: FxSpeed;
@@ -41,7 +41,7 @@ export function readUiSettings(): UiSettings {
   const out: UiSettings = { ...DEFAULT_SETTINGS };
   if (raw && typeof raw === 'object') {
     const record = raw as Record<string, unknown>;
-    if (record.fxSpeed === 2 || record.fxSpeed === 4 || record.fxSpeed === 1) {
+    if (record.fxSpeed === 2 || record.fxSpeed === 4 || record.fxSpeed === 8 || record.fxSpeed === 1) {
       out.fxSpeed = record.fxSpeed;
     }
     if (typeof record.autoAdvance === 'boolean') out.autoAdvance = record.autoAdvance;
@@ -103,4 +103,21 @@ export function writeMute(roomId: string, seat: number, flags: MuteFlags): void 
   } catch {
     /* ignore */
   }
+}
+
+/** `?speed=8` is used by automated playtests; accepted values 1/2/4/8. */
+export function urlFxSpeed(): FxSpeed | null {
+  if (typeof window === 'undefined') return null;
+  const raw = new URLSearchParams(window.location.search).get('speed');
+  if (!raw) return null;
+  const value = Number(raw);
+  return value === 1 || value === 2 || value === 4 || value === 8 ? value : null;
+}
+
+export function effectiveFxSpeed(): FxSpeed {
+  return urlFxSpeed() ?? uiSettings().fxSpeed;
+}
+
+export function effectiveUiSettings(): UiSettings {
+  return { ...uiSettings(), fxSpeed: effectiveFxSpeed() };
 }

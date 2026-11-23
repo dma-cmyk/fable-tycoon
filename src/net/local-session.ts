@@ -9,7 +9,7 @@ import { GAME_DATA } from '../data/index';
 import type { ChatLine, ClientMsg, LobbyView, ServerMsg } from './protocol';
 import { PROTOCOL_VERSION } from './protocol';
 import type { ConnectionState, Session } from './session-types';
-import { RoomController } from './room';
+import { CPU_MOVE_DELAY_MS, RoomController } from './room';
 import type { RoomDeps, TimerHandle } from './room';
 
 export const LOCAL_SAVE_KEY = 'fable.local';
@@ -19,6 +19,8 @@ export interface LocalSetup {
   players: PlayerSetup[];
   years: number;
   seed?: number;
+  /** Presentation and CPU pacing multiplier (1..16). Used by ?speed= automated playtests. */
+  speed?: number;
 }
 
 function randomIntFromCrypto(n: number): number {
@@ -154,9 +156,12 @@ export class LocalSession implements Session {
     }
 
     let sessionSink: ((msg: ServerMsg, connId: string | null) => void) | null = null;
+    const speed = Math.max(1, Math.min(16, Number(setup.speed) || 1));
     const deps: RoomDeps = {
       roomId: LOCAL_ROOM_ID,
       now: () => Date.now(),
+      fxScale: 1 / speed,
+      cpuDelayMs: Math.round(CPU_MOVE_DELAY_MS / speed),
       ...localTimers(),
       randomInt: setup.seed === undefined ? randomIntFromCrypto : seededRandom(setup.seed),
       data: GAME_DATA,

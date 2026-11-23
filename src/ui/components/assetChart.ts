@@ -1,6 +1,6 @@
 import type { GameState } from '../../core/types';
 import { h } from '../dom';
-import { formatOkuShort, playerColor } from '../format';
+import { displayPlayerName, formatOkuShort, playerColor } from '../format';
 
 export interface AssetChartOptions {
   canvas: HTMLCanvasElement;
@@ -141,7 +141,7 @@ export function assetLegend(state: GameState): HTMLElement {
         'span',
         { class: 'asset-legend-item' },
         h('span', { class: 'asset-legend-dot', attrs: { style: `background:${playerColor(player)}` } }),
-        h('span', { text: player.name }),
+        h('span', { text: displayPlayerName(player) }),
       ),
     );
   }

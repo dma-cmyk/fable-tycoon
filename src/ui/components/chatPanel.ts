@@ -1,7 +1,7 @@
 import type { ChatLine } from '../../net/protocol';
 import { COMM } from '../../net/protocol';
 import type { Session } from '../../net/session-types';
-import { avatar, h } from '../dom';
+import { avatar, h, uiIcon } from '../dom';
 import { characterSprite, charsById, formatClock } from '../format';
 
 export interface ChatSeatInfo {
@@ -109,7 +109,7 @@ export class ChatPanel {
         attrs: { type: 'button', 'aria-label': 'チャットをひらく', title: 'チャット' },
         on: { click: () => this.toggle() },
       },
-      h('span', { class: 'comm-fab-icon', text: '💬', attrs: { 'aria-hidden': 'true' } }),
+      uiIcon('chat', '💬', 'comm-fab-icon'),
       h('span', { class: 'comm-fab-label', text: 'チャット' }),
       this.unreadBadge,
     );

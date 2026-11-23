@@ -1,5 +1,5 @@
 import { Audio } from '../../audio/audio';
-import { h } from '../dom';
+import { h, uiIcon } from '../dom';
 import { GAME_DATA } from '../../data/index';
 import { assetUrl, characterSprite } from '../format';
 import type { ScreenHandle } from './types';
@@ -30,6 +30,10 @@ export class TitleScreen implements ScreenHandle {
         'aria-hidden': 'true',
         draggable: 'false',
       },
+      on: {
+        load: () => { logo.hidden = true; },
+        error: () => { logo.hidden = false; },
+      },
     });
     const shade = h('div', { class: 'title-shade', attrs: { 'aria-hidden': 'true' } });
     const clouds = h('div', { class: 'title-clouds', attrs: { 'aria-hidden': 'true' } });
@@ -50,6 +54,11 @@ export class TitleScreen implements ScreenHandle {
       );
     });
 
+    const mobileSky = h('div', { class: 'title-mobile-sky', attrs: { 'aria-hidden': 'true' } });
+    const mobileLogo = h('img', {
+      class: 'title-logo-mobile',
+      attrs: { src: assetUrl('assets/ui/logo.webp'), alt: '', draggable: 'false' },
+    });
     const logo = h(
       'div',
       { class: 'title-logo' },
@@ -77,9 +86,9 @@ export class TitleScreen implements ScreenHandle {
       callbacks.hasResume
         ? this.smallButton('⏯️', 'つづきから', callbacks.onResume, 'title-btn-resume')
         : null,
-      this.smallButton('📖', '遊び方', callbacks.onHelp),
-      this.smallButton('⚙️', '設定', callbacks.onSettings),
-      this.smallButton('🎵', 'クレジット', callbacks.onCredits),
+      this.smallButton('help', '遊び方', callbacks.onHelp),
+      this.smallButton('gear', '設定', callbacks.onSettings),
+      this.smallButton('trophy', 'クレジット', callbacks.onCredits),
     );
 
     const footnote = h('p', {
@@ -87,7 +96,7 @@ export class TitleScreen implements ScreenHandle {
       text: 'はじめてのタップで音声が有効になります ・ 世界は横につながっています',
     });
 
-    this.el.append(keyart, shade, clouds, parade, logo, primary, secondary, footnote);
+    this.el.append(keyart, shade, clouds, parade, mobileSky, mobileLogo, logo, primary, secondary, footnote);
 
     const startBgm = () => {
       Audio.bgm('title');
@@ -146,7 +155,7 @@ export class TitleScreen implements ScreenHandle {
         attrs: { type: 'button' },
         on: { click: onClick },
       },
-      h('span', { text: icon, attrs: { 'aria-hidden': 'true' } }),
+      uiIcon(icon, icon, 'title-small-icon'),
       h('span', { text: label }),
     );
   }

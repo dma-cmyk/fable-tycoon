@@ -38,7 +38,45 @@ export interface CitySheetHandle {
 
 export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
   const city = citiesById.get(options.cityId);
-  if (!city) throw new Error(`unknown city: ${options.cityId}`);
+  if (!city) {
+    let canAct = options.canAct;
+    let modalHandle: ModalHandle | null = null;
+    const body = h(
+      'div',
+      { class: 'city-sheet' },
+      h(
+        'div',
+        { class: 'city-unavailable' },
+        h('span', { class: 'city-unavailable-icon', text: '🚧' }),
+        h('h3', { text: 'この駅は開業準備中' }),
+        h('p', { text: `駅データ「${options.cityId}」はまだ物件カタログに登録されていません。手番を終了してください。` }),
+      ),
+    );
+    const footer = h('div', { class: 'city-sheet-footer' });
+    footer.append(
+      h('span', { class: 'muted', text: '物件はありません' }),
+      options.buyMode && canAct
+        ? h('button', {
+            class: 'btn btn-gold city-end-buy',
+            text: '✔ 手番を終える',
+            attrs: { type: 'button' },
+            on: { click: (event) => { (event.currentTarget as HTMLButtonElement).disabled = true; options.onEndBuy(); } },
+          })
+        : h('button', { class: 'btn btn-gold', text: 'とじる', attrs: { type: 'button' }, on: { click: () => modalHandle?.close() } }),
+    );
+    body.append(footer);
+    modalHandle = options.modal.open(body, {
+      title: '駅',
+      subtitle: '準備中',
+      className: 'city-modal',
+      dismissible: !(options.buyMode && canAct),
+      onClose: options.onClose,
+    });
+    return {
+      update(_nextState, nextCanAct) { canAct = nextCanAct; },
+      close() { modalHandle?.close(); },
+    };
+  }
 
   let state = options.state;
   let canAct = options.canAct;

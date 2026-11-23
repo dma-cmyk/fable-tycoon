@@ -85,6 +85,22 @@ export function button(
   return h('button', { class: className, text: label, attrs: { type: 'button' }, on: { click: onClick } });
 }
 
+import { UI_ICON_FILES } from './assetManifest';
+
+/** Renders a generated glossy UI icon when available, otherwise the emoji fallback. */
+export function uiIcon(name: string, emoji: string, className = 'ui-icon'): HTMLElement {
+  if (UI_ICON_FILES.has(name)) {
+    return h('span', { class: className }, h('img', {
+      attrs: {
+        src: `${import.meta.env.BASE_URL}assets/ui/${name}.webp`,
+        alt: '',
+        draggable: 'false',
+      },
+    }));
+  }
+  return h('span', { class: className, text: emoji, attrs: { 'aria-hidden': 'true' } });
+}
+
 export interface IconButtonOptions {
   class?: string;
   badge?: string | number;
@@ -111,7 +127,7 @@ export function iconButton(
       },
       on: { click: onClick },
     },
-    h('span', { class: 'icon-btn-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
+    uiIcon(icon, icon, 'icon-btn-icon'),
     h('span', { class: 'icon-btn-label', text: label }),
     badge,
   );

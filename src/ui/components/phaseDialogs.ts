@@ -28,6 +28,7 @@ export interface CardTargetOptions {
   options: string[];
   onTarget: (target: string) => void;
   onCancel: () => void;
+  onPickOnMap?: () => void;
 }
 
 export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
@@ -66,6 +67,20 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
     }),
   );
   if (search) body.append(search);
+  if (options.canAct && options.onPickOnMap && cityOptions.length > 0) {
+    body.append(
+      h('button', {
+        class: 'btn btn-ghost target-map-btn',
+        text: '📍 地図の都市をタップして選ぶ',
+        attrs: { type: 'button' },
+        on: {
+          click: () => {
+            options.onPickOnMap?.();
+          },
+        },
+      }),
+    );
+  }
 
   if (rocket && options.options.includes('r:space')) {
     const button = h(

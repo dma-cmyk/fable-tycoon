@@ -1,7 +1,7 @@
 import type { GameState, YearReport } from '../../core/types';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import { animateCounter, confettiBurst, motionReduced } from '../motion';
-import { characterSprite, charsById, formatDelta, formatOku, playerColor } from '../format';
+import { characterSprite, charsById, displayPlayerName, formatDelta, formatOku, playerColor } from '../format';
 import { assetLegend, drawAssetChart } from './assetChart';
 
 export interface YearEndOptions {
@@ -50,8 +50,8 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
           h(
             'span',
             { class: 'yearend-player' },
-            h('strong', { class: 'yearend-name', text: player.name }),
-            h('span', { class: 'yearend-char muted', text: character?.nameJa ?? '' }),
+            h('strong', { class: 'yearend-name', text: displayPlayerName(player) }),
+            h('span', { class: 'yearend-char muted', text: player.isCpu ? `CPU ・ ${character?.originRegion ?? ''}` : character?.nameJa ?? '' }),
           ),
           h(
             'span',
@@ -83,7 +83,7 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
           'div',
           { class: `yearend-bar-row ${index === 0 ? 'is-top' : ''}`.trim() },
           h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), character?.color ?? playerColor(player), 32)),
-          h('span', { class: 'yearend-bar-name', text: index === 0 ? `👑 ${player.name}` : player.name }),
+          h('span', { class: 'yearend-bar-name', text: index === 0 ? `👑 ${displayPlayerName(player)}` : displayPlayerName(player) }),
           h('span', { class: 'yearend-bar-track' }, fill),
           valueEl,
         ),
@@ -134,7 +134,6 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
         h('span', { class: 'badge badge-gold', text: finalYear ? '最終決算' : `全 ${state.config.years} 年` }),
       ),
       h('p', { class: 'yearend-headline', text: report.headline }),
-      table,
       h(
         'section',
         { class: 'yearend-race-card' },
@@ -142,6 +141,7 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
         raceHost,
         confettiHost,
       ),
+      table,
       chartCard,
       h('p', {
         class: 'yearend-note muted',

@@ -10,6 +10,7 @@ import {
 } from '../net/online-session';
 import type { Session } from '../net/session-types';
 import { h, ModalHost, ToastHost } from './dom';
+import { effectiveFxSpeed } from './settings';
 import { applyMotionPreference } from './motion';
 import { TitleScreen } from './screens/title';
 import { SetupScreen } from './screens/setup';
@@ -148,7 +149,7 @@ export class App {
     try {
       this.closeSession();
       clearLocalSave();
-      const session = createLocal(setup);
+      const session = createLocal({ ...setup, speed: effectiveFxSpeed() });
       this.lastLocalSetup = setup;
       this.session = session;
       this.showGame(session);

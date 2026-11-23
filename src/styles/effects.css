@@ -919,3 +919,194 @@ body.reduced-motion *::after {
     right: calc(30px + min(430px, 36vw));
   }
 }
+
+/* generated art */
+.title-logo-art {
+  position: absolute;
+  z-index: 7;
+  top: clamp(12px, 3.5vh, 44px);
+  left: clamp(10px, 3.5vw, 54px);
+  width: clamp(360px, 44vw, 760px);
+  height: auto;
+  max-height: 44vh;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 22px rgba(0,0,0,0.45));
+  animation: logo-bob 4.5s ease-in-out infinite;
+}
+.title-logo-art[hidden] { display: none; }
+.title-small-icon { display: inline-grid; place-items: center; width: 18px; height: 18px; }
+.title-small-icon img { width: 100%; height: 100%; object-fit: contain; }
+.icon-btn-icon img, .ui-icon img { width: 1.35em; height: 1.35em; object-fit: contain; display: block; }
+.comm-fab-icon img { width: 26px; height: 26px; object-fit: contain; display: block; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.25)); }
+.hud-icon .icon-btn-icon img { width: 34px; height: 34px; }
+.top-actions .icon-btn-icon img { width: 27px; height: 27px; }
+@media (max-width: 899px) {
+  .title-logo-art {
+    top: calc(8px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(94vw, 560px);
+    max-height: 27vh;
+    animation: none;
+  }
+}
+
+/* map city pick banner */
+.city-pick-banner {
+  position: absolute;
+  left: 50%;
+  top: calc(82px + var(--safe-top));
+  transform: translateX(-50%);
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 6px 8px 6px 14px;
+  border-radius: 999px;
+  border: 2.5px solid #fff;
+  background: linear-gradient(180deg, #ffe680, #ffb01f);
+  color: #4a2200;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 rgba(3,10,25,0.35), 0 10px 20px rgba(0,0,0,0.3);
+}
+.city-pick-banner[hidden] { display: none; }
+.city-pick-banner .btn { min-height: 38px; color: #4a2200; border-color: #a45d00; }
+@media (max-width: 899px) { .city-pick-banner { top: calc(104px + var(--safe-top)); } }
+
+.rank-coin { width: 13px; height: 13px; display: inline-grid; place-items: center; }
+.rank-coin img { width: 13px; height: 13px; object-fit: contain; }
+.money-head-icon { width: 18px; height: 18px; margin-left: auto; opacity: 0.9; }
+.money-head-icon img { width: 18px; height: 18px; object-fit: contain; }
+
+/* Toasts stay below modal dialogs so they never cover report headers. */
+.toast-host { z-index: 80 !important; }
+
+/* Soft cloud patch hides the baked-in logo on the keyart while the generated logo is used. */
+.title-logo-halo {
+  position: absolute;
+  z-index: 5;
+  top: -8vh;
+  left: -8vw;
+  width: 72vw;
+  height: 54vh;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 40% 42%, #8ed4ff 0%, #77c3f6 38%, rgba(108, 187, 242, 0.72) 56%, rgba(108, 187, 242, 0) 76%);
+  filter: blur(6px);
+}
+.title-logo-art {
+  top: clamp(6px, 2vh, 26px) !important;
+  left: clamp(10px, 3vw, 42px) !important;
+  width: clamp(430px, 50vw, 760px) !important;
+  max-height: none !important;
+}
+.title-logo-art + * { z-index: 6; }
+@media (max-width: 899px) {
+  .title-logo-halo {
+    top: -8vh;
+    left: -18vw;
+    width: 136vw;
+    height: 34vh;
+    filter: blur(4px);
+  }
+  .title-logo-art {
+    top: calc(2px + var(--safe-top)) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 98vw !important;
+    max-height: none !important;
+    animation: none !important;
+  }
+}
+
+/* keep toasts under the full-screen result overlay */
+.toast-host { z-index: 69 !important; }
+
+/* solid cloud patch under the generated logo to hide the keyart's baked-in lettering */
+.title-logo-halo {
+  background:
+    radial-gradient(ellipse at 42% 42%, #83d0fb 0%, #75c3f4 52%, #63b5ea 66%, rgba(99, 181, 234, 0) 78%);
+  filter: blur(3px);
+  top: -12vh !important;
+  left: -12vw !important;
+  width: 74vw !important;
+  height: 56vh !important;
+}
+@media (max-width: 899px) {
+  .title-logo-halo {
+    top: -10vh !important;
+    left: -22vw !important;
+    width: 144vw !important;
+    height: 36vh !important;
+  }
+}
+
+/* The keyart already embeds the generated title logo; keep the plate clean. */
+.title-logo-halo, .title-logo-art { display: none !important; }
+
+/* Mobile: hide the baked keyart logo under a sky wash and use the generated logo. */
+.title-logo-mobile, .title-mobile-sky { display: none; }
+@media (max-width: 899px) {
+  .title-mobile-sky {
+    display: block;
+    position: absolute;
+    z-index: 6;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 38vh;
+    background:
+      radial-gradient(ellipse 90% 70% at 50% 20%, #79c9f7 0%, #68bcf0 60%, rgba(104,188,240,0.88) 82%, rgba(104,188,240,0) 100%);
+    pointer-events: none;
+  }
+  .title-logo-mobile {
+    display: block;
+    position: absolute;
+    z-index: 7;
+    top: calc(2px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: 96vw;
+    height: auto;
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,0.35));
+  }
+  .title-logo { display: none !important; }
+}
+
+/* Year-end: keep asset race above the fold, body scrolls for chart/table. */
+.yearend-modal .modal-panel { height: min(92dvh, 900px); }
+.yearend-modal .modal-body { overflow-y: auto; overscroll-behavior: contain; padding-bottom: 12px; }
+.yearend-row { min-height: 44px; }
+
+/* Result sits above the global toast layer. */
+.result-screen { z-index: 72; }
+
+
+@media (max-width: 899px) {
+  .shop-dialog { display: block; height: auto; min-height: 0; }
+  .shop-section { margin-bottom: 10px; }
+  .shop-footer { position: static; margin-top: 8px; padding-bottom: calc(8px + var(--safe-bottom)); background: transparent; }
+  .shop-hand { max-height: none; }
+  .shop-card { min-height: 150px; }
+}
+
+@media (max-width: 899px) {
+  .shop-modal .modal-body { display: block; overflow-y: auto; }
+  .shop-dialog { display: flex !important; flex-direction: column; height: auto !important; min-height: 0; padding-bottom: 8px; }
+  .shop-footer {
+    position: static !important;
+    margin-top: 6px;
+    padding: 10px 0 calc(10px + var(--safe-bottom));
+    background: linear-gradient(180deg, rgba(247, 238, 219, 0), #f4ebd7 30%);
+    border-top: 2px solid #d9c9a3;
+  }
+  .shop-leave { width: 100%; min-height: 52px; }
+  .shop-footer-note { display: none; }
+  .shop-section { flex: none; }
+}
+
+/* Toasts participate below turn/card overlays, so they never cover the turn banner. */
+.toast-host { z-index: 44 !important; }
