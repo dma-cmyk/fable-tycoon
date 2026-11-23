@@ -103,11 +103,37 @@ export interface SafeArea {
   left: number;
 }
 
+/** CSS-pixel rectangle relative to the canvas top-left. */
+export interface MapLabelObstacle {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface MoveOptionHooks {
-  onSelect?: (nodeId: string) => void;
+  /** Selection only. `null` means the map was tapped empty. Never confirms. */
+  onSelect?: (nodeId: string | null) => void;
   onConfirm?: (nodeId: string) => void;
   /** Optional numbers matching the UI list; defaults to 1..n. */
   numbers?: number[];
+}
+
+/** Shared square-kind chip styling for map pins and UI option lists. */
+export interface MoveKindChip {
+  color: string;
+  symbol: string;
+  label: string;
+}
+
+/** Lightweight movement state for the HUD's remaining-steps chip. */
+export interface MoveProgress {
+  playerId: number;
+  path: string[];
+  stepIndex: number;
+  remaining: number;
+  vehicle: string | null;
+  nextNodeId: string | null;
 }
 
 interface CityEntry {
@@ -350,10 +376,13 @@ export class MapView {
   private movePick: ((nodeId: string) => void) | null = null;
   private moveHooks: MoveOptionHooks | null = null;
   private optionPinHits: Array<{ nodeId: string; x: number; y: number; r: number }> = [];
+  private edgePinHits: Array<{ nodeId: string; x: number; y: number; r: number }> = [];
   private hoveredOption: string | null = null;
   private selectedOption: string | null = null;
   private lastPickAt = 0;
-  private badgeRect: Rect | null = null;
+  private labelObstacles: MapLabelObstacle[] = [];
+  private artLabelRects: Rect[] = [];
+  private overviewMode = false;
   private cityTap: ((cityId: string) => void) | null = null;
 
   private cityHits: Array<{ cityId: string; x: number; y: number; r: number }> = [];
@@ -639,20 +668,24 @@ export class MapView {
     const hPx = layer.hWorld * scale;
     const radiusPx = this.cityRadius() * layer.dpr;
     const placed: Array<{ x: number; y: number }> = [];
-    const sorted = [...this.cityEntries].sort((a, b) => a.city.tier - b.city.tier);
+    const sorted = [...this.cityEntries]
+      .filter((entry) => !!entry.city.landmark)
+      .sort((a, b) => a.city.tier - b.city.tier);
     for (const entry of sorted) {
       if (placed.some((p) => Math.hypot(wrapDx(p.x, entry.node.x), p.y - entry.node.y) < 250)) continue;
       placed.push({ x: entry.node.x, y: entry.node.y });
       const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
       const img = this.assets.stamps?.get(kind);
-      const worldSize = (kind === 'metropolis' ? 58 : kind === 'port_town' ? 42 : 32) * (MAP_W / 8192);
+      const worldSize = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192);
       const sz = worldSize * scale;
       const wx = centerX + wrapDx(centerX, entry.node.x);
       const [px, py] = toCanvas(wx, entry.node.y);
       if (px < -sz || px > wPx + sz || py < -sz || py > hPx + sz) continue;
+      // One compact block below the station, leaving the plate, label and all
+      // route edges clear. Landmarks remain drawn above this cluster.
       const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
-      const cx = px + dir * (radiusPx + sz * 0.35);
-      const cy = py - sz * 0.22;
+      const cx = px + dir * (radiusPx + sz * 0.85);
+      const cy = py + radiusPx * 1.35 + sz * 0.55;
       if (img) ctx.drawImage(img, cx - sz / 2, cy - sz * 0.62, sz, sz);
       else drawStampFallback(ctx, kind, cx, cy, sz);
     }
@@ -778,21 +811,22 @@ export class MapView {
     if (!options || !this.selectedOption || !options.some((o) => o.nodeId === this.selectedOption)) {
       this.selectedOption = null;
     }
-    this.badgeRect = null;
     if (this.moveOptions && this.moveOptions.length > 0) this.frameMoveOptions();
     this.requestRender();
   }
 
-  /** List-driven selection: highlight the same route a map pin tap would. */
+  /** List-driven selection: highlight and frame the same route a map pin tap would. */
   selectMoveOption(nodeId: string): void {
     if (!this.moveOptions?.some((o) => o.nodeId === nodeId)) return;
     this.selectedOption = nodeId;
     this.hoveredOption = nodeId;
+    this.overviewMode = false;
+    this.frameSelectedPath(nodeId);
     this.moveHooks?.onSelect?.(nodeId);
     this.requestRender();
   }
 
-  /** Explicit confirmation (UI confirm button or second map tap). */
+  /** Explicit confirmation from the UI's confirm button (or the map's badge button). */
   confirmMoveOption(nodeId?: string): void {
     const target = nodeId ?? this.selectedOption;
     if (!target) return;
@@ -860,6 +894,7 @@ export class MapView {
 
   fitWorld(ms = 650): Promise<void> {
     this.followId = null;
+    this.overviewMode = true;
     const cam = this.camera;
     const box = this.boardBox();
     const targetZoom = Math.min(box.w / cam.worldW, box.h / cam.worldH);
@@ -999,7 +1034,6 @@ export class MapView {
     if (!existed) void this.fitWorld(0);
     this.hoveredOption = null;
     this.selectedOption = null;
-    this.badgeRect = null;
     this.followPausedUntil = 0;
     this.requestRender();
   }
@@ -1221,6 +1255,26 @@ export class MapView {
     return { avgMs: avg, p95Ms: p95, maxMs: max, fps: avg > 0 ? 1000 / avg : 0, frames: values.length };
   }
 
+  getMoveProgress(): MoveProgress | null {
+    const move = this.moveAnim;
+    if (!move) return null;
+    const full = [move.startNode, ...move.path];
+    const raw = Math.max(0, (performance.now() - move.start) / move.msPerStep);
+    const idx = Math.min(full.length - 2, Math.floor(raw));
+    const a = this.nodeById.get(full[idx]);
+    const b = this.nodeById.get(full[idx + 1]);
+    const sea = a && b ? (this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail') === 'sea' : false;
+    const vehicle = sea ? 'ferry' : move.dice >= 3 ? 'bullet_train' : move.dice === 2 ? 'express' : 'train';
+    return {
+      playerId: move.playerId,
+      path: full,
+      stepIndex: idx,
+      remaining: Math.max(0, full.length - 1 - idx),
+      vehicle,
+      nextNodeId: full[idx + 1] ?? null,
+    };
+  }
+
   resetFrameStats(): void {
     this.frameTimes = [];
     this.lastFrameTime = 0;
@@ -1275,6 +1329,15 @@ export class MapView {
     this.requestRender();
   }
 
+  /**
+   * Screen-space rectangles (CSS px, relative to the canvas) that labels must avoid:
+   * HUD panels, modal edges, and any other chrome the page draws over the map.
+   */
+  setLabelObstacles(rects: ReadonlyArray<MapLabelObstacle>): void {
+    this.labelObstacles = rects.map((r) => ({ x: r.x, y: r.y, w: Math.max(0, r.w), h: Math.max(0, r.h) }));
+    this.requestRender();
+  }
+
   private boardBox(): { x: number; y: number; w: number; h: number } {
     const x = Math.min(this.cssW - 1, Math.max(0, this.safeArea.left));
     const y = Math.min(this.cssH - 1, Math.max(0, this.safeArea.top));
@@ -1287,6 +1350,7 @@ export class MapView {
   }
 
   private focusWorldPoint(x: number, y: number, zoom: number, ms: number): Promise<void> {
+    this.overviewMode = false;
     const z = this.camera.clampZoom(zoom);
     const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
     const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
@@ -1320,6 +1384,44 @@ export class MapView {
     void this.focusWorldPoint(start.x + (minX + maxX) / 2, start.y + (minY + maxY) / 2, zoom, 420);
   }
 
+  /** Fit the selected option's whole path, including both endpoints, inside the HUD-free board box. */
+  private frameSelectedPath(nodeId: string): void {
+    const option = this.moveOptions?.find((o) => o.nodeId === nodeId);
+    const startId = this.state?.players[this.state.current]?.nodeId;
+    const start = startId ? this.nodeById.get(startId) : null;
+    if (!option || !start) return;
+    const ids = option.path[0] === start.id ? option.path : [start.id, ...option.path];
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    let cursorX = 0;
+    let cursorY = 0;
+    let prev = start;
+    for (let i = 1; i < ids.length; i++) {
+      const node = this.nodeById.get(ids[i]);
+      if (!node) continue;
+      cursorX += wrapDx(prev.x, node.x);
+      cursorY += node.y - prev.y;
+      minX = Math.min(minX, cursorX);
+      maxX = Math.max(maxX, cursorX);
+      minY = Math.min(minY, cursorY);
+      maxY = Math.max(maxY, cursorY);
+      prev = node;
+    }
+    const cam = this.camera;
+    const box = this.boardBox();
+    const pad = 52;
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const computed = Math.min((box.w - pad * 2) / spanX, (box.h - pad * 2) / spanY);
+    const zoom = Math.max(0.02, Math.min(cam.maxZoom(), this.playZoom() * 1.8, Math.max(computed, 0.02)));
+    const centerX = start.x + (minX + maxX) / 2;
+    const centerY = start.y + (minY + maxY) / 2;
+    const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
+    const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
+    const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
+    const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
+    void cam.startTween(targetX, targetY, zoom, 360, Math.min(cam.minZoom(), zoom));
+  }
+
   private playZoom(): number {
     return this.camera.clampZoom(MAP_W / 5460);
   }
@@ -1347,7 +1449,8 @@ export class MapView {
   }
 
   private isOverview(): boolean {
-    return this.view === 'world' && !this.moveAnim && !this.warpAnim && this.camera.zoom <= this.camera.minZoom() * 1.18;
+    return this.view === 'world' && !this.moveAnim && !this.warpAnim && !this.selectedOption
+      && (this.overviewMode || this.camera.zoom <= this.camera.minZoom() * 1.18);
   }
 
   private detailLevel(): number {
@@ -1357,7 +1460,7 @@ export class MapView {
   }
 
   private tileRadius(): number {
-    return Math.min(this.view === 'world' ? 11 : 50, Math.max(5, (4 + this.camera.zoom * 6) * this.viewScale()));
+    return Math.min(this.view === 'world' ? 11 : 50, Math.max(5, (5.2 + this.camera.zoom * 6.4) * this.viewScale()));
   }
 
   private cityRadius(): number {
@@ -1516,8 +1619,9 @@ export class MapView {
       }
     }
 
-    // Follow the active token, but never fight a user pan or a camera tween.
-    if (!this.dragging && !this.camera.isTweening() && now > this.followPausedUntil) {
+    // Follow the active token, but never fight a user pan, a camera tween, or
+    // an active move selection (the selected route must stay in frame).
+    if (!this.dragging && !this.selectedOption && !this.camera.isTweening() && now > this.followPausedUntil) {
       let followId = this.followId;
       if (followId === null && this.moveAnim) followId = this.moveAnim.playerId;
       if (followId === null && this.warpAnim) followId = this.warpAnim.playerId;
@@ -1548,7 +1652,7 @@ export class MapView {
           const dx = wrapDx(this.camera.x, desiredX);
           const dy = desiredY - this.camera.y;
           if (Math.abs(dx) > 0.35 || Math.abs(dy) > 0.35) {
-            const k = this.moveAnim || this.warpAnim ? 0.14 : 0.1;
+            const k = this.warpAnim ? 0.5 : this.moveAnim ? 0.14 : 0.1;
             this.camera.x = wrapX(this.camera.x + dx * k);
             this.camera.y = this.camera.clampCenterY(this.camera.y + dy * k, this.camera.zoom);
             animating = true;
@@ -1673,6 +1777,7 @@ export class MapView {
         (layer) => this.paintStaticBoard(layer),
         (x, y) => this.avoidGrid.queryRect({ x: x - 42, y: y - 42, w: 84, h: 84 }).length > 0,
         (x, y) => this.geoAt(x, y),
+        !this.isOverview(),
       );
       this.landLayer.drawSeasonFade(ctx, cam, now);
       this.ambient.draw(ctx, cam, now, this.detailLevel(), (x, y) => this.landLayer.isLand(x, y));
@@ -1763,6 +1868,42 @@ export class MapView {
       kind === 'ocean' ? 0 : kind === 'sea' ? 1 : kind === 'continent' ? 2 : kind === 'country' ? 3 : kind === 'lake' ? 4 : 5;
     labels.sort((a, b) => rank(a.kind ?? 'country') - rank(b.kind ?? 'country'));
     const placed = new RectGrid<Rect>(48);
+    this.artLabelRects = [];
+    const blockers: Rect[] = [...this.labelObstacles];
+    for (const token of this.tokens) {
+      const world = this.tokenWorldPosition(token.playerId, performance.now());
+      if (!world) continue;
+      const sx = cam.screenX(world.x);
+      const sy = cam.screenY(world.y);
+      blockers.push({ x: sx - 34, y: sy - this.tokenHeight() - 16, w: 68, h: this.tokenHeight() + 24 });
+    }
+    for (const option of this.moveOptions ?? []) {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) continue;
+      const sx = cam.screenX(node.x);
+      const sy = cam.screenY(node.y);
+      blockers.push({ x: sx - 30, y: sy - this.tileRadius() - 70, w: 60, h: 96 });
+    }
+    // Reserve room for the priority city labels (current / destination / options)
+    // before background terrain names are placed, so a sea name cannot steal
+    // the only collision-free slot from them.
+    const priorityCityNodes = new Set<string>();
+    if (this.destinationNodeId) priorityCityNodes.add(this.destinationNodeId);
+    if (this.state) {
+      const current = this.cityNodeIdOfPlayer(this.state.current);
+      if (current) priorityCityNodes.add(current);
+    }
+    for (const option of this.moveOptions ?? []) {
+      const node = this.nodeById.get(option.nodeId);
+      if (node?.kind === 'city') priorityCityNodes.add(node.id);
+    }
+    for (const id of priorityCityNodes) {
+      const node = this.nodeById.get(id);
+      if (!node) continue;
+      const sx = cam.screenX(node.x);
+      const sy = cam.screenY(node.y);
+      blockers.push({ x: sx - 85, y: sy - 58, w: 170, h: 86 });
+    }
     for (const label of labels) {
       const text = label.text ?? label.nameJa;
       if (!text) continue;
@@ -1773,12 +1914,13 @@ export class MapView {
       const kind = label.kind ?? 'country';
       if (kind === 'country' && (this.detailLevel() >= 2 || cam.zoom >= 0.9)) continue;
       const base = label.size ?? 24;
+      const playZoom = cam.zoom >= this.playZoom() * 0.95;
       const cap = kind === 'ocean' || kind === 'continent'
-        ? (cam.zoom >= 0.8 ? 44 : 80)
+        ? (playZoom ? 20 : 80)
         : kind === 'sea'
-          ? (cam.zoom >= 0.85 ? 20 : 40)
+          ? (playZoom ? 20 : 40)
           : kind === 'country'
-            ? 24
+            ? (playZoom ? 20 : 24)
             : (cam.zoom >= 0.9 ? 12 : 18);
       const fs = Math.min(cap, Math.max(6, base * cam.zoom));
       const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
@@ -1793,11 +1935,22 @@ export class MapView {
       if (water) width += Math.max(0, Array.from(text).length - 1) * fs * 0.12;
       const height = fs * 1.15;
       const rect = { x: x - width / 2, y: y - height / 2, w: width, h: height };
+      const board = this.boardBox();
+      if (rect.x < board.x + 2 || rect.y < board.y + 2
+        || rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) {
+        ctx.restore();
+        continue;
+      }
+      if (blockers.some((o) => rectsHit(rect, o, 3))) {
+        ctx.restore();
+        continue;
+      }
       if (placed.queryRect(rect).some((r) => rectsHit(rect, r, 2))) {
         ctx.restore();
         continue;
       }
       placed.add(rect, rect);
+      this.artLabelRects.push(rect);
       if (water) {
         const chars = Array.from(text);
         const gap = fs * 0.12;
@@ -1805,7 +1958,7 @@ export class MapView {
         for (const ch of chars) {
           const cw = ctx.measureText(ch).width;
           ctx.strokeStyle = 'rgba(24, 72, 104, 0.22)';
-          ctx.lineWidth = Math.max(2, fs * 0.08);
+          ctx.lineWidth = playZoom && water ? 1.05 : Math.max(2, fs * 0.08);
           ctx.strokeText(ch, cx + cw / 2, 0);
           ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
           ctx.fillText(ch, cx + cw / 2, 0);
@@ -1813,7 +1966,7 @@ export class MapView {
         }
       } else {
         ctx.strokeStyle = 'rgba(255, 255, 245, 0.72)';
-        ctx.lineWidth = Math.max(2, fs * 0.1);
+        ctx.lineWidth = playZoom ? 1.05 : Math.max(2, fs * 0.1);
         ctx.lineJoin = 'round';
         ctx.strokeText(text, 0, 0);
         ctx.fillStyle = kind === 'country' ? 'rgba(100, 66, 32, 0.8)' : 'rgba(34, 98, 136, 0.9)';
@@ -2152,18 +2305,30 @@ export class MapView {
     ctx.lineWidth = Math.max(1, 1.2 * dpr);
     ctx.stroke(chevronPath);
     const railW = overview ? 1.15 : Math.min(7, Math.max(1.8, 1.4 + zoom * 0.7));
-    const dimTracks = !overview && zoom >= 0.85;
-    if (detailForTrack >= 1 && zoom >= 0.75 && !overview) {
-      ctx.strokeStyle = dimTracks ? 'rgba(98, 110, 122, 0.55)' : '#7d8790';
+    const dimTracks = !overview && zoom >= 0.65;
+    if (dimTracks && detailForTrack >= 1 && zoom >= 0.75) {
+      // Less grey mass at play zoom: a faint ballast shadow, sparse sleepers,
+      // then a 1–1.5px bright core so the squares and landmarks win attention.
+      ctx.strokeStyle = 'rgba(80, 94, 108, 0.28)';
+      ctx.lineWidth = 3.4 * dpr;
+      ctx.stroke(railPath);
+      ctx.strokeStyle = 'rgba(122, 108, 86, 0.28)';
+      ctx.lineWidth = Math.max(0.8, 0.65 * dpr);
+      ctx.stroke(sleeperPath);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
+      ctx.lineWidth = Math.max(1, 1.3 * dpr);
+      ctx.stroke(railPath);
+    } else if (detailForTrack >= 1 && zoom >= 0.75 && !overview) {
+      ctx.strokeStyle = '#7d8790';
       ctx.lineWidth = (railW + 7) * dpr;
       ctx.stroke(railPath);
-      ctx.strokeStyle = dimTracks ? 'rgba(233, 228, 214, 0.6)' : '#e9e2cf';
+      ctx.strokeStyle = '#e9e2cf';
       ctx.lineWidth = (railW + 4) * dpr;
       ctx.stroke(railPath);
-      ctx.strokeStyle = dimTracks ? 'rgba(122, 108, 86, 0.5)' : '#8b7658';
+      ctx.strokeStyle = '#8b7658';
       ctx.lineWidth = Math.max(1.1, 1.2 * dpr);
       ctx.stroke(sleeperPath);
-      ctx.strokeStyle = dimTracks ? 'rgba(95, 106, 118, 0.6)' : '#6f7a86';
+      ctx.strokeStyle = '#6f7a86';
       ctx.lineWidth = Math.max(1.2, railW * 0.7 * dpr);
       ctx.stroke(railPath);
     } else {
@@ -2442,28 +2607,48 @@ export class MapView {
     ctx.beginPath();
     ctx.ellipse(0.8, r * 0.56 + 2, r * 1.03, r * 0.44, 0, 0, TAU);
     ctx.fill();
+    const shape = (dy: number, scale = 1): void => {
+      const rr = r * scale;
+      ctx.beginPath();
+      if (node.kind === 'red' || node.kind === 'shop') {
+        ctx.roundRect(-rr, -rr + dy, rr * 2, rr * 2, node.kind === 'shop' ? rr * 0.44 : rr * 0.24);
+      } else if (node.kind === 'yellow') {
+        ctx.moveTo(0, -rr + dy);
+        ctx.lineTo(rr, dy);
+        ctx.lineTo(0, rr + dy);
+        ctx.lineTo(-rr, dy);
+        ctx.closePath();
+      } else if (node.kind === 'news') {
+        for (let i = 0; i < 8; i++) {
+          const a = -Math.PI / 2 + (i / 8) * TAU;
+          const px = Math.cos(a) * rr;
+          const py = Math.sin(a) * rr + dy;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      } else {
+        ctx.arc(0, dy, rr, 0, TAU);
+      }
+    };
     // 2–3 px side / thickness under the top face
-    ctx.beginPath();
-    ctx.arc(0, 3, r, 0, TAU);
+    shape(3.2);
     ctx.fillStyle = palette.edge;
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(0, 3, r * 0.98, 0, TAU);
+    shape(2.2, 0.96);
     ctx.fillStyle = palette.dark;
     ctx.fill();
     const grad = ctx.createLinearGradient(0, -r, 0, r);
     grad.addColorStop(0, palette.light);
     grad.addColorStop(0.55, palette.main);
     grad.addColorStop(1, palette.dark);
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
+    shape(0);
     ctx.fillStyle = grad;
     ctx.fill();
     ctx.lineWidth = Math.max(1.3, r * 0.17);
     ctx.strokeStyle = palette.edge;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.72, 0, TAU);
+    shape(0, 0.72);
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = Math.max(1, r * 0.1);
     ctx.stroke();
@@ -2581,6 +2766,31 @@ export class MapView {
     const tokenCityAt = (v: CityVis): boolean => tokenNodeIds.has(v.entry.node.id);
     const discGrid = new RectGrid<Rect>(64);
     const tr = this.tileRadius();
+    const board = this.boardBox();
+    if (this.labelObstacles.length > 0) reserved.push(...this.labelObstacles);
+    if (this.artLabelRects.length > 0) reserved.push(...this.artLabelRects);
+    for (const option of this.moveOptions ?? []) {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) continue;
+      const px = cam.screenX(node.x);
+      const py = cam.screenY(node.y);
+      reserved.push({ x: px - 26, y: py - tr - 78, w: 52, h: 78 + tr });
+    }
+    // Keep city labels off the landmark town cluster.
+    if (this.view === 'world' && detail >= 1) {
+      for (const entry of this.cityEntries) {
+        if (!entry.city.landmark) continue;
+        const px = cam.screenX(entry.node.x);
+        const py = cam.screenY(entry.node.y);
+        if (px < -120 || px > cam.vw + 120 || py < -120 || py > cam.vh + 120) continue;
+        const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
+        const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192) * cam.zoom;
+        const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
+        const cx = px + dir * (radius + sz * 0.85);
+        const cy = py + radius * 1.35 + sz * 0.55;
+        reserved.push({ x: cx - sz / 2, y: cy - sz * 0.62, w: sz, h: sz });
+      }
+    }
     for (const node of this.nodesForView()) {
       if (node.kind === 'city') continue;
       const dx = cam.screenX(node.x);
@@ -2624,8 +2834,8 @@ export class MapView {
       })
       .slice()
       .sort((a, b) => {
-        const pa = this.cityPriority(a, currentCityId, tokenCityAt(a));
-        const pb = this.cityPriority(b, currentCityId, tokenCityAt(b));
+        const pa = this.cityPriority(a, currentCityId, tokenCityAt(a)) + (optionCities.has(a.entry.node.id) ? 40000 : 0);
+        const pb = this.cityPriority(b, currentCityId, tokenCityAt(b)) + (optionCities.has(b.entry.node.id) ? 40000 : 0);
         if (pa !== pb) return pb - pa;
         return a.entry.city.id < b.entry.city.id ? -1 : 1;
       });
@@ -2654,7 +2864,8 @@ export class MapView {
       let chosen: Rect | null = null;
       for (const [cx, cy] of placements) {
         const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-        if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+        if (rect.x < board.x + 3 || rect.y < board.y + 3
+          || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
         if (reserved.some((r) => rectsHit(rect, r, 3))) continue;
         if (!freeOfAll(rect)) continue;
         chosen = rect;
@@ -2667,7 +2878,7 @@ export class MapView {
             const cx = v.x + Math.cos(a) * rr;
             const cy = v.y + Math.sin(a) * rr * 0.85;
             const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
             if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
             if (!freeOfDiscs(rect)) continue;
             chosen = rect;
@@ -2682,7 +2893,7 @@ export class MapView {
             const cx = v.x + Math.cos(a) * rr;
             const cy = v.y + Math.sin(a) * rr * 0.85;
             const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
             if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
             if (!freeOfDiscs(rect)) continue;
             chosen = rect;
@@ -2692,15 +2903,11 @@ export class MapView {
         if (!chosen) {
           for (const [cx, cy] of placements) {
             const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
             if (reserved.some((r) => rectsHit(rect, r, 1))) continue;
             chosen = rect;
             break;
           }
-        }
-        if (!chosen) {
-          const [cx, cy] = placements[0];
-          chosen = { x: Math.max(3, Math.min(this.camera.vw - w - 3, cx - w / 2)), y: Math.max(3, Math.min(this.camera.vh - h - 3, cy - h / 2)), w, h };
         }
       }
       if (!chosen) continue;
@@ -2877,6 +3084,7 @@ export class MapView {
 
   private drawOptionMarkers(ctx: CanvasRenderingContext2D, now: number): void {
     this.optionPinHits = [];
+    this.edgePinHits = [];
     if (!this.moveOptions) return;
     const cam = this.camera;
     const r = this.tileRadius();
@@ -2887,6 +3095,7 @@ export class MapView {
       const y = cam.screenY(node.y);
       if (x < -60 || x > cam.vw + 60 || y < -90 || y > cam.vh + 60) return;
       const selected = this.selectedOption === option.nodeId;
+      const chip = moveKindChip(node.kind);
       const bob = Math.sin(now / 280 + index * 1.8) * 2;
       const pinY = y - r - 26 - bob;
       const number = this.moveHooks?.numbers?.[index] ?? index + 1;
@@ -2901,34 +3110,93 @@ export class MapView {
       ctx.moveTo(x, pinY + 12);
       ctx.lineTo(x, y - r - 2);
       ctx.strokeStyle = selected ? '#ffd83d' : '#f6efe0';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.4;
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(x, pinY, 14, 0, TAU);
-      const grad = ctx.createLinearGradient(0, pinY - 14, 0, pinY + 14);
-      grad.addColorStop(0, selected ? '#fff27a' : '#ffffff');
-      grad.addColorStop(1, selected ? '#ffc21f' : '#ffe7a0');
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.strokeStyle = '#23385c';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      // square-kind colour chip
-      const palette = gemColors(node.kind);
-      ctx.beginPath();
-      ctx.arc(x + 11, pinY + 9, 5, 0, TAU);
-      ctx.fillStyle = palette.main;
+      ctx.fillStyle = chip.color;
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.fillStyle = '#20315a';
+      ctx.strokeStyle = selected ? '#ffd83d' : '#23385c';
+      ctx.lineWidth = selected ? 3 : 1.5;
+      ctx.stroke();
+      // shared square-kind symbol chip
+      ctx.beginPath();
+      ctx.arc(x + 11, pinY + 9, 7.5, 0, TAU);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = chip.color;
+      ctx.font = `900 9px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(chip.symbol, x + 11, pinY + 9.5);
+      const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
+      ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
       ctx.font = `800 15px ${LABEL_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(number), x, pinY + 0.5);
       ctx.restore();
     });
+
+    // Endpoint indicator for a selected path whose far node cannot fit in the
+    // HUD-free board area. 44px diameter so it is a legal touch target.
+    if (this.selectedOption) {
+      const option = this.moveOptions.find((o) => o.nodeId === this.selectedOption);
+      const node = option ? this.nodeById.get(option.nodeId) : null;
+      if (node) {
+        const x = cam.screenX(node.x);
+        const y = cam.screenY(node.y);
+        const board = this.boardBox();
+        const m = 26;
+        if (x < board.x + m || x > board.x + board.w - m || y < board.y + m || y > board.y + board.h - m) {
+          const bx = Math.max(board.x + m, Math.min(board.x + board.w - m, x));
+          const by = Math.max(board.y + m, Math.min(board.y + board.h - m, y));
+          const chip = moveKindChip(node.kind);
+          const number = this.moveHooks?.numbers?.[this.moveOptions.findIndex((o) => o.nodeId === node.id)] ?? 1;
+          const ang = Math.atan2(y - by, x - bx);
+          this.edgePinHits.push({ nodeId: node.id, x: bx, y: by, r: 24 });
+          ctx.save();
+          ctx.fillStyle = 'rgba(8, 26, 48, 0.36)';
+          ctx.beginPath();
+          ctx.arc(bx + 1, by + 2, 22, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(bx, by, 22, 0, TAU);
+          ctx.fillStyle = chip.color;
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.strokeStyle = '#ffd83d';
+          ctx.lineWidth = 2.4;
+          ctx.stroke();
+          // arrow pointing to the off-screen endpoint
+          ctx.beginPath();
+          ctx.moveTo(bx + Math.cos(ang) * 27, by + Math.sin(ang) * 27);
+          ctx.lineTo(bx + Math.cos(ang + 2.5) * 16, by + Math.sin(ang + 2.5) * 16);
+          ctx.lineTo(bx + Math.cos(ang - 2.5) * 16, by + Math.sin(ang - 2.5) * 16);
+          ctx.closePath();
+          ctx.fillStyle = '#ffd83d';
+          ctx.fill();
+          ctx.strokeStyle = '#23385c';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
+          ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
+          ctx.font = `800 15px ${LABEL_FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(number), bx, by + 0.5);
+          ctx.restore();
+        }
+      }
+    }
   }
 
   private drawPathPreview(ctx: CanvasRenderingContext2D, option: MoveOption, selected: boolean): void {
@@ -2979,45 +3247,26 @@ export class MapView {
   }
 
   private drawBadge(ctx: CanvasRenderingContext2D): void {
-    this.badgeRect = null;
-    if (!this.selectedOption) return;
-    const node = this.nodeById.get(this.selectedOption);
-    if (!node) return;
-    const cam = this.camera;
-    const x = cam.screenX(node.x);
-    const y = cam.screenY(node.y);
-    if (x < -80 || x > cam.vw + 80 || y < -80 || y > cam.vh + 80) return;
-    const fs = 12;
-    const font = `800 ${fs}px ${LABEL_FONT}`;
-    const text = 'ここへ移動';
-    const w = this.measureText(ctx, text, font) + 20;
-    const h = 24;
-    let bx = x - w / 2;
-    let by = y - this.tokenHeight() - 14;
-    if (by < 5) by = y + this.tileRadius() + 16;
-    bx = Math.max(5, Math.min(cam.vw - w - 5, bx));
-    const rect = { x: bx, y: by, w, h };
-    this.badgeRect = rect;
+    // Next hop target, drawn above the vehicle for train -> ferry switches.
+    const progress = this.getMoveProgress();
+    if (!progress?.nextNodeId) return;
+    const next = this.nodeById.get(progress.nextNodeId);
+    if (!next) return;
+    const x = this.camera.screenX(next.x);
+    const y = this.camera.screenY(next.y);
+    const pulse = (Math.sin(performance.now() / 240) + 1) / 2;
+    const rr = this.tileRadius() + 7 + pulse * 4;
     ctx.save();
-    ctx.fillStyle = 'rgba(8, 28, 52, 0.32)';
+    ctx.strokeStyle = 'rgba(255, 224, 74, 0.98)';
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.roundRect(rect.x + 1, rect.y + 2.5, w, h, h / 2);
-    ctx.fill();
-    const grad = ctx.createLinearGradient(0, by, 0, by + h);
-    grad.addColorStop(0, '#fff27a');
-    grad.addColorStop(1, '#ffc21f');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.roundRect(rect.x, rect.y, w, h, h / 2);
-    ctx.fill();
-    ctx.strokeStyle = '#2a3b62';
-    ctx.lineWidth = 2;
+    ctx.arc(x, y, rr, 0, TAU);
     ctx.stroke();
-    ctx.fillStyle = '#20315a';
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, rect.x + w / 2, rect.y + h / 2 + 0.5);
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(x, y, rr + 4, 0, TAU);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -3050,7 +3299,75 @@ export class MapView {
     const idleByNode = new Map<string, number[]>();
     for (const token of this.tokens) {
       if (this.tokenRealm(token.playerId) !== this.view) continue;
-      if (this.moveAnim?.playerId === token.playerId || this.warpAnim?.playerId === token.playerId) continue;
+      const move = this.moveAnim;
+      if (move && move.playerId === token.playerId) {
+        const full = [move.startNode, ...move.path];
+        const raw = Math.max(0, (now - move.start) / move.msPerStep);
+        const idx = Math.min(full.length - 2, Math.floor(raw));
+        const frac = Math.min(1, Math.max(0, raw - idx));
+        const a = this.nodeById.get(full[idx]);
+        const b = this.nodeById.get(full[idx + 1]);
+        if (a && b) {
+          const dx = wrapDx(a.x, b.x);
+          const mode = this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail';
+          const vehicle: VehicleKind =
+            mode === 'sea' ? 'ferry' : move.dice >= 3 ? 'bullet_train' : move.dice === 2 ? 'express' : 'train';
+          const prevNode = idx > 0 ? this.nodeById.get(full[idx - 1]) : null;
+          const prevMode = prevNode ? this.edgeModes.get(edgeKey(prevNode.id, a.id)) ?? 'rail' : null;
+          const wx = a.x + dx * frac;
+          const wy = a.y + (b.y - a.y) * frac;
+          const sx = this.camera.screenX(wx);
+          const sy = this.camera.screenY(wy);
+          entries.push({
+            ...base(token.playerId),
+            x: sx,
+            y: sy,
+            worldX: wx,
+            worldY: wy,
+            idle: false,
+            facing: Math.abs(dx) > 0.01 ? Math.sign(dx) : 1,
+            moving: true,
+            vehicle,
+            stepFrac: frac,
+            stepIndex: idx,
+            switchPoof: prevMode !== null && prevMode !== mode && frac < 0.22,
+            switchAt: prevMode !== null && prevMode !== mode ? move.start + idx * move.msPerStep : 0,
+            tilt: Math.max(-0.12, Math.min(0.12, Math.atan2(b.y - a.y, Math.abs(dx) < 0.01 ? 0.01 : dx) * 0.28)),
+            anchorX: sx,
+            anchorY: sy,
+            nodeId: token.nodeId,
+          });
+          continue;
+        }
+      }
+      const warp = this.warpAnim;
+      if (warp && warp.playerId === token.playerId) {
+        const world = this.tokenWorldPosition(token.playerId, now);
+        if (world) {
+          const from = this.nodeById.get(warp.fromNode);
+          const to = this.nodeById.get(warp.toNode);
+          const dx = from && to ? wrapDx(from.x, to.x) : 1;
+          const vehicle: VehicleKind | null =
+            warp.via === 'plane' ? 'plane' : warp.via === 'rocket' ? 'rocket' : warp.via === 'carpet' ? 'carpet' : null;
+          const sx = this.camera.screenX(world.x);
+          const sy = this.camera.screenY(world.y);
+          entries.push({
+            ...base(token.playerId),
+            x: sx,
+            y: sy,
+            worldX: world.x,
+            worldY: world.y,
+            idle: false,
+            facing: Math.abs(dx) > 0.01 ? Math.sign(dx) : 1,
+            vehicle,
+            warping: warp.via,
+            anchorX: sx,
+            anchorY: sy,
+            nodeId: token.nodeId,
+          });
+          continue;
+        }
+      }
       const ids = idleByNode.get(token.nodeId) ?? [];
       ids.push(token.playerId);
       idleByNode.set(token.nodeId, ids);
@@ -3832,46 +4149,78 @@ export class MapView {
     const cam = this.camera;
     const state = this.state;
     if (!state) return;
-    const markerName = (x: number, y: number, text: string, color: string, shape: 'current' | 'destination'): void => {
+    const board = this.boardBox();
+    const used: Rect[] = [];
+    const markerName = (
+      x: number,
+      y: number,
+      text: string,
+      color: string,
+      shape: 'current' | 'destination',
+    ): void => {
       ctx.save();
       ctx.translate(x, y);
       ctx.fillStyle = 'rgba(8, 30, 52, 0.28)';
       ctx.beginPath();
-      ctx.ellipse(0, 8, 9, 3.5, 0, 0, TAU);
+      ctx.ellipse(0, 9, 10, 4, 0, 0, TAU);
       ctx.fill();
       if (shape === 'destination') {
         ctx.strokeStyle = '#23385c';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -12); ctx.stroke();
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -15); ctx.stroke();
         for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) {
           ctx.fillStyle = (r + c) % 2 === 0 ? '#1b2b47' : '#ffffff';
-          ctx.fillRect(2 + c * 6, -12 + r * 6, 6, 6);
+          ctx.fillRect(1.5 + c * 7.5, -15 + r * 7.5, 7.5, 7.5);
         }
-        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1; ctx.strokeRect(2, -12, 12, 12);
+        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1.2; ctx.strokeRect(1.5, -15, 15, 15);
       } else {
         ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU);
         ctx.fillStyle = color; ctx.fill();
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.4; ctx.stroke();
-        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.6; ctx.stroke();
+        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1.3; ctx.stroke();
       }
       ctx.restore();
-      // Label in screen coordinates, after the translated marker drawing.
-      const fs = 12;
+
+      const fs = 13;
       ctx.save();
       ctx.font = `800 ${fs}px ${LABEL_FONT}`;
-      const tw = ctx.measureText(text).width + 14;
-      const bx = Math.max(3, Math.min(cam.vw - tw - 3, x - tw / 2));
-      const by = Math.max(3, Math.min(cam.vh - 20, y - 34));
+      const tw = Math.min(board.w - 10, ctx.measureText(text).width + 16);
+      const th = 22;
+      const raw: Rect[] = [
+        { x: x - tw / 2, y: y - 39, w: tw, h: th },
+        { x: x - tw / 2, y: y + 19, w: tw, h: th },
+        { x: x + 20, y: y - th / 2, w: tw, h: th },
+        { x: x - tw - 20, y: y - th / 2, w: tw, h: th },
+      ];
+      let bx = raw[0].x;
+      let by = raw[0].y;
+      for (const cand of raw) {
+        const rx = Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, cand.x));
+        const ry = Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, cand.y));
+        const rect = { x: rx, y: ry, w: tw, h: th };
+        if (!used.some((r) => rectsHit(rect, r, 4))) {
+          bx = rx;
+          by = ry;
+          break;
+        }
+      }
+      const labelRect = {
+        x: Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, bx)),
+        y: Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, by)),
+        w: tw,
+        h: th,
+      };
+      used.push(labelRect);
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = shape === 'destination' ? '#c98a00' : color;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(bx, by, tw, 19, 9.5); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.roundRect(labelRect.x, labelRect.y, tw, th, 10); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = '#23385c';
-      ctx.lineWidth = 0.8;
+      ctx.lineWidth = 0.9;
       ctx.stroke();
       ctx.fillStyle = shape === 'destination' ? '#8a5c00' : '#1a2b4c';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(text, bx + tw / 2, by + 10);
+      ctx.fillText(text, labelRect.x + tw / 2, labelRect.y + th / 2 + 0.5);
       ctx.restore();
     };
     for (const token of this.tokens) {
@@ -4319,6 +4668,7 @@ export class MapView {
 
   private readonly onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    this.overviewMode = false;
     const p = this.eventPoint(e);
     const scale = e.deltaMode === 1 ? 16 : 1;
     const factor = Math.exp(-e.deltaY * scale * 0.0014);
@@ -4376,6 +4726,7 @@ export class MapView {
   }
 
   private applyPinch(): void {
+    this.overviewMode = false;
     const pts = [...this.pointers.values()];
     if (pts.length < 2) return;
     const [a, b] = pts;
@@ -4399,9 +4750,8 @@ export class MapView {
       this.hoveredOption = next;
       this.requestRender();
     }
-    const badge = this.badgeRect;
     const city = option ? null : this.hitCity(x, y);
-    this.canvas.style.cursor = option || (badge && insideRect(x, y, badge)) ? 'pointer' : city ? 'pointer' : 'grab';
+    this.canvas.style.cursor = option || city ? 'pointer' : 'grab';
   }
 
   private handleTap(x: number, y: number): void {
@@ -4417,20 +4767,17 @@ export class MapView {
       this.lastTap = null;
       return;
     }
-    if (this.badgeRect && insideRect(x, y, this.badgeRect) && this.selectedOption) {
-      this.confirmOption(this.selectedOption);
-      this.lastTap = null;
-      return;
-    }
     const option = this.hitOption(x, y);
     if (option) {
-      if (this.selectedOption === option.nodeId) this.confirmOption(option.nodeId);
-      else {
-        this.selectedOption = option.nodeId;
-        this.hoveredOption = option.nodeId;
-        this.moveHooks?.onSelect?.(option.nodeId);
-        this.requestRender();
-      }
+      // A pin tap only changes selection. Confirmation always comes from the
+      // explicit UI button (or the map's numbered badge), so UI and map cannot
+      // disagree about whether a move is committed.
+      this.selectedOption = option.nodeId;
+      this.hoveredOption = option.nodeId;
+      this.overviewMode = false;
+      this.frameSelectedPath(option.nodeId);
+      this.moveHooks?.onSelect?.(option.nodeId);
+      this.requestRender();
       this.lastTap = null;
       return;
     }
@@ -4442,11 +4789,14 @@ export class MapView {
     }
     if (this.selectedOption) {
       this.selectedOption = null;
+      this.hoveredOption = null;
+        this.moveHooks?.onSelect?.(null);
       this.requestRender();
     }
-    // Double-tap zooms around the tapped world point. Single taps only clear selection.
+    // Double-tap zooms around the tapped world point.
     if (this.lastTap && now - this.lastTap.at < 330 && Math.hypot(x - this.lastTap.x, y - this.lastTap.y) < 28) {
       this.lastTap = null;
+      this.overviewMode = false;
       const cam = this.camera;
       const wx = cam.x + (x - cam.vw / 2) / cam.zoom;
       const wy = cam.y + (y - cam.vh / 2) / cam.zoom;
@@ -4465,6 +4815,17 @@ export class MapView {
     if (!this.moveOptions) return null;
     let best: MoveOption | null = null;
     let bestDist = Infinity;
+    for (const pin of this.edgePinHits) {
+      const d = Math.hypot(pin.x - x, pin.y - y);
+      if (d <= pin.r && d < bestDist) {
+        const option = this.moveOptions.find((o) => o.nodeId === pin.nodeId) ?? null;
+        if (option) {
+          best = option;
+          bestDist = d;
+        }
+      }
+    }
+    if (best) return best;
     for (const pin of this.optionPinHits) {
       const d = Math.hypot(pin.x - x, pin.y - y);
       if (d <= pin.r && d < bestDist) {
@@ -4598,4 +4959,29 @@ function gemColors(kind: SquareKind): { light: string; main: string; dark: strin
     case 'portal': return { light: '#fff6b0', main: '#ffd84a', dark: '#d19100', edge: '#8f6100' };
     case 'city': return { light: '#ffffff', main: '#eef7ff', dark: '#cfe5f4', edge: '#23385c' };
   }
+}
+
+/**
+ * Canonical square-kind chip. The map pins and the UI option-list chips both
+ * import this so numbers, colours and kind symbols cannot drift apart.
+ */
+export function moveKindChip(kind: SquareKind): MoveKindChip {
+  const colors = gemColors(kind);
+  const symbol =
+    kind === 'city' ? '駅' :
+      kind === 'blue' ? '＋' :
+        kind === 'red' ? '−' :
+          kind === 'yellow' ? '？' :
+            kind === 'news' ? '！' :
+              kind === 'shop' ? '店' :
+                kind === 'warp' ? '↻' : '↯';
+  const label =
+    kind === 'city' ? '都市' :
+      kind === 'blue' ? '収入' :
+        kind === 'red' ? '支出' :
+          kind === 'yellow' ? 'カード' :
+            kind === 'news' ? 'ニュース' :
+              kind === 'shop' ? 'カード売り場' :
+                kind === 'warp' ? 'ワープ' : '異世界出口';
+  return { color: kind === 'city' ? '#2f6fa8' : colors.main, symbol, label };
 }

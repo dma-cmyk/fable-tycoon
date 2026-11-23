@@ -17,6 +17,7 @@ const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('map') as HTMLCanvasElement | null;
 const panel = document.getElementById('panel');
 const statusEl = document.getElementById('status');
+const moveHud = document.getElementById('move-hud');
 const loadingEl = document.getElementById('loading');
 const loadingText = document.getElementById('loading-text');
 const emoteGrid = document.getElementById('emotes');
@@ -43,6 +44,10 @@ interface DemoApi {
   floatText(text?: string, color?: string): void;
   animateMoveTo(cityId: string, dice?: number): Promise<void>;
   showMoveOptions(): void;
+  selectOption(nodeId?: string): void;
+  confirmOption(): void;
+  setLabelObstacles(rects: Array<{ x: number; y: number; w: number; h: number }>): void;
+  mixedMove(msPerStep?: number): Promise<void>;
   measurePan(ms?: number): Promise<FrameStats>;
   celebrate(kind: CelebrateKind): void;
   shake(intensity?: number): void;
@@ -195,6 +200,20 @@ async function main(): Promise<void> {
   });
 
   let moveOptions: MoveOption[] = [];
+  let moveSelection: string | null = null;
+  const commitMove = (nodeId: string): void => {
+    const option = moveOptions.find((o) => o.nodeId === nodeId);
+    if (!option) return;
+    const target = state.players[state.current];
+    if (target) {
+      target.prevNodeId = target.nodeId;
+      target.nodeId = nodeId;
+    }
+    moveSelection = null;
+    map.floatText(nodeId, '移動決定！', '#c88900');
+    setStatus(`移動決定: ${nodeLabel(nodeId)}（${option.path.length} 歩）`);
+    map.bubble(0, `${nodeLabel(nodeId)}へ向かうぞ！`, 2600);
+  };
   const showMoveOptions = (): void => {
     const from = state.players[state.current]?.nodeId ?? 'c:tokyo';
     const paths = bfsPaths(from, 4);
@@ -227,19 +246,55 @@ async function main(): Promise<void> {
       if (picked.length === 3) break;
     }
     moveOptions = picked.length > 0 ? picked : pool.slice(0, 3);
-    map.setMoveOptions(moveOptions, (nodeId) => {
-      const option = moveOptions.find((o) => o.nodeId === nodeId);
-      if (!option) return;
-      const target = state.players[state.current];
-      if (target) {
-        target.prevNodeId = target.nodeId;
-        target.nodeId = nodeId;
-      }
-      map.floatText(nodeId, '移動決定！', '#c88900');
-      setStatus(`移動先を選択: ${nodeLabel(nodeId)}（${option.path.length} 歩）`);
-      map.bubble(0, `${nodeLabel(nodeId)}へ向かうぞ！`, 2600);
+    moveSelection = null;
+    map.setMoveOptions(moveOptions, {
+      numbers: [1, 2, 3].slice(0, moveOptions.length),
+      onSelect: (nodeId) => {
+        moveSelection = nodeId;
+        if (!nodeId) {
+          setStatus('選択を解除しました');
+          return;
+        }
+        const option = moveOptions.find((o) => o.nodeId === nodeId);
+        setStatus(`選択中: ${nodeLabel(nodeId)}（${option?.path.length ?? 0} 歩）— 下の確定で移動`);
+      },
+      onConfirm: commitMove,
     });
-    setStatus(`移動先候補 ${moveOptions.length} 件（1回目タップで経路、2回目で決定）`);
+    setStatus(`移動先候補 ${moveOptions.length} 件（タップで選択、確定ボタンで移動）`);
+  };
+
+  const selectOption = (nodeId?: string): void => {
+    if (!moveOptions.length) showMoveOptions();
+    const target = nodeId ?? moveOptions[0]?.nodeId;
+    if (!target) return;
+    map.selectMoveOption(target);
+  };
+
+  const mixedMove = async (msPerStep = 1400): Promise<void> => {
+    const edges = data.board.edges;
+    const rail = edges.find((e) => e.mode === 'rail' && edges.some((q) => q.mode === 'sea' && (q.a === e.b || q.b === e.b)));
+    if (!rail) {
+      setStatus('鉄道→海路の切り替え経路が見つかりません');
+      return;
+    }
+    const sea = edges.find((e) => e.mode === 'sea' && (e.a === rail.b || e.b === rail.b));
+    if (!sea) return;
+    const railEnd = rail.a === rail.b ? rail.a : rail.b;
+    const start = rail.a === railEnd ? rail.b : rail.a;
+    const arrival = sea.a === railEnd ? sea.b : sea.a;
+    const player = state.players[0];
+    if (!player) return;
+    player.prevNodeId = start;
+    player.nodeId = start;
+    map.setState(state);
+    await map.focusNode(start, { zoom: 1.25, ms: 0 });
+    setStatus('鉄道から海路へ切り替わる区間を移動中…');
+    const hudTimer = startMoveHud();
+    await map.animateMove(0, [railEnd, arrival], msPerStep, { dice: 1 });
+    stopMoveHud(hudTimer);
+    player.prevNodeId = railEnd;
+    player.nodeId = arrival;
+    setStatus('乗り換え移動が完了');
   };
 
   const playAnim = (anim: EmoteAnim, target = 1): Promise<void> => {
@@ -248,6 +303,21 @@ async function main(): Promise<void> {
     const line = def.lines[charId] ?? def.lines.default;
     map.bubble(0, line, Math.min(2600, def.cooldownMs + 800));
     return map.playEmote(0, def, target);
+  };
+
+  const startMoveHud = (): number => {
+    const labels: Record<string, string> = { ferry: 'ふね', train: 'れっしゃ', express: 'きゅうこう', bullet_train: 'しんかんせん' };
+    const tick = (): void => {
+      if (!moveHud) return;
+      const p = map.getMoveProgress();
+      moveHud.textContent = p ? `${labels[p.vehicle ?? 'train'] ?? 'いどう'}　のこり ${p.remaining} マス` : '';
+    };
+    tick();
+    return window.setInterval(tick, 80);
+  };
+  const stopMoveHud = (timer: number): void => {
+    window.clearInterval(timer);
+    if (moveHud) moveHud.textContent = '';
   };
 
   const animateMoveTo = async (cityId: string, dice = 1): Promise<void> => {
@@ -260,7 +330,9 @@ async function main(): Promise<void> {
       return;
     }
     setStatus(`${nodeLabel(nodeId)} まで ${path.length} 歩を移動中…`);
+    const hudTimer = startMoveHud();
     await map.animateMove(0, path, 180, { dice });
+    stopMoveHud(hudTimer);
     player.prevNodeId = player.nodeId;
     player.nodeId = nodeId;
     setStatus(`${nodeLabel(nodeId)} に到着（${path.length} 歩）`);
@@ -345,6 +417,10 @@ async function main(): Promise<void> {
       map.floatText(state.players[0]?.nodeId ?? 'c:tokyo', text, color),
     animateMoveTo,
     showMoveOptions,
+    selectOption,
+    confirmOption: () => { if (moveSelection) map.confirmMoveOption(moveSelection); },
+    setLabelObstacles: (rects) => map.setLabelObstacles(rects),
+    mixedMove,
     measurePan,
     celebrate: (kind) => {
       const nodeId = state.players[state.current]?.nodeId;
@@ -380,6 +456,7 @@ async function main(): Promise<void> {
     void animateMoveTo('seoul');
   });
   bind('btn-options', showMoveOptions);
+  bind('btn-confirm', () => { if (moveSelection) map.confirmMoveOption(moveSelection); });
   bind('btn-focus', () => {
     void map.focusNode('c:paris', { zoom: 1.9, ms: 650 });
   });

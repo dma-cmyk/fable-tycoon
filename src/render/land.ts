@@ -26,7 +26,7 @@ interface TreeStamp {
   lon?: number;
 }
 
-const CACHE_PAD = 0.55; // extra world margin on each side of the viewport
+const CACHE_PAD = 0.85; // extra world margin on each side of the viewport
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -207,6 +207,7 @@ export class LandLayer {
     paintStatic?: LayerPainter,
     treeAvoid?: (x: number, y: number) => boolean,
     geoAt?: (x: number, y: number) => { lat: number; lon: number },
+    tileWorld = true,
   ): void {
     // Quantise zoom on a log2 grid (~7% steps). The cached raster is reused and
     // scaled a few percent while zooming, so wheel/pinch do not rebuild every frame.
@@ -226,8 +227,8 @@ export class LandLayer {
     const dy = Math.abs(cam.y - this.centerY);
     const needs =
       key !== this.key ||
-      dx > marginX * 0.72 ||
-      dy > marginY * 0.72;
+      dx > marginX * 0.8 ||
+      dy > marginY * 0.8;
 
     if (needs) {
       this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt);
@@ -239,6 +240,12 @@ export class LandLayer {
     const drawH = this.hWorld * cam.zoom;
 
     if (this.wWorld >= MAP_W - 0.5) {
+      // Overview intentionally shows exactly one circumference: repeating it
+      // would make phone overviews look like the same continents twice.
+      if (!tileWorld) {
+        target.drawImage(this.canvas, screenX, screenY, drawW, drawH);
+        return;
+      }
       // Whole-world cache: tile horizontally so views that straddle the seam
       // always show the wrapped part of the world on both sides.
       const first = Math.floor((0 - screenX) / drawW);

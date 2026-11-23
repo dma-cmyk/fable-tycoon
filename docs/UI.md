@@ -36,7 +36,7 @@ PC（横長 ≥ 900px）:
 
 ## 3. 操作
 - マップ: ドラッグでパン、ホイール / ピンチでズーム（0.35〜3.0）、横方向は無限ループ。ダブルタップでズームイン。
-- 移動先選択: 到達可能マスを脈動ハイライト + ゴースト経路。タップで決定（確認なし、ただし誤タップ防止のため 1 回目タップでそのマスの経路を太く表示し「ここへ移動」ボタン、もう一度タップでも決定）。PC はホバーで経路プレビュー。
+- 移動先選択: 到達可能マスを脈動ハイライト + ゴースト経路。ピン/一覧のタップは**選択のみ**（経路を太く表示し、セーフエリア内へフィット）。確定は下段の「ここへ移動」= `confirmMoveOption` だけ。同じピンの再タップでも確定しない。空マップのタップは選択解除で `onSelect(null)`。PC はホバーで経路プレビュー。
 - 都市タップ: 都市情報シート（物件一覧、所有者、価格、収益率、独占状況、ランドマーク画像）。
 - 物件購入フェーズ: 都市シートが購入モードで開き、各物件に「買う」、下に「購入を終える」。
 - キーボード（PC）: Space/Enter = 主ボタン、Esc = ダイアログを閉じる、1〜3 = 選択肢。
@@ -53,22 +53,30 @@ PC（横長 ≥ 900px）:
 ### `src/render/map.ts` — `MapView`
 ```ts
 export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; npcs?: Map<string, HTMLImageElement>; vehicles?: Map<string, HTMLImageElement>; joy?: Map<string, HTMLImageElement>; sad?: Map<string, HTMLImageElement>; realms?: Map<RealmId, HTMLImageElement>; stamps?: Map<string, HTMLImageElement>; terrain?: HTMLImageElement; terrainLo?: HTMLImageElement; mapArt?: MapArtData; }
-export interface MoveOptionHooks { onSelect?: (nodeId: string) => void; onConfirm?: (nodeId: string) => void; numbers?: number[]; }
+export interface MoveOptionHooks { onSelect?: (nodeId: string | null) => void; onConfirm?: (nodeId: string) => void; numbers?: number[]; }
 export interface SafeArea { top: number; right: number; bottom: number; left: number; }
+export interface MapLabelObstacle { x: number; y: number; w: number; h: number; } // CSS px, canvas relative
+export interface MoveProgress { playerId: number; path: string[]; stepIndex: number; remaining: number; vehicle: string | null; nextNodeId: string | null; }
+export interface MoveKindChip { color: string; symbol: string; label: string; }
+export function moveKindChip(kind: SquareKind): MoveKindChip;
 export class MapView {
   constructor(canvas: HTMLCanvasElement, data: GameData, assets: MapAssets);
   setState(state: PublicState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
   setMoveOptions(options: MoveOption[] | null, onPickOrHooks: ((nodeId: string) => void) | MoveOptionHooks | null): void;
-  /** 一覧から同じ選択状態にする（確定はしない）。 */
+  /** 一覧から同じ選択状態にする（選択のみ。経路をセーフエリア内にフィットする）。 */
   selectMoveOption(nodeId: string): void;
-  /** 地図外の確定ボタンから呼ぶ。nodeId 省略時は選択中。 */
+  /** UI の確定ボタンからのみ呼ぶ。nodeId 省略時は選択中。 */
   confirmMoveOption(nodeId?: string): void;
+  /** HUD の「残りマス」表示用。移動中以外は null。 */
+  getMoveProgress(): MoveProgress | null;
   /** HUD/パネルが覆う領域。カメラのフィット・フォーカス・フォローは残りの盤面領域基準になる。 */
   setSafeArea(area: Partial<SafeArea>): void;
+  /** HUD/モーダル/操作パネルの矩形。都市名・地形名ラベルはこの領域を避ける。 */
+  setLabelObstacles(rects: ReadonlyArray<MapLabelObstacle>): void;
   animateMove(playerId: number, path: string[], msPerStep: number, opts?: { dice?: number }): Promise<void>; // dice 1=列車 / 2=急行 / 3=超特急
   warp(playerId: number, nodeId: string, via?: 'plane'|'rocket'|'carpet'|'event'|'tornado'|'realm'): Promise<void>;
   focusNode(nodeId: string, opts?: { zoom?: number; ms?: number }): Promise<void>;
-  fitWorld(ms?: number): Promise<void>; // セーフエリアの盤面領域に全体を収める（通常の最小ズームより小さくできる）
+  fitWorld(ms?: number): Promise<void>; // 概要モード。セーフエリアの盤面領域に世界一周を横幅いっぱいに1回だけ描く（通常の最小ズームより小さくできる）
   follow(playerId: number | null): void;
   floatText(nodeId: string, text: string, color: string): void;
   onCityTap(cb: (cityId: string) => void): void;
@@ -98,9 +106,11 @@ export class MapView {
   /** 外部キャンバスにワールドミニマップを描画。タップでその地点へジャンプ。 */
   setMiniMap(el: HTMLCanvasElement | null): void;
 }
+// UI の候補チップは moveKindChip(node.kind) の color/symbol/label を地図ピンと共有する。
+// 空マップのタップは onSelect(null)。ピン/一覧の再タップは選択のみで、onConfirm は明示的な confirmMoveOption だけ。
 ```
-- 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（全体表示: 主要路線・主要都市ドット・現在地/目的地マーカー、通常: マス・駅・ラベル）、画面外カリング。移動候補はUI一覧と同じ番号のピン（44px 判定）で表示し、初回タップ/`selectMoveOption` で選択、再タップ/`confirmMoveOption` で確定する。
-- 見た目: 海は青のグラデーション + 波の模様、大陸は明るい緑に濃い緑の縁と影、所々に木のスタンプ（決定的な疑似乱数で配置）。鉄道は白い太線 + 灰色の縁、航路は白の点線。マスは丸角の宝石風タイル（青 / 赤 / 黄 / ニュースは紫で「！」）。都市は白い台座の駅 + 名前ラベル（吹き出し風、所有者の色の帯、独占で金縁）、ランドマークがある都市は画像を描く。駒はキャラ画像（足元に影と色付きリング、同じマスに複数なら並べる）。目的地はチェッカーフラッグ + 脈動、取り立て屋は holder の駒の後ろに NPC 画像。
+- 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（概要: 世界一周を横1回・主要都市ドット・現在地/目的地マーカー、通常: マス・駅・ラベル）、画面外カリング。移動中は補間位置に乗り物+乗員を描き、次のマスを金リングで強調する。移動候補はUI一覧と同じ番号・色・記号のピン（44px 判定）で表示し、ピン/一覧のタップは選択のみ、確定は `confirmMoveOption` だけ。選択経路はセーフエリア内にフィットし、端点が入らない場合は44pxの番号付き画面端ボタンを出す。
+- 見た目: 海は青のグラデーション + 波の模様、大陸は明るい緑に濃い緑の縁と影、所々に木のスタンプ（決定的な疑似乱数で配置）。鉄道は通常倍率で太い灰色の塊を避け、白い1〜1.5pxの芯 + 薄いバラスト、航路は白の点線。マスは18〜22pxの天面 + 2〜3pxの側面を持つ宝石風タイル（青=円/＋、赤=角丸四角/−、黄=菱形/？、ニュース=八角形/！、売り場=角丸四角/店）。都市は白い台座の駅 + 名前ラベル（吹き出し風、所有色帯、独占で金縁）、ランドマークがある都市は画像と足元の街クラスタを描く。駒はキャラ画像（影・色リング、複数は顔バッジ）。目的地はチェッカーフラッグ + 脈動、取り立て屋は holder の後ろに NPC 画像。
 
 ### `src/audio/audio.ts` — `Audio`
 ```ts
