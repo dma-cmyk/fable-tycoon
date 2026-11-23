@@ -44,7 +44,7 @@ class Peer {
   history: ServerMsg[] = [];
   onState: ((state: PublicState, seq: number) => void) | null = null;
   private waiters: Waiter[] = [];
-  private readonly autoPlay: boolean;
+  autoPlay: boolean;
 
   constructor(session: Session, label: string, autoPlay: boolean) {
     this.session = session;
@@ -260,7 +260,6 @@ describe('online P2P over an in-process MQTT broker', () => {
     function observe(peer: Peer): void {
       peer.onState = (state, seq) => {
         if (peer === guest2 && seq >= 12) killGuestGate.resolve();
-        if (peer === guest1 && seq >= 30) killHostGate.resolve();
         if (finished || state.phase.t !== 'game_over') return;
         finished = true;
         clearTimeout(gameTimeout);
@@ -270,6 +269,14 @@ describe('online P2P over an in-process MQTT broker', () => {
     observe(guest1);
     observe(guest2);
     observe(guest3);
+
+    // Kill the host while it is the current actor in choose_dest (the browser failure case).
+    host.onState = (state) => {
+      if (state.current === 0 && state.phase.t === 'choose_dest') {
+        host.autoPlay = false;
+        killHostGate.resolve();
+      }
+    };
 
     const rejoin = (async () => {
       await killGuestGate.promise;
@@ -300,6 +307,24 @@ describe('online P2P over an in-process MQTT broker', () => {
       (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
       15_000,
       'new host elected',
+    );
+
+    await guest1.waitFor(
+      (msg) =>
+        msg.t === 'lobby' &&
+        [1, 2, 3].every((seatIndex) => msg.lobby.seats[seatIndex]?.connected === true),
+      15_000,
+      'all guests rebound to the new host',
+    );
+
+    // The old host seat must be driven by the new host's grace/CPU path even if the old host
+    // never comes back. Wait for a state advance before resuming it.
+    const seqAfterMigration = guest1.seq;
+    await guest1.waitFor(
+      (msg) =>
+        (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > seqAfterMigration,
+      20_000,
+      'game advances without old host',
     );
 
     // A returning old host must see the newer generation and step down to guest instead of
@@ -357,6 +382,7 @@ describe('online P2P over an in-process MQTT broker', () => {
     // Seat 1 (guest1) is the lowest connected human seat and must have adopted the room.
     const lobby = guest1.session.lobby();
     expect(lobby?.seats.find((seat) => seat.isHost)?.index).toBe(1);
+    expect([1, 2, 3].every((seatIndex) => lobby?.seats[seatIndex].connected === true)).toBe(true);
     const info = transportInfo(guest1.session);
     expect(info.broker).toContain(`127.0.0.1:${brokerPort}`);
     expect(info.p2pPeers).toBe(0); // Node tests intentionally run relay-only

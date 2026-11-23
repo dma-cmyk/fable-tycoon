@@ -294,6 +294,7 @@ export class OnlineSession implements Session {
   private identity: ClientIdentity | null = null;
   private seat: number | null = null;
   private generation = 0;
+  private shadowGeneration = 0;
   private hostKeyFingerprint: string | null = null;
   private hostBroker: string | null = null;
   private peerKeys = new Map<string, string>();
@@ -735,13 +736,14 @@ export class OnlineSession implements Session {
   /** Drop stale/duplicate host state before it reaches subscribers (generation, seq ordering). */
   private acceptServerMessage(message: ServerMsg): boolean {
     const gen = genOf(message) ?? this.generation;
-    if (this.generation > 0 && gen < this.generation) {
-      this.log(`drop ${message.t}: old generation ${gen} < ${this.generation}`);
+    if (this.shadowGeneration > 0 && gen < this.shadowGeneration) {
+      this.log(`drop ${message.t}: old generation ${gen} < ${this.shadowGeneration}`);
       return false;
     }
     if (gen > this.generation) this.generation = gen;
     if (message.t === 'snapshot' || message.t === 'update') {
-      if (isNewerStateOrder(this.generation, this.shadow.seq, gen, message.seq)) return true;
+      if (gen > this.shadowGeneration) return true; // a new host may legitimately be behind on seq
+      if (isNewerStateOrder(this.shadowGeneration, this.shadow.seq, gen, message.seq)) return true;
       const fill = message.t === 'snapshot' && !this.shadow.state && message.seq === this.shadow.seq;
       if (!fill) this.log(`drop ${message.t}: stale/duplicate seq ${message.seq} (have ${this.shadow.seq})`);
       return fill;
@@ -1053,7 +1055,10 @@ export class OnlineSession implements Session {
     this.retryPendingGuestOps(now);
     const hostSilence = networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS;
     if (!this.hostPeerId || !this.shadow.lobby) return;
-    if (now - this.lastHostHeartbeatAt <= hostSilence) return;
+    // Stagger takeover by seat index so a higher seat cannot split-brain the room while the
+    // lowest connected seat is still broadcasting its generation announcement.
+    const stagger = this.seat === null ? 0 : Math.max(0, this.seat - 1) * 600;
+    if (now - this.lastHostHeartbeatAt <= hostSilence + stagger) return;
     this.setState('reconnecting');
     if (this.promoting) return;
     if (this.isLowestAliveHuman(now)) this.promoteToHost();
@@ -1203,6 +1208,7 @@ export class OnlineSession implements Session {
         this.shadow.lobby = message.lobby;
         this.shadow.state = message.state;
         this.shadow.seq = message.seq;
+        this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
         if (this.pendingAction && message.seq > this.pendingAction.seq) this.pendingAction = null;
         break;
@@ -1210,6 +1216,7 @@ export class OnlineSession implements Session {
         this.lastUpdate = message;
         this.shadow.state = message.state;
         this.shadow.seq = message.seq;
+        this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
         this.shadow.lastFx = message.fx;
         if (this.pendingAction && message.seq > this.pendingAction.seq) this.pendingAction = null;
