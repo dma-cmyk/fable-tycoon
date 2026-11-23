@@ -34,6 +34,9 @@ const DEFAULT_HEARTBEAT_MS = 3_000;
 const DEFAULT_HOST_SILENCE_MS = 10_000;
 const DEFAULT_PEER_SILENCE_MS = 10_000;
 const PROBE_TIMEOUT_MS = 5_000;
+const HOST_PROBE_MS = 3_000;
+const HOST_GONE_MS = 15_000;
+const SELF_HOST_GRACE_MS = 10_000;
 
 const data: GameData = GAME_DATA;
 
@@ -54,6 +57,10 @@ export interface NetworkConfig {
   yearEndAckMs?: number;
   cpuDelayMs?: number;
   fxScale?: number;
+  /** How long a guest probes before takeover, and how old the host must look. */
+  probeMs?: number;
+  hostGoneMs?: number;
+  selfHostGraceMs?: number;
 }
 
 let networkConfig: NetworkConfig = {};
@@ -219,6 +226,21 @@ interface GuestSave {
   name: string;
 }
 
+type HostClaim = Extract<P2PControl, { k: 'hb' | 'host' }>;
+
+function connectedHumans(lobby: LobbyView | null): number {
+  return lobby?.seats.filter((seat) => seat.kind === 'human' && seat.connected).length ?? 0;
+}
+
+/** Conflict resolution ignores generation: higher seq, then more connected humans, then lower peer id. */
+function claimBeats(incoming: HostClaim, current: HostClaim): boolean {
+  if (incoming.seq !== current.seq) return incoming.seq > current.seq;
+  const incomingConnected = incoming.connectedHumans ?? connectedHumans(incoming.lobby);
+  const currentConnected = current.connectedHumans ?? connectedHumans(current.lobby);
+  if (incomingConnected !== currentConnected) return incomingConnected > currentConnected;
+  return incoming.hostPeerId < current.hostPeerId;
+}
+
 export interface HostCheckpoint {
   roomId: string;
   name: string;
@@ -317,6 +339,11 @@ export class OnlineSession implements Session {
   private closed = false;
   private crashed = false;
   private promoting = false;
+  private probeStartedAt = 0;
+  private promotedAt = 0;
+  private hostFollowers = new Set<string>();
+  private lastCompeting: { control: HostClaim; fingerprint: string; at: number } | null = null;
+  private inboundBlockedForTests = false;
   private lastResyncAt = 0;
   private pendingSeat: number | null = null;
   private pendingCharacter: string | null = null;
@@ -358,6 +385,10 @@ export class OnlineSession implements Session {
     const session = new OnlineSession(checkpoint.roomId, checkpoint.name, 'host');
     void session.beginHost(checkpoint.snapshot, checkpoint.generation).catch(() => session.fail());
     return session;
+  }
+
+  setInboundBlockedForTests(blocked: boolean): void {
+    this.inboundBlockedForTests = blocked;
   }
 
   hostCheckpoint(): HostCheckpoint | null {
@@ -518,6 +549,10 @@ export class OnlineSession implements Session {
       return;
     }
     this.generation = generation;
+    this.promotedAt = 0;
+    this.hostFollowers.clear();
+    this.lastCompeting = null;
+    this.probeStartedAt = 0;
     this.hostPeerId = this.clientId;
     this.hostKeyFingerprint = this.identity.fingerprint;
     const deps = this.hostDeps();
@@ -676,7 +711,7 @@ export class OnlineSession implements Session {
   // ---------------------------------------------------------------- transport inbound
 
   private onTransportMessage(from: string, message: P2PMessage, fingerprint: string): void {
-    if (this.crashed || this.closed) return;
+    if (this.crashed || this.closed || this.inboundBlockedForTests) return;
     this.peerSeen.set(from, Date.now());
     const knownKey = this.peerKeys.get(from);
     if (knownKey !== undefined && knownKey !== fingerprint) return;
@@ -703,6 +738,7 @@ export class OnlineSession implements Session {
         return;
       }
       this.guestSeen.set(from, Date.now());
+      this.hostFollowers.add(from);
       this.controller.connect(from);
       this.controller.message(from, message);
       this.afterHostMessage(message);
@@ -758,6 +794,10 @@ export class OnlineSession implements Session {
           void this.transport?.send(from, { k: 'probeAck', at: Date.now() });
         }
         return;
+      case 'host_probe':
+        if (this.role === 'host') this.sendHeartbeat();
+        else this.broadcastPresence();
+        return;
       case 'presence':
         if (this.role === 'host' && this.peerKeys.get(from) !== fingerprint) return;
         this.peerSeen.set(control.peerId, Date.now());
@@ -766,7 +806,7 @@ export class OnlineSession implements Session {
       case 'hb':
       case 'host': {
         if (this.role === 'host') {
-          if (control.gen > this.generation) this.stepDownToGuest(control, fingerprint);
+          this.considerCompetingHost(control, fingerprint);
           return;
         }
         if (control.k === 'hb') this.handleHostHeartbeat(control, fingerprint);
@@ -776,6 +816,7 @@ export class OnlineSession implements Session {
       case 'bye':
         if (this.role === 'host') {
           this.guestSeen.delete(from);
+          this.hostFollowers.delete(from);
           this.controller?.disconnect(from);
         } else if (from === this.hostPeerId) {
           this.lastHostHeartbeatAt = 0;
@@ -804,34 +845,98 @@ export class OnlineSession implements Session {
     return this.shadow.seatKeys[String(seat)] ?? null;
   }
 
+  private ownHostClaim(): HostClaim | null {
+    if (!this.controller) return null;
+    const snapshot = this.controller.publicSnapshot();
+    return {
+      k: 'hb',
+      hostPeerId: this.clientId,
+      seat: this.seat,
+      hostSeat: snapshot.hostSeat,
+      seatKeys: snapshot.seatKeys,
+      lobby: snapshot.lobby,
+      seq: snapshot.seq,
+      gen: this.generation,
+      connectedHumans: connectedHumans(snapshot.lobby),
+      broker: this.transport?.broker() ?? null,
+      at: Date.now(),
+    };
+  }
+
+  private shadowHostClaim(): HostClaim | null {
+    if (!this.hostPeerId || !this.shadow.lobby) return null;
+    return {
+      k: 'hb',
+      hostPeerId: this.hostPeerId,
+      seat: null,
+      hostSeat: this.shadow.hostSeat,
+      seatKeys: this.shadow.seatKeys,
+      lobby: this.shadow.lobby,
+      seq: this.shadow.seq,
+      gen: this.generation,
+      connectedHumans: connectedHumans(this.shadow.lobby),
+      broker: this.hostBroker,
+      at: this.lastHostHeartbeatAt,
+    };
+  }
+
+  private considerCompetingHost(control: HostClaim, fingerprint: string): void {
+    if (control.hostPeerId === this.clientId || control.hostSeat === null) return;
+    const expected = this.trustedSeatKey(control.hostSeat);
+    if (expected !== null && expected !== fingerprint) {
+      this.log(`drop competing host ${control.hostPeerId}: seat key mismatch`);
+      return;
+    }
+    this.lastCompeting = { control, fingerprint, at: Date.now() };
+    const own = this.ownHostClaim();
+    if (own && claimBeats(control, own)) {
+      this.log(`yielding host role to ${control.hostPeerId} (seq ${control.seq} > ${own.seq})`);
+      this.stepDownToGuest(control, fingerprint);
+      return;
+    }
+    const grace = networkConfig.selfHostGraceMs ?? SELF_HOST_GRACE_MS;
+    if (
+      this.promotedAt > 0 &&
+      Date.now() - this.promotedAt > grace &&
+      this.hostFollowers.size === 0
+    ) {
+      this.log(`self-promoted host has no followers; yielding to ${control.hostPeerId}`);
+      this.stepDownToGuest(control, fingerprint);
+    }
+  }
+
   private handleHostHeartbeat(control: Extract<P2PControl, { k: 'hb' }>, fingerprint: string): void {
     if (control.hostPeerId === this.clientId) return;
     if (control.hostSeat === null) return;
     const expected = this.trustedSeatKey(control.hostSeat);
-    const trusted = expected === null || expected === fingerprint;
-    if (!trusted) {
+    if (expected !== null && expected !== fingerprint) {
       this.log(`drop heartbeat from ${control.hostPeerId}: host seat key mismatch`);
       return;
     }
-    if (control.gen < this.generation) {
-      this.log(`drop heartbeat from ${control.hostPeerId}: old generation ${control.gen}`);
-      return;
-    }
     const switching = this.hostPeerId !== control.hostPeerId;
-    if (switching && control.gen === this.generation) {
-      this.log(`drop heartbeat from ${control.hostPeerId}: same generation, different host`);
+    if (switching) {
+      const current = this.shadowHostClaim();
+      const currentFresh =
+        current !== null &&
+        Date.now() - this.lastHostHeartbeatAt <= (networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS);
+      if (currentFresh && !claimBeats(control, current)) {
+        this.log(`drop competing heartbeat ${control.hostPeerId}: current host ranks higher`);
+        return;
+      }
+      this.adoptHostClaim(control, fingerprint, false);
       return;
     }
-    if (switching) {
-      this.hostPeerId = control.hostPeerId;
-      this.hostKeyFingerprint = fingerprint;
+    if (this.hostKeyFingerprint === null) this.hostKeyFingerprint = fingerprint;
+    if (control.gen !== this.generation) {
       this.generation = control.gen;
-      this.setState('reconnecting');
-      this.sendHello();
-    } else if (this.hostKeyFingerprint === null) {
-      this.hostKeyFingerprint = fingerprint;
+      if (control.gen < this.shadowGeneration) {
+        this.shadowGeneration = control.gen;
+        this.shadow.seq = 0;
+        this.shadow.state = null;
+      }
     }
     this.lastHostHeartbeatAt = Date.now();
+    this.probeStartedAt = 0;
     this.hostSeat = control.hostSeat;
     this.shadow.hostSeat = control.hostSeat;
     this.shadow.seatKeys = { ...control.seatKeys };
@@ -849,7 +954,7 @@ export class OnlineSession implements Session {
 
   private switchHost(control: Extract<P2PControl, { k: 'host' }>, fingerprint: string): void {
     if (control.hostPeerId === this.clientId) return;
-    if (control.hostSeat === null || control.gen < this.generation) return;
+    if (control.hostSeat === null) return;
     const expected = this.trustedSeatKey(control.hostSeat);
     if (expected !== null && expected !== fingerprint) {
       this.log(`drop host announcement from ${control.hostPeerId}: seat key mismatch`);
@@ -857,40 +962,60 @@ export class OnlineSession implements Session {
     }
     if (control.hostPeerId === this.hostPeerId && control.gen === this.generation) {
       this.lastHostHeartbeatAt = Date.now();
+      this.probeStartedAt = 0;
       return;
     }
+    const current = this.shadowHostClaim();
+    const currentFresh =
+      current !== null &&
+      Date.now() - this.lastHostHeartbeatAt <= (networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS);
+    if (currentFresh && !claimBeats(control, current)) {
+      this.log(`drop competing host announcement ${control.hostPeerId}: current host ranks higher`);
+      return;
+    }
+    this.adoptHostClaim(control, fingerprint, false);
+  }
+
+  private adoptHostClaim(control: HostClaim, fingerprint: string, forceReset: boolean): void {
     this.hostPeerId = control.hostPeerId;
     this.hostSeat = control.hostSeat;
     this.hostKeyFingerprint = fingerprint;
     this.generation = control.gen;
     this.lastHostHeartbeatAt = Date.now();
+    this.probeStartedAt = 0;
     this.shadow.hostSeat = control.hostSeat;
     this.shadow.seatKeys = { ...control.seatKeys };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
     if (control.broker) this.hostBroker = control.broker;
+    if (
+      forceReset ||
+      control.gen < this.shadowGeneration ||
+      (control.seq < this.shadow.seq && control.gen <= this.shadowGeneration)
+    ) {
+      this.shadowGeneration = control.gen;
+      this.shadow.seq = 0;
+      this.shadow.state = null;
+      this.lastSnapshot = null;
+      this.lastUpdate = null;
+    }
     this.setState('reconnecting');
     this.sendHello();
     setTimeout(() => this.maybeResync(control.hostPeerId, control.seq), 100);
   }
 
-  private stepDownToGuest(control: Extract<P2PControl, { k: 'hb' | 'host' }>, fingerprint: string): void {
+  private stepDownToGuest(control: HostClaim, fingerprint: string): void {
     if (control.hostSeat === null) return;
     const expected = this.trustedSeatKey(control.hostSeat);
     if (expected !== null && expected !== fingerprint) return;
     this.controller?.dispose();
     this.controller = null;
     this.role = 'guest';
-    this.hostPeerId = control.hostPeerId;
-    this.hostKeyFingerprint = fingerprint;
-    this.generation = control.gen;
-    this.hostSeat = control.hostSeat;
-    this.shadow.seatKeys = { ...control.seatKeys };
-    this.lastLobby = control.lobby;
-    this.shadow.lobby = control.lobby;
+    this.promotedAt = 0;
+    this.hostFollowers.clear();
+    this.lastCompeting = null;
+    this.adoptHostClaim(control, fingerprint, true);
     storageRemove('session', HOST_SAVE_KEY);
-    this.setState('reconnecting');
-    this.sendHello();
   }
 
   private stampHostMessage(message: ServerMsg): ServerMsg {
@@ -969,6 +1094,7 @@ export class OnlineSession implements Session {
       lobby: snapshot.lobby,
       seq: snapshot.seq,
       gen: this.generation,
+      connectedHumans: connectedHumans(snapshot.lobby),
       broker: this.transport.broker(),
       at: Date.now(),
     };
@@ -997,6 +1123,7 @@ export class OnlineSession implements Session {
       lobby: snapshot.lobby,
       seq: snapshot.seq,
       gen: this.generation,
+      connectedHumans: connectedHumans(snapshot.lobby),
       broker: this.transport.broker(),
       at: Date.now(),
     });
@@ -1048,19 +1175,59 @@ export class OnlineSession implements Session {
       for (const [peerId, seen] of [...this.guestSeen]) {
         if (now - seen <= peerSilence) continue;
         this.guestSeen.delete(peerId);
+        this.hostFollowers.delete(peerId);
         this.controller?.disconnect(peerId);
+      }
+      const grace = networkConfig.selfHostGraceMs ?? SELF_HOST_GRACE_MS;
+      if (
+        this.promotedAt > 0 &&
+        now - this.promotedAt > grace &&
+        this.hostFollowers.size === 0 &&
+        this.lastCompeting &&
+        now - this.lastCompeting.at < 5_000
+      ) {
+        this.log('self-promoted host has no followers; yielding to the visible host');
+        this.stepDownToGuest(this.lastCompeting.control, this.lastCompeting.fingerprint);
       }
       return;
     }
     this.retryPendingGuestOps(now);
     const hostSilence = networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS;
     if (!this.hostPeerId || !this.shadow.lobby) return;
+    const hostPeerId = this.hostPeerId;
     // Stagger takeover by seat index so a higher seat cannot split-brain the room while the
     // lowest connected seat is still broadcasting its generation announcement.
     const stagger = this.seat === null ? 0 : Math.max(0, this.seat - 1) * 600;
-    if (now - this.lastHostHeartbeatAt <= hostSilence + stagger) return;
+    const lastHostSeen = Math.max(
+      this.lastHostHeartbeatAt,
+      this.peerSeen.get(hostPeerId) ?? 0,
+    );
+    if (now - lastHostSeen <= hostSilence + stagger) return;
     this.setState('reconnecting');
     if (this.promoting) return;
+
+    // Probe before takeover: a momentary inbound gap must not create a second host.
+    const probeMs = networkConfig.probeMs ?? HOST_PROBE_MS;
+    const hostGoneMs = networkConfig.hostGoneMs ?? HOST_GONE_MS;
+    if (this.probeStartedAt === 0) {
+      this.probeStartedAt = now;
+      void this.transport?.broadcast({ k: 'host_probe', from: this.clientId, at: now });
+      return;
+    }
+    if (now - this.probeStartedAt < probeMs) return;
+
+    const probeStartedAt = this.probeStartedAt;
+    const otherLive = [...this.peerSeen.entries()].some(([peerId, seen]) => {
+      if (peerId === this.clientId || peerId === hostPeerId) return false;
+      // Must be fresh *during* the probe, not merely seen before the partition began.
+      return seen >= probeStartedAt && now - seen <= (networkConfig.peerSilenceMs ?? DEFAULT_PEER_SILENCE_MS);
+    });
+    const hostGap = now - lastHostSeen;
+    if (!otherLive && hostGap <= hostGoneMs) {
+      this.probeStartedAt = 0;
+      return;
+    }
+    this.probeStartedAt = 0;
     if (this.isLowestAliveHuman(now)) this.promoteToHost();
   }
 
@@ -1133,6 +1300,10 @@ export class OnlineSession implements Session {
       this.controller = RoomController.adopt(snapshot, deps);
       this.role = 'host';
       this.generation = Math.max(1, this.generation) + 1;
+      this.promotedAt = Date.now();
+      this.hostFollowers.clear();
+      this.lastCompeting = null;
+      this.probeStartedAt = 0;
       this.hostPeerId = this.clientId;
       this.hostKeyFingerprint = this.identity?.fingerprint ?? null;
       this.hostSeat = this.seat;
@@ -1379,6 +1550,11 @@ export function checkpointHostForTests(session: Session): HostCheckpoint | null 
 
 export function resumeHostForTests(checkpoint: HostCheckpoint): Session {
   return OnlineSession.resumeFromCheckpoint(checkpoint);
+}
+
+/** Test hook: partition a peer's inbound traffic while leaving its outbound traffic intact. */
+export function setNetworkPartitionForTests(session: Session, blocked: boolean): void {
+  if (session instanceof OnlineSession) session.setInboundBlockedForTests(blocked);
 }
 
 /** Test hook used by the in-process broker e2e: kill a session's transport without a leave. */

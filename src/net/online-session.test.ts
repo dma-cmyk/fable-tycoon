@@ -20,6 +20,7 @@ import {
   killSessionForTests,
   resumeHostForTests,
   roomExists,
+  setNetworkPartitionForTests,
   transportInfo,
 } from './online-session';
 
@@ -77,6 +78,14 @@ class Peer {
     };
     this.waiters.push(waiter);
     return promise;
+  }
+
+  kickAutoPlay(): void {
+    if (!this.autoPlay || !this.state || this.seat === null || this.state.phase.t === 'game_over') return;
+    const actor = actorOf(this.state);
+    if (actor !== this.seat || this.lastSentSeq === this.seq) return;
+    this.lastSentSeq = this.seq;
+    this.session.send({ t: 'action', seq: this.seq, action: cpuDecide(GAME_DATA, this.state as GameState) });
   }
 
   stop(): void {
@@ -327,12 +336,16 @@ describe('online P2P over an in-process MQTT broker', () => {
       'game advances without old host',
     );
 
+    const finalState = await settled.promise;
+    expect(hostCheckpoint).not.toBeNull();
+
     // A returning old host must see the newer generation and step down to guest instead of
-    // forking a second authoritative room.
+    // forking a second authoritative room. Resume only after the migrated game is over so its
+    // local controller cannot race the live room.
     let returned: Peer | null = null;
     if (hostCheckpoint) {
       const returnedSession = resumeHostForTests(hostCheckpoint);
-      returned = new Peer(returnedSession, 'returned-host', true);
+      returned = new Peer(returnedSession, 'returned-host', false);
       active.push(returned);
       await returned.waitFor(
         (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
@@ -341,9 +354,6 @@ describe('online P2P over an in-process MQTT broker', () => {
       );
       expect(checkpointHostForTests(returnedSession)).toBeNull();
     }
-
-    const finalState = await settled.promise;
-    expect(hostCheckpoint).not.toBeNull();
 
     const remaining = [guest1, guest2, guest3];
     const finalSeen = remaining.map((peer) =>
@@ -390,6 +400,90 @@ describe('online P2P over an in-process MQTT broker', () => {
     const elapsed = Date.now() - startedAt;
     console.log(`[p2p-e2e] 1-year 3-guest game (host migrated) in ${elapsed}ms, final seq ${guest1.seq}`);
   }, 90_000);
+
+  it('heals a partitioned self-promoted host without split-brain', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    configureNetworkForTests({
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 150,
+      hostSilenceMs: 800,
+      peerSilenceMs: 3_000,
+      probeMs: 250,
+      hostGoneMs: 2_500,
+      selfHostGraceMs: 800,
+      saveThrottleMs: 20,
+      probeTimeoutMs: 4_000,
+      graceMs: 60_000,
+      replaceMs: 60_000,
+      yearEndAckMs: 60_000,
+      cpuDelayMs: 50,
+      fxScale: 0.01,
+      clientIds: {
+        confhost: 'conf-host',
+        conf1: 'conf-p1',
+        conf2: 'conf-p2',
+        conf3: 'conf-p3',
+      },
+    });
+
+    const hostSession = await createOnlineRoom('confhost');
+    const host = new Peer(hostSession, 'conf-host', true);
+    const guest1 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf1'), 'conf1', true);
+    const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf2'), 'conf2', true);
+    const guest3 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf3'), 'conf3', true);
+    active.push(host, guest1, guest2, guest3);
+    await Promise.all([
+      guest1.waitFor((msg) => msg.t === 'welcome'),
+      guest2.waitFor((msg) => msg.t === 'welcome'),
+      guest3.waitFor((msg) => msg.t === 'welcome'),
+    ]);
+    const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+    hostSession.send({ t: 'take_seat', index: 0 });
+    await hostWelcome;
+    hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+    await takeSeats(host, [guest1, guest2, guest3], 1);
+    hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+    const started = [guest1, guest2, guest3].map((peer) =>
+      peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'conflict start'),
+    );
+    hostSession.send({ t: 'start' });
+    await Promise.all(started);
+
+    const partitionStart = Date.now();
+    guest3.autoPlay = false;
+    setNetworkPartitionForTests(guest3.session, true);
+    await guest3.waitFor(
+      (msg) => msg.t === 'welcome' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 3,
+      15_000,
+      'pixel self-promotes',
+    );
+    const remaining = 12_000 - (Date.now() - partitionStart);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+
+    const resolved = guest3.waitForNew(
+      (msg) =>
+        msg.t === 'lobby' &&
+        msg.lobby.seats.find((seat) => seat.isHost)?.index === 0 &&
+        msg.lobby.seats.every((seat) => seat.kind !== 'human' || seat.connected),
+      20_000,
+      'partitioned host yields',
+    );
+    setNetworkPartitionForTests(guest3.session, false);
+    await resolved;
+    guest3.autoPlay = true;
+    guest3.kickAutoPlay();
+    expect(checkpointHostForTests(guest3.session)).toBeNull();
+    const before = guest3.seq;
+    await guest3.waitFor(
+      (msg) => msg.t === 'update' && msg.seq > before,
+      15_000,
+      'game continues after conflict',
+    );
+    expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
+  }, 60_000);
 
   it('orders host state by generation then seq', () => {
     expect(isNewerStateOrder(1, 5, 1, 5)).toBe(false);

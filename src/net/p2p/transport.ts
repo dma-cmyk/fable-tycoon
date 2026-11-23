@@ -45,6 +45,7 @@ export type P2PControl =
       lobby: LobbyView;
       seq: number;
       gen: number;
+      connectedHumans: number;
       broker: string | null;
       at: number;
     }
@@ -57,10 +58,12 @@ export type P2PControl =
       lobby: LobbyView;
       seq: number;
       gen: number;
+      connectedHumans: number;
       broker: string | null;
       at: number;
     }
   | { k: 'presence'; peerId: string; seat: number | null; at: number }
+  | { k: 'host_probe'; from: string; at: number }
   | { k: 'probe'; at: number }
   | { k: 'probeAck'; at: number }
   | { k: 'resync' }
