@@ -290,7 +290,7 @@ export interface PlayerSetup {
 }
 
 export interface GameConfig {
-  years: number; // 1..20
+  years: number; // 1 | 3 | 5 | 10 | 20 (see ALLOWED_YEARS)
   players: PlayerSetup[]; // 1..4
   seed?: number;
 }
@@ -303,7 +303,7 @@ export interface PlayerState {
   cpuLevel: 1 | 2 | 3;
   cash: number; // may go negative (= 借金)
   nodeId: string;
-  prevNodeId: string | null; // to discourage immediate backtracking
+  prevNodeId: string | null; // previous path node (presentation only; no-backtrack is per move)
   cards: string[];
   skipTurns: number;
   goals: number; // 目的地到着回数
@@ -369,6 +369,14 @@ export interface GameState {
   /** Set while a month-start event must resume the current player's turn when it closes. */
   pendingTurnStart?: boolean;
 }
+
+/** State safe to broadcast: no rng state and no input seed. */
+export type PublicState = Omit<GameState, 'rng' | 'config'> & {
+  config: Omit<GameConfig, 'seed'>;
+};
+
+/** Read-only query boundary: engine accepts authoritative or sanitized state. */
+export type StateView = GameState | PublicState;
 
 // ---------------------------------------------------------------- actions & fx
 

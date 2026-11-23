@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { Action, GameConfig, GameData, GameState, Phase } from './types';
 import { fixtureData } from './test-fixture';
 import {
+  ALLOWED_YEARS,
   actorOf,
   cpuDecide,
+  annualIncome,
   createGame,
+  currentPrice,
   EngineError,
   netWorth,
   sanitizeState,
   step,
+  withSeed,
 } from './engine';
 
 const data: GameData = fixtureData;
@@ -143,18 +147,23 @@ describe('engine full simulation', () => {
   });
 
   it('is deterministic for a seed and transitions identically', () => {
-    const a = play([1, 2, 3, 3], 2, 4242);
-    const b = play([1, 2, 3, 3], 2, 4242);
+    const a = play([1, 2, 3, 3], 3, 4242);
+    const b = play([1, 2, 3, 3], 3, 4242);
     expect(a.steps).toBe(b.steps);
     expect(JSON.parse(JSON.stringify(a.state))).toEqual(JSON.parse(JSON.stringify(b.state)));
-    const c = createGame(data, config([1, 2, 3, 3], 2, 4242));
-    const d = createGame(data, config([1, 2, 3, 3], 2, 4242));
+    const c = createGame(data, config([1, 2, 3, 3], 3, 4242));
+    const d = createGame(data, config([1, 2, 3, 3], 3, 4242));
     expect(c.state).toEqual(d.state);
     expect(c.fx).toEqual(d.fx);
   });
 });
 
 describe('step rejection and immutability', () => {
+  it('exports and enforces the allowed year options', () => {
+    expect(ALLOWED_YEARS).toEqual([1, 3, 5, 10, 20]);
+    expect(() => createGame(data, config([1, 2], 2, 1))).toThrowError(EngineError);
+  });
+
   it('rejects a wrong player, an illegal action and a stale phase', () => {
     const game = createGame(data, config([1, 2], 1, 99));
     const state = game.state;
@@ -242,13 +251,31 @@ describe('step rejection and immutability', () => {
     expect(allFx).toContain('destination');
   });
 
-  it('sanitizeState zeroes rng without touching the original', () => {
+  it('sanitizeState removes rng and seed without touching the original', () => {
     const game = createGame(data, config([1, 2], 1, 11));
+    expect('seed' in game.state.config).toBe(false);
+    game.state.config.seed = 987654;
     const before = JSON.stringify(game.state);
     const pub = sanitizeState(game.state);
-    expect(pub.rng).toBe(0);
+    expect('rng' in pub).toBe(false);
+    expect('seed' in pub.config).toBe(false);
+    const serialized = JSON.stringify(pub);
+    expect(serialized).not.toContain('"rng"');
+    expect(serialized).not.toContain('"seed"');
     expect(JSON.stringify(game.state)).toBe(before);
     expect(pub.players).toEqual(game.state.players);
     expect(pub).not.toBe(game.state);
+    expect(actorOf(pub)).toBe(0);
+    expect(netWorth(data, pub, 0)).toBe(netWorth(data, game.state, 0));
+    expect(currentPrice(data, pub, 'tokyo-tower')).toBe(currentPrice(data, game.state, 'tokyo-tower'));
+    expect(annualIncome(data, pub, 0)).toBe(annualIncome(data, game.state, 0));
+  });
+
+  it('withSeed re-seeds without storing a seed in config', () => {
+    const game = createGame(data, config([1, 2], 1, 12));
+    const reseeded = withSeed(game.state, 777);
+    expect(reseeded.rng).toBe(777);
+    expect('seed' in reseeded.config).toBe(false);
+    expect(game.state.rng).not.toBe(777);
   });
 });

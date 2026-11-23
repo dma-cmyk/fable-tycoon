@@ -43,7 +43,7 @@ export function assignPiperToFarthest(
   let holder: number | null = null;
   let best = -1;
   for (const player of state.players) {
-    const d = effectiveDistance(data, cityBoardNodeId, player.nodeId);
+    const d = effectiveDistance(data, player.nodeId, cityBoardNodeId);
     const value = Number.isFinite(d) ? d : 9999;
     if (value > best) {
       best = value;

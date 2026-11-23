@@ -4,8 +4,9 @@
 // stores its centre in map units and its zoom in CSS px per map unit. Horizontal wrap is
 // handled by always projecting through wrapDx(), so no drawing code needs seam special cases.
 
-import { CENTRAL_MERIDIAN, LAT_BOTTOM, LAT_TOP, MAP_H, MAP_W, wrapDx, wrapX } from '../core/geo';
+import { MAP_H, MAP_W, project, wrapDx, wrapX } from '../core/geo';
 import { REALMS, REALM_H, REALM_W } from '../core/realm';
+import realmCitiesData from '../data/realms.json';
 import type {
   BoardNode,
   Character,
@@ -13,7 +14,6 @@ import type {
   EmoteDef,
   GameData,
   RealmId,
-  GameState,
   MoveOption,
   SquareKind,
 } from '../core/types';
@@ -30,6 +30,7 @@ import {
 } from './emotes';
 import { LandLayer, OceanBackdrop, oppositeSeason, seasonForMonth } from './land';
 import type { LayerTransform, Season } from './land';
+import type { PublicState } from '../core/engine';
 import { AmbientWorld } from './ambient';
 import { RectGrid } from './grid';
 import { drawVehicle, vehicleMetrics, type VehicleKind } from './vehicles';
@@ -40,6 +41,24 @@ export interface LandJson {
   /** polygons → rings → flat [x,y,...]; holes are represented by extra rings. */
   polygons: number[][][];
 }
+
+export interface RiverData { w: number; h: number; rivers: Array<{ rank?: number; w?: number; pts: number[]; name?: string; nameJa?: string }> }
+export interface LakeData { w: number; h: number; lakes: Array<{ rank?: number; name?: string; nameJa?: string; rings: number[][] }> }
+export interface BorderData { w: number; h: number; lines: number[][] }
+export interface MapArtLabel {
+  text?: string;
+  nameJa?: string;
+  x: number;
+  y: number;
+  kind?: 'ocean' | 'continent' | 'country' | 'river' | 'lake' | 'sea' | string;
+  size?: number;
+  minZoom?: number;
+  maxZoom?: number;
+  rotate?: number;
+  angle?: number;
+}
+export type LabelData = MapArtLabel[];
+export interface MapArtData { rivers?: RiverData; lakes?: LakeData; borders?: BorderData; labels?: LabelData }
 
 export interface MapAssets {
   land: LandJson;
@@ -56,6 +75,10 @@ export interface MapAssets {
   realms?: Map<RealmId, HTMLImageElement>;
   /** Terrain and town stamps. */
   stamps?: Map<string, HTMLImageElement>;
+  /** MapArt terrain texture (full/lo). */
+  terrain?: HTMLImageElement;
+  terrainLo?: HTMLImageElement;
+  mapArt?: MapArtData;
 }
 
 export interface FrameStats {
@@ -251,6 +274,7 @@ export class MapView {
   private readonly realmEdges = new Map<RealmId, DrawEdge[]>();
   private readonly terrain: Array<{ x: number; y: number; kind: string; size: number }> = [];
   private readonly avoidGrid = new RectGrid<true>(64);
+  private readonly geoGrid = new RectGrid<{ lat: number; lon: number }>(128);
   private readonly cityNodeId = new Map<string, string>();
   private readonly characterById = new Map<string, Character>();
   private readonly edges: DrawEdge[] = [];
@@ -258,7 +282,7 @@ export class MapView {
   private readonly warpNodes: BoardNode[] = [];
   private readonly ambient: AmbientWorld;
 
-  private state: GameState | null = null;
+  private state: PublicState | null = null;
   private tokens: TokenRuntime[] = [];
   private playerColors: string[] = [];
   private ownership = new Map<string, { counts: number[]; total: number; monopoly: number }>();
@@ -268,6 +292,7 @@ export class MapView {
   private season: Season = seasonForMonth(4);
   private seasonTransitionStart = 0;
   private initialCameraDone = false;
+  private lastCurrent = -1;
   private manualViewUntil = 0;
   private reducedMotion = false;
   private ambientTimer: number | null = null;
@@ -326,6 +351,10 @@ export class MapView {
   private lastTap: { at: number; x: number; y: number } | null = null;
   private suppressTapUntil = 0;
 
+  private miniMapEl: HTMLCanvasElement | null = null;
+  private miniLand: HTMLCanvasElement | null = null;
+  private miniLandSize = '';
+  private readonly miniPointer = (e: PointerEvent): void => this.handleMiniTap(e);
   private readonly measureCache = new Map<string, number>();
   private resizeObserver: ResizeObserver;
 
@@ -339,6 +368,7 @@ export class MapView {
     this.ctx.imageSmoothingQuality = 'high';
 
     this.landLayer = new LandLayer(assets.land);
+    this.landLayer.setTerrain(assets.terrain, assets.terrainLo);
 
     for (const node of data.board.nodes) {
       this.nodeById.set(node.id, node);
@@ -350,7 +380,11 @@ export class MapView {
         this.worldNodes.push(node);
       }
     }
-    for (const city of data.cities) {
+    const allCities = [...data.cities, ...(realmCitiesData as unknown as City[])];
+    const seenCityIds = new Set<string>();
+    for (const city of allCities) {
+      if (seenCityIds.has(city.id)) continue;
+      seenCityIds.add(city.id);
       const node = data.board.nodes.find((n) => n.kind === 'city' && n.cityId === city.id);
       if (node) {
         const entry = { city, node };
@@ -392,6 +426,7 @@ export class MapView {
       if (node.kind === 'warp') this.warpNodes.push(node);
     }
     this.ambient = new AmbientWorld(data, assets.vehicles);
+    this.buildGeoGrid();
     this.buildTerrain();
 
     canvas.style.touchAction = 'none';
@@ -404,6 +439,36 @@ export class MapView {
     this.resize();
     this.attachInput();
     this.requestRender();
+  }
+
+  private buildGeoGrid(): void {
+    for (let lat = -58; lat <= 82; lat += 2) {
+      for (let lon = -180; lon <= 180; lon += 2) {
+        const [x, y] = project(lon, lat);
+        const item = { lat, lon };
+        for (const shift of [-MAP_W, 0, MAP_W]) {
+          this.geoGrid.add({ x: x + shift - 2, y: y - 2, w: 4, h: 4 }, item);
+        }
+      }
+    }
+  }
+
+  private geoAt(x: number, y: number): { lat: number; lon: number } {
+    let best: { lat: number; lon: number } | null = null;
+    let bestD = Infinity;
+    for (const item of this.geoGrid.queryRect({ x: x - 170, y: y - 170, w: 340, h: 340 })) {
+      const [px, py] = project(item.lon, item.lat);
+      const d = Math.min(
+        Math.abs(px - x),
+        Math.abs(px + MAP_W - x),
+        Math.abs(px - MAP_W - x),
+      ) ** 2 + (py - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = item;
+      }
+    }
+    return best ?? { lat: 0, lon: 0 };
   }
 
   private buildTerrain(): void {
@@ -425,14 +490,94 @@ export class MapView {
         n += 1;
         const x = gx + (hashString(`t${n}`) % 1000) / 1000 * step * 0.9 - step * 0.45;
         const y = gy + (hashString(`u${n}`) % 1000) / 1000 * step * 0.9 - step * 0.45;
-        const lon = ((x / MAP_W) * 360 - 180 + CENTRAL_MERIDIAN + 540) % 360 - 180;
-        const lat = LAT_TOP + (y / MAP_H) * (LAT_BOTTOM - LAT_TOP);
-        const kind = classifyTerrain(lat, lon, n);
+        const geo = this.geoAt(x, y);
+        const kind = classifyTerrain(geo.lat, geo.lon, n);
         if (!kind) continue;
         if (!this.landLayer.isLand(((x % MAP_W) + MAP_W) % MAP_W, y)) continue;
         if (this.avoidGrid.queryRect({ x: x - 38, y: y - 38, w: 76, h: 76 }).length) continue;
         const size = terrainSize(kind) * (MAP_W / 8192);
         this.terrain.push({ x, y, kind, size });
+      }
+    }
+  }
+
+  private drawMapArt(ctx: CanvasRenderingContext2D, layer: LayerTransform, detail: number): void {
+    const art = this.assets.mapArt;
+    if (!art) return;
+    const { toCanvas, scale, dpr } = layer;
+    const centerX = layer.ox + layer.wWorld / 2;
+    const wPx = layer.wWorld * scale;
+    const hPx = layer.hWorld * scale;
+    const visible = (px: number, py: number, m: number): boolean => px > -m && px < wPx + m && py > -m && py < hPx + m;
+    const shiftNear = (x: number): number => Math.round((centerX - x) / MAP_W) * MAP_W;
+    if (art.borders && detail >= 1) {
+      const path = new Path2D();
+      for (const line of art.borders.lines) {
+        if (line.length < 4) continue;
+        const shift = shiftNear(line[0]);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let i = 0; i < line.length; i += 2) { minX = Math.min(minX, line[i]); maxX = Math.max(maxX, line[i]); minY = Math.min(minY, line[i+1]); maxY = Math.max(maxY, line[i+1]); }
+        const [cx, cy] = toCanvas(minX + shift, minY);
+        if (!visible(cx, cy, Math.max(maxX - minX, maxY - minY) * scale + 30)) continue;
+        for (let i = 0; i < line.length; i += 2) {
+          const [px, py] = toCanvas(line[i] + shift, line[i+1]);
+          if (i === 0) path.moveTo(px, py); else path.lineTo(px, py);
+        }
+      }
+      ctx.save();
+      ctx.strokeStyle = 'rgba(86, 100, 78, 0.45)';
+      ctx.lineWidth = Math.max(1, dpr);
+      ctx.setLineDash([6 * dpr, 5 * dpr]);
+      ctx.stroke(path);
+      ctx.restore();
+    }
+    if (art.rivers) {
+      for (const r of art.rivers.rivers) {
+        const pts = r.pts;
+        if (pts.length < 4) continue;
+        const shift = shiftNear(pts[0]);
+        const [sx, sy] = toCanvas(pts[0] + shift, pts[1]);
+        if (!visible(sx, sy, 120)) continue;
+        const path = new Path2D();
+        for (let i = 0; i < pts.length; i += 2) {
+          const [px, py] = toCanvas(pts[i] + shift, pts[i+1]);
+          if (i === 0) path.moveTo(px, py); else path.lineTo(px, py);
+        }
+        const width = Math.max(1 * dpr, (r.w ?? 2.2) * this.camera.zoom * dpr);
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#2a6e96';
+        ctx.lineWidth = width + 1.6 * dpr;
+        ctx.stroke(path);
+        ctx.strokeStyle = '#4eaed6';
+        ctx.lineWidth = width;
+        ctx.stroke(path);
+        ctx.restore();
+      }
+    }
+    if (art.lakes && detail >= 1) {
+      for (const lake of art.lakes.lakes) {
+        const ring = lake.rings[0];
+        if (!ring || ring.length < 6) continue;
+        const shift = shiftNear(ring[0]);
+        const [sx, sy] = toCanvas(ring[0] + shift, ring[1]);
+        if (!visible(sx, sy, 120)) continue;
+        const path = new Path2D();
+        for (const r of lake.rings) {
+          for (let i = 0; i < r.length; i += 2) {
+            const [px, py] = toCanvas(r[i] + shift, r[i+1]);
+            if (i === 0) path.moveTo(px, py); else path.lineTo(px, py);
+          }
+          path.closePath();
+        }
+        ctx.save();
+        ctx.fillStyle = '#4eaed6';
+        ctx.fill(path, 'evenodd');
+        ctx.strokeStyle = '#2a6e96';
+        ctx.lineWidth = Math.max(1, 1 * dpr);
+        ctx.stroke(path);
+        ctx.restore();
       }
     }
   }
@@ -469,8 +614,12 @@ export class MapView {
     const wPx = layer.wWorld * scale;
     const hPx = layer.hWorld * scale;
     const radiusPx = this.cityRadius() * layer.dpr;
-    for (const entry of this.cityEntries) {
-      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.port ? 'port_town' : 'town';
+    const placed: Array<{ x: number; y: number }> = [];
+    const sorted = [...this.cityEntries].sort((a, b) => a.city.tier - b.city.tier);
+    for (const entry of sorted) {
+      if (placed.some((p) => Math.hypot(wrapDx(p.x, entry.node.x), p.y - entry.node.y) < 250)) continue;
+      placed.push({ x: entry.node.x, y: entry.node.y });
+      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
       const img = this.assets.stamps?.get(kind);
       const worldSize = (kind === 'metropolis' ? 58 : kind === 'port_town' ? 42 : 32) * (MAP_W / 8192);
       const sz = worldSize * scale;
@@ -525,8 +674,12 @@ export class MapView {
 
   // ---------------------------------------------------------------- public API
 
-  setState(state: GameState): void {
+  setState(state: PublicState): void {
     this.state = state;
+    if (this.followId !== null && (this.followId === this.lastCurrent || this.lastCurrent < 0)) {
+      this.followId = state.current;
+    }
+    this.lastCurrent = state.current;
     const previousCount = this.tokens.length;
     this.tokens = state.players.map((p) => ({ playerId: p.id, nodeId: p.nodeId }));
     this.playerColors = state.players.map(
@@ -543,9 +696,8 @@ export class MapView {
       if (node) {
         this.initialCameraDone = true;
         // Momotetsu-like default: a regional close view centred on the actor.
-        const fitH = this.cssH / MAP_H;
-        const playZoom = this.camera.clampZoom(fitH * (this.cssW >= 900 ? 5 : 3.6));
-        this.camera.startTween(node.x, node.y, playZoom, 0);
+        this.camera.startTween(node.x, node.y, this.playZoomNear(actor.nodeId), 0);
+        this.followId = state.current;
       }
     }
 
@@ -834,6 +986,101 @@ export class MapView {
     this.requestRender();
   }
 
+  /** Render a compact world overview into an external canvas; click/tap jumps there. */
+  setMiniMap(el: HTMLCanvasElement | null): void {
+    if (this.miniMapEl) this.miniMapEl.removeEventListener('pointerdown', this.miniPointer);
+    this.miniMapEl = el;
+    this.miniLand = null;
+    if (el) el.addEventListener('pointerdown', this.miniPointer);
+    this.drawMiniMap();
+  }
+
+  private handleMiniTap(e: PointerEvent): void {
+    const el = this.miniMapEl;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / Math.max(1, r.width)) * MAP_W;
+    const y = ((e.clientY - r.top) / Math.max(1, r.height)) * MAP_H;
+    if (this.view !== 'world') this.switchView('world');
+    this.followId = null;
+    void this.camera.focus(x, y, this.playZoom(), 350);
+    this.requestRender();
+  }
+
+  private drawMiniMap(): void {
+    const el = this.miniMapEl;
+    if (!el) return;
+    const cssW = el.clientWidth || el.width || 180;
+    const cssH = el.clientHeight || el.height || 84;
+    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    if (el.width !== Math.round(cssW * dpr) || el.height !== Math.round(cssH * dpr)) {
+      el.width = Math.round(cssW * dpr);
+      el.height = Math.round(cssH * dpr);
+    }
+    const ctx = el.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+    if (!this.miniLand || this.miniLandSize !== `${cssW}x${cssH}`) {
+      const c = this.miniLand ?? document.createElement('canvas');
+      c.width = Math.round(cssW * dpr);
+      c.height = Math.round(cssH * dpr);
+      const g = c.getContext('2d');
+      if (g) {
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const grad = g.createLinearGradient(0, 0, 0, cssH);
+        grad.addColorStop(0, '#7fdfff');
+        grad.addColorStop(1, '#2a9bdb');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, cssW, cssH);
+        const path = new Path2D();
+        for (const rings of this.assets.land.polygons) {
+          for (const ring of rings) {
+            for (let i = 0; i < ring.length; i += 2) {
+              const px = (ring[i] / MAP_W) * cssW;
+              const py = (ring[i + 1] / MAP_H) * cssH;
+              if (i === 0) path.moveTo(px, py);
+              else path.lineTo(px, py);
+            }
+            path.closePath();
+          }
+        }
+        g.fillStyle = '#82cd55';
+        g.fill(path, 'evenodd');
+        g.strokeStyle = '#3f7d2e';
+        g.lineWidth = 0.8;
+        g.stroke(path);
+      }
+      this.miniLand = c;
+      this.miniLandSize = `${cssW}x${cssH}`;
+    }
+    ctx.drawImage(this.miniLand, 0, 0, cssW, cssH);
+    const toX = (x: number): number => (x / MAP_W) * cssW;
+    const toY = (y: number): number => (y / MAP_H) * cssH;
+    const dest = this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) : null;
+    if (dest) {
+      ctx.fillStyle = '#ffe04a';
+      ctx.strokeStyle = '#20315a';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(toX(dest.x), toY(dest.y), 3.2, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+    for (const token of this.tokens) {
+      const node = this.nodeById.get(token.nodeId);
+      if (!node || node.realm) continue;
+      const cur = this.state?.current === token.playerId;
+      ctx.fillStyle = this.playerColor(token.playerId);
+      ctx.strokeStyle = cur ? '#ffe066' : '#ffffff';
+      ctx.lineWidth = cur ? 1.6 : 1;
+      ctx.beginPath();
+      ctx.arc(toX(node.x), toY(node.y), cur ? 3.4 : 2.4, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
   resize(): void {
     const rect = this.canvas.getBoundingClientRect();
     const cssW = Math.max(1, rect.width || this.canvas.clientWidth || 640);
@@ -935,6 +1182,32 @@ export class MapView {
     }
   }
 
+  private playZoom(): number {
+    return this.camera.clampZoom(MAP_W / 5460);
+  }
+
+  private playZoomNear(nodeId: string | null): number {
+    const base = this.playZoom();
+    if (!nodeId) return base;
+    const node = this.nodeById.get(nodeId);
+    if (!node) return base;
+    const lens: number[] = [];
+    for (const e of this.edges) {
+      const near = Math.hypot(wrapDx(node.x, e.ax), node.y - e.ay) < 420;
+      if (!near) continue;
+      lens.push(Math.hypot(e.dx, e.dy));
+    }
+    if (lens.length < 3) return base;
+    lens.sort((a, b) => a - b);
+    const median = lens[Math.floor(lens.length / 2)];
+    const fit = median > 30 ? 20 / (median - 30) : 2.4;
+    return this.camera.clampZoom(Math.min(2.4, Math.max(base, fit)));
+  }
+
+  private viewScale(): number {
+    return this.view === 'world' ? 1 : 2.5;
+  }
+
   private detailLevel(): number {
     if (this.view !== 'world') return this.camera.zoom < 0.8 ? 1 : 2;
     const z = this.camera.zoom;
@@ -942,15 +1215,15 @@ export class MapView {
   }
 
   private tileRadius(): number {
-    return Math.min(20, Math.max(5, 4 + this.camera.zoom * 6));
+    return Math.min(this.view === 'world' ? 15 : 50, Math.max(5, (4 + this.camera.zoom * 6) * this.viewScale()));
   }
 
   private cityRadius(): number {
-    return Math.min(15, Math.max(5.5, 4.5 + this.camera.zoom * 4.2));
+    return Math.min(38, Math.max(5.5, (4.5 + this.camera.zoom * 4.2) * this.viewScale()));
   }
 
   private tokenHeight(): number {
-    return Math.min(104, Math.max(44, 44 + this.camera.zoom * 18));
+    return Math.min(190, Math.max(44, (44 + this.camera.zoom * 18) * this.viewScale()));
   }
 
   private playerColor(playerId: number): string {
@@ -1235,11 +1508,15 @@ export class MapView {
         this.staticRevision,
         this.season,
         (layer) => this.paintStaticBoard(layer),
+        (x, y) => this.avoidGrid.queryRect({ x: x - 42, y: y - 42, w: 84, h: 84 }).length > 0,
+        (x, y) => this.geoAt(x, y),
       );
       this.landLayer.drawSeasonFade(ctx, cam, now);
-      this.ambient.draw(ctx, cam, now, this.detailLevel());
+      this.ambient.draw(ctx, cam, now, this.detailLevel(), (x, y) => this.landLayer.isLand(x, y));
       this.drawWorldWarpTiles(ctx, now);
       this.drawSeasonParticles(ctx, now);
+      this.drawCompass(ctx);
+      this.drawMapArtLabels(ctx);
     } else {
       this.drawRealmBoard(ctx, now);
       this.drawRealmAmbient(ctx, now);
@@ -1257,6 +1534,7 @@ export class MapView {
     this.drawBubbles(ctx, layouts, now);
     this.drawBadge(ctx);
     ctx.restore();
+    this.drawMiniMap();
   }
 
   private shakeOffset(now: number): { x: number; y: number } {
@@ -1269,6 +1547,107 @@ export class MapView {
       x: Math.sin(now * 0.075) * s.intensity * 11 * decay,
       y: Math.cos(now * 0.092) * s.intensity * 7 * decay,
     };
+  }
+
+  private drawCompass(ctx: CanvasRenderingContext2D): void {
+    if (this.view !== 'world' || this.detailLevel() > 0) return;
+    const cam = this.camera;
+    const cx = cam.vw - 70;
+    const cy = cam.vh - 70;
+    if (cx < 40 || cy < 40) return;
+    const r = 30;
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.translate(cx, cy);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      const long = i % 2 === 0;
+      ctx.fillStyle = long ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a - 0.12) * (long ? r * 0.82 : r * 0.5), Math.sin(a - 0.12) * (long ? r * 0.82 : r * 0.5));
+      ctx.lineTo(Math.cos(a) * (r * 0.98), Math.sin(a) * (r * 0.98));
+      ctx.lineTo(Math.cos(a + 0.12) * (long ? r * 0.82 : r * 0.5), Math.sin(a + 0.12) * (long ? r * 0.82 : r * 0.5));
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 12px ${LABEL_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', 0, -r * 0.35);
+    ctx.restore();
+  }
+
+  private drawMapArtLabels(ctx: CanvasRenderingContext2D): void {
+    const data = this.assets.mapArt?.labels;
+    if (!data) return;
+    const labels = Array.isArray(data) ? [...data] : [];
+    if (labels.length === 0) return;
+    const cam = this.camera;
+    const rank = (kind: string): number =>
+      kind === 'ocean' ? 0 : kind === 'sea' ? 1 : kind === 'continent' ? 2 : kind === 'country' ? 3 : kind === 'lake' ? 4 : 5;
+    labels.sort((a, b) => rank(a.kind ?? 'country') - rank(b.kind ?? 'country'));
+    const placed = new RectGrid<Rect>(48);
+    for (const label of labels) {
+      const text = label.text ?? label.nameJa;
+      if (!text) continue;
+      if (cam.zoom < (label.minZoom ?? 0) || cam.zoom > (label.maxZoom ?? 99)) continue;
+      const x = cam.screenX(label.x);
+      const y = cam.screenY(label.y);
+      if (x < -320 || x > cam.vw + 320 || y < -160 || y > cam.vh + 160) continue;
+      const kind = label.kind ?? 'country';
+      if (kind === 'country' && (this.detailLevel() >= 2 || cam.zoom >= 0.9)) continue;
+      const base = label.size ?? 24;
+      const cap = kind === 'ocean' || kind === 'continent' || kind === 'sea' ? 80 : kind === 'country' ? 24 : 18;
+      const fs = Math.min(cap, Math.max(6, base * cam.zoom));
+      const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
+      ctx.save();
+      ctx.translate(x, y);
+      const rot = label.rotate ?? label.angle ?? 0;
+      ctx.rotate((-rot * Math.PI) / 180);
+      ctx.font = `${water ? 'italic ' : ''}800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      let width = ctx.measureText(text).width;
+      if (water) width += Math.max(0, Array.from(text).length - 1) * fs * 0.12;
+      const height = fs * 1.15;
+      const rect = { x: x - width / 2, y: y - height / 2, w: width, h: height };
+      if (placed.queryRect(rect).some((r) => rectsHit(rect, r, 2))) {
+        ctx.restore();
+        continue;
+      }
+      placed.add(rect, rect);
+      if (water) {
+        const chars = Array.from(text);
+        const gap = fs * 0.12;
+        let cx = -width / 2;
+        for (const ch of chars) {
+          const cw = ctx.measureText(ch).width;
+          ctx.strokeStyle = 'rgba(24, 72, 104, 0.22)';
+          ctx.lineWidth = Math.max(2, fs * 0.08);
+          ctx.strokeText(ch, cx + cw / 2, 0);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          ctx.fillText(ch, cx + cw / 2, 0);
+          cx += cw + gap;
+        }
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 245, 0.72)';
+        ctx.lineWidth = Math.max(2, fs * 0.1);
+        ctx.lineJoin = 'round';
+        ctx.strokeText(text, 0, 0);
+        ctx.fillStyle = kind === 'country' ? 'rgba(100, 66, 32, 0.8)' : 'rgba(34, 98, 136, 0.9)';
+        ctx.fillText(text, 0, 0);
+      }
+      ctx.restore();
+    }
   }
 
   private drawRealmBackdrop(ctx: CanvasRenderingContext2D, now: number): void {
@@ -1374,14 +1753,15 @@ export class MapView {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    const rs = this.viewScale();
     ctx.strokeStyle = accent.glow;
-    ctx.lineWidth = 13;
+    ctx.lineWidth = 13 * rs;
     ctx.stroke(path);
     ctx.strokeStyle = accent.edge;
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 8 * rs;
     ctx.stroke(path);
     ctx.strokeStyle = accent.core;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 * rs;
     ctx.stroke(path);
     ctx.restore();
 
@@ -1532,6 +1912,7 @@ export class MapView {
     const hPx = hWorld * scale;
     const margin = 80 * dpr;
     const detail0 = this.detailLevel();
+    this.drawMapArt(ctx, layer, detail0);
     this.drawTerrain(ctx, layer, detail0);
     this.drawCityClusters(ctx, layer, detail0);
 
@@ -1723,8 +2104,8 @@ export class MapView {
     for (const layout of layouts) {
       if (layout.x < -100 || layout.x > cam.vw + 100 || layout.y < -100 || layout.y > cam.vh + 100) continue;
       const big = layout.height * (this.state?.current === layout.playerId ? 1.12 : 1);
-      const tw = big * 0.8;
-      reserved.push({ x: layout.x - tw / 2, y: layout.y - big - 4, w: tw, h: big + 10 });
+      const tw = big * 1.05;
+      reserved.push({ x: layout.x - tw / 2, y: layout.y - big - 8, w: tw, h: big + 16 });
     }
 
     this.drawCityLabels(ctx, visible, radius, detail, reserved);
@@ -1732,7 +2113,7 @@ export class MapView {
 
   private landmarkSize(tier: number): number {
     if (this.detailLevel() === 0) return tier === 1 ? 40 : 0;
-    return Math.min(76, Math.max(54, 40 + this.camera.zoom * 18));
+    return Math.min(58, Math.max(42, 34 + this.camera.zoom * 12));
   }
 
   private landmarkBox(
@@ -1992,10 +2373,45 @@ export class MapView {
     const cam = this.camera;
     const currentCityId = this.state ? this.cityNodeIdOfPlayer(this.state.current) : null;
     const tokenNodeIds = new Set(this.tokens.map((t) => t.nodeId));
-    const fs = Math.min(14, Math.max(9.5, 9.5 + cam.zoom * 1.25));
+    const fs = Math.min(this.view === 'world' ? 13 : 34, Math.max(9.5, (this.view === 'world' ? 8.5 + cam.zoom * 0.9 : 9.5 + cam.zoom * 1.25) * this.viewScale()));
     const font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
     ctx.font = font;
     const tokenCityAt = (v: CityVis): boolean => tokenNodeIds.has(v.entry.node.id);
+    const discGrid = new RectGrid<Rect>(64);
+    const tr = this.tileRadius();
+    for (const node of this.nodesForView()) {
+      if (node.kind === 'city') continue;
+      const dx = cam.screenX(node.x);
+      const dy = cam.screenY(node.y);
+      if (dx < -tr || dx > cam.vw + tr || dy < -tr || dy > cam.vh + tr) continue;
+      discGrid.add({ x: dx - tr, y: dy - tr, w: tr * 2, h: tr * 2 }, { x: dx - tr, y: dy - tr, w: tr * 2, h: tr * 2 });
+    }
+    const trackGrid = new RectGrid<Rect>(48);
+    for (const e of this.view === 'world' ? this.edges : this.realmEdges.get(this.view) ?? []) {
+      const x1 = cam.screenX(e.ax);
+      const y1 = cam.screenY(e.ay);
+      const x2 = x1 + e.dx * cam.zoom;
+      const y2 = y1 + e.dy * cam.zoom;
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const steps = Math.max(1, Math.ceil(len / 34));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const px = x1 + (x2 - x1) * t;
+        const py = y1 + (y2 - y1) * t;
+        if (px < -30 || px > cam.vw + 30 || py < -30 || py > cam.vh + 30) continue;
+        const r = { x: px - 7, y: py - 7, w: 14, h: 14 };
+        trackGrid.add(r, r);
+      }
+    }
+    const freeOfDiscs = (rect: Rect): boolean => !discGrid.queryRect(rect).some((d) => rectsHit(rect, d, 2));
+    const freeOfTrack = (rect: Rect): boolean => !trackGrid.queryRect(rect).some((d) => rectsHit(rect, d, 2));
+    const freeOfAll = (rect: Rect): boolean => freeOfDiscs(rect) && freeOfTrack(rect);
+    const optionCities = new Set((this.moveOptions ?? []).filter(o => this.nodeById.get(o.nodeId)?.kind === 'city').map(o => o.nodeId));
+    const mustShow = (v: CityVis): boolean =>
+      v.entry.node.id === this.destinationNodeId ||
+      v.entry.node.id === currentCityId ||
+      tokenCityAt(v) ||
+      optionCities.has(v.entry.node.id);
     const candidates = visible
       .filter((v) => {
         if (detail > 0) return true;
@@ -2026,12 +2442,39 @@ export class MapView {
       let chosen: Rect | null = null;
       for (const [cx, cy] of placements) {
         const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-        if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) {
-          continue;
-        }
+        if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
         if (reserved.some((r) => rectsHit(rect, r, 3))) continue;
+        if (!freeOfAll(rect)) continue;
         chosen = rect;
         break;
+      }
+      if (!chosen && mustShow(v)) {
+        for (const rr of [radius + 16, radius + 34, radius + 58, radius + 84]) {
+          for (let i = 0; i < 12 && !chosen; i++) {
+            const a = (i / 12) * TAU;
+            const cx = v.x + Math.cos(a) * rr;
+            const cy = v.y + Math.sin(a) * rr * 0.85;
+            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
+            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
+            if (!freeOfDiscs(rect)) continue;
+            chosen = rect;
+          }
+          if (chosen) break;
+        }
+        if (!chosen) {
+          for (const [cx, cy] of placements) {
+            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
+            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (reserved.some((r) => rectsHit(rect, r, 1))) continue;
+            chosen = rect;
+            break;
+          }
+        }
+        if (!chosen) {
+          const [cx, cy] = placements[0];
+          chosen = { x: Math.max(3, Math.min(this.camera.vw - w - 3, cx - w / 2)), y: Math.max(3, Math.min(this.camera.vh - h - 3, cy - h / 2)), w, h };
+        }
       }
       if (!chosen) continue;
       reserved.push(chosen);
@@ -2188,6 +2631,13 @@ export class MapView {
       ctx.restore();
     });
 
+    for (const option of this.moveOptions) {
+      if (option.nodeId === this.selectedOption || option.nodeId === this.hoveredOption) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      this.drawPathPreview(ctx, option, false);
+      ctx.restore();
+    }
     const shown = this.selectedOption ?? this.hoveredOption;
     if (shown) {
       const option = this.moveOptions.find((o) => o.nodeId === shown);
@@ -3067,31 +3517,33 @@ export class MapView {
   private drawSeasonParticles(ctx: CanvasRenderingContext2D, now: number): void {
     if (this.reducedMotion || this.view !== 'world') return;
     const cam = this.camera;
-    const eq = MAP_H * 0.52;
-    const north = cam.y < eq;
-    const season = north ? this.season : oppositeSeason(this.season);
     const fade = this.seasonTransitionStart > 0 ? Math.min(1, (now - this.seasonTransitionStart) / 1000) : 1;
     ctx.save();
     ctx.globalAlpha = Math.max(0.2, fade);
     for (let i = 0; i < 26; i++) {
       const seed = hashString(`${this.month}-${i}`);
       const x = ((seed % 1000) / 1000) * cam.vw + Math.sin(now / 2400 + i) * 16;
-      const y = ((now / (season === 'winter' ? 90 : 140) + (seed % 700)) % (cam.vh + 80)) - 40;
-      if (season === 'spring') {
+      const y = ((now / 130 + (seed % 700)) % (cam.vh + 80)) - 40;
+      const worldX = wrapX(cam.x + (x - cam.vw / 2) / cam.zoom);
+      const worldY = cam.y + (y - cam.vh / 2) / cam.zoom;
+      const geo = this.geoAt(worldX, worldY);
+      const localSeason = Math.abs(geo.lat) < 23 ? 'summer' : geo.lat >= 0 ? this.season : oppositeSeason(this.season);
+      if (classifyTerrain(geo.lat, geo.lon, i + 7) === 'desert' || this.landLayer.isBarrenAt(worldX, worldY)) continue;
+      if (localSeason === 'spring') {
         ctx.fillStyle = i % 3 === 0 ? '#ffd1e4' : '#ff9fc4';
         ctx.beginPath();
         ctx.ellipse(x, y, 4, 2.2, Math.sin(now / 600 + i), 0, TAU);
         ctx.fill();
-      } else if (season === 'autumn') {
+      } else if (localSeason === 'autumn') {
         ctx.fillStyle = i % 2 === 0 ? '#e08a2e' : '#d05a2b';
         ctx.beginPath();
         ctx.ellipse(x, y, 4.5, 2.4, Math.sin(now / 500 + i), 0, TAU);
         ctx.fill();
-      } else if (season === 'summer') {
-        ctx.globalAlpha = fade * (0.35 + 0.35 * Math.abs(Math.sin(now / 500 + i)));
-        ctx.fillStyle = '#fff3a0';
+      } else if (localSeason === 'summer') {
+        ctx.globalAlpha = fade * (0.3 + 0.35 * Math.abs(Math.sin(now / 500 + i)));
+        ctx.fillStyle = '#d9f08a';
         ctx.beginPath();
-        ctx.arc(x, y, 1.8, 0, TAU);
+        ctx.arc(x, y, 1.6, 0, TAU);
         ctx.fill();
         ctx.globalAlpha = fade;
       } else {

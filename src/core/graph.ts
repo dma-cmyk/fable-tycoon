@@ -3,9 +3,9 @@
 // Movement rule (DESIGN §2.1):
 //  - exactly `steps` edges are taken, except that the destination city truncates the path
 //    as soon as it is passed / reached.
-//  - an edge may not be traversed back immediately, unless the current node is a dead end.
-//  - `prevNodeId` (the square the player just came from) is treated as the previous node for
-//    the first step, so a player cannot immediately step back where they came from.
+//  - an edge may not be traversed back immediately inside the chosen path, unless the current
+//    node is a dead end. The engine starts every move with prevNodeId = null; the field is
+//    kept in state for presentation, not as a cross-turn movement ban.
 
 import type { BoardEdge, BoardNode, GameData, MoveOption } from './types';
 

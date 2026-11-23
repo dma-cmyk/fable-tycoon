@@ -2,7 +2,7 @@
 // point at .png files while the shipped cut sprites are .webp, so ids drive the URLs.
 
 import type { GameData } from '../core/types';
-import type { LandJson, MapAssets } from './map';
+import type { LandJson, MapAssets, MapArtData } from './map';
 import { VEHICLE_FILES, VEHICLE_KINDS } from './vehicles';
 import { REALMS } from '../core/realm';
 import type { RealmId } from '../core/types';
@@ -16,6 +16,10 @@ export interface AssetProgress {
 }
 
 const IMAGE_TIMEOUT_MS = 15000;
+// Flip once public/assets/map/{terrain,terrain_lo,rivers,lakes,borders,labels} exist.
+// Keeping this false avoids noisy 404s for the optional MapArt bundle.
+const MAP_ART_READY = true; // terrain/borders/labels bundle
+const MAP_ART_VECTORS_READY = true; // rivers.json/lakes.json have landed
 
 function assetUrl(path: string): string {
   return new URL(`assets/${path}`, document.baseURI).href;
@@ -53,6 +57,25 @@ export async function loadMapAssets(
   const res = await fetch(landUrl);
   if (!res.ok) throw new Error(`land.json を読み込めません (${res.status})`);
   const land = (await res.json()) as LandJson;
+  let mapArt: MapArtData = {};
+  if (MAP_ART_READY || MAP_ART_VECTORS_READY) {
+    const fetchJson = async <T>(path: string): Promise<T | null> => {
+      try {
+        const r = await fetch(assetUrl(path));
+        if (!r.ok) return null;
+        return (await r.json()) as T;
+      } catch {
+        return null;
+      }
+    };
+    const [rivers, lakes, borders, labels] = await Promise.all([
+      fetchJson<NonNullable<MapArtData['rivers']>>('map/rivers.json'),
+      fetchJson<NonNullable<MapArtData['lakes']>>('map/lakes.json'),
+      MAP_ART_READY ? fetchJson<NonNullable<MapArtData['borders']>>('map/borders.json') : Promise.resolve(null),
+      MAP_ART_READY ? fetchJson<NonNullable<MapArtData['labels']>>('map/labels.json') : Promise.resolve(null),
+    ]);
+    mapArt = { rivers: rivers ?? undefined, lakes: lakes ?? undefined, borders: borders ?? undefined, labels: labels ?? undefined };
+  }
 
   const chars = new Map<string, HTMLImageElement>();
   const landmarks = new Map<string, HTMLImageElement>();
@@ -62,6 +85,8 @@ export async function loadMapAssets(
   const sad = new Map<string, HTMLImageElement>();
   const realms = new Map<RealmId, HTMLImageElement>();
   const stamps = new Map<string, HTMLImageElement>();
+  let terrain: HTMLImageElement | undefined;
+  let terrainLo: HTMLImageElement | undefined;
 
   interface Job {
     label: string;
@@ -87,6 +112,18 @@ export async function loadMapAssets(
     'mountains', 'snow_mountain', 'volcano', 'conifer_forest', 'forest', 'palms', 'desert',
     'fields', 'town', 'metropolis', 'port_town', 'station', 'iceberg', 'ranch', 'oil_rig', 'factory',
   ];
+  if (MAP_ART_READY) {
+    jobs.push({
+      label: 'map/terrain',
+      url: assetUrl('map/terrain.webp'),
+      put: (img) => { terrain = img; },
+    });
+    jobs.push({
+      label: 'map/terrain_lo',
+      url: assetUrl('map/terrain_lo.webp'),
+      put: (img) => { terrainLo = img; },
+    });
+  }
   for (const name of stampNames) {
     jobs.push({
       label: `stamps/${name}`,
@@ -159,5 +196,5 @@ export async function loadMapAssets(
       ...stamps.values(),
     ].map((img) => img.decode().catch(() => undefined)),
   );
-  return { land, chars, landmarks, npcs, vehicles, joy, sad, realms, stamps };
+  return { land, chars, landmarks, npcs, vehicles, joy, sad, realms, stamps, terrain, terrainLo, mapArt };
 }

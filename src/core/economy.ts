@@ -1,6 +1,6 @@
 // Prices, income, net worth and the fiscal-year scaling rules (DESIGN §2.2/§2.3).
 
-import type { GameData, GameState, Industry, PerkId, Property } from './types';
+import type { GameData, GameState, Industry, PerkId, Property, StateView } from './types';
 import { getGraph } from './graph';
 
 export const STARTING_CASH = 100;
@@ -28,12 +28,12 @@ export function findProperty(data: GameData, propertyId: string): PropertyRef | 
   return null;
 }
 
-export function industryPriceMult(state: GameState, industry: Industry): number {
+export function industryPriceMult(state: StateView, industry: Industry): number {
   return state.priceMod[industry] ?? 1;
 }
 
 /** Asset value (and base purchase value before perk discounts). */
-export function currentPrice(data: GameData, state: GameState, propertyId: string): number {
+export function currentPrice(data: GameData, state: StateView, propertyId: string): number {
   const ref = findProperty(data, propertyId);
   if (!ref) throw new Error(`unknown property: ${propertyId}`);
   return ref.property.price * industryPriceMult(state, ref.property.industry);
@@ -42,7 +42,7 @@ export function currentPrice(data: GameData, state: GameState, propertyId: strin
 /** What `playerId` actually pays to buy (haggler −10%). */
 export function purchasePrice(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
   propertyId: string,
 ): number {
@@ -53,13 +53,13 @@ export function purchasePrice(
   return ref.property.price * industryPriceMult(state, ref.property.industry) * discount;
 }
 
-export function sellPrice(data: GameData, state: GameState, propertyId: string): number {
+export function sellPrice(data: GameData, state: StateView, propertyId: string): number {
   return currentPrice(data, state, propertyId) * SELL_RATE;
 }
 
 export function monopolises(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
   cityId: string,
 ): boolean {
@@ -70,7 +70,7 @@ export function monopolises(
 
 export function ownCount(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
   cityId: string,
 ): number {
@@ -81,7 +81,7 @@ export function ownCount(
 
 export function ownedProperties(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
 ): PropertyRef[] {
   const out: PropertyRef[] = [];
@@ -93,7 +93,7 @@ export function ownedProperties(
   return out;
 }
 
-export function characterPerk(data: GameData, state: GameState, playerId: number): PerkId {
+export function characterPerk(data: GameData, state: StateView, playerId: number): PerkId {
   const characterId = state.players[playerId]?.characterId;
   const character = data.characters.find((c) => c.id === characterId);
   return character?.perk ?? 'none';
@@ -118,7 +118,7 @@ export function perkIndustryMultiplier(perk: PerkId, industry: Industry): number
 /** Active `industry_mod` product for one industry and one player's perk. */
 export function incomeMultiplier(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
   industry: Industry,
 ): number {
@@ -129,9 +129,9 @@ export function incomeMultiplier(
   return mult * perkIndustryMultiplier(characterPerk(data, state, playerId), industry);
 }
 
-function propertyIncome(
+export function propertyAnnualIncome(
   data: GameData,
-  state: GameState,
+  state: StateView,
   playerId: number,
   property: Property,
   cityId: string,
@@ -142,12 +142,12 @@ function propertyIncome(
 }
 
 /** Sum of all owned properties' annual income (億円, floats allowed; display rounds). */
-export function annualIncome(data: GameData, state: GameState, playerId: number): number {
+export function annualIncome(data: GameData, state: StateView, playerId: number): number {
   let total = 0;
   for (const city of data.cities) {
     for (const property of city.properties) {
       if (state.owner[property.id] === playerId) {
-        total += propertyIncome(data, state, playerId, property, city.id);
+        total += propertyAnnualIncome(data, state, playerId, property, city.id);
       }
     }
   }
@@ -155,7 +155,7 @@ export function annualIncome(data: GameData, state: GameState, playerId: number)
 }
 
 /** Cash + current asset value of every owned property. */
-export function netWorth(data: GameData, state: GameState, playerId: number): number {
+export function netWorth(data: GameData, state: StateView, playerId: number): number {
   const player = state.players[playerId];
   if (!player) return 0;
   let total = player.cash;
@@ -171,7 +171,7 @@ export function destinationBonus(state: Pick<GameState, 'year'>, startDistance: 
 }
 
 /** `year_end` 用の風刺見出し。rng を使わず、勝者から決定的に選ぶ。 */
-export function satiricalHeadline(data: GameData, state: GameState, winnerId: number): string {
+export function satiricalHeadline(data: GameData, state: StateView, winnerId: number): string {
   const winner = state.players[winnerId];
   const character = data.characters.find((c) => c.id === winner?.characterId);
   const who = character?.nameJa ?? winner?.name ?? '謎の投資家';

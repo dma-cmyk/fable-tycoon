@@ -15,9 +15,12 @@ import type {
   Fx,
   MoveOption,
   PlayerState,
+  PublicState,
+  StateView,
   StepResult,
   YearReport,
 } from './types';
+export type { PublicState, StateView };
 import { nextRandom, pickOne, randInt, weightedPick } from './rng';
 import {
   getGraph,
@@ -70,6 +73,8 @@ import {
 import { sayCharacterLine } from './speech';
 import { cpuDecide as decideCpu } from './cpu';
 
+export const ALLOWED_YEARS = [1, 3, 5, 10, 20] as const;
+
 export class EngineError extends Error {
   readonly code: string;
 
@@ -87,7 +92,7 @@ export function distance(data: GameData, fromNodeId: string, toNodeId: string): 
   return effectiveDistance(data, fromNodeId, toNodeId);
 }
 
-export function actorOf(state: GameState): number | null {
+export function actorOf(state: StateView): number | null {
   if (state.phase.t === 'game_over') return null;
   return state.current;
 }
@@ -96,11 +101,19 @@ export function cpuDecide(data: GameData, state: GameState): Action {
   return decideCpu(data, state);
 }
 
-/** State safe to broadcast: identical data with the RNG zeroed. */
-export function sanitizeState(state: GameState): Omit<GameState, 'rng'> & { rng: 0 } {
+export function sanitizeState(state: GameState): PublicState {
   const clone = structuredClone(state);
-  clone.rng = 0;
-  return clone as Omit<GameState, 'rng'> & { rng: 0 };
+  Reflect.deleteProperty(clone, 'rng');
+  Reflect.deleteProperty(clone.config, 'seed');
+  return clone;
+}
+
+/** Re-seeds the authoritative state without ever storing the seed in config. */
+export function withSeed(state: GameState, seed: number): GameState {
+  const next = structuredClone(state);
+  next.rng = seed >>> 0;
+  Reflect.deleteProperty(next.config, 'seed');
+  return next;
 }
 
 // ---------------------------------------------------------------- creation
@@ -141,10 +154,12 @@ export function createGame(data: GameData, config: GameConfig): StepResult {
     goals: 0,
   }));
 
+  const storedConfig = structuredClone(config);
+  Reflect.deleteProperty(storedConfig, 'seed');
   const state: GameState = {
     version: 1,
     rng: rngSeed,
-    config: structuredClone(config),
+    config: storedConfig,
     year: 1,
     month: 4,
     round: 0,
@@ -170,8 +185,9 @@ export function createGame(data: GameData, config: GameConfig): StepResult {
 }
 
 function validateConfig(data: GameData, config: GameConfig): void {
-  if (!Number.isInteger(config.years) || config.years < 1 || config.years > 20) {
-    throw new EngineError('illegal', 'years must be an integer in 1..20');
+  const allowedYears: readonly number[] = ALLOWED_YEARS;
+  if (!Number.isInteger(config.years) || !allowedYears.includes(config.years)) {
+    throw new EngineError('illegal', `years must be one of ${ALLOWED_YEARS.join(', ')}`);
   }
   if (!Array.isArray(config.players) || config.players.length < 1 || config.players.length > 4) {
     throw new EngineError('illegal', 'players must contain 1..4 entries');
@@ -516,13 +532,10 @@ function resolveRoll(data: GameData, state: GameState, fx: Fx[], diceCount: numb
     data,
     player.nodeId,
     total,
-    player.prevNodeId,
+    null,
     destinationNode,
     portalStops,
   );
-  if (options.length === 0 && player.prevNodeId !== null) {
-    options = reachableInExactly(data, player.nodeId, total, null, destinationNode, portalStops);
-  }
   if (options.length === 0) {
     fx.push({ t: 'toast', text: '進めるマスがなく、手番を終えた。' });
     endTurn(data, state, fx);

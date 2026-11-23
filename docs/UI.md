@@ -55,7 +55,7 @@ PC（横長 ≥ 900px）:
 export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; npcs?: Map<string, HTMLImageElement>; vehicles?: Map<string, HTMLImageElement>; joy?: Map<string, HTMLImageElement>; sad?: Map<string, HTMLImageElement>; realms?: Map<RealmId, HTMLImageElement>; }
 export class MapView {
   constructor(canvas: HTMLCanvasElement, data: GameData, assets: MapAssets);
-  setState(state: GameState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
+  setState(state: PublicState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
   setMoveOptions(options: MoveOption[] | null, onPick: (nodeId: string) => void): void;
   animateMove(playerId: number, path: string[], msPerStep: number, opts?: { dice?: number }): Promise<void>; // dice 1=列車 / 2=急行 / 3=超特急
   warp(playerId: number, nodeId: string, via?: 'plane'|'rocket'|'carpet'|'event'|'tornado'|'realm'): Promise<void>;
@@ -87,6 +87,8 @@ export class MapView {
   isNodeVisible(nodeId: string): boolean;
   /** 季節。1秒クロスフェード。 */
   setMonth(month: number): void;
+  /** 外部キャンバスにワールドミニマップを描画。タップでその地点へジャンプ。 */
+  setMiniMap(el: HTMLCanvasElement | null): void;
 }
 ```
 - 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（遠景: 大陸・航路・主要都市名のみ、近景: 全マス・全都市名・ランドマーク）。画面外カリング。

@@ -22,6 +22,8 @@ interface TreeStamp {
   size: number;
   tint: number;
   rank: number;
+  lat?: number;
+  lon?: number;
 }
 
 const CACHE_PAD = 0.55; // extra world margin on each side of the viewport
@@ -97,6 +99,15 @@ function pointInPolygons(boxes: PolyBox[], x: number, y: number): boolean {
   return inside;
 }
 
+function isDesertBox(lat: number, lon: number): boolean {
+  return (
+    (lon > -18 && lon < 36 && lat > 12 && lat < 32) ||
+    (lon > 35 && lon < 60 && lat > 12 && lat < 33) ||
+    (lon > 114 && lon < 146 && lat > -33 && lat < -19) ||
+    (lon > 84 && lon < 116 && lat > 37 && lat < 51)
+  );
+}
+
 export class LandLayer {
   private readonly boxes: PolyBox[];
   private canvas: HTMLCanvasElement;
@@ -113,6 +124,11 @@ export class LandLayer {
   private fadeCanvas: HTMLCanvasElement | null = null;
   private fadeStart = 0;
   private fadeMeta: { ox: number; oy: number; wWorld: number; hWorld: number; scale: number } | null = null;
+  private terrain: HTMLImageElement | undefined;
+  private terrainLo: HTMLImageElement | undefined;
+  private biomeMask: Uint8ClampedArray | null = null;
+  private biomeW = 512;
+  private biomeH = 238;
 
   constructor(land: LandJson) {
     this.boxes = land.polygons.map((rings) => {
@@ -143,6 +159,39 @@ export class LandLayer {
     this.key = '';
   }
 
+  setTerrain(full?: HTMLImageElement, lo?: HTMLImageElement): void {
+    this.terrain = full;
+    this.terrainLo = lo;
+    this.key = '';
+    const img = full ?? lo;
+    if (img && img.naturalWidth > 0) {
+      const c = document.createElement('canvas');
+      this.biomeW = 512;
+      this.biomeH = Math.max(8, Math.round((512 * MAP_H) / MAP_W));
+      c.width = this.biomeW;
+      c.height = this.biomeH;
+      const g = c.getContext('2d');
+      if (g) {
+        g.drawImage(img, 0, 0, this.biomeW, this.biomeH);
+        this.biomeMask = g.getImageData(0, 0, this.biomeW, this.biomeH).data;
+      }
+    }
+  }
+
+  /** True for desert/sand/ice according to the terrain texture. */
+  isBarrenAt(x: number, y: number): boolean {
+    const data = this.biomeMask;
+    if (!data) return false;
+    const px = Math.min(this.biomeW - 1, Math.max(0, Math.floor((((x % MAP_W) + MAP_W) % MAP_W / MAP_W) * this.biomeW)));
+    const py = Math.min(this.biomeH - 1, Math.max(0, Math.floor((y / MAP_H) * this.biomeH)));
+    const i = (py * this.biomeW + px) * 4;
+    if (data[i + 3] < 40) return false;
+    const r = data[i], gg = data[i + 1], b = data[i + 2];
+    const ice = r > 205 && gg > 212 && b > 210;
+    const sand = r > 140 && r - b > 48 && gg - b > 18 && r >= gg - 12;
+    return ice || sand;
+  }
+
   /** True when a world point lies on land (used to place terrain stamps). */
   isLand(x: number, y: number): boolean {
     return pointInPolygons(this.boxes, x, y);
@@ -156,6 +205,8 @@ export class LandLayer {
     revision: number,
     season: Season,
     paintStatic?: LayerPainter,
+    treeAvoid?: (x: number, y: number) => boolean,
+    geoAt?: (x: number, y: number) => { lat: number; lon: number },
   ): void {
     // Quantise zoom on a log2 grid (~7% steps). The cached raster is reused and
     // scaled a few percent while zooming, so wheel/pinch do not rebuild every frame.
@@ -179,7 +230,7 @@ export class LandLayer {
       dy > marginY * 0.72;
 
     if (needs) {
-      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic);
+      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt);
     }
 
     const screenX = cam.vw / 2 + wrapDx(cam.x, this.ox + this.wWorld / 2) * cam.zoom - (this.wWorld * cam.zoom) / 2;
@@ -211,6 +262,8 @@ export class LandLayer {
     revision: number,
     season: Season,
     paintStatic?: LayerPainter,
+    treeAvoid?: (x: number, y: number) => boolean,
+    geoAt?: (x: number, y: number) => { lat: number; lon: number },
   ): void {
     const wPx = Math.max(1, Math.ceil(wWorld * scale));
     const hPx = Math.max(1, Math.ceil(hWorld * scale));
@@ -274,6 +327,14 @@ export class LandLayer {
       grad.addColorStop(0, palette.top);
       grad.addColorStop(0.45, palette.mid);
       grad.addColorStop(1, palette.bottom);
+      // shallow-water halo just outside the coastline
+      ctx.save();
+      ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
+      ctx.lineWidth = Math.max(8, Math.min(46, 26 * scale));
+      ctx.lineJoin = 'round';
+      ctx.stroke(path);
+      ctx.restore();
+
       // A flat offset silhouette is much cheaper than a blurred canvas shadow
       // and reads as a soft coastal drop shadow at every zoom.
       ctx.save();
@@ -284,6 +345,24 @@ export class LandLayer {
 
       ctx.fillStyle = grad;
       ctx.fill(path, 'evenodd');
+
+      const tex = cam.zoom <= 0.22 ? this.terrainLo ?? this.terrain : this.terrain ?? this.terrainLo;
+      if (tex && tex.naturalWidth > 0) {
+        ctx.save();
+        ctx.clip(path, 'evenodd');
+        for (let k = kMin; k <= kMax; k++) {
+          const shift = k * MAP_W;
+          ctx.drawImage(tex, (shift - this.ox) * scale, -this.oy * scale, MAP_W * scale, MAP_H * scale);
+        }
+        // Keep the concept-art saturation on top of the pale topographic texture.
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = SEASON_LAND[season].mid;
+        ctx.fillRect(0, 0, wPx, hPx);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.strokeStyle = SEASON_LAND[season].outline;
@@ -296,7 +375,7 @@ export class LandLayer {
 
     if (withTrees) {
       if (!this.trees) this.trees = this.buildTrees();
-      this.drawTrees(ctx, toCanvas, cam.zoom >= 1.45 ? 0 : 0.5, season);
+      this.drawTrees(ctx, toCanvas, cam.zoom >= 1.45 ? 0.25 : 0.6, season, treeAvoid, geoAt);
     }
     if (visiblePolys > 0 && (season === 'winter' || season === 'summer')) {
       this.drawSnow(ctx, path, season);
@@ -397,6 +476,8 @@ export class LandLayer {
     toCanvas: (x: number, y: number) => [number, number],
     minRank: number,
     season: Season,
+    treeAvoid?: (x: number, y: number) => boolean,
+    geoAt?: (x: number, y: number) => { lat: number; lon: number },
   ): void {
     const trees = this.trees;
     if (!trees) return;
@@ -409,6 +490,7 @@ export class LandLayer {
       const shift = k * MAP_W;
       for (const t of trees) {
         if (t.rank < minRank) continue;
+        if (treeAvoid?.(t.x, t.y)) continue;
         const tx = t.x + shift;
         if (tx < x0 || tx > x1 || t.y < y0 || t.y > y1) continue;
         const [cx, cy] = toCanvas(tx, t.y);
@@ -421,10 +503,19 @@ export class LandLayer {
         // crown: two overlapping circles plus a highlight
         const crown = s * (0.72 + t.tint * 0.16);
         const eq = project(0, 0)[1];
-        const hemi = t.y < eq ? season : oppositeSeason(season);
+        if (t.lat === undefined) {
+          const geo = geoAt?.(t.x, t.y) ?? { lat: 0, lon: 0 };
+          t.lat = geo.lat;
+          t.lon = geo.lon;
+        }
+        const lat = t.lat;
+        const lon = t.lon ?? 0;
+        if (isDesertBox(lat, lon) || this.isBarrenAt(t.x, t.y)) continue;
+        const tropical = Math.abs(lat) < 23;
+        const hemi = tropical ? 'summer' : t.y < eq ? season : oppositeSeason(season);
         const colors = SEASON_TREES[hemi];
         const base = t.tint > 0.66 ? colors[0] : t.tint > 0.33 ? colors[1] : colors[2];
-        ctx.fillStyle = season === 'winter' && t.y < project(0, 35)[1] ? '#eaf2e6' : base;
+        ctx.fillStyle = !tropical && season === 'winter' && Math.abs(lat) > 35 ? '#eaf2e6' : base;
         ctx.beginPath();
         ctx.arc(cx, cy - s * 0.75, crown, 0, Math.PI * 2);
         ctx.arc(cx - crown * 0.65, cy - s * 0.45, crown * 0.7, 0, Math.PI * 2);

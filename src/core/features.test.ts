@@ -144,6 +144,23 @@ describe('shop squares', () => {
   });
 });
 
+describe('movement backtracking', () => {
+  it('allows stepping back to last turn’s previous node on a new move', () => {
+    const state = fresh();
+    state.players[0].nodeId = 'c:osaka';
+    state.players[0].prevNodeId = 's:0-2';
+    state.destination = 'mumbai';
+    state.phase = { t: 'turn_start' };
+    state.rng = 7; // randInt(1..6) => 1
+    const rolled = step(data, state, 0, { t: 'roll' });
+    expect(rolled.state.phase.t).toBe('choose_dest');
+    if (rolled.state.phase.t === 'choose_dest') {
+      expect(rolled.state.phase.roll).toBe(1);
+      expect(rolled.state.phase.options.some((o) => o.nodeId === 's:0-2')).toBe(true);
+    }
+  });
+});
+
 describe('tornado / portal / realm movement', () => {
   it('warp square normally throws the player to a far world city', () => {
     const state = fresh();
@@ -252,6 +269,9 @@ describe('tornado / portal / realm movement', () => {
     expect(shortestDistance(data, 'c:heaven-gate', 'c:tokyo')).toBe(Infinity);
     expect(distance(data, 'c:heaven-gate', 'c:tokyo')).toBe(21);
     expect(distance(data, 'c:tokyo', 'c:heaven-gate')).toBe(20);
+    // Direction matters: piper assignment starts from the player's realm position.
+    expect(distance(data, 'c:heaven-estate', 'c:tokyo')).toBe(22);
+    expect(distance(data, 'c:tokyo', 'c:heaven-estate')).toBe(21);
   });
 
   it('realm effect op warps to the gate and back to a world city', () => {
@@ -331,6 +351,14 @@ describe('rocket card, dice and via fields', () => {
     state.phase = { t: 'card_target', cardId: 'rocket', options: ['c:tokyo', 'c:osaka'] };
     state.destination = 'osaka';
     expect(cpuDecide(data, state)).toEqual({ t: 'card_target', target: 'c:osaka' });
+  });
+
+  it('CPU values marginal settlement income, not raw yield/price', () => {
+    const state = fresh([2, 1, 1]);
+    state.phase = { t: 'buy', cityId: 'shanghai' };
+    state.players[0].cash = 100;
+    state.industryMods = [{ industry: 'tech', mult: 2, yearsLeft: 2, label: 'AI' }];
+    expect(cpuDecide(data, state)).toEqual({ t: 'buy', propertyId: 'shanghai-tech' });
   });
 
   it('move fx carries dice count for normal and express moves', () => {

@@ -187,6 +187,8 @@ async function main(): Promise<void> {
   const state = buildState();
   const map = new MapView(mapCanvas, data, assets);
   map.setState(state);
+  const mini = document.getElementById('minimap') as HTMLCanvasElement | null;
+  if (mini) map.setMiniMap(mini);
   map.onCityTap((cityId) => {
     const city = data.cities.find((c) => c.id === cityId);
     setStatus(`都市タップ: ${city?.nameJa ?? cityId}`);

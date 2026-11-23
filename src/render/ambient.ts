@@ -7,6 +7,8 @@ import type { GameData } from '../core/types';
 import type { Camera } from './camera';
 import { drawVehicle, type VehicleKind } from './vehicles';
 
+const TAU = Math.PI * 2;
+
 interface TrafficRoute {
   ax: number;
   ay: number;
@@ -125,13 +127,82 @@ export class AmbientWorld {
   }
 
   /** Draw ambient shadows and traffic. `detail` is the MapView LOD (0/1/2). */
-  draw(ctx: CanvasRenderingContext2D, cam: Camera, now: number, detail: number): void {
+  draw(
+    ctx: CanvasRenderingContext2D,
+    cam: Camera,
+    now: number,
+    detail: number,
+    isLand?: (x: number, y: number) => boolean,
+  ): void {
     this.drawClouds(ctx, cam, now);
+    this.drawOceanDecor(ctx, cam, now, isLand);
     this.drawRoutes(ctx, cam, now, this.seaRoutes, 'sea');
     this.drawRoutes(ctx, cam, now, this.airRoutes, 'air');
     if (detail >= 1) {
       this.drawRoutes(ctx, cam, now, this.railRoutes, 'rail');
       this.drawBirds(ctx, cam, now);
+    }
+  }
+
+  private drawOceanDecor(
+    ctx: CanvasRenderingContext2D,
+    cam: Camera,
+    now: number,
+    isLand?: (x: number, y: number) => boolean,
+  ): void {
+    const whaleScale = Math.min(36, Math.max(14, 8 + cam.zoom * 12));
+    const candidates = [
+      { fx: 0.12, fy: 0.58, phase: 0.0 },
+      { fx: 0.56, fy: 0.46, phase: 2.1 },
+      { fx: 0.82, fy: 0.66, phase: 4.2 },
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const wx = (c.fx + Math.sin(now / 24000 + c.phase) * 0.035) * MAP_W;
+      const wy = (c.fy + Math.cos(now / 30000 + c.phase) * 0.03) * MAP_H;
+      if (isLand?.(wx, wy)) continue;
+      const x = cam.screenX(wx);
+      const y = cam.screenY(wy);
+      if (x < -60 || x > cam.vw + 60 || y < -60 || y > cam.vh + 60) continue;
+      ctx.save();
+      ctx.translate(x, y);
+      const bob = Math.sin(now / 900 + i * 2) * 2;
+      // whale body + tail + spout
+      ctx.fillStyle = '#31597d';
+      ctx.beginPath();
+      ctx.ellipse(0, bob, whaleScale * 0.55, whaleScale * 0.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(whaleScale * 0.45, bob);
+      ctx.lineTo(whaleScale * 0.72, bob - whaleScale * 0.18);
+      ctx.lineTo(whaleScale * 0.72, bob + whaleScale * 0.18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(235, 252, 255, 0.85)';
+      ctx.lineWidth = 1.6;
+      const spout = 0.4 + 0.6 * Math.abs(Math.sin(now / 2600 + i));
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.moveTo(-whaleScale * 0.1, bob - whaleScale * 0.15);
+        ctx.quadraticCurveTo(
+          -whaleScale * (0.2 + k * 0.06),
+          bob - whaleScale * (0.5 + spout * 0.5),
+          -whaleScale * (0.05 + k * 0.12),
+          bob - whaleScale * (0.8 + spout * 0.5),
+        );
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(0, bob + whaleScale * 0.2, whaleScale * 0.7, whaleScale * 0.12, 0, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      if (i === 0) {
+        const sx = x + Math.sin(now / 17000) * 50;
+        const sy = y + 44;
+        drawVehicle(ctx, 'sailboat', sx, sy, Math.max(18, whaleScale * 1.1), 1, this.vehicles?.get('sailboat'));
+      }
     }
   }
 

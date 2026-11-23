@@ -11,10 +11,12 @@ import {
   characterPerk,
   currentPrice,
   findProperty,
+  incomeMultiplier,
   monopolises,
   netWorth,
   ownCount,
   ownedProperties,
+  propertyAnnualIncome,
   purchasePrice,
   yearScale,
 } from './economy';
@@ -244,10 +246,22 @@ function chooseBuy(data: GameData, state: GameState, player: PlayerState): Actio
   const currentOwned = ownCount(data, state, player.id, city.id);
   const completing = player.cpuLevel >= 3 && currentOwned > 0;
   const reserve = completing ? player.cash * 0.1 : player.cash * 0.3;
+  const remainingSettlements = Math.max(1, state.config.years - state.year + 1);
   const sorted = available.slice().sort((a, b) => {
     const score = (p: typeof a): number => {
       const cost = purchasePrice(data, state, player.id, p.id);
-      return p.yieldPct / Math.max(1, cost);
+      const multiplier = incomeMultiplier(data, state, player.id, p.industry);
+      const ownedInCity = city.properties.filter(
+        (q) => q.id !== p.id && state.owner[q.id] === player.id,
+      );
+      const completesMonopoly = ownedInCity.length === city.properties.length - 1;
+      let marginalIncome = ((p.price * p.yieldPct) / 100) * multiplier * (completesMonopoly ? 2 : 1);
+      if (completesMonopoly) {
+        for (const other of ownedInCity) {
+          marginalIncome += propertyAnnualIncome(data, state, player.id, other, city.id);
+        }
+      }
+      return (marginalIncome * remainingSettlements) / Math.max(1, cost);
     };
     const sa = score(a);
     const sb = score(b);
