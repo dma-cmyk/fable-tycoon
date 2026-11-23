@@ -34,6 +34,7 @@ import type { PublicState } from '../core/engine';
 import { AmbientWorld } from './ambient';
 import { RectGrid } from './grid';
 import { drawVehicle, vehicleMetrics, type VehicleKind } from './vehicles';
+import { resolveCancelledToken, shouldCancelForSnapshot } from './mapState';
 import {
   detectCanvasBudget,
   fitBackingStore,
@@ -774,11 +775,13 @@ export class MapView {
     if (this.moveAnim) {
       const player = state.players[this.moveAnim.playerId];
       const last = this.moveAnim.path[this.moveAnim.path.length - 1];
-      if (!player || last !== player.nodeId) this.cancelMove();
+      // Authoritative snapshot wins. Cancel without writing the old animation
+      // endpoint back over the node that setState just adopted.
+      if (shouldCancelForSnapshot(last, player?.nodeId)) this.cancelMove(false);
     }
     if (this.warpAnim) {
       const player = state.players[this.warpAnim.playerId];
-      if (!player || player.nodeId !== this.warpAnim.toNode) this.cancelWarp();
+      if (shouldCancelForSnapshot(this.warpAnim.toNode, player?.nodeId)) this.cancelWarp(false);
     }
     for (const [playerId, active] of [...this.emoteActive]) {
       if (playerId >= state.players.length) {
@@ -1553,21 +1556,28 @@ export class MapView {
     this.startEmote(playerId, next);
   }
 
-  private cancelMove(): void {
+  private cancelMove(applyEnd = true): void {
     const anim = this.moveAnim;
     if (!anim) return;
     this.moveAnim = null;
     const token = this.tokens[anim.playerId];
-    if (token && anim.path.length > 0) token.nodeId = anim.path[anim.path.length - 1];
+    const end = anim.path[anim.path.length - 1];
+    if (token && end !== undefined) {
+      const nodeId = resolveCancelledToken(token.nodeId, end, applyEnd);
+      if (nodeId !== undefined) token.nodeId = nodeId;
+    }
     anim.resolve();
   }
 
-  private cancelWarp(): void {
+  private cancelWarp(applyEnd = true): void {
     const anim = this.warpAnim;
     if (!anim) return;
     this.warpAnim = null;
     const token = this.tokens[anim.playerId];
-    if (token) token.nodeId = anim.toNode;
+    if (token) {
+      const nodeId = resolveCancelledToken(token.nodeId, anim.toNode, applyEnd);
+      if (nodeId !== undefined) token.nodeId = nodeId;
+    }
     anim.resolve();
   }
 
