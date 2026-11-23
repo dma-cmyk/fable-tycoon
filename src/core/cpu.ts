@@ -4,9 +4,11 @@
 // action that is legal for the current phase and acting player.
 
 import type { Action, Effect, GameData, GameState, MoveOption, PlayerState } from './types';
-import { getGraph, nodeForCity, shortestDistance } from './graph';
+import { getGraph, nodeForCity } from './graph';
+import { effectiveDistance } from './realm';
 import {
   annualIncome,
+  characterPerk,
   currentPrice,
   findProperty,
   monopolises,
@@ -14,7 +16,9 @@ import {
   ownCount,
   ownedProperties,
   purchasePrice,
+  yearScale,
 } from './economy';
+import { handLimitFor } from './cards';
 
 const CARD_VALUE: Readonly<Record<string, number>> = {
   shield: 100,
@@ -27,6 +31,7 @@ const CARD_VALUE: Readonly<Record<string, number>> = {
   stop: 50,
   express3: 45,
   pegasus: 40,
+  rocket: 80,
   express2: 35,
   carpet: 30,
   insider: 20,
@@ -45,6 +50,8 @@ export function cpuDecide(data: GameData, state: GameState): Action {
       return { t: 'move', nodeId: chooseMove(data, state, player, state.phase.options) };
     case 'buy':
       return chooseBuy(data, state, player) ?? { t: 'end_buy' };
+    case 'shop':
+      return chooseShop(data, state, player);
     case 'event': {
       const eventId = state.phase.eventId;
       const event = data.events.find((e) => e.id === eventId);
@@ -72,6 +79,40 @@ export function cpuDecide(data: GameData, state: GameState): Action {
     default:
       return { t: 'ack' };
   }
+}
+
+// ---------------------------------------------------------------- shop
+
+function chooseShop(data: GameData, state: GameState, player: PlayerState): Action {
+  const phase = state.phase;
+  if (phase.t !== 'shop') return { t: 'end_shop' };
+  const limit = handLimitFor(characterPerk(data, state, player.id));
+  if (player.cards.length >= limit) return { t: 'end_shop' };
+  const reserve = player.cash * 0.3;
+  const affordable = (cardId: string): boolean => {
+    if (!phase.stock.includes(cardId)) return false;
+    const card = data.cards.find((c) => c.id === cardId);
+    if (!card) return false;
+    const price = card.price * yearScale(state);
+    return player.cash >= price && player.cash - price >= reserve;
+  };
+  const distance = distanceToDestination(data, state, player);
+
+  if (distance > 30) {
+    if (affordable('express3')) return { t: 'buy_card', cardId: 'express3' };
+    if (affordable('express2')) return { t: 'buy_card', cardId: 'express2' };
+  }
+  if (state.piper.holder === player.id) {
+    for (const cardId of ['piper_pass', 'stop', 'takeover']) {
+      if (affordable(cardId)) return { t: 'buy_card', cardId };
+    }
+  }
+  return { t: 'end_shop' };
+}
+
+function distanceToDestination(data: GameData, state: GameState, player: PlayerState): number {
+  const destNode = nodeForCity(data, state.destination);
+  return destNode ? effectiveDistance(data, player.nodeId, destNode) : 0;
 }
 
 // ---------------------------------------------------------------- cards
@@ -106,17 +147,20 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
   }
 
   const destNode = nodeForCity(data, state.destination);
-  const currentDistance = destNode ? shortestDistance(data, player.nodeId, destNode) : 0;
-  if (hand.has('express3') && currentDistance > 14) return { t: 'use_card', cardId: 'express3' };
-  if (hand.has('express2') && currentDistance > 9) return { t: 'use_card', cardId: 'express2' };
+  const currentDistance = destNode ? effectiveDistance(data, player.nodeId, destNode) : 0;
+  if (hand.has('rocket') && currentDistance > 20) return { t: 'use_card', cardId: 'rocket' };
+  if (currentDistance > 30) {
+    if (hand.has('express3')) return { t: 'use_card', cardId: 'express3' };
+    if (hand.has('express2')) return { t: 'use_card', cardId: 'express2' };
+  }
 
   if (hand.has('pegasus') && destNode) {
-    const airports = data.cities.filter((c) => c.airport);
+    const airports = data.cities.filter((c) => c.realm === undefined && c.airport);
     let best = currentDistance;
     for (const city of airports) {
       const node = nodeForCity(data, city.id);
       if (!node) continue;
-      best = Math.min(best, shortestDistance(data, node, destNode));
+      best = Math.min(best, effectiveDistance(data, node, destNode));
     }
     if (best + 4 < currentDistance) return { t: 'use_card', cardId: 'pegasus' };
   }
@@ -154,7 +198,7 @@ function chooseMove(
     score: number;
   }
   const scored: Scored[] = options.map((option) => {
-    let score = destNode ? shortestDistance(data, option.nodeId, destNode) : 0;
+    let score = destNode ? effectiveDistance(data, option.nodeId, destNode) : 0;
     if (!Number.isFinite(score)) score = 9999;
     if (player.cpuLevel >= 3) {
       if (state.piper.holder === player.id) {
@@ -351,13 +395,44 @@ function chooseCardTarget(
       });
       return scored[0];
     }
+    case 'portal': {
+      const destNode = nodeForCity(data, state.destination);
+      if (!destNode) return options[0];
+      return options.slice().sort((a, b) => {
+        const da = effectiveDistance(data, a, destNode);
+        const db = effectiveDistance(data, b, destNode);
+        return da !== db ? da - db : a.localeCompare(b);
+      })[0];
+    }
+    case 'rocket': {
+      const destNode = nodeForCity(data, state.destination);
+      if (!destNode) return options[0];
+      const scored = options.map((node) => {
+        if (node.startsWith('r:')) return { node, score: 9999 };
+        let score = effectiveDistance(data, node, destNode);
+        if (level >= 3) {
+          const graphNode = getGraph(data).nodes.get(node);
+          const city = graphNode?.cityId
+            ? data.cities.find((c) => c.id === graphNode.cityId)
+            : undefined;
+          const unowned = city ? city.properties.filter((p) => state.owner[p.id] === undefined) : [];
+          if (unowned.length > 0) {
+            const bestYield = Math.max(...unowned.map((p) => p.yieldPct));
+            score -= 6 + Math.min(6, bestYield / 2);
+          }
+        }
+        return { node, score };
+      });
+      scored.sort((a, b) => (a.score !== b.score ? a.score - b.score : a.node.localeCompare(b.node)));
+      return scored[0].node;
+    }
     case 'pegasus':
     case 'carpet': {
       const destNode = nodeForCity(data, state.destination);
       if (!destNode) return options[0];
       return options.slice().sort((a, b) => {
-        const da = shortestDistance(data, a, destNode);
-        const db = shortestDistance(data, b, destNode);
+        const da = effectiveDistance(data, a, destNode);
+        const db = effectiveDistance(data, b, destNode);
         if (level >= 3) {
           const nodeA = getGraph(data).nodes.get(a);
           const nodeB = getGraph(data).nodes.get(b);

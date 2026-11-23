@@ -87,8 +87,8 @@ export function shortestDistance(data: GameData, fromNodeId: string, toNodeId: s
 
 /**
  * All distinct endpoint nodes reachable in exactly `steps` edges under the movement rules,
- * with one concrete path each. If `stopNodeId` is passed (or reached) the path is truncated
- * there and that node is returned as an option instead of continuing on.
+ * with one concrete path each. If `stopNodeId` or an extra stop (portal) is passed, the path is
+ * truncated there and that node is returned as an option instead of continuing on.
  */
 export function reachableInExactly(
   data: GameData,
@@ -96,6 +96,7 @@ export function reachableInExactly(
   steps: number,
   prevNodeId: string | null = null,
   stopNodeId: string | null = null,
+  extraStopNodeIds: ReadonlySet<string> | null = null,
 ): MoveOption[] {
   const graph = getGraph(data);
   if (!graph.nodes.has(startNodeId)) return [];
@@ -119,8 +120,11 @@ export function reachableInExactly(
       for (const nb of neighbours) {
         if (!deadEnd && nb.id === walker.prev) continue;
         const path = [...walker.path, nb.id];
+        const destinationStop =
+          stopNodeId !== null && nb.id === stopNodeId && stopNodeId !== startNodeId;
+        const portalStop = extraStopNodeIds !== null && extraStopNodeIds.has(nb.id);
         // The destination claims movement the moment it is reached (including passing).
-        if (stopNodeId !== null && nb.id === stopNodeId && stopNodeId !== startNodeId) {
+        if (destinationStop || portalStop) {
           if (!found.has(nb.id)) found.set(nb.id, { nodeId: nb.id, path });
           continue;
         }

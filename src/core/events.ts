@@ -13,6 +13,7 @@ import type {
   GameEventDef,
   GameState,
   Industry,
+  RealmId,
   Who,
 } from './types';
 import { nextRandom, pickOne, shuffled, weightedPick } from './rng';
@@ -27,14 +28,48 @@ import {
 } from './economy';
 import { drawCards, handLimitFor, isCardId } from './cards';
 import { transferPiper } from './piper';
+import { REALMS, randomWorldCityNodeId, realmEntryNodeId } from './realm';
 import { emitDialogueLines, sayCharacterLine } from './speech';
 
-/** Picks a weighted, year- and once-eligible event, advancing the seeded rng. */
-export function pickEvent(data: GameData, state: GameState): GameEventDef | null {
+function monthAllowed(event: GameEventDef, month: number): boolean {
+  return !event.months || event.months.includes(month);
+}
+
+function realmAllowed(event: GameEventDef, realm: RealmId | 'world'): boolean {
+  if (!event.realms || event.realms.length === 0) return realm === 'world';
+  return event.realms.includes(realm);
+}
+
+/** Picks a weighted, year-, month-, realm- and once-eligible news event. */
+export function pickEvent(
+  data: GameData,
+  state: GameState,
+  realm: RealmId | 'world' = 'world',
+): GameEventDef | null {
   const eligible = data.events.filter(
     (e) =>
+      e.monthly !== true &&
       e.weight > 0 &&
       state.year >= (e.minYear ?? 1) &&
+      monthAllowed(e, state.month) &&
+      realmAllowed(e, realm) &&
+      (!e.once || !state.usedOnceEvents.includes(e.id)),
+  );
+  return weightedPick(state, eligible, (e) => e.weight);
+}
+
+/** Month-start event candidates; the 30% chance roll lives in engine.ts. */
+export function pickMonthlyEvent(
+  data: GameData,
+  state: GameState,
+  month: number = state.month,
+): GameEventDef | null {
+  const eligible = data.events.filter(
+    (e) =>
+      e.monthly === true &&
+      e.weight > 0 &&
+      state.year >= (e.minYear ?? 1) &&
+      monthAllowed(e, month) &&
       (!e.once || !state.usedOnceEvents.includes(e.id)),
   );
   return weightedPick(state, eligible, (e) => e.weight);
@@ -199,7 +234,7 @@ function applyEffect(
         if (!nodeId) continue;
         state.players[id].nodeId = nodeId;
         state.players[id].prevNodeId = null;
-        fx.push({ t: 'warp', playerId: id, nodeId });
+        fx.push({ t: 'warp', playerId: id, nodeId, via: 'event' });
       }
       return;
     }
@@ -215,6 +250,26 @@ function applyEffect(
       for (const id of targets) {
         transferPiper(state, fx, id, `イベントの力で ${state.players[id].name} に取り立て屋が移った！`);
         sayCharacterLine(data, state, id, 'piper_get', fx);
+      }
+      return;
+    }
+    case 'realm': {
+      for (const id of resolveTargets(data, state, effect.who, actor)) {
+        const node =
+          effect.realm === 'world'
+            ? randomWorldCityNodeId(data, state)
+            : realmEntryNodeId(data, effect.realm);
+        if (!node) continue;
+        state.players[id].nodeId = node;
+        state.players[id].prevNodeId = null;
+        fx.push({ t: 'warp', playerId: id, nodeId: node, via: 'realm' });
+        fx.push({
+          t: 'toast',
+          text:
+            effect.realm === 'world'
+              ? `${state.players[id].name} は地上へ戻された。`
+              : `${state.players[id].name} は ${REALMS[effect.realm].nameJa} へ飛ばされた。`,
+        });
       }
       return;
     }
@@ -267,11 +322,14 @@ function resolveMoveNode(
   if (cities.length === 0) return null;
   const player = state.players[playerId];
   if (to === 'random_city') {
-    return nodeForCity(data, pickOne(state, cities).id);
+    return randomWorldCityNodeId(data, state);
   }
   if (to === 'nearest_port') {
-    const ports = cities.filter((c) => c.port);
-    if (ports.length === 0) return nodeForCity(data, cities[0].id);
+    const ports = cities.filter((c) => c.realm === undefined && c.port);
+    if (ports.length === 0) {
+      const world = cities.filter((c) => c.realm === undefined);
+      return world.length > 0 ? nodeForCity(data, world[0].id) : null;
+    }
     const sorted = ports.slice().sort((a, b) => {
       const na = nodeForCity(data, a.id) ?? '';
       const nb = nodeForCity(data, b.id) ?? '';
@@ -284,7 +342,10 @@ function resolveMoveNode(
   if (to === 'destination_near') {
     const destNode = nodeForCity(data, state.destination);
     if (!destNode) return null;
-    const sorted = cities.slice().sort((a, b) => {
+    const sorted = cities
+      .filter((c) => c.realm === undefined)
+      .slice()
+      .sort((a, b) => {
       const na = nodeForCity(data, a.id) ?? '';
       const nb = nodeForCity(data, b.id) ?? '';
       const da = shortestDistance(data, destNode, na);

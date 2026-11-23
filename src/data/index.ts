@@ -7,9 +7,11 @@ import cities from './cities.json';
 import emotes from './emotes.json';
 import events from './events.json';
 import npcs from './npcs.json';
+import realms from './realms.json';
 
 export const GAME_DATA: GameData = {
-  cities: cities as City[],
+  // 異世界の駅（realm 付き City）も物件・独占・収益の対象なので同じ配列に含める
+  cities: [...(cities as City[]), ...(realms as City[])],
   board: board as Board,
   characters: characters as Character[],
   events: events as GameEventDef[],

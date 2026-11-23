@@ -2,7 +2,7 @@
 // Used by tools/build-board.mjs (via a copy of the same formulas) and the renderer.
 
 export const CENTRAL_MERIDIAN = 11; // degrees east; the map seam is at -169 (Bering / mid-Pacific)
-export const MAP_W = 4096;
+export const MAP_W = 8192;
 export const LAT_TOP = 80;
 export const LAT_BOTTOM = -56;
 

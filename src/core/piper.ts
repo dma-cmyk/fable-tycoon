@@ -7,11 +7,11 @@
 // (弁護士軍団) cancels one complete mischief automatically.
 
 import type { Fx, GameData, GameState } from './types';
-import { randInt, shuffled } from './rng';
+import { randInt, nextRandom, shuffled } from './rng';
 import { consumeShield, piperDiscardCount } from './cards';
 import { characterPerk, ownedProperties, sellPrice } from './economy';
 import { sayCharacterLine } from './speech';
-import { shortestDistance } from './graph';
+import { effectiveDistance, realmEntryNodeId } from './realm';
 
 export const PIPER_LEVEL_TURNS: readonly number[] = [12, 24];
 
@@ -43,7 +43,7 @@ export function assignPiperToFarthest(
   let holder: number | null = null;
   let best = -1;
   for (const player of state.players) {
-    const d = shortestDistance(data, cityBoardNodeId, player.nodeId);
+    const d = effectiveDistance(data, cityBoardNodeId, player.nodeId);
     const value = Number.isFinite(d) ? d : 9999;
     if (value > best) {
       best = value;
@@ -98,6 +98,20 @@ export function runPiperTurnStart(
 
   const level = state.piper.level;
   const charm = characterPerk(data, state, playerId) === 'piper_charm' ? 0.5 : 1;
+
+  // King piper rare mischief: drag the holder to hell.
+  if (level === 3 && nextRandom(state) < 0.1) {
+    const hell = realmEntryNodeId(data, 'hell');
+    if (hell) {
+      player.nodeId = hell;
+      player.prevNodeId = null;
+      fx.push({ t: 'warp', playerId, nodeId: hell, via: 'realm' });
+      sayCharacterLine(data, state, playerId, 'piper_hit', fx);
+      fx.push({ t: 'toast', text: 'キング取り立て屋が蜘蛛の糸を切った。借金地獄へ真っ逆さま。' });
+      return 'continue';
+    }
+  }
+
   const kind = randInt(state, 0, 4);
 
   if (kind === 0) {

@@ -244,6 +244,42 @@ export const CITIES: City[] = [
       property('rio-agri', '熱帯プランテーション', 'agri', 15, 7),
     ],
   },
+  {
+    id: 'heaven-gate', nameJa: '天国の門', nameEn: 'Heaven Gate', country: 'XX', countryJa: '天国',
+    region: 'oceania', lat: 0, lon: 0, tier: 3, port: false, airport: false,
+    blurb: '雲の上の検問所。', realm: 'heaven',
+    properties: [property('heaven-mansion', '雲の上の豪邸', 'tourism', 800, 10)],
+  },
+  {
+    id: 'heaven-estate', nameJa: '天使の投資村', nameEn: 'Angel Estate', country: 'XX', countryJa: '天国',
+    region: 'oceania', lat: 0, lon: 1, tier: 3, port: false, airport: false,
+    blurb: '天使投資ファンドの本拠地。', realm: 'heaven',
+    properties: [property('heaven-fund', '天使投資ファンド', 'finance', 600, 12)],
+  },
+  {
+    id: 'hell-gate', nameJa: '地獄の門', nameEn: 'Hell Gate', country: 'XX', countryJa: '地獄',
+    region: 'africa', lat: 0, lon: 0, tier: 3, port: false, airport: false,
+    blurb: 'ここから先は自己責任。', realm: 'hell',
+    properties: [property('hell-onsen', '地獄の釜ゆで温泉', 'tourism', 20, 40)],
+  },
+  {
+    id: 'hell-tax', nameJa: '閻魔の税務署', nameEn: 'Hell Tax Office', country: 'XX', countryJa: '地獄',
+    region: 'africa', lat: 0, lon: 1, tier: 3, port: false, airport: false,
+    blurb: '申告漏れは釜ゆで。', realm: 'hell',
+    properties: [property('hell-ski', '針の山スキー場', 'tourism', 15, 50)],
+  },
+  {
+    id: 'space-gate', nameJa: '宇宙港', nameEn: 'Space Port', country: 'XX', countryJa: '宇宙',
+    region: 'east_asia', lat: 0, lon: 0, tier: 3, port: false, airport: true,
+    blurb: '打ち上げ待ちの列。', realm: 'space',
+    properties: [property('space-moonbase', '月面基地', 'tech', 300, 15)],
+  },
+  {
+    id: 'space-moon', nameJa: '火星の分譲地', nameEn: 'Mars Plots', country: 'XX', countryJa: '宇宙',
+    region: 'east_asia', lat: 0, lon: 1, tier: 3, port: false, airport: false,
+    blurb: '眺めは最高、空気は別売り。', realm: 'space',
+    properties: [property('space-asteroid', '小惑星採掘権', 'energy', 200, 20)],
+  },
 ];
 
 export const CITY_IDS: readonly string[] = CITIES.map((c) => c.id);
@@ -256,9 +292,9 @@ function buildBoard(): Board {
   const nodes: BoardNode[] = [];
   const edges: BoardEdge[] = [];
   const ring: string[] = [];
-
-  for (let i = 0; i < CITIES.length; i += 1) {
-    const city = CITIES[i];
+  const worldCities = CITIES.filter((c) => c.realm === undefined);
+  for (let i = 0; i < worldCities.length; i += 1) {
+    const city = worldCities[i];
     const cityNodeId = `c:${city.id}`;
     ring.push(cityNodeId);
     nodes.push({
@@ -283,6 +319,29 @@ function buildBoard(): Board {
     edges.push({ a: ring[i], b: ring[(i + 1) % ring.length], mode: 'rail' });
   }
 
+  // Tiny disconnected loops for the three realms: two stations, blue/red/news squares, portal.
+  const realmFillerKinds: readonly SquareKind[] = ['blue', 'red', 'news'];
+  for (const realm of ['heaven', 'hell', 'space'] as const) {
+    const realmRing: string[] = [];
+    const realmCities = CITIES.filter((c) => c.realm === realm);
+    realmCities.forEach((city, i) => {
+      const id = `c:${city.id}`;
+      realmRing.push(id);
+      nodes.push({ id, kind: 'city', cityId: city.id, realm, x: 200 + i * 300, y: 200 });
+    });
+    for (let j = 0; j < realmFillerKinds.length; j += 1) {
+      const id = `s:${realm}-${j}`;
+      realmRing.push(id);
+      nodes.push({ id, kind: realmFillerKinds[j], realm, x: 200 + j * 220, y: 500 });
+    }
+    const portalId = `s:${realm}-portal`;
+    realmRing.push(portalId);
+    nodes.push({ id: portalId, kind: 'portal', realm, x: 900, y: 800 });
+    for (let i = 0; i < realmRing.length; i += 1) {
+      edges.push({ a: realmRing[i], b: realmRing[(i + 1) % realmRing.length], mode: 'rail' });
+    }
+  }
+
   // Sea edges. These are parallel to existing rail links (a dock beside the station) so they
   // add rail/sea variety without collapsing the ring diameter needed by the 20-step rule.
   edges.push({ a: 'c:tokyo', b: 's:0-0', mode: 'sea' });
@@ -292,6 +351,12 @@ function buildBoard(): Board {
   // Dead-end spur off Rio, for the "dead ends may fold back" rule.
   nodes.push({ id: 's:dead', kind: 'blue', x: 3600, y: 900 });
   edges.push({ a: 'c:rio', b: 's:dead', mode: 'rail' });
+
+  // Shop and tornado squares (spurs, so city distances are unchanged).
+  nodes.push({ id: 's:shop', kind: 'shop', x: 900, y: 950 });
+  edges.push({ a: 'c:osaka', b: 's:shop', mode: 'rail' });
+  nodes.push({ id: 's:warp', kind: 'warp', x: 1200, y: 950 });
+  edges.push({ a: 'c:shanghai', b: 's:warp', mode: 'rail' });
 
   return { nodes, edges };
 }
@@ -375,19 +440,20 @@ export const CHARACTERS: Character[] = [
 ];
 
 export const CARDS: CardDef[] = [
-  { id: 'express2', name: '急行ゴブリン便', desc: 'サイコロ2個', kind: 'move', weight: 10 },
-  { id: 'express3', name: '特急ドラゴン便', desc: 'サイコロ3個', kind: 'move', weight: 8 },
-  { id: 'pegasus', name: 'ペガサス便', desc: '空港都市へワープ', kind: 'move', weight: 8, needsTarget: 'airport' },
-  { id: 'carpet', name: '魔法のじゅうたん', desc: '目的地から5〜10歩の都市へ', kind: 'move', weight: 8, needsTarget: 'city' },
-  { id: 'tariff', name: '関税カード', desc: '他の全員から5%徴収', kind: 'money', weight: 10 },
-  { id: 'subsidy', name: '謎の補助金', desc: '+40億×yearScale', kind: 'money', weight: 10 },
-  { id: 'bailout', name: '大きすぎて潰せませんカード', desc: '借金を全員で肩代わり', kind: 'money', weight: 5 },
-  { id: 'stop', name: '牛歩法案', desc: '相手を1回休み', kind: 'attack', weight: 8, needsTarget: 'player' },
-  { id: 'takeover', name: '敵対的買収', desc: '物件1件を1.5倍で強制購入', kind: 'attack', weight: 6, needsTarget: 'city' },
-  { id: 'piper_pass', name: '笛の押し付け', desc: '取り立て屋を押し付ける', kind: 'attack', weight: 6, needsTarget: 'player' },
-  { id: 'golden_egg', name: '金の卵', desc: '年間物件収益の30%', kind: 'money', weight: 8 },
-  { id: 'insider', name: '噂話カード', desc: '目的地を自分に近い都市へ再抽選', kind: 'special', weight: 8 },
-  { id: 'shield', name: '弁護士軍団', desc: '次の1回の被害を無効', kind: 'defense', weight: 6 },
+  { id: 'express2', name: '急行列車きっぷ', desc: 'サイコロ2個', kind: 'move', weight: 10, price: 10 },
+  { id: 'express3', name: '超特急きっぷ', desc: 'サイコロ3個', kind: 'move', weight: 8, price: 15 },
+  { id: 'pegasus', name: '飛行機チケット', desc: '空港都市へワープ', kind: 'move', weight: 8, needsTarget: 'airport', price: 15 },
+  { id: 'carpet', name: '魔法のじゅうたん', desc: '目的地から5〜10歩の都市へ', kind: 'move', weight: 8, needsTarget: 'city', price: 12 },
+  { id: 'rocket', name: 'ロケット便', desc: '任意の都市へワープ', kind: 'move', weight: 3, needsTarget: 'city', price: 100 },
+  { id: 'tariff', name: '関税カード', desc: '他の全員から5%徴収', kind: 'money', weight: 10, price: 45 },
+  { id: 'subsidy', name: '謎の補助金', desc: '+40億×yearScale', kind: 'money', weight: 10, price: 50 },
+  { id: 'bailout', name: '大きすぎて潰せませんカード', desc: '借金を全員で肩代わり', kind: 'money', weight: 5, price: 50 },
+  { id: 'stop', name: '牛歩法案', desc: '相手を1回休み', kind: 'attack', weight: 8, needsTarget: 'player', price: 40 },
+  { id: 'takeover', name: '敵対的買収', desc: '物件1件を1.5倍で強制購入', kind: 'attack', weight: 6, needsTarget: 'city', price: 70 },
+  { id: 'piper_pass', name: '笛の押し付け', desc: '取り立て屋を押し付ける', kind: 'attack', weight: 6, needsTarget: 'player', price: 45 },
+  { id: 'golden_egg', name: '金の卵', desc: '年間物件収益の30%', kind: 'money', weight: 8, price: 40 },
+  { id: 'insider', name: '噂話カード', desc: '目的地を自分に近い都市へ再抽選', kind: 'special', weight: 8, price: 20 },
+  { id: 'shield', name: '弁護士軍団', desc: '次の1回の被害を無効', kind: 'defense', weight: 6, price: 35 },
 ];
 
 export const EVENTS: GameEventDef[] = [
@@ -501,6 +567,21 @@ export const EVENTS: GameEventDef[] = [
       { op: 'move', who: 'self', to: 'random_city' },
       { op: 'cash_pct', who: 'self', pct: 10 },
     ],
+  },
+  {
+    id: 'ev-monthly-harvest',
+    title: '月替わり豊作',
+    kind: 'fable',
+    fact: undefined,
+    satireNote: '完全創作。月替わりの季節イベント用。',
+    weight: 10,
+    monthly: true,
+    months: [4, 8],
+    lines: [
+      { speaker: 'narrator', text: '月が替わった。季節の風が世界経済を揺らす。' },
+      { speaker: 'npc:banker_pig', text: '豊作でも豊作でなくても、手数料はいただきます。' },
+    ],
+    effects: [{ op: 'cash', who: 'self', amount: 5, scale: false }],
   },
 ];
 
