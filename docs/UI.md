@@ -24,7 +24,8 @@ PC（横長 ≥ 900px）:
 - 下中央: 主ボタン「サイコロをふる」（自分が操作できる番だけ）。その右にアイコンボタン列: カード / 物件 / 持ち物（=カード一覧の別名ではなく所有物件一覧）/ 情報（業種倍率・経済ニュース・ログ）/ 全体マップ。
 - 右下: 自分（または手番プレイヤー）の所持金・年間収益見込み・総資産。
 - イベント: 右側の大パネル（赤帯見出し「世界ニュースイベント！」、挿絵、台詞、選択肢ボタン、「元ネタ」ボタンで fact / sources / satireNote を表示）。
-- オンライン: タイマー（手番の残り秒、円形ゲージ）、スタンプ / 定型文ボタン、受信したスタンプはそのプレイヤーの順位パネル横に 2 秒ポップ。
+- オンライン: タイマー（手番の残り秒、円形ゲージ）。
+- コミュニケーション（DESIGN.md §8、ローカル / オンライン共通）: 画面右下寄りに「💬」チャットボタンと「😆」エモートボタン（常時表示、手番外も押せる）。エモートパレットはタブ（喜怒哀楽 / アクション / 煽り / ちょっかい / 固有技）でボタン各 44px 以上、クールダウン中は円形ゲージでグレーアウト。ちょっかいは押した後に相手の顔アイコンを選ぶ。チャットは下からせり上がる小パネル（ログ + 入力欄 + 定型文チップ「よろしく！」「ナイス！」「やられた〜」「それはズルい！」「GG！」等）。各プレイヤー行の「…」メニューにミュート（チャット / エモート / ボイス）と通報。受信したチャットはマップ上の駒の頭上と順位パネル横に吹き出し、エモートは駒のアニメ + 頭上アイコン + 台詞の吹き出し + ボイス。ローカル（ホットシート）では手番プレイヤーとしてエモートを出す。
 
 スマホ（< 900px または縦向き）:
 - 上部 1 行に年月・目的地・残り歩数。順位はアイコンだけの横並び（タップで詳細）。
@@ -65,6 +66,10 @@ export class MapView {
   onCityTap(cb: (cityId: string) => void): void;
   resize(): void; // also called internally on ResizeObserver
   destroy(): void;
+  /** Cosmetic emote on the player's token (and projectile to target). Resolves when the animation ends (~1.5–2.5 s). */
+  playEmote(playerId: number, def: EmoteDef, targetPlayerId: number | null): Promise<void>;
+  /** Speech bubble above a token (chat or emote line), auto-hides after ms. */
+  bubble(playerId: number, text: string, ms?: number): void;
 }
 ```
 - 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（遠景: 大陸・航路・主要都市名のみ、近景: 全マス・全都市名・ランドマーク）。画面外カリング。

@@ -213,6 +213,43 @@ export interface CardDef {
   needsTarget?: 'player' | 'city' | 'airport';
 }
 
+// --- communication (cosmetic only; never touches GameState) -----------------
+
+/** Animation vocabulary implemented by MapView.playEmote. Add new ones there first. */
+export type EmoteAnim =
+  | 'jump' // 喜: ぴょんぴょん
+  | 'angry' // 怒: 震え + 湯気
+  | 'cry' // 哀: 涙のしずく
+  | 'laugh' // 楽: 左右に揺れる + 音符
+  | 'dance' // くるくる回って跳ねる
+  | 'taunt' // 挑発: お尻ぺんぺん風の左右フリ + 「べー」マーク
+  | 'dogeza' // 土下座: 平たく潰れて小さく上下
+  | 'money_rain' // 札束をばらまく: 頭上から紙幣パーティクル
+  | 'flex' // 自慢: 拡大 + キラキラ
+  | 'sleep' // 放置ネタ: Zzz
+  | 'heart' // 感謝: ハート
+  | 'throw' // 対象へ投げ物（projectile）→ 当たった相手が 'hit'
+  | 'hit' // 被弾リアクション（throw の着弾側で自動再生）
+  | 'spotlight'; // 固有技向け: スポットライト + 拡大 + 決めポーズ
+
+export type EmoteCategory = 'emotion' | 'action' | 'taunt' | 'poke' | 'unique';
+
+export interface EmoteDef {
+  id: string; // ascii slug
+  category: EmoteCategory;
+  label: string; // ボタン表示（日本語、短く）
+  icon: string; // 絵文字 1 つ（ボタン・頭上ポップ）
+  anim: EmoteAnim;
+  targeted: boolean; // true なら相手プレイヤーを選ぶ（ちょっかい）
+  projectile?: string; // throw 用の絵文字（例: 🍑, 🍅, 💸）
+  characterId?: string; // category 'unique' の持ち主（その人だけ使える）
+  cooldownMs: number; // この emote 自体の再使用間隔（席ごと）
+  /** 発動者キャラの台詞（音声化）。キーは character id。無いキャラは default を使う。 */
+  lines: Record<string, string> & { default: string };
+  /** targeted のとき、当てられた側キャラの返し台詞（音声化、任意）。 */
+  hitLines?: Record<string, string> & { default: string };
+}
+
 export interface GameData {
   cities: City[];
   board: Board;
@@ -220,6 +257,7 @@ export interface GameData {
   events: GameEventDef[];
   cards: CardDef[];
   npcs: NpcDef[];
+  emotes: EmoteDef[];
 }
 
 // ---------------------------------------------------------------- runtime state
@@ -301,6 +339,8 @@ export interface GameState {
   priceMod: Partial<Record<Industry, number>>;
   industryMods: IndustryModState[];
   destination: string; // cityId
+  /** Shortest steps from the drawer to `destination` when it was drawn (goal bonus input). */
+  destinationStartDistance?: number;
   piper: PiperState;
   usedOnceEvents: string[];
   activeEventId: string | null;

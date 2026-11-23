@@ -33,10 +33,39 @@ export interface LobbyView {
 /** state with rng removed (see sanitizeState) */
 export type PublicState = GameState;
 
-export const STAMPS = ['👍', '😂', '😱', '💸', '🙏', '😡', '🎉', '🤔'] as const;
-export const PHRASES = [
-  'よろしく！', 'ナイス！', 'やられた〜', 'お先に失礼！', 'それはズルい！', '待って待って', '大富豪は私だ', 'GG！',
-] as const;
+/** Communication limits (enforced by the server/RoomController; mirrored in the UI to grey out buttons). */
+export const COMM = {
+  chatMaxChars: 80,
+  chatMinIntervalMs: 1500, // per seat
+  chatBurst: 3, // token bucket size
+  emoteMinIntervalMs: 2500, // per seat, any emote
+  emoteBurst: 2,
+  duplicateWindowMs: 10000, // identical chat text from the same seat is dropped within this window
+  historySize: 60, // chat lines kept for snapshot / reconnect
+} as const;
+
+export interface ChatLine {
+  id: number; // room-unique, increasing
+  seat: number; // -1 = system
+  text: string; // already filtered (NG words masked)
+  at: number; // server epoch ms
+}
+
+/** A cosmetic emote/action broadcast. NEVER changes GameState (gameplay-affecting interference only via cards). */
+export interface EmoteEvent {
+  id: number;
+  seat: number;
+  emoteId: string; // EmoteDef.id (src/data/emotes.json)
+  target: number | null; // targeted seat for 'poke' style actions
+  at: number;
+}
+
+export interface Report {
+  reporter: number;
+  seat: number;
+  reason: 'spam' | 'abuse' | 'cheat' | 'other';
+  at: number;
+}
 
 // ---------------------------------------------------------------- client -> server
 
@@ -49,21 +78,23 @@ export type ClientMsg =
   | { t: 'settings'; settings: Partial<RoomSettings> } // host only
   | { t: 'start' } // host only
   | { t: 'action'; seq: number; action: Action }
-  | { t: 'stamp'; stamp: number } // index into STAMPS
-  | { t: 'phrase'; phrase: number } // index into PHRASES
+  | { t: 'chat'; text: string }
+  | { t: 'emote'; emoteId: string; target?: number } // usable any time during lobby/game, by own seat
+  | { t: 'report'; seat: number; reason: Report['reason'] } // stored server-side with last chat lines
   | { t: 'leave' } // leave room permanently (seat becomes CPU in game)
   | { t: 'ping'; at: number };
 
 // ---------------------------------------------------------------- server -> client
 
 export type ServerMsg =
-  | { t: 'welcome'; roomId: string; token: string; seat: number | null; lobby: LobbyView }
+  | { t: 'welcome'; roomId: string; token: string; seat: number | null; lobby: LobbyView; chat: ChatLine[] }
   | { t: 'lobby'; lobby: LobbyView }
   // full state, sent on game start / reconnect; client renders it without animation
   | { t: 'snapshot'; seq: number; state: PublicState; deadline: number | null; lobby: LobbyView }
   // incremental: apply fx animations then adopt state
   | { t: 'update'; seq: number; by: number; fx: Fx[]; state: PublicState; deadline: number | null }
-  | { t: 'react'; seat: number; stamp?: number; phrase?: number }
+  | { t: 'chat'; line: ChatLine }
+  | { t: 'emote'; emote: EmoteEvent } // fire-and-forget; clients may drop if their overlay is busy
   | { t: 'system'; text: string } // 例: "赤ずきん が切断しました（CPU が代行中）"
   | { t: 'error'; code: ErrorCode; message: string }
   | { t: 'pong'; at: number; serverNow: number };
