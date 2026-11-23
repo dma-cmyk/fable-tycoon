@@ -10,32 +10,36 @@
 |---|---|---|
 | ルールエンジン | 純 TypeScript。DOM・時計・乱数の外部依存なし。`(data, state, action) -> {state, fx}` | `src/core/` |
 | ルーム制御 | 純 TypeScript。席・タイマー・CPU 進行・切断処理。時計とタイマーを注入 | `src/net/room.ts` |
-| サーバー | Node 24 + `ws`（ローカル・LAN・自前ホスト・テスト）／Cloudflare Workers + Durable Objects（本番ホスティング）。どちらも同じ `RoomController` を使う薄いアダプタ | `server/` |
+| 通信（サーバーレス） | 静的ホスティング（GitHub Pages）。公開 MQTT ブローカー（WSS、3 か所を順に試行）で中継・シグナリングし、WebRTC DataChannel の P2P 直結へ自動昇格。**ホスト端末のブラウザが `RoomController` を動かす権威ホスト** | `src/net/p2p/`, `src/net/online-session.ts` |
 | クライアント | Vite + TypeScript。マップは Canvas 2D、HUD とダイアログは DOM/CSS | `src/render/`, `src/ui/` |
-| 音 | VOICEVOX で事前生成した mp3、`manifest.json` で照合。SE/BGM は手続き生成 | `tools/gen-voice.mjs`, `src/audio/` |
+| 音 | VOICEVOX で事前生成した mp3、`manifest.json` で照合。BGM は incompetech（CC BY 4.0）、SE は手続き生成 / CC0 | `tools/gen-voice.mjs`, `src/audio/` |
 | データ | JSON（AI が追加しやすい平坦な構造、`tools/validate-data.mjs` で検証） | `src/data/` |
 
-### 1.1 オンライン前提の設計（権威サーバー方式）
+### 1.1 オンライン前提の設計（ホスト権威 P2P 方式）
 
-- **ゲーム状態の正本はサーバーの `RoomController` だけ**。クライアントは `Action` を送り、サーバーが `step()` で検証・適用し、`fx` と新しい状態を全員に配信する。クライアントは状態を予測しない。
-- **乱数はサーバー内**（`state.rng`, mulberry32）。配信時に `rng` を取り除く（`sanitizeState`）。サイコロの出目をクライアントが決めることはない。
-- 不正・競合対策: 行動は「今行動すべき席の持ち主」からだけ受け付ける。各メッセージは `seq`（ルームの状態番号）を持ち、古い `seq` の行動は `stale` で拒否（二重タップ・同時操作・再送を無害化）。ルームごとに処理は直列。
+ユーザー決定（2026-11-23）: 専用サーバーを持たず、`nanj-kakutougi` と同じく公開 MQTT ブローカー + WebRTC で通信し、GitHub Pages で公開する。
+
+- **ゲーム状態の正本はホスト端末の `RoomController` だけ**。ゲストは `Action` を送り、ホストが `step()` で検証・適用し、`fx` と新しい状態を全員に配信する。ゲストは状態を予測しない。ホスト自身もループバック接続の 1 プレイヤー。
+- **乱数はホスト内**（`state.rng`, mulberry32）。配信時に `rng` を取り除く（`sanitizeState`）。ゲストがサイコロを決めることはできない。既知の限界: ホスト本人は乱数を知り得る（友人同士のプライベートルーム前提で許容。公開マッチングで問題になれば専用サーバー版 `RoomController` を同じプロトコルで立てられる）。
+- 不正・競合対策: 行動は「今行動すべき席の持ち主」からだけ受け付ける。各メッセージは `seq` を持ち、古い `seq` は `stale` で拒否（二重タップ・同時操作・再送を無害化）。ホスト内で処理は直列。
 - **ローカル / CPU 対戦も同じ `RoomController` をブラウザ内で動かす**（`LocalSession`）。オンラインとローカルでルール・CPU・タイマーの経路が一つ。
-- 再接続: 参加時に発行する `seatToken`（推測不能な乱数）を `localStorage` に保存。再接続時にトークンで同じ席へ復帰し、`snapshot`（最新状態 + 直近ログ）を受け取る。
-- 放置・切断: 人間の手番には制限時間（既定 30 秒、ルーム設定 20/30/60/無制限）。時間切れ・切断中は CPU ロジックが代行（`autoplay`）。切断後 120 秒戻らなければ席は CPU に置換（資産は維持）。明示的な退出は即 CPU 置換。ホストが抜けたら次の人間がホスト。
-- コミュニケーション: スタンプ（定型リアクション）と定型チャット。サーバーで 1 人 1 秒 1 回にレート制限。自由入力は将来拡張（モデレーション前提）。
-- 公開マッチング拡張: ルームに `visibility: 'private' | 'public'` を持たせ、`GET /api/rooms` が public かつ空席ありのルームを返す（初版は private のみ UI に出す）。
+- 秘匿: MQTT のトピック名はルーム ID のハッシュ、本文はルーム ID から導出した鍵で AES-GCM 暗号化（公開ブローカーのワイルドカード購読者に中身を読まれない）。
+- 再接続: 端末ごとの `clientId`（乱数、`localStorage`）で同じ席へ復帰し `snapshot` を受け取る。
+- **ホスト移譲**: 全員が最新の公開スナップショット（ロビー・状態・seq・チャット）を保持。ホストの心拍が 10 秒途絶えたら、接続中で最小の席番号の人間が新ホストになり、公開スナップショット + 新しい乱数シードで `RoomController` を再構築して続行。旧ホストの席は通常の切断ルールに従う。
+- 放置・切断: 人間の手番には制限時間（既定 30 秒、ルーム設定 20/30/60/無制限）。時間切れ・切断中は CPU ロジックが代行（`autoplay`）。切断後 120 秒戻らなければ席は CPU に置換（資産は維持）。明示的な退出は即 CPU 置換。
+- コミュニケーション: §8。
+- 公開マッチング拡張: `RoomSettings.visibility = 'public'` のルームは MQTT の公開ロビートピックに定期告知し、一覧から参加できるようにする（初版は private のみ UI に出す）。
 
 ### 1.2 ディレクトリ
 
 ```
 src/core/      types.ts, engine.ts, rng.ts, geo.ts, economy.ts, events.ts, cards.ts, piper.ts, cpu.ts, *.test.ts
-src/net/       protocol.ts, room.ts, session.ts(LocalSession/OnlineSession)
+src/net/       protocol.ts, room.ts, filter.ts, local-session.ts, online-session.ts, p2p/(transport, crypto)
 src/render/    map.ts (Canvas, pan/zoom/pinch), tokens, fx animations
 src/ui/        screens (title, setup, lobby, game, result), hud, dialogs
 src/audio/     audio.ts (voice/sfx/bgm, volume, subtitles hook)
 src/data/      cities.json, board.json(生成物), characters.json, events.json, cards.json, npcs.json
-server/        node.ts, worker.ts
+art/           concept.png, raw/（Codex 生成の原画シート）
 tools/         build-board.mjs, validate-data.mjs, gen-voice.mjs, cut-sprites.mjs
 public/assets/ chars/, npcs/, landmarks/, events/, ui/, voice/, sfx/, bgm/, map/land.json
 ```
@@ -124,8 +128,8 @@ sanitizeState(state): Omit<GameState, 'rng'> & { rng: 0 }
 
 ## 4. 通信（`src/net/protocol.ts` が正本）
 
-- 接続: `wss://<host>/ws?room=<ROOMID>`。HTTP: `POST /api/rooms`（作成）、`GET /api/rooms/:id`（存在確認）、`GET /api/rooms`（public 一覧）。
-- 招待 URL: `https://<host>/?room=<ROOMID>`。ルーム ID は 6 文字（紛らわしい文字を除く英数大文字）。
+- 接続: ルーム作成者がホスト（ルーム ID をブラウザで生成）。ゲストは MQTT の受信箱トピックへ `hello` を送り、以後は WebRTC 直結（不可なら MQTT 中継）で `ClientMsg` / `ServerMsg` をやり取りする。「サーバー」は以下すべてホスト端末の `RoomController` を指す。
+- 招待 URL: `https://dma-cmyk.github.io/fable-tycoon/?room=<ROOMID>`。ルーム ID は 6 文字（紛らわしい文字を除く英数大文字）。
 - ロビー: 席 4 つ（人間 / CPU / 空き）。各自キャラ選択（重複不可）、ホストが年数・制限時間・CPU を設定して開始。開始条件: 人間 1 人以上、合計 2 人以上。
 - 進行: サーバーは `step` の結果 `{seq, fx, state, deadline}` を配信。クライアントは fx を順に演出し、終わったら最新 state で操作 UI を出す。CPU / autoplay の手は fx 演出時間の見積もり分だけ遅らせて適用。
 - 演出の同期: サーバーは各 fx の標準演出時間（`fxDuration`）の合計を次の締切に加算。クライアントはスキップ／早送り可（自分だけ）。
@@ -162,7 +166,7 @@ NPC（`npcs.json`）: `piper1` ハーメルンの取り立て屋, `piper2` ブ�
 | テキストチャット | ロビー・ゲーム中ともに使用可。80 文字まで。発言は順位パネル横と、マップ上の発言者の駒の頭上に吹き出し（4 秒）、チャットログ（直近 60 件、再接続時も復元）。自動読み上げはしない |
 | スパム対策 | サーバーでトークンバケット（1.5 秒ごと 1 回、バースト 3）、同一文の 10 秒以内の連投破棄、URL を `[URL]` に置換、NG ワードを `＊` で伏字（`src/net/filter.ts` のリスト）。超過は `rate_limited` で本人にだけ通知 |
 | ミュート | クライアント側。席ごとにチャット / エモート / ボイスを個別ミュート（`localStorage`）。全体の「チャットを表示しない」設定も用意 |
-| 通報 | `report` を送るとサーバーが「通報者・対象・理由・対象の直近チャット 10 件・時刻」を保存（Node: `server/data/reports.jsonl`、Workers: DO storage）。同一ルームで 2 人以上に通報された席は他の全員の画面で自動ミュート |
+| 通報 | `report` を送るとホストが「通報者・対象・理由・対象の直近チャット 10 件・時刻」を記録（ホスト端末の `localStorage`、設定画面から JSON で書き出し可。専用サーバーが無いため運営への自動送信はしない）。同一ルームで 2 人以上に通報された席は他の全員の画面で自動ミュート |
 | エモート | `src/data/emotes.json`（`EmoteDef`）。カテゴリ: 喜怒哀楽（emotion）、ダンス・土下座・札束ばらまき・自慢・感謝（action）、挑発・「早くして〜」（taunt）、ちょっかい（poke: 相手を選んで投げ物）、キャラ固有技（unique, 各キャラ 1 つ） |
 | 連打対策 | 席ごとにエモート全体 2.5 秒・バースト 2、各エモートの `cooldownMs`。クライアントは同じ席の演出を 1 つずつ再生し、待ちが 2 件を超えたら古いものを捨てる。エモートはモーダルを出さず、操作 UI・入力を塞がない（重ね描きのみ） |
 | ボイス連動 | エモートは発動キャラの台詞（`lines[characterId]` または `default`）を、そのキャラの声で事前生成して再生。ちょっかいは当てられた側の `hitLines` 返し台詞も再生。ゲーム進行の台詞（イベント・ナレーション）を優先し、エモート音声は別チャネルで最大 1 本、ゲーム音声再生中は音量を下げる |

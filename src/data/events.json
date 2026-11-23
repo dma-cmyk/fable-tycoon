@@ -128,7 +128,8 @@
         ],
         "cpuWeight": 0.9
       }
-    ]
+    ],
+    "image": "assets/events/ai.webp"
   },
   {
     "id": "ever-given-stuck",
@@ -245,7 +246,8 @@
         ],
         "cpuWeight": 1.2
       }
-    ]
+    ],
+    "image": "assets/events/suez.webp"
   },
   {
     "id": "meme-stock-squeeze",
@@ -717,7 +719,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "image": "assets/events/tariff.webp"
   },
   {
     "id": "inflation-surge",
@@ -1723,7 +1726,8 @@
         ],
         "cpuWeight": 1.2
       }
-    ]
+    ],
+    "image": "assets/events/tulip.webp"
   },
   {
     "id": "south-sea-bubble",
@@ -2078,7 +2082,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "image": "assets/events/goldrush.webp"
   },
   {
     "id": "weimar-hyperinflation",
@@ -2190,7 +2195,8 @@
         ],
         "cpuWeight": 0.7
       }
-    ]
+    ],
+    "image": "assets/events/hyperinflation.webp"
   },
   {
     "id": "crash-1929",
@@ -2772,7 +2778,8 @@
         ],
         "cpuWeight": 1.2
       }
-    ]
+    ],
+    "image": "assets/events/bailout.webp"
   },
   {
     "id": "dutch-east-india-company",
@@ -3217,7 +3224,8 @@
         ],
         "cpuWeight": 1.1
       }
-    ]
+    ],
+    "image": "assets/events/hyperinflation.webp"
   },
   {
     "id": "naked-emperor-ai",
@@ -3330,7 +3338,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "image": "assets/events/emperor.webp"
   },
   {
     "id": "golden-goose-ipo",
