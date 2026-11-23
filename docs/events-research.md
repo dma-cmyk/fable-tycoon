@@ -126,7 +126,7 @@
 
 - `node -e "JSON.parse(require('fs').readFileSync('src/data/events.json','utf8'))"` → exit 0
 - イベント単体チェック: 54件、id重複なし、`monthly` 12件、全月カバー、通常の月限定6件、話者・文字数エラーなし。
-- `node tools/validate-data.mjs` は events.json に関するエラーを0件で通過するが、実行時点で `cities.json`（300都市 vs 期待150）と `board.json`（未生成の都市ノード）に既存の163エラーがあり、プロセス全体は exit 1。イベント追加とは無関係の同時進行作業。委譲元の Main に報告済み。
+- `node tools/validate-data.mjs` は季節追加時点で events.json に関するエラーを0件で通過するが、当時 `cities.json`（300都市 vs 期待150）と `board.json`（未生成の都市ノード）に既存の163エラーがあり、プロセス全体は exit 1 だった。異世界追加後の最新状況は §8.3 を参照。
 
 ## 8. 異世界イベント追加（20件、2026-11-23）
 
@@ -161,4 +161,15 @@
 
 - `node -e "JSON.parse(require('fs').readFileSync('src/data/events.json','utf8'))"` → exit 0
 - 独自イベントバリデータ（`realm` 効果・`realms` を含む）: 74件、0エラー、id重複なし、話者・文字数OK、地上入口5件・各レルム5件、`realm` 効果11個。
-- `node tools/validate-data.mjs` は現時点で exit 1（164エラー）。内訳は `board.json` の未生成都市ノード152件、`public/assets/map/land.json` の寸法1件、および validator が `op:'realm'` を未対応として出す11件。`events.json` の通常スキーマエラーは0件。board 生成と validator の realm 対応後に再実行が必要。
+- `node tools/validate-data.mjs` は異世界追加直後は exit 1（164エラー）だった。内訳は `board.json` の未生成都市ノード152件、`public/assets/map/land.json` の寸法1件、および validator が `op:'realm'` を未対応として出す11件。現在は board/validator の更新により exit 0（§9 参照）。
+
+## 9. Codex review round 1 対応（2026-11-23）
+
+- `season-hanami` の事実を修正: 気象庁は2010年春以降、さくらの開花予想を発表しておらず、開花観測のみ継続している。民間気象事業者が予想を提供する。一次資料として気象庁の2009年12月25日報道発表を追加。
+- news 23件・history 14件のすべてに、Wikipedia 以外の一次資料または主要メディアを1件以上追加した。source 総数73、ユニークURL 71。
+- 追加した主な資料: AP News、CNBC、SEC、FRB（金融安定報告・FRB History）、BLS、GAO、NASA（ODPO・NTRS）、UNOOSA、NPR、NOAA、気象庁、欧州議会（EPRS）、IMF、日本銀行、Harvard CURIOSity、FRB New York、Britannica、Cambridge Core。
+- `zimbabwe-hyperinflation` は IMF の推計（2008年9月の12か月CPI約5000億%）に合わせて事実を修正。
+- `rare-earth-controls` は EPRS の「分離・精製の約9割」に合わせて表現を修正。
+- `world-space-lottery` は NASA NTRS の宇宙旅行論文に合わせ、商業化の表現を調整。
+- 台詞（`lines` / `reply`）は変更していない。音声再生成は不要。
+- 検証: `JSON.parse` exit 0、独自イベント検証0エラー、`node tools/validate-data.mjs` exit 0（warning 1件: board.json の world node 間隔が目標範囲外、イベントとは無関係）。

@@ -142,6 +142,11 @@
         "title": "2021 Suez Canal obstruction - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/2021_Suez_Canal_obstruction",
         "date": "2021-03-29"
+      },
+      {
+        "title": "Suez Canal blocked by massive ship - CNBC",
+        "url": "https://www.cnbc.com/2021/03/25/suez-canal-blocked-ship-billions-trade-standstill.html",
+        "date": "2021-03-25"
       }
     ],
     "satireNote": "座礁と経済的影響は実在。ゲーム内の救出投資・株価の乱高下・収益倍率は創作。",
@@ -260,6 +265,11 @@
         "title": "2021年の株式空売り踏み上げ - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/GameStop_short_squeeze",
         "date": "2021-01-28"
+      },
+      {
+        "title": "Staff Report on Equity and Options Market Structure Conditions in Early 2021 - SEC",
+        "url": "https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf",
+        "date": "2021-10-14"
       }
     ],
     "satireNote": "踏み上げは実在。ゲーム内の金額・確率・「最も裕福な人から5%徴収」は創作で、実在企業・人物への攻撃ではない。",
@@ -380,6 +390,11 @@
       {
         "title": "暗号資産取引所の破綻（2022年） - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Bankruptcy_of_FTX",
+        "date": "2022-11-11"
+      },
+      {
+        "title": "暗号資産取引所の破綻 - CNBC",
+        "url": "https://www.cnbc.com/2022/11/11/sam-bankman-frieds-cryptocurrency-exchange-ftx-files-for-bankruptcy.html",
         "date": "2022-11-11"
       }
     ],
@@ -505,6 +520,11 @@
         "title": "米地方銀行の取り付け騒ぎ（2023年） - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Collapse_of_Silicon_Valley_Bank",
         "date": "2023-03-10"
+      },
+      {
+        "title": "Financial Stability Report, May 2023 - Federal Reserve",
+        "url": "https://www.federalreserve.gov/publications/2023-may-financial-stability-report-leverage.htm",
+        "date": "2023"
       }
     ],
     "satireNote": "破綻と取り付けは実在。ゲーム内の預金者行動・救済の効果・カードは誇張した創作。",
@@ -735,6 +755,11 @@
         "title": "2021–2023 inflation surge - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/2021%E2%80%932023_inflation_surge",
         "date": "2022"
+      },
+      {
+        "title": "Consumer Price Index News Release, December 2022 - BLS",
+        "url": "https://www.bls.gov/news.release/archives/cpi_01122023.htm",
+        "date": "2023-01-12"
       }
     ],
     "satireNote": "インフレは実在。ゲーム内の「最も裕福な人が5%失う」は、世論の富裕層批判を誇張した創作。",
@@ -840,6 +865,11 @@
         "title": "Shrinkflation - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Shrinkflation",
         "date": "2023"
+      },
+      {
+        "title": "64% of consumers worry about shrinkflation - CNBC",
+        "url": "https://www.cnbc.com/2022/08/29/64percent-of-consumers-worry-about-shrinkflation-heres-what-to-watch-for.html",
+        "date": "2022-08-29"
       }
     ],
     "satireNote": "手法は実在。ゲーム内の売上・評判・確率は創作で、特定の企業を指すものではない。",
@@ -958,6 +988,11 @@
         "title": "2020–2023 global chip shortage - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/2020%E2%80%932023_global_chip_shortage",
         "date": "2021"
+      },
+      {
+        "title": "Semiconductor Supply Chain: Policy Considerations - GAO",
+        "url": "https://www.gao.gov/assets/gao-22-105923.pdf",
+        "date": "2022"
       }
     ],
     "satireNote": "半導体不足は実在。ゲーム内の工場建設・転売・没収の効果は創作。",
@@ -1307,6 +1342,11 @@
         "title": "Metaverse - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Metaverse",
         "date": "2023"
+      },
+      {
+        "title": "Metaverse in spotlight at MWC even as doubts arise - AP News",
+        "url": "https://apnews.com/article/metaverse-mobile-world-congress-mwc-a19b0eb269dc58df44f31b0970d83c4b",
+        "date": "2023-03-01"
       }
     ],
     "satireNote": "メタバース熱と冷え込みは実在。ゲーム内の確率・金額・「現実の土地」効果は創作。",
@@ -1414,11 +1454,16 @@
     "id": "rare-earth-controls",
     "title": "レアアースの首輪",
     "kind": "news",
-    "fact": "中国は2025年、レアアース5元素を新たに輸出管理の対象に加え、規制対象を12元素に広げた。中国は2024年に世界の分離・精製の約91%を担っており、供給網の集中リスクが改めて問題となった。",
+    "fact": "中国は2025年、レアアース5元素を新たに輸出管理の対象に加え、規制対象を12元素に広げた。中国は世界の分離・精製の約9割を担っており、供給網の集中リスクが改めて問題となった。",
     "sources": [
       {
         "title": "Rare-earth industry in China - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Rare-earth_industry_in_China",
+        "date": "2025"
+      },
+      {
+        "title": "China's rare-earth export restrictions - European Parliament",
+        "url": "https://www.europarl.europa.eu/RegData/etudes/ATAG/2025/779220/EPRS_ATA%282025%29779220_EN.pdf",
         "date": "2025"
       }
     ],
@@ -1531,6 +1576,11 @@
         "title": "2022 stock market decline - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/2022_stock_market_decline",
         "date": "2022"
+      },
+      {
+        "title": "Pain, few gains for investors as markets slumped in 2022 - AP News",
+        "url": "https://apnews.com/article/2022-year-end-market-trends-ed7ca50a58a1d8c2f57dee7ff9dccd0b",
+        "date": "2022-12-21"
       }
     ],
     "satireNote": "株安は実在。ゲーム内の確率・金額・「借金整理で弁護士カード」は創作。",
@@ -1643,6 +1693,11 @@
         "title": "Tulip mania - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Tulip_mania",
         "date": "1637"
+      },
+      {
+        "title": "Tulip Mania - Britannica",
+        "url": "https://www.britannica.com/event/Tulip-Mania",
+        "date": "2025"
       }
     ],
     "satireNote": "球根バブルは実在。ゲーム内の金額・確率・花屋の収益効果は創作。",
@@ -1744,6 +1799,11 @@
       {
         "title": "South Sea Company - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/South_Sea_Company",
+        "date": "1720"
+      },
+      {
+        "title": "The Crash - The South Sea Bubble, 1720 - Harvard",
+        "url": "https://curiosity.lib.harvard.edu/south-sea-bubble/feature/the-crash",
         "date": "1720"
       }
     ],
@@ -1870,6 +1930,11 @@
         "title": "John Law's Company (Mississippi Company) - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Mississippi_Company",
         "date": "1720"
+      },
+      {
+        "title": "Crisis Chronicles: The Mississippi Bubble of 1720 - FRB New York",
+        "url": "https://libertystreeteconomics.newyorkfed.org/2014/01/crisis-chronicles-the-mississippi-bubble-of-1720-and-the-european-debt-crisis",
+        "date": "2014-01-10"
       }
     ],
     "satireNote": "ミシシッピ泡沫は実在。ゲーム内の確率・金額・「新大陸投資」の効果は創作。",
@@ -1990,6 +2055,11 @@
         "title": "California gold rush - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/California_gold_rush",
         "date": "1848"
+      },
+      {
+        "title": "California Gold Rush - Britannica",
+        "url": "https://www.britannica.com/event/California-Gold-Rush",
+        "date": "2025"
       }
     ],
     "satireNote": "ゴールドラッシュは実在。「スコップ売り」の収益効果と確率は創作。",
@@ -2103,6 +2173,11 @@
         "title": "Hyperinflation in the Weimar Republic - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Hyperinflation_in_the_Weimar_Republic",
         "date": "1923"
+      },
+      {
+        "title": "Weimar Republic: The Ruhr and inflation - Britannica",
+        "url": "https://www.britannica.com/place/Weimar-Republic/The-Ruhr-and-inflation",
+        "date": "2025"
       }
     ],
     "satireNote": "ハイパーインフレは実在。ゲーム内の「給料をすぐ使う」「紙幣を刷る」の効果と確率は創作。",
@@ -2216,6 +2291,11 @@
       {
         "title": "Wall Street crash of 1929 - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Wall_Street_crash_of_1929",
+        "date": "1929-10-29"
+      },
+      {
+        "title": "Stock Market Crash of 1929 - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/stock-market-crash-of-1929",
         "date": "1929-10-29"
       }
     ],
@@ -2331,6 +2411,11 @@
         "title": "Black Monday (1987) - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Black_Monday_(1987)",
         "date": "1987-10-19"
+      },
+      {
+        "title": "Stock Market Crash of 1987 - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/stock-market-crash-of-1987",
+        "date": "1987-10-19"
       }
     ],
     "satireNote": "ブラックマンデーは実在。ゲーム内の確率・金額・「何もしないでカード獲得」は創作。",
@@ -2439,6 +2524,11 @@
         "title": "Japanese asset price bubble - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Japanese_asset_price_bubble",
         "date": "1989"
+      },
+      {
+        "title": "The Asset Price Bubble and Monetary Policy - Bank of Japan",
+        "url": "https://www.imes.boj.or.jp/research/papers/english/00-E-12.pdf",
+        "date": "2000"
       }
     ],
     "satireNote": "日本のバブルと崩壊は実在。ゲーム内の投資判断・確率・収益倍率は創作。",
@@ -2572,6 +2662,11 @@
         "title": "Dot-com bubble - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Dot-com_bubble",
         "date": "2000-03-10"
+      },
+      {
+        "title": "Dot-com Bubble & Bust - Britannica",
+        "url": "https://www.britannica.com/event/Dot-com-bubble",
+        "date": "2025"
       }
     ],
     "satireNote": "ドットコム・バブルは実在。ゲーム内の確率・金額・空売り効果は創作。",
@@ -2697,6 +2792,11 @@
         "title": "Too big to fail - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Too_big_to_fail",
         "date": "2008"
+      },
+      {
+        "title": "Support for Specific Institutions - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/support-for-specific-institutions",
+        "date": "2009"
       }
     ],
     "satireNote": "金融危機と公的資金投入は実在。「大きすぎて潰せませんカード」とゲーム内の金額は風刺的な創作。",
@@ -2805,6 +2905,11 @@
         "title": "Dutch East India Company - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Dutch_East_India_Company",
         "date": "1602-03-20"
+      },
+      {
+        "title": "Dutch East India Company - Britannica",
+        "url": "https://www.britannica.com/topic/Dutch-East-India-Company",
+        "date": "2025"
       }
     ],
     "satireNote": "VOCの設立と株式取引は実在。ゲーム内の配当・確率・「金の卵カード」は創作。",
@@ -3032,6 +3137,11 @@
         "title": "Price revolution - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Price_revolution",
         "date": "1550"
+      },
+      {
+        "title": "The Price Revolution: A Monetary Interpretation - Cambridge Core",
+        "url": "https://www.cambridge.org/core/journals/journal-of-economic-history/article/abs/price-revolution-a-monetary-interpretation/8544ABE09C0BECA7D4DE9FCDF1904875",
+        "date": "1989"
       }
     ],
     "satireNote": "価格革命は実在。ゲーム内の「銀をためる」「値上げに抗議」の効果は創作。",
@@ -3131,12 +3241,17 @@
     "id": "zimbabwe-hyperinflation",
     "title": "100兆ドル札でバスに乗る",
     "kind": "history",
-    "fact": "ジンバブエでは2007年から2009年にかけてハイパーインフレが進み、2008年11月の月間インフレ率は約7906億%と推定された。100兆ドル札でもバスの運賃を払えず、最終的に自国通貨は廃止された。",
+    "fact": "ジンバブエでは2007年から2009年にかけてハイパーインフレが進み、IMFは2008年9月の12か月消費者物価上昇率が約5000億%に達したと推計している。100兆ドル札でもバスの運賃を払えず、最終的に自国通貨は廃止された。",
     "sources": [
       {
         "title": "Hyperinflation in Zimbabwe - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Hyperinflation_in_Zimbabwe",
         "date": "2008"
+      },
+      {
+        "title": "Zimbabwe: 2009 Article IV Consultation - IMF",
+        "url": "https://www.elibrary.imf.org/view/journals/002/2009/139/article-A001-en.xml",
+        "date": "2009-05-11"
       }
     ],
     "satireNote": "ジンバブエのハイパーインフレは実在。ゲーム内の確率・金額・外貨効果は創作。",
@@ -4396,6 +4511,11 @@
         "title": "Black Friday (shopping) - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Black_Friday_(shopping)",
         "date": "2025"
+      },
+      {
+        "title": "Retailers coax Black Friday shoppers into stores - AP News",
+        "url": "https://apnews.com/article/black-friday-shopping-stores-2678816a0683519071426a991d89fecb",
+        "date": "2024-11-29"
       }
     ],
     "satireNote": "実在する商戦を題材にした風刺。金額・効果は創作。",
@@ -4565,6 +4685,11 @@
         "title": "Valentine's Day - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Valentine%27s_Day",
         "date": "2025"
+      },
+      {
+        "title": "Why Valentine's chocolates are more expensive this year - AP News",
+        "url": "https://apnews.com/article/valentine-love-chocolate-belgium-cocoa-farmers-116b285ccb6542480c1c887f38a6b16a",
+        "date": "2025-02-13"
       }
     ],
     "satireNote": "バレンタインの商業習慣は実在。金額・相場・効果は創作。",
@@ -4655,12 +4780,17 @@
     "id": "season-hanami",
     "title": "桜前線と花見特需",
     "kind": "news",
-    "fact": "日本では3月下旬から5月上旬にかけて桜が開花し、花見を楽しむ習慣がある。気象庁の桜前線予想を見ながら、多くの人が行楽や宴会を計画する。",
+    "fact": "日本では3月下旬から5月上旬にかけて桜が開花し、花見を楽しむ習慣がある。気象庁は桜の開花を観測しているが、2010年春以降は開花予想を発表しておらず、民間の気象事業者が予想を提供している。",
     "sources": [
       {
         "title": "Hanami - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Hanami",
         "date": "2025"
+      },
+      {
+        "title": "気象庁: さくらの開花予想の発表終了について",
+        "url": "https://www.jma.go.jp/jma/press/0912/25a/091225sakura.html",
+        "date": "2009-12-25"
       }
     ],
     "satireNote": "花見は実在。金額・収益効果は創作。",
@@ -4780,6 +4910,11 @@
       {
         "title": "Heat wave - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Heat_wave",
+        "date": "2024"
+      },
+      {
+        "title": "2023 was the world's warmest year on record - NOAA",
+        "url": "https://www.noaa.gov/news/2023-was-worlds-warmest-year-on-record-by-far",
         "date": "2024"
       }
     ],
@@ -5121,12 +5256,17 @@
     "id": "world-space-lottery",
     "title": "宇宙旅行の抽選に当選",
     "kind": "news",
-    "fact": "宇宙旅行は、2020年代に民間事業者が準軌道・軌道飛行を実施し、富裕層向けの商業サービスとして広がりつつある。旅行者は地球の眺めや無重力を目的とする。",
+    "fact": "宇宙旅行は、民間事業者による準軌道・軌道飛行や宇宙ステーション滞在として商業化が進められている。旅行者は地球の眺めや無重力を目的とする。",
     "sources": [
       {
         "title": "Space tourism - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Space_tourism",
         "date": "2025"
+      },
+      {
+        "title": "Space Tourism - NASA NTRS",
+        "url": "https://ntrs.nasa.gov/api/citations/20205005651/downloads/Space%20TourismF_ALD_v3.pdf",
+        "date": "2020"
       }
     ],
     "satireNote": "宇宙旅行は実在。抽選・当選・金額は創作。",
@@ -5245,6 +5385,11 @@
       {
         "title": "Space debris - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Space_debris",
+        "date": "2025"
+      },
+      {
+        "title": "Orbital Debris Program Office - NASA",
+        "url": "https://www.nasa.gov/odpo/",
         "date": "2025"
       }
     ],
@@ -5954,6 +6099,11 @@
         "title": "Extraterrestrial real estate - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Extraterrestrial_real_estate",
         "date": "2025"
+      },
+      {
+        "title": "The Outer Space Treaty - UNOOSA",
+        "url": "https://www.unoosa.org/oosa/en/ourwork/spacelaw/treaties/outerspacetreaty.html",
+        "date": "1967"
       }
     ],
     "satireNote": "月の土地販売は実在するが法的効力はない。金額・確率は創作。",
@@ -6033,6 +6183,11 @@
         "title": "火星片道移住計画（2012-2019） - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Mars_One",
         "date": "2019"
+      },
+      {
+        "title": "火星片道移住計画の破綻 - NPR",
+        "url": "https://www.npr.org/2019/02/12/693945694/mars-one-fizzles-into-bankruptcy-after-promising-a-new-life-in-space",
+        "date": "2019-02-12"
       }
     ],
     "satireNote": "火星移住計画は実在。予約・金額・確率は創作。",
@@ -6155,6 +6310,11 @@
       {
         "title": "Space debris - Wikipedia",
         "url": "https://en.wikipedia.org/wiki/Space_debris",
+        "date": "2025"
+      },
+      {
+        "title": "Orbital Debris Program Office - NASA",
+        "url": "https://www.nasa.gov/odpo/",
         "date": "2025"
       }
     ],
