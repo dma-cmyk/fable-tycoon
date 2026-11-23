@@ -148,6 +148,19 @@ def main() -> None:
         BG["vehicles"] = "green"
         cut_grid("vehicles", ["train", "express", "bullet_train", "ferry", "plane", "rocket", "carpet", "sailboat"],
                  4, 2, OUT / "vehicles", 256)
+    if ok("ui_icons"):
+        BG["ui_icons"] = "magenta"
+        cut_grid("ui_icons", ["coins", "moneybag", "property", "cards", "treasure", "chart", "globe", "gear",
+                              "menu", "help", "chat", "emote", "trophy", "calendar", "flag", "hourglass"],
+                 4, 4, OUT / "ui", 192)
+    if ok("title_logo"):
+        BG["title_logo"] = "magenta"
+        cut_grid("title_logo", ["logo"], 1, 1, OUT / "ui", 600)
+    if ok("map_stamps"):
+        BG["map_stamps"] = "magenta"
+        cut_grid("map_stamps", ["mountains", "snow_mountain", "volcano", "conifer_forest", "forest", "palms", "desert",
+                                "fields", "town", "metropolis", "port_town", "station", "iceberg", "ranch", "oil_rig",
+                                "factory"], 4, 4, OUT / "stamps", 192)
     for s, names in EVENTS.items():
         if ok(s):
             cut_panels(s, names, OUT / "events")

@@ -52,7 +52,9 @@ export type SquareKind =
   | 'blue' // お金がもらえる
   | 'red' // お金が減る
   | 'yellow' // カードがもらえる
-  | 'news'; // ニュース/歴史イベント
+  | 'news' // ニュース/歴史イベント
+  | 'shop' // カード売り場（所持金でカードを買える）
+  | 'warp'; // オズの竜巻マス（ランダムな都市へ吹き飛ばされる）
 
 export type EdgeMode = 'rail' | 'sea';
 
@@ -192,6 +194,10 @@ export interface GameEventDef {
   weight: number; // 抽選の重み
   minYear?: number;
   once?: boolean; // 1 ゲーム 1 回
+  /** 発生できる月（4..12,1..3）。省略 = 通年 */
+  months?: number[];
+  /** true = ニュースマスではなく「月替わりイベント」として月初に全体へ発生（効果の 'self' は月初の手番プレイヤー） */
+  monthly?: boolean;
   lines: DialogueLine[]; // 導入の掛け合い
   choices?: EventChoice[]; // 無ければ effects を即適用
   effects?: Effect[];
@@ -213,6 +219,7 @@ export interface CardDef {
   kind: CardKind;
   weight: number; // 黄マスで引く重み
   needsTarget?: 'player' | 'city' | 'airport';
+  price: number; // カード売り場での価格（億円、yearScale 倍）。売却は半額
 }
 
 // --- communication (cosmetic only; never touches GameState) -----------------
@@ -272,7 +279,7 @@ export interface PlayerSetup {
 }
 
 export interface GameConfig {
-  years: number; // 1..10
+  years: number; // 1..20
   players: PlayerSetup[]; // 1..4
   seed?: number;
 }
@@ -306,8 +313,9 @@ export interface PiperState {
 
 export type Phase =
   | { t: 'turn_start' } // roll or use card
-  | { t: 'choose_dest'; roll: number; options: MoveOption[] }
+  | { t: 'choose_dest'; roll: number; options: MoveOption[]; dice?: number } // dice = count used (for move fx)
   | { t: 'buy'; cityId: string } // buy properties then end
+  | { t: 'shop'; stock: string[] } // カード売り場: buy_card / sell_card any number of times, then end_shop
   | { t: 'event'; eventId: string } // pick a choice (only when event has choices)
   | { t: 'card_target'; cardId: string; options: string[] } // choose target (player id as string / city id)
   | { t: 'discard' } // hand over limit
@@ -347,6 +355,8 @@ export interface GameState {
   usedOnceEvents: string[];
   activeEventId: string | null;
   assetHistory: number[][]; // per round: total assets per player
+  /** Set while a month-start event must resume the current player's turn when it closes. */
+  pendingTurnStart?: boolean;
 }
 
 // ---------------------------------------------------------------- actions & fx
@@ -359,6 +369,9 @@ export type Action =
   | { t: 'move'; nodeId: string }
   | { t: 'buy'; propertyId: string }
   | { t: 'end_buy' }
+  | { t: 'buy_card'; cardId: string }
+  | { t: 'sell_card'; cardId: string }
+  | { t: 'end_shop' }
   | { t: 'choose'; index: number }
   | { t: 'discard'; cardId: string }
   | { t: 'sell'; propertyId: string }
@@ -371,8 +384,8 @@ export type Fx =
   // dice = number of dice used for this move (1 normal, 2 急行, 3 超特急). Renderer picks the vehicle per hop:
   // sea edge -> ship, rail edge -> train (dice 1) / express train (2) / bullet train (3).
   | { t: 'move'; playerId: number; path: string[]; dice?: number }
-  // via: how the warp happens (plane = 飛行機カード, rocket = ロケットカード, carpet = 魔法のじゅうたん, event = イベント効果)
-  | { t: 'warp'; playerId: number; nodeId: string; via?: 'plane' | 'rocket' | 'carpet' | 'event' }
+  // via: how the warp happens (plane = 飛行機カード, rocket = ロケットカード, carpet = 魔法のじゅうたん, event = イベント効果, tornado = オズの竜巻マス)
+  | { t: 'warp'; playerId: number; nodeId: string; via?: 'plane' | 'rocket' | 'carpet' | 'event' | 'tornado' }
   | { t: 'cash'; playerId: number; delta: number; reason: string }
   | { t: 'buy'; playerId: number; propertyId: string; monopoly: boolean }
   | { t: 'sell'; playerId: number; propertyId: string; amount: number }
