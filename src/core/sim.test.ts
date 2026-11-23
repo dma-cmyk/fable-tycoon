@@ -12,7 +12,7 @@ import { GAME_DATA } from '../data/index';
 
 const RUN_REAL_DATA = process.env.FABLE_SIM === '1';
 const realDescribe = RUN_REAL_DATA ? describe : describe.skip;
-const SEEDS = 12;
+const SEEDS = 24;
 const LEVELS: Array<1 | 2 | 3> = [1, 2, 3, 3];
 const CHARACTERS = ['momotaro', 'sinbad', 'alice', 'red_hood'];
 
@@ -24,15 +24,20 @@ interface SimStats {
   finalNetWorth: Record<1 | 2 | 3, number[]>;
 }
 
+/**
+ * Seat order rotates by seed. With a fixed [Lv1,Lv2,Lv3,Lv3] seat mapping the level
+ * comparison is dominated by turn-seat/character bias (seat 2 vs seats 3–4), not policy.
+ */
 function config(seed: number): GameConfig {
+  const rotation = (seed - 1) % LEVELS.length;
   return {
     years: 3,
     seed,
-    players: LEVELS.map((cpuLevel, i) => ({
+    players: LEVELS.map((_, i) => ({
       name: `CPU${i + 1}`,
       characterId: CHARACTERS[i],
       isCpu: true,
-      cpuLevel,
+      cpuLevel: LEVELS[(i + rotation) % LEVELS.length],
     })),
   };
 }
@@ -83,7 +88,7 @@ function runOne(data: GameData, seed: number): SimStats {
 
 realDescribe('real-data balance (FABLE_SIM=1)', () => {
   it(
-    'runs 12 seeds × 3 years × 4 CPUs and prints balance metrics',
+    'runs 24 seeds × 3 years × 4 CPUs and prints balance metrics',
     () => {
       const boardCityIds = new Set(
         GAME_DATA.board.nodes.filter((n) => n.kind === 'city').map((n) => n.cityId),
@@ -108,7 +113,7 @@ realDescribe('real-data balance (FABLE_SIM=1)', () => {
 
       console.log(
         [
-          '--- real-data balance: 12 seeds × 3 years × 4 CPUs [Lv1,Lv2,Lv3,Lv3] ---',
+          '--- real-data balance: 24 seeds × 3 years × 4 CPUs [Lv1,Lv2,Lv3,Lv3], seats rotated by seed ---',
           `cities=${data.cities.length}${missing.length > 0 ? ` (filtered missing board cities: ${missing.join(', ')})` : ''}`,
           `goals/game: ${goalsPerGame} (target 5–8)`,
           `events/game: ${eventsPerGame}`,

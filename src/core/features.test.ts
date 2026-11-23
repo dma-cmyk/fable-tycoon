@@ -354,7 +354,7 @@ describe('rocket card, dice and via fields', () => {
   });
 
   it('CPU values marginal settlement income, not raw yield/price', () => {
-    const state = fresh([2, 1, 1]);
+    const state = fresh([3, 1, 1]);
     state.phase = { t: 'buy', cityId: 'shanghai' };
     state.players[0].cash = 100;
     state.industryMods = [{ industry: 'tech', mult: 2, yearsLeft: 2, label: 'AI' }];

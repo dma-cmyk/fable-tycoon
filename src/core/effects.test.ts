@@ -160,7 +160,7 @@ describe('Effect DSL', () => {
 });
 
 describe('event selection and dialogue', () => {
-  it('CPU levels choose event options by cpuWeight (Lv2) and expected value (Lv3)', () => {
+  it('CPU event choices use cpuWeight first and Lv3 expected value as a tie-break', () => {
     const state = fresh(1, 12);
     state.phase = { t: 'event', eventId: 'ev-ai-bubble' };
     state.players[0].cpuLevel = 1;
@@ -168,10 +168,16 @@ describe('event selection and dialogue', () => {
     state.players[0].cpuLevel = 2;
     expect(cpuDecide(data, state)).toEqual({ t: 'choose', index: 0 });
     state.players[0].cpuLevel = 3;
-    // No tech property → the card in option 1 is worth more in expectation than the gamble.
-    expect(cpuDecide(data, state)).toEqual({ t: 'choose', index: 1 });
-    state.owner['sf-ai'] = 0;
     expect(cpuDecide(data, state)).toEqual({ t: 'choose', index: 0 });
+
+    const tied = structuredClone(data);
+    const event = tied.events.find((e) => e.id === 'ev-ai-bubble');
+    if (!event?.choices) throw new Error('fixture event missing choices');
+    event.choices = event.choices.map((choice) => ({ ...choice, cpuWeight: 1 }));
+    const tieState = structuredClone(state);
+    tieState.players[0].cpuLevel = 3;
+    // Equal weights: option 1's card is worth more than option 0's gamble in expectation.
+    expect(cpuDecide(tied, tieState)).toEqual({ t: 'choose', index: 1 });
   });
 
   it('picks eligible events and records once events', () => {

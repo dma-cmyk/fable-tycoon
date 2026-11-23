@@ -4,7 +4,7 @@
 // action that is legal for the current phase and acting player.
 
 import type { Action, Effect, GameData, GameState, MoveOption, PlayerState } from './types';
-import { getGraph, nodeForCity } from './graph';
+import { nodeForCity } from './graph';
 import { effectiveDistance } from './realm';
 import {
   annualIncome,
@@ -229,7 +229,10 @@ function chooseBuy(data: GameData, state: GameState, player: PlayerState): Actio
   const currentOwned = ownCount(data, state, player.id, city.id);
   const completingMonopoly =
     player.cpuLevel >= 3 && currentOwned === city.properties.length - 1;
-  const reserve = completingMonopoly ? player.cash * 0.15 : player.cash * 0.3;
+  const reserve =
+    player.cpuLevel >= 3
+      ? player.cash * (completingMonopoly ? 0.1 : 0.3)
+      : player.cash * 0.3;
   const remainingSettlements = Math.max(1, state.config.years - state.year + 1);
   const sorted = available.slice().sort((a, b) => {
     const score = (p: typeof a): number => {
@@ -268,16 +271,18 @@ function chooseEventOption(
 ): number {
   if (player.cpuLevel === 1) return 0;
   let best = 0;
-  let bestScore = -Infinity;
+  let bestWeight = -Infinity;
+  let bestExpectation = -Infinity;
   for (let i = 0; i < choices.length; i += 1) {
     const choice = choices[i];
     const weight = choice.cpuWeight ?? 1;
-    const score =
-      player.cpuLevel >= 3
-        ? effectListValue(data, state, player.id, choice.effects) * weight
-        : weight;
-    if (score > bestScore) {
-      bestScore = score;
+    // Lv3 uses expected value only as a tie-break: tuned cpuWeight reflects narrative/fun
+    // balance and pure effect-EV proved too willing to take cash-losing gambles.
+    const expectation =
+      player.cpuLevel >= 3 ? effectListValue(data, state, player.id, choice.effects) : 0;
+    if (weight > bestWeight || (weight === bestWeight && expectation > bestExpectation)) {
+      bestWeight = weight;
+      bestExpectation = expectation;
       best = i;
     }
   }
@@ -405,22 +410,10 @@ function chooseCardTarget(
     case 'rocket': {
       const destNode = nodeForCity(data, state.destination);
       if (!destNode) return options[0];
-      const scored = options.map((node) => {
-        if (node.startsWith('r:')) return { node, score: 9999 };
-        let score = effectiveDistance(data, node, destNode);
-        if (level >= 3) {
-          const graphNode = getGraph(data).nodes.get(node);
-          const city = graphNode?.cityId
-            ? data.cities.find((c) => c.id === graphNode.cityId)
-            : undefined;
-          const unowned = city ? city.properties.filter((p) => state.owner[p.id] === undefined) : [];
-          if (unowned.length > 0) {
-            const bestYield = Math.max(...unowned.map((p) => p.yieldPct));
-            score -= 6 + Math.min(6, bestYield / 2);
-          }
-        }
-        return { node, score };
-      });
+      const scored = options.map((node) => ({
+        node,
+        score: node.startsWith('r:') ? 9999 : effectiveDistance(data, node, destNode),
+      }));
       scored.sort((a, b) => (a.score !== b.score ? a.score - b.score : a.node.localeCompare(b.node)));
       return scored[0].node;
     }
@@ -431,15 +424,6 @@ function chooseCardTarget(
       return options.slice().sort((a, b) => {
         const da = effectiveDistance(data, a, destNode);
         const db = effectiveDistance(data, b, destNode);
-        if (level >= 3) {
-          const nodeA = getGraph(data).nodes.get(a);
-          const nodeB = getGraph(data).nodes.get(b);
-          const bonusA = nodeA?.cityId ? ownCount(data, state, player.id, nodeA.cityId) * 10 : 0;
-          const bonusB = nodeB?.cityId ? ownCount(data, state, player.id, nodeB.cityId) * 10 : 0;
-          const sa = da - bonusA;
-          const sb = db - bonusB;
-          return sa !== sb ? sa - sb : a.localeCompare(b);
-        }
         return da !== db ? da - db : a.localeCompare(b);
       })[0];
     }

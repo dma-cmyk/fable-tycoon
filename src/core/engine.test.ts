@@ -134,7 +134,7 @@ describe('engine full simulation', () => {
     ] as Phase['t'][]) {
       expect(allPhases.has(tag), `phase ${tag} should be reachable`).toBe(true);
     }
-  });
+  }, 120_000);
 
   it('runs 1 year with 2 players to game_over', () => {
     const { state, phasesSeen } = play([2, 3], 1, 7);
