@@ -1,5 +1,6 @@
+import type { PublicState } from '../../core/engine';
 import { purchasePrice } from '../../core/economy';
-import type { GameState, Property } from '../../core/types';
+import type {Property} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import { LANDMARK_FILES } from '../assetManifest';
@@ -20,7 +21,7 @@ import {
 export interface CitySheetOptions {
   modal: ModalHost;
   cityId: string;
-  state: GameState;
+  state: PublicState;
   buyMode: boolean;
   canAct: boolean;
   /** This client owns the actor, even if fx are still playing; forces a locked purchase sheet. */
@@ -32,7 +33,7 @@ export interface CitySheetOptions {
 }
 
 export interface CitySheetHandle {
-  update(state: GameState, canAct: boolean): void;
+  update(state: PublicState, canAct: boolean): void;
   close(): void;
 }
 
@@ -333,7 +334,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
   });
 
   return {
-    update(nextState: GameState, nextCanAct: boolean) {
+    update(nextState: PublicState, nextCanAct: boolean) {
       state = nextState;
       canAct = nextCanAct;
       render();

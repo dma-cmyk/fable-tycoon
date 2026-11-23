@@ -12,7 +12,15 @@ export interface OnlineEntryOptions {
 
 type Tab = 'create' | 'join';
 
-const ROOM_ALPHABET = /^[A-HJ-NP-Z2-9]{6}$/;
+const ROOM_CODE = /^[A-HJ-NP-Z2-9]{6}(?:-[A-HJ-NP-Z2-9]{4})?$/;
+
+function normalizeCode(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 11);
+}
 
 export class OnlineEntryScreen implements ScreenHandle {
   readonly el: HTMLElement;
@@ -44,19 +52,18 @@ export class OnlineEntryScreen implements ScreenHandle {
       class: 'input input-code',
       attrs: {
         type: 'text',
-        maxlength: '6',
+        maxlength: '11',
         inputmode: 'text',
         autocapitalize: 'characters',
         spellcheck: 'false',
-        placeholder: 'ABC123',
+        placeholder: 'ABC123-K7Q9',
         'aria-label': 'あいことば（6文字）',
         autocomplete: 'off',
         value: options.initialRoom ?? '',
       },
       on: {
         input: () => {
-          const el = this.roomInput;
-          el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+          this.roomInput.value = normalizeCode(this.roomInput.value);
           this.updateJoinState();
         },
       },
@@ -205,7 +212,7 @@ export class OnlineEntryScreen implements ScreenHandle {
 
   private updateJoinState(): void {
     if (this.joinButton) {
-      this.joinButton.disabled = this.busy || !ROOM_ALPHABET.test(this.roomInput.value);
+      this.joinButton.disabled = this.busy || !ROOM_CODE.test(this.roomInput.value);
     }
   }
 
@@ -223,7 +230,7 @@ export class OnlineEntryScreen implements ScreenHandle {
     const create = this.createPanel.querySelector('button');
     if (create instanceof HTMLButtonElement) create.disabled = busy;
     const join = this.joinPanel.querySelector('button');
-    if (join instanceof HTMLButtonElement) join.disabled = busy || !ROOM_ALPHABET.test(this.roomInput.value);
+    if (join instanceof HTMLButtonElement) join.disabled = busy || !ROOM_CODE.test(this.roomInput.value);
   }
 
   private async submitCreate(): Promise<void> {
@@ -236,9 +243,9 @@ export class OnlineEntryScreen implements ScreenHandle {
 
   private async submitJoin(): Promise<void> {
     if (this.busy) return;
-    const roomId = this.roomInput.value.trim().toUpperCase();
-    if (!ROOM_ALPHABET.test(roomId)) {
-      this.feedback.textContent = 'あいことばは 6 文字の英数字です（I・L・O・0・1 は使いません）。';
+    const roomId = normalizeCode(this.roomInput.value);
+    if (!ROOM_CODE.test(roomId)) {
+      this.feedback.textContent = 'あいことばは 6文字＋4文字のコードです（例: ABC123-K7Q9。I・L・O・0・1 は使いません）。';
       return;
     }
     this.setBusy(true, 'ルームを探しています…');

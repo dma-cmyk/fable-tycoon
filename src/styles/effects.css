@@ -1110,3 +1110,15 @@ body.reduced-motion *::after {
 
 /* Toasts participate below turn/card overlays, so they never cover the turn banner. */
 .toast-host { z-index: 44 !important; }
+
+/* Full room codes (6 + 4 secret) */
+.lobby-room-code { font-size: clamp(24px, 3.6vw, 40px); letter-spacing: 0.16em; word-break: break-all; }
+.input-code { letter-spacing: 0.14em; font-size: 20px; }
+@media (max-width: 700px) {
+  .lobby-room-code { font-size: 26px; letter-spacing: 0.1em; }
+  .input-code { font-size: 18px; letter-spacing: 0.1em; }
+}
+.player-menu-flagged { margin: 6px 0; padding: 7px 9px; border-radius: 9px; background: #fff0f0; border: 1px solid #e8b6b6; color: #a31224; font-size: 10.5px; line-height: 1.5; }
+.settings-reports-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings-report-feedback { min-height: 16px; margin: 4px 0 0; font-size: 10px; color: #6b6350; }
+.toggle:disabled { opacity: 0.5; cursor: default; }

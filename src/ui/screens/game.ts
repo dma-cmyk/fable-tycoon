@@ -1,10 +1,10 @@
 import { Audio, bgmForEvent, voiceKeyOf, type BgmName } from '../../audio/audio';
 import { destination as destinationNarration } from '../../audio/narration';
-import { actorOf, annualIncome, distance, netWorth } from '../../core/engine';
+import {  actorOf, annualIncome, distance, netWorth, type PublicState } from '../../core/engine';
 import { REALMS } from '../../core/realm';
 import { wrapDx } from '../../core/geo';
 import { purchasePrice } from '../../core/economy';
-import type { Action, Fx, GameState, RealmId, SpeakerRef } from '../../core/types';
+import type {Action, Fx, RealmId, SpeakerRef} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
@@ -50,6 +50,7 @@ import { openShopDialog, type ShopHandle } from '../components/shopDialog';
 import { JOY_SPRITE_IDS, LANDMARK_FILES, SAD_SPRITE_IDS } from '../assetManifest';
 import { animateCounter, confettiBurst, motionReduced, watchMotionPreference } from '../motion';
 import { extraMapView, type MapViewId } from '../mapMotion';
+import { myPlayerIds, playerToSeat, seatToPlayer } from '../session-map';
 import { cardDepartureText, cardVehicle, vehicleBadge, vehicleForDice } from '../vehicles';
 import {
   openCardTargetDialog,
@@ -96,8 +97,10 @@ export class GameScreen implements ScreenHandle {
   private readonly session: Session;
   private readonly canvas: HTMLCanvasElement;
   private map: MapView | null = null;
-  private state: GameState | null = null;
+  private state: PublicState | null = null;
   private seq = 0;
+  private latestSeq = -1;
+  private appliedSeq = -1;
   private deadline: number | null = null;
   private lobby: LobbyView | null = null;
   private mySeat: number | null = null;
@@ -110,6 +113,7 @@ export class GameScreen implements ScreenHandle {
   private lastHumanTurn: number | null = null;
   private readonly unsubscribeFns: (() => void)[] = [];
   private readonly muteCache = new Map<number, MuteFlags>();
+  private flaggedSeats = new Set<number>();
   private readonly fxPlayer: FxPlayer;
   private readonly dice: DiceOverlay;
   private readonly timer: TurnTimer;
@@ -422,33 +426,39 @@ export class GameScreen implements ScreenHandle {
     this.chat = new ChatPanel({
       session: this.session,
       canChat: () => this.session.mySeats().length > 0,
-      seatInfo: (seat) => this.seatInfo(seat),
+      seatInfo: (seat) => this.chatSeatInfo(seat),
       isMuted: (seat) => this.muteOf(seat).chat,
       showChat: () => uiSettings().showChat,
       onIncoming: (line) => {
-        if (line.seat !== this.emoteSeat()) Audio.sfx('chat');
-        this.showRankBubble(line.seat, line.text);
-        this.map?.bubble(line.seat, line.text, 4200);
-        this.addLog(`💬 ${this.playerName(line.seat)}: ${line.text}`);
+        const playerId = this.playerIdOfSeat(line.seat);
+        if (playerId === null) return;
+        if (!this.session.mySeats().includes(line.seat)) Audio.sfx('chat');
+        this.showRankBubble(playerId, line.text);
+        this.map?.bubble(playerId, line.text, 4200);
+        this.addLog(`💬 ${this.playerName(playerId)}: ${line.text}`);
       },
       class: 'game-chat-panel',
     });
 
     this.emotes = new EmotePalette({
-      canSend: () => this.emoteSeat() !== null && !this.destroyed,
+      canSend: () => this.emotePlayer() !== null && !this.destroyed,
       ownSeats: () => {
-        const seat = this.emoteSeat();
-        return seat === null ? [] : [seat];
+        const playerId = this.emotePlayer();
+        return playerId === null ? [] : [playerId];
       },
       ownCharacterId: () => {
-        const seat = this.emoteSeat();
-        return seat !== null ? this.state?.players[seat]?.characterId ?? null : null;
+        const playerId = this.emotePlayer();
+        return playerId !== null ? this.state?.players[playerId]?.characterId ?? null : null;
       },
-      seatInfo: (seat) => this.seatInfo(seat),
-      isMuted: (seat) => this.muteOf(seat).emote,
-      playerCount: () => this.state?.players.length ?? this.lobby?.seats.length ?? 4,
-      onSend: (emoteId, target) => {
-        this.session.send({ t: 'emote', emoteId, ...(target !== null ? { target } : {}) });
+      seatInfo: (playerId) => this.playerInfo(playerId),
+      isMuted: (playerId) => {
+        const seat = this.seatOfPlayer(playerId);
+        return seat !== null && this.muteOf(seat).emote;
+      },
+      playerCount: () => this.state?.players.length ?? 4,
+      onSend: (emoteId, targetPlayerId) => {
+        const targetSeat = targetPlayerId !== null ? this.seatOfPlayer(targetPlayerId) : null;
+        this.session.send({ t: 'emote', emoteId, ...(targetSeat !== null ? { target: targetSeat } : {}) });
       },
     });
 
@@ -556,7 +566,7 @@ export class GameScreen implements ScreenHandle {
     this.fxPlayer = new FxPlayer({
       settings: () => effectiveUiSettings(),
       handleFx: (fx, state, control) => this.handleFx(fx, state, control),
-      applyState: (state, deadline) => this.applyState(state, deadline),
+      applyState: (state, deadline, seq) => this.applyState(state, deadline, seq),
       setBusy: (busy) => {
         this.fxBusy = busy;
         this.updateHud();
@@ -666,20 +676,25 @@ export class GameScreen implements ScreenHandle {
       case 'welcome':
         this.mySeat = msg.seat;
         this.lobby = msg.lobby;
+        this.syncFlaggedSeats();
         for (const line of msg.chat) this.chat.addLine(line);
         this.renderConnections();
         break;
       case 'snapshot':
+        if (msg.seq < this.latestSeq) break;
         this.fxPlayer.reset();
-        this.seq = msg.seq;
+        this.latestSeq = Math.max(this.latestSeq, msg.seq);
         this.lobby = msg.lobby;
+        this.syncFlaggedSeats();
         this.deadline = msg.deadline;
         this.actionPending = false;
         this.endedVoicePlayed = false;
-        this.applyState(msg.state, msg.deadline, true);
+        this.applyState(msg.state, msg.deadline, msg.seq, true);
+        this.eventPanel.resetChosen();
         break;
       case 'update':
-        this.seq = msg.seq;
+        if (msg.seq <= this.latestSeq) break;
+        this.latestSeq = msg.seq;
         this.deadline = msg.deadline;
         this.actionPending = false;
         this.clearPendingTimer();
@@ -688,8 +703,19 @@ export class GameScreen implements ScreenHandle {
         break;
       case 'lobby':
         this.lobby = msg.lobby;
+        this.syncFlaggedSeats();
         this.renderConnections();
         break;
+      case 'flag': {
+        this.flaggedSeats.add(msg.seat);
+        const playerId = this.playerIdOfSeat(msg.seat);
+        const name = playerId !== null ? this.playerName(playerId) : `席 ${msg.seat + 1}`;
+        this.chat.addSystem(`${name} は通報により自動ミュートされました。`);
+        this.app.toasts.show(`${name} を自動ミュートしました（通報）`, 'warn', 3600);
+        this.chat.refreshLog();
+        if (this.state) this.renderRanking(this.state, actorOf(this.state));
+        break;
+      }
       case 'chat':
         this.chat.addLine(msg.line);
         break;
@@ -713,6 +739,7 @@ export class GameScreen implements ScreenHandle {
 
   private onServerError(code: string, message: string): void {
     this.actionPending = false;
+    if (code !== 'rate_limited') this.eventPanel.resetChosen();
     this.clearPendingTimer();
     if (code === 'rate_limited') {
       this.chat.notifyRateLimited('レート制限中。少し待ってから送ってください。');
@@ -743,7 +770,10 @@ export class GameScreen implements ScreenHandle {
 
   // ---------------------------------------------------------------- state & hud
 
-  private applyState(state: GameState, deadline: number | null, instant = false): void {
+  private applyState(state: PublicState, deadline: number | null, seq: number, instant = false): void {
+    if (seq < this.appliedSeq) return;
+    this.appliedSeq = seq;
+    this.seq = Math.max(this.seq, seq);
     const previousYear = this.state?.year;
     this.state = state;
     this.deadline = deadline;
@@ -823,15 +853,15 @@ export class GameScreen implements ScreenHandle {
           ? 'ゲーム終了'
           : actor === null
             ? '観戦中'
-            : this.session.mySeats().includes(actor)
+            : this.myPlayerIds().includes(actor)
               ? 'あなたの番'
               : `${this.actorLabel(actor)} の番`;
     this.statusChip.classList.toggle(
       'is-mine',
-      actor !== null && this.session.mySeats().includes(actor) && state.phase.t !== 'game_over',
+      actor !== null && this.myPlayerIds().includes(actor) && state.phase.t !== 'game_over',
     );
 
-    const choosing = state.phase.t === 'choose_dest' && actor !== null && this.session.mySeats().includes(actor);
+    const choosing = state.phase.t === 'choose_dest' && actor !== null && this.myPlayerIds().includes(actor);
     this.el.classList.toggle('choosing-dest', choosing);
     this.renderRanking(state, actor);
     this.renderPortrait(state, actor);
@@ -845,7 +875,7 @@ export class GameScreen implements ScreenHandle {
     this.cardBadge.hidden = hand === 0;
   }
 
-  private renderRanking(state: GameState, actor: number | null): void {
+  private renderRanking(state: PublicState, actor: number | null): void {
     const order = [...state.players].sort((a, b) => {
       const diff = netWorth(GAME_DATA, state, b.id) - netWorth(GAME_DATA, state, a.id);
       return diff !== 0 ? diff : a.id - b.id;
@@ -867,8 +897,10 @@ export class GameScreen implements ScreenHandle {
       const displayName = player.isCpu ? character?.nameJa ?? player.name : player.name;
       const net = netWorth(GAME_DATA, state, player.id);
       const isActor = player.id === actor;
-      const isMine = this.session.mySeats().includes(player.id);
-      const lobbySeat = this.lobby?.seats[player.id];
+      const isMine = this.myPlayerIds().includes(player.id);
+      const lobbySeat = this.lobby?.seats[this.seatOfPlayer(player.id) ?? -1];
+      const playerSeat = this.seatOfPlayer(player.id);
+      const flagged = playerSeat !== null && this.flaggedSeats.has(playerSeat);
       const previousIndex = oldIndexes.get(player.id);
       const moved = previousIndex !== undefined && previousIndex !== index ? (previousIndex > index ? 'up' : 'down') : null;
       const bubble = this.rankBubbles.get(player.id);
@@ -890,6 +922,7 @@ export class GameScreen implements ScreenHandle {
             { class: 'rank-name-line' },
             h('span', { class: 'rank-name', text: displayName }),
             player.isCpu ? h('span', { class: 'rank-tag', text: `Lv${player.cpuLevel}` }) : null,
+            flagged ? h('span', { class: 'rank-tag is-flagged', text: '🚩自動ミュート' }) : null,
             isActor ? h('span', { class: 'rank-turn', text: '▶' }) : null,
             realmOfNode(player.nodeId) !== 'world'
               ? h('span', {
@@ -926,7 +959,8 @@ export class GameScreen implements ScreenHandle {
             on: {
               click: (event) => {
                 event.stopPropagation();
-                this.openSeatMenu(player.id);
+                const seat = this.seatOfPlayer(player.id);
+                if (seat !== null) this.openSeatMenu(seat);
               },
             },
           },
@@ -960,7 +994,7 @@ export class GameScreen implements ScreenHandle {
     }
   }
 
-  private renderPortrait(state: GameState, actor: number | null): void {
+  private renderPortrait(state: PublicState, actor: number | null): void {
     const seat = actor ?? this.displaySeat();
     const player = seat !== null ? state.players[seat] : undefined;
     const character = player ? charsById.get(player.characterId) : undefined;
@@ -985,7 +1019,7 @@ export class GameScreen implements ScreenHandle {
     this.portraitRank.className = `portrait-rank rank-${rank}`;
   }
 
-  private renderMoney(state: GameState, seat: number | null, actor: number | null): void {
+  private renderMoney(state: PublicState, seat: number | null, actor: number | null): void {
     const player = seat !== null ? state.players[seat] : undefined;
     if (!player) {
       this.moneyHost.hidden = true;
@@ -1042,14 +1076,14 @@ export class GameScreen implements ScreenHandle {
     if (netEl) this.setCounter(netEl, `money:${player.id}:net`, net, formatOku);
   }
 
-  private renderMoveOptions(state: GameState, actor: number | null): void {
+  private renderMoveOptions(state: PublicState, actor: number | null): void {
     if (state.phase.t !== 'choose_dest') {
       this.moveOptionsHost.hidden = true;
       this.moveOptionsHost.replaceChildren();
       this.map?.setMoveOptions(null, () => undefined);
       return;
     }
-    const canAct = actor !== null && this.session.mySeats().includes(actor) && !this.fxBusy && !this.actionPending;
+    const canAct = actor !== null && this.myPlayerIds().includes(actor) && !this.fxBusy && !this.actionPending;
     if (!canAct) {
       this.moveOptionsHost.hidden = true;
       this.moveOptionsHost.replaceChildren();
@@ -1092,8 +1126,8 @@ export class GameScreen implements ScreenHandle {
     );
   }
 
-  private updatePrimary(state: GameState, actor: number | null): void {
-    const mine = actor !== null && this.session.mySeats().includes(actor);
+  private updatePrimary(state: PublicState, actor: number | null): void {
+    const mine = actor !== null && this.myPlayerIds().includes(actor);
     let label = 'サイコロをふる';
     let icon = '▶';
     let disabled = true;
@@ -1162,7 +1196,7 @@ export class GameScreen implements ScreenHandle {
     this.primary.className = className;
   }
 
-  private updateTimer(state: GameState, actor: number | null): void {
+  private updateTimer(state: PublicState, actor: number | null): void {
     const totalSeconds = this.lobby?.settings.turnSeconds ?? 0;
     if (state.phase.t === 'game_over' || this.resultScreen || this.session.mode !== 'online' || totalSeconds <= 0 || this.deadline === null) {
       this.timer.set({ deadline: null, totalSeconds, isMine: false });
@@ -1171,7 +1205,7 @@ export class GameScreen implements ScreenHandle {
     this.timer.set({
       deadline: this.deadline,
       totalSeconds,
-      isMine: actor !== null && this.session.mySeats().includes(actor),
+      isMine: actor !== null && this.myPlayerIds().includes(actor),
     });
   }
 
@@ -1199,7 +1233,7 @@ export class GameScreen implements ScreenHandle {
           state,
           buyMode: true,
           canAct,
-          ownerWillAct: this.session.mySeats().includes(state.current),
+          ownerWillAct: this.myPlayerIds().includes(state.current),
           onBuy: (propertyId) => this.sendAction({ t: 'buy', propertyId }),
           onBuyAll: () => {
             this.bulkBuyCityId = cityId;
@@ -1303,7 +1337,7 @@ export class GameScreen implements ScreenHandle {
     }
   }
 
-  private updateTransientDialog(state: GameState, canAct: boolean): void {
+  private updateTransientDialog(state: PublicState, canAct: boolean): void {
     const phase = state.phase;
     if (this.cityPick) {
       if (phase.t === 'card_target' && phase.cardId === this.cityPick.cardId) return;
@@ -1400,6 +1434,7 @@ export class GameScreen implements ScreenHandle {
     this.pendingTimer = window.setTimeout(() => {
       if (!this.actionPending) return;
       this.actionPending = false;
+      this.eventPanel.resetChosen();
       this.updateHud();
       this.app.toasts.show('操作の応答がありませんでした。もう一度お試しください。', 'warn', 3200);
       this.refreshActionDialogs();
@@ -1434,14 +1469,14 @@ export class GameScreen implements ScreenHandle {
     const state = this.state;
     if (!state || state.phase.t === 'game_over' || this.actionPending || this.fxBusy) return false;
     const actor = actorOf(state);
-    return actor !== null && this.session.mySeats().includes(actor);
+    return actor !== null && this.myPlayerIds().includes(actor);
   }
 
   private canActSeatNow(): boolean {
     const state = this.state;
     if (!state || state.phase.t === 'game_over' || this.actionPending || this.fxBusy) return false;
     const actor = actorOf(state);
-    return actor !== null && this.session.mySeats().includes(actor);
+    return actor !== null && this.myPlayerIds().includes(actor);
   }
 
   // ---------------------------------------------------------------- dialogs & panels
@@ -1462,7 +1497,7 @@ export class GameScreen implements ScreenHandle {
     animateCounter(el, previous, value, format, duration);
   }
 
-  private renderPlayerPlate(state: GameState, seat: number | null, actor: number | null): void {
+  private renderPlayerPlate(state: PublicState, seat: number | null, actor: number | null): void {
     const player = seat !== null ? state.players[seat] : undefined;
     if (!player) {
       this.playerPlate.hidden = true;
@@ -1510,7 +1545,7 @@ export class GameScreen implements ScreenHandle {
     this.updateBgm();
   }
 
-  private updateDestArrow(state: GameState, actor: number | null, nodeId: string): void {
+  private updateDestArrow(state: PublicState, actor: number | null, nodeId: string): void {
     if (actor === null || !this.state) {
       this.destArrow.hidden = true;
       return;
@@ -1971,7 +2006,8 @@ export class GameScreen implements ScreenHandle {
 
   private openSeatMenu(seat: number): void {
     const state = this.state;
-    const player = state?.players[seat];
+    const playerId = this.playerIdOfSeat(seat);
+    const player = playerId !== null ? state?.players[playerId] : undefined;
     const lobbySeat = this.lobby?.seats[seat];
     openPlayerMenu({
       modal: this.app.modal,
@@ -1982,12 +2018,13 @@ export class GameScreen implements ScreenHandle {
       characterId: player?.characterId ?? lobbySeat?.characterId ?? null,
       color: player ? playerColor(player) : '#9fb3d9',
       canReport: this.session.mode === 'online' && seat !== this.mySeat && !!player && !player.isCpu,
+      flagged: this.flaggedSeats.has(seat) || lobbySeat?.flagged === true,
       flags: { ...this.muteOf(seat) },
       onMute: (flags) => {
         this.muteCache.set(seat, flags);
         writeMute(this.session.roomId, seat, flags);
         this.chat.refresh();
-        this.renderHud();
+        if (this.state) this.renderRanking(this.state, actorOf(this.state));
       },
     });
   }
@@ -2000,7 +2037,10 @@ export class GameScreen implements ScreenHandle {
       modal: this.app.modal,
       title: 'プレイヤー',
       rows,
-      onMenu: (seat) => this.openSeatMenu(seat),
+      onMenu: (playerId) => {
+        const seat = this.seatOfPlayer(playerId);
+        if (seat !== null) this.openSeatMenu(seat);
+      },
     });
   }
 
@@ -2077,10 +2117,11 @@ export class GameScreen implements ScreenHandle {
     handle = this.app.modal.open(body, { title: isOnline ? '退出しますか？' : 'タイトルへ戻りますか？' });
   }
 
-  private openEventPanel(eventId: string, state: GameState): void {
+  private openEventPanel(eventId: string, state: PublicState): void {
     const event = eventsById.get(eventId);
     if (!event) return;
-    const playerName = state.players.find((player) => player.id === state.current)?.name ?? '';
+    const currentPlayer = state.players.find((player) => player.id === state.current);
+    const playerName = displayPlayerName(currentPlayer);
     this.eventPanel.show(event, state, playerName);
     this.eventPanel.setState(state, this.interactiveNow());
     this.activeEventBgm = bgmForEvent(event);
@@ -2088,7 +2129,7 @@ export class GameScreen implements ScreenHandle {
     this.recordNews(eventId, state);
   }
 
-  private showResult(state: GameState): void {
+  private showResult(state: PublicState): void {
     if (this.resultScreen) return;
     this.timer.set({ deadline: null, totalSeconds: 0, isMine: false });
     this.eventPanel.hide();
@@ -2102,7 +2143,10 @@ export class GameScreen implements ScreenHandle {
     this.resultScreen = new ResultScreen({
       state,
       mode: this.session.mode,
-      isVoiceMuted: (seat) => this.muteOf(seat).voice,
+      isVoiceMuted: (playerId) => {
+        const seat = this.seatOfPlayer(playerId);
+        return seat !== null && this.muteOf(seat).voice;
+      },
       skipEndingVoice: this.endedVoicePlayed,
       onTitle: () => this.app.goTitle(),
       onRematch: () => this.app.rematch(),
@@ -2115,13 +2159,13 @@ export class GameScreen implements ScreenHandle {
 
   // ---------------------------------------------------------------- fx playback
 
-  private async handleFx(fx: Fx, pending: GameState, control: PlaybackControl): Promise<void> {
+  private async handleFx(fx: Fx, pending: PublicState, control: PlaybackControl): Promise<void> {
     this.clearSay();
     switch (fx.t) {
       case 'turn': {
         this.manualView = false;
         let handoff = false;
-        if (this.session.mode === 'local' && this.session.mySeats().length > 1 && this.session.mySeats().includes(fx.playerId)) {
+        if (this.session.mode === 'local' && this.myPlayerIds().length > 1 && this.myPlayerIds().includes(fx.playerId)) {
           if (this.lastHumanTurn !== null && this.lastHumanTurn !== fx.playerId) {
             this.showHandoff(fx.playerId);
             handoff = true;
@@ -2336,7 +2380,7 @@ export class GameScreen implements ScreenHandle {
 
   private async playSay(
     fx: Extract<Fx, { t: 'say' }>,
-    state: GameState,
+    state: PublicState,
     control: PlaybackControl,
   ): Promise<void> {
     const speaker = fx.speaker;
@@ -2372,7 +2416,8 @@ export class GameScreen implements ScreenHandle {
       speaker === 'self'
         ? voiceKeyOf('self', speakerCharId ?? undefined)
         : voiceKeyOf(speaker);
-    const muted = speakerSeat !== null && this.muteOf(speakerSeat).voice;
+    const speakerLobbySeat = speakerSeat !== null ? this.seatOfPlayer(speakerSeat) : null;
+    const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
     const duration = FX_MS.sayBase + FX_MS.sayPerChar * [...fx.text].length;
     const stopVoice = () => Audio.stopVoice();
     control.onSkip(stopVoice);
@@ -2384,7 +2429,7 @@ export class GameScreen implements ScreenHandle {
     await Promise.all([voicePromise, advance]);
   }
 
-  private speakerSeat(speaker: SpeakerRef, playerId: number | undefined, state: GameState): number | null {
+  private speakerSeat(speaker: SpeakerRef, playerId: number | undefined, state: PublicState): number | null {
     if (speaker === 'self') return playerId ?? state.current;
     if (speaker.startsWith('char:')) {
       const characterId = speaker.slice(5);
@@ -2410,7 +2455,7 @@ export class GameScreen implements ScreenHandle {
     this.subtitleBar.hidden = true;
   }
 
-  private setPortraitFor(playerId: number, state: GameState): void {
+  private setPortraitFor(playerId: number, state: PublicState): void {
     const player = state.players[playerId];
     const character = player ? charsById.get(player.characterId) : undefined;
     if (!character) return;
@@ -2447,25 +2492,27 @@ export class GameScreen implements ScreenHandle {
     const state = this.state;
     if (!state) return;
     const def = emotesById.get(event.emoteId);
-    const speaker = state.players[event.seat];
-    const victim = event.target !== null ? state.players[event.target] : undefined;
+    const speakerPlayerId = this.playerIdOfSeat(event.seat);
+    const targetPlayerId = event.target !== null ? this.playerIdOfSeat(event.target) : null;
+    if (speakerPlayerId === null) return;
+    const speaker = state.players[speakerPlayerId];
+    const victim = targetPlayerId !== null ? state.players[targetPlayerId] : undefined;
     if (!def || !speaker) return;
     const speakerChar = speaker.characterId;
     const victimChar = victim?.characterId ?? null;
     const lines = resolveEmoteLines(def, speakerChar, victimChar);
-    this.map?.bubble(event.seat, lines.speaker, 3000);
+    this.map?.bubble(speakerPlayerId, lines.speaker, 3000);
     Audio.sfx('emote_pop');
-    const anim = this.map?.playEmote(event.seat, def, event.target) ?? Promise.resolve();
+    const anim = this.map?.playEmote(speakerPlayerId, def, targetPlayerId) ?? Promise.resolve();
     void playEmoteVoice(lines, (characterId) => {
       if (characterId === speakerChar) return this.muteOf(event.seat).voice;
       if (event.target !== null && characterId === victimChar) return this.muteOf(event.target).voice;
       return false;
     });
-    if (event.target !== null && lines.hit) {
-      const target = event.target;
+    if (targetPlayerId !== null && lines.hit) {
       const hitText = lines.hit;
       window.setTimeout(() => {
-        this.map?.bubble(target, hitText, 2600);
+        this.map?.bubble(targetPlayerId, hitText, 2600);
         Audio.sfx('hit');
       }, 650);
     }
@@ -2474,14 +2521,14 @@ export class GameScreen implements ScreenHandle {
 
   // ---------------------------------------------------------------- chat bubbles & helpers
 
-  private showRankBubble(seat: number, text: string): void {
+  private showRankBubble(playerId: number, text: string): void {
     if (!uiSettings().showChat) return;
-    this.rankBubbles.set(seat, { text, expires: Date.now() + 4000 });
+    this.rankBubbles.set(playerId, { text, expires: Date.now() + 4000 });
     if (this.state) this.renderRanking(this.state, actorOf(this.state));
     window.setTimeout(() => {
-      const entry = this.rankBubbles.get(seat);
+      const entry = this.rankBubbles.get(playerId);
       if (entry && entry.expires <= Date.now()) {
-        this.rankBubbles.delete(seat);
+        this.rankBubbles.delete(playerId);
         if (this.state) this.renderRanking(this.state, actorOf(this.state));
       }
     }, 4100);
@@ -2498,7 +2545,7 @@ export class GameScreen implements ScreenHandle {
     }, 4200);
   }
 
-  private showTurnBanner(playerId: number, state: GameState): void {
+  private showTurnBanner(playerId: number, state: PublicState): void {
     const player = state.players[playerId];
     const character = player ? charsById.get(player.characterId) : undefined;
     if (!player || !character) return;
@@ -2572,14 +2619,14 @@ export class GameScreen implements ScreenHandle {
     while (this.logs.length > 100) this.logs.shift();
   }
 
-  private recordNews(eventId: string, state: GameState): void {
+  private recordNews(eventId: string, state: PublicState): void {
     const last = this.newsLog[this.newsLog.length - 1];
     if (last && last.eventId === eventId && last.year === state.year && last.month === state.month) return;
     this.newsLog.push({ eventId, year: state.year, month: state.month });
     while (this.newsLog.length > 30) this.newsLog.shift();
   }
 
-  private playerViews(state: GameState): PlayerView[] {
+  private playerViews(state: PublicState): PlayerView[] {
     const order = [...state.players].sort((a, b) => {
       const diff = netWorth(GAME_DATA, state, b.id) - netWorth(GAME_DATA, state, a.id);
       return diff !== 0 ? diff : a.id - b.id;
@@ -2587,7 +2634,7 @@ export class GameScreen implements ScreenHandle {
     const actor = actorOf(state);
     return order.map((player, index) => {
       const character = charsById.get(player.characterId);
-      const lobbySeat = this.lobby?.seats[player.id];
+      const lobbySeat = this.lobby?.seats[this.seatOfPlayer(player.id) ?? -1];
       const cash = player.cash;
       return {
         seat: player.id,
@@ -2600,6 +2647,7 @@ export class GameScreen implements ScreenHandle {
         rank: index + 1,
         isCurrent: player.id === actor,
         isCpu: player.isCpu,
+        flagged: this.flaggedSeats.has(this.seatOfPlayer(player.id) ?? -1),
         connected: lobbySeat?.kind === 'human' ? lobbySeat.connected : null,
         autoplay: lobbySeat?.autoplay ?? false,
         piperLevel: state.piper.holder === player.id ? state.piper.level : null,
@@ -2611,8 +2659,9 @@ export class GameScreen implements ScreenHandle {
     });
   }
 
-  private seatInfo(seat: number) {
-    const player = this.state?.players[seat];
+  private chatSeatInfo(seat: number) {
+    const playerId = this.playerIdOfSeat(seat);
+    const player = playerId !== null ? this.state?.players[playerId] : undefined;
     const lobbySeat = this.lobby?.seats[seat];
     const character = player ? charsById.get(player.characterId) : lobbySeat?.characterId ? charsById.get(lobbySeat.characterId) : undefined;
     return {
@@ -2622,29 +2671,16 @@ export class GameScreen implements ScreenHandle {
     };
   }
 
-  private privateSeat(): number | null {
-    const state = this.state;
-    if (!state) return this.mySeat;
-    if (this.session.mode === 'online') return this.mySeat ?? actorOf(state);
-    const actor = actorOf(state);
-    if (actor !== null && this.session.mySeats().includes(actor)) return actor;
-    return this.session.mySeats()[0] ?? actor;
-  }
-
-  private displaySeat(): number | null {
-    const state = this.state;
-    if (!state) return this.mySeat;
-    if (this.session.mode === 'online') return this.mySeat ?? actorOf(state);
-    return actorOf(state) ?? this.session.mySeats()[0] ?? null;
-  }
-
-  private emoteSeat(): number | null {
-    const state = this.state;
-    if (!state) return this.mySeat ?? this.session.mySeats()[0] ?? null;
-    if (this.session.mode === 'online') return this.mySeat;
-    const actor = actorOf(state);
-    if (actor !== null && this.session.mySeats().includes(actor)) return actor;
-    return this.session.mySeats()[0] ?? null;
+  private playerInfo(playerId: number) {
+    const player = this.state?.players[playerId];
+    const seat = this.seatOfPlayer(playerId);
+    const lobbySeat = seat !== null ? this.lobby?.seats[seat] : undefined;
+    const character = player ? charsById.get(player.characterId) : lobbySeat?.characterId ? charsById.get(lobbySeat.characterId) : undefined;
+    return {
+      name: displayPlayerName(player) || lobbySeat?.name || `プレイヤー${playerId + 1}`,
+      characterId: player?.characterId ?? lobbySeat?.characterId ?? null,
+      color: character?.color ?? '#9fb3d9',
+    };
   }
 
   private playerName(playerId: number): string {
@@ -2658,12 +2694,65 @@ export class GameScreen implements ScreenHandle {
     return `${displayPlayerName(player)}${player.isCpu ? '（CPU）' : ''}`;
   }
 
+  private myPlayerIds(): number[] {
+    return myPlayerIds(this.session);
+  }
+
+  private playerIdOfSeat(seat: number): number | null {
+    return seatToPlayer(this.session, seat);
+  }
+
+  private seatOfPlayer(playerId: number): number | null {
+    return playerToSeat(this.session, playerId);
+  }
+
+  private privateSeat(): number | null {
+    const state = this.state;
+    const mine = this.myPlayerIds();
+    if (!state) return mine[0] ?? null;
+    if (this.session.mode === 'online') {
+      const myId = mine[0] ?? null;
+      return myId !== null && state.players[myId] ? myId : actorOf(state);
+    }
+    const actor = actorOf(state);
+    if (actor !== null && mine.includes(actor)) return actor;
+    return mine[0] ?? actor;
+  }
+
+  private displaySeat(): number | null {
+    const state = this.state;
+    const mine = this.myPlayerIds();
+    if (!state) return mine[0] ?? null;
+    if (this.session.mode === 'online') {
+      const myId = mine[0] ?? null;
+      return myId !== null && state.players[myId] ? myId : actorOf(state);
+    }
+    return actorOf(state) ?? mine[0] ?? null;
+  }
+
+  private emotePlayer(): number | null {
+    const state = this.state;
+    const mine = this.myPlayerIds();
+    if (!state) return mine[0] ?? null;
+    if (this.session.mode === 'online') return mine[0] ?? null;
+    const actor = actorOf(state);
+    if (actor !== null && mine.includes(actor)) return actor;
+    return mine[0] ?? null;
+  }
+
   private muteOf(seat: number): MuteFlags {
+    if (this.flaggedSeats.has(seat)) return { chat: true, emote: true, voice: true };
     const cached = this.muteCache.get(seat);
     if (cached) return cached;
     const flags = readMute(this.session.roomId, seat);
     this.muteCache.set(seat, flags);
     return flags;
+  }
+
+  private syncFlaggedSeats(): void {
+    const seats = this.lobby?.seats;
+    if (!seats) return;
+    this.flaggedSeats = new Set(seats.filter((seat) => seat.flagged === true).map((seat) => seat.index));
   }
 
   private renderConnections(): void {
@@ -2724,9 +2813,9 @@ export class GameScreen implements ScreenHandle {
 
   private bindKeyboard(): void {
     const onKey = (event: KeyboardEvent): void => {
-      const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       if (event.defaultPrevented) return;
+      const target = event.target;
+      const inText = target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
       if (event.key === 'Escape') {
         if (this.app.modal.isOpen()) return;
         if (this.emotes.isOpen) {
@@ -2740,12 +2829,15 @@ export class GameScreen implements ScreenHandle {
         }
         return;
       }
+      if (inText) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest('button, a, [role="button"], input, textarea, select, .modal-panel, .chat-panel, .emote-palette')) return;
+      if (this.app.modal.isOpen()) return;
       if (this.fxBusy && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault();
         this.fxPlayer.skip();
         return;
       }
-      if (this.app.modal.isOpen()) return;
       if (this.eventPanel.isOpen && /^[1-3]$/.test(event.key)) {
         const buttons = this.eventPanel.el.querySelectorAll<HTMLButtonElement>('.event-choice:not(:disabled)');
         const button = buttons[Number(event.key) - 1];

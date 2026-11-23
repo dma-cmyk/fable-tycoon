@@ -197,6 +197,7 @@ export class ModalHost {
 
   open(content: HTMLElement, options: ModalOptions = {}): ModalHandle {
     const dismissible = options.dismissible ?? true;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = h('div', {
       class: `modal-panel ${options.className ?? ''}`.trim(),
       attrs: {
@@ -231,6 +232,32 @@ export class ModalHost {
     panel.append(body);
 
     const backdrop = h('div', { class: 'modal-backdrop', attrs: { 'aria-hidden': 'false' } }, panel);
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (dismissible) close();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusables = [...panel.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => element.getClientRects().length > 0);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !panel.contains(active))) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    });
     let closed = false;
     const close = () => {
       if (closed) return;
@@ -241,6 +268,17 @@ export class ModalHost {
       window.setTimeout(() => backdrop.remove(), 120);
       entry.closed = true;
       options.onClose?.();
+      if (this.stack.length === 0 && previousFocus?.isConnected) {
+        window.setTimeout(() => previousFocus.focus({ preventScroll: true }), 0);
+      } else if (this.stack.length > 0) {
+        const top = this.stack[this.stack.length - 1];
+        window.setTimeout(() => {
+          const focusable = top.panel.querySelector<HTMLElement>(
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          );
+          focusable?.focus({ preventScroll: true });
+        }, 0);
+      }
     };
     const entry: ModalEntry = { backdrop, panel, options, dismissible, closed: false, close };
     if (dismissible) {

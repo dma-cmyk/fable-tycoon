@@ -1,5 +1,5 @@
-import { currentPrice } from '../../core/engine';
-import type { CardDef, GameState } from '../../core/types';
+import {  currentPrice, type PublicState } from '../../core/engine';
+import type {CardDef} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import {
@@ -22,7 +22,7 @@ import {
 
 export interface CardTargetOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   canAct: boolean;
   cardId: string;
   options: string[];
@@ -159,7 +159,7 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
   });
 }
 
-function targetButton(state: GameState, target: string, onClick: () => void): HTMLButtonElement {
+function targetButton(state: PublicState, target: string, onClick: () => void): HTMLButtonElement {
   if (/^\d+$/.test(target)) {
     const player = state.players[Number(target)];
     const character = player ? charsById.get(player.characterId) : undefined;
@@ -237,7 +237,7 @@ function targetButton(state: GameState, target: string, onClick: () => void): HT
 
 export interface DiscardOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   canAct: boolean;
   onDiscard: (cardId: string) => void;
 }
@@ -300,7 +300,7 @@ function discardRow(def: CardDef, count: number, onDiscard: () => void): HTMLEle
 
 export interface SellOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   canAct: boolean;
   onSell: (propertyId: string) => void;
 }

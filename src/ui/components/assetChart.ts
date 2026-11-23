@@ -1,10 +1,11 @@
-import type { GameState } from '../../core/types';
+import type { PublicState } from '../../core/engine';
+import type {} from '../../core/types';
 import { h } from '../dom';
 import { displayPlayerName, formatOkuShort, playerColor } from '../format';
 
 export interface AssetChartOptions {
   canvas: HTMLCanvasElement;
-  state: GameState;
+  state: PublicState;
   finalAssets?: number[];
 }
 
@@ -133,7 +134,7 @@ export function drawAssetChart(options: AssetChartOptions): void {
   });
 }
 
-export function assetLegend(state: GameState): HTMLElement {
+export function assetLegend(state: PublicState): HTMLElement {
   const legend = h('div', { class: 'asset-legend' });
   for (const player of state.players) {
     legend.append(

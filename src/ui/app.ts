@@ -221,7 +221,7 @@ export class App {
   // ---------------------------------------------------------------- dialogs
 
   openSettings(): void {
-    openSettingsDialog(this.modal);
+    openSettingsDialog(this.modal, this.session);
   }
 
   openHelp(): void {
@@ -286,5 +286,10 @@ export class App {
 }
 
 function normalizeRoomId(roomId: string): string {
-  return roomId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  return roomId
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 11);
 }

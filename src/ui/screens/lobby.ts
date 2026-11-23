@@ -1,5 +1,6 @@
 import { Audio } from '../../audio/audio';
-import type { EmoteEvent, LobbyView, SeatInfo, ServerMsg } from '../../net/protocol';
+import { ALLOWED_YEARS } from '../../core/engine';
+import type { EmoteEvent, LobbyView, RoomSettings, SeatInfo, ServerMsg } from '../../net/protocol';
 import type { ConnectionState, Session } from '../../net/session-types';
 import { avatar, clear, h, iconButton, type ModalHost, type ToastHost } from '../dom';
 import { characterSprite, charsById, displayPlayerName, emotesById } from '../format';
@@ -39,6 +40,7 @@ export class LobbyScreen implements ScreenHandle {
   private readonly chat: ChatPanel;
   private readonly emotes: EmotePalette;
   private readonly muteCache = new Map<number, MuteFlags>();
+  private flaggedSeats = new Set<number>();
   private lobby: LobbyView | null = null;
   private mySeat: number | null = null;
   private started = false;
@@ -159,13 +161,25 @@ export class LobbyScreen implements ScreenHandle {
       case 'welcome':
         this.mySeat = msg.seat;
         this.lobby = msg.lobby;
+        this.syncFlaggedSeats();
         for (const line of msg.chat) this.chat.addLine(line);
         this.afterLobbyChange();
         break;
       case 'lobby':
         this.lobby = msg.lobby;
+        this.syncFlaggedSeats();
         this.afterLobbyChange();
         break;
+      case 'flag': {
+        this.flaggedSeats.add(msg.seat);
+        const seat = this.lobby?.seats[msg.seat];
+        const name = displayPlayerName({ name: seat?.name ?? `席 ${msg.seat + 1}`, characterId: seat?.characterId ?? undefined, isCpu: seat?.kind === 'cpu' });
+        this.chat.addSystem(`${name} は通報により自動ミュートされました。`);
+        this.options.toast.show(`${name} を自動ミュートしました（通報）`, 'warn', 3600);
+        this.chat.refreshLog();
+        this.render();
+        break;
+      }
       case 'snapshot':
         this.lobby = msg.lobby;
         this.loading.hidden = true;
@@ -286,7 +300,7 @@ export class LobbyScreen implements ScreenHandle {
         { class: 'lobby-setting-row' },
         h('span', { class: 'lobby-setting-label', text: '年数' }),
         segmented(
-          [1, 3, 5, 10, 20].map((years) => ({
+          ALLOWED_YEARS.map((years) => ({
             label: `${years}年`,
             pressed: lobby.settings.years === years,
             disabled: !isHost,
@@ -533,6 +547,7 @@ export class LobbyScreen implements ScreenHandle {
       characterId: seat.characterId,
       color: (seat.characterId ? charsById.get(seat.characterId)?.color : undefined) ?? '#9fb3d9',
       canReport: seat.kind === 'human' && seat.index !== this.mySeat,
+      flagged: seat.flagged === true || this.flaggedSeats.has(seat.index),
       flags: { ...this.muteOf(seat.index) },
       onMute: (flags) => {
         this.muteCache.set(seat.index, flags);
@@ -558,6 +573,9 @@ export class LobbyScreen implements ScreenHandle {
   }
 
   private muteOf(seat: number): MuteFlags {
+    if (this.flaggedSeats.has(seat) || this.lobby?.seats[seat]?.flagged === true) {
+      return { chat: true, emote: true, voice: true };
+    }
     const cached = this.muteCache.get(seat);
     if (cached) return cached;
     const flags = readMute(this.options.session.roomId, seat);
@@ -565,7 +583,13 @@ export class LobbyScreen implements ScreenHandle {
     return flags;
   }
 
-  private sendSettings(settings: { years?: number; turnSeconds?: number }): void {
+  private syncFlaggedSeats(): void {
+    const seats = this.lobby?.seats;
+    if (!seats) return;
+    this.flaggedSeats = new Set(seats.filter((seat) => seat.flagged === true).map((seat) => seat.index));
+  }
+
+  private sendSettings(settings: Partial<RoomSettings>): void {
     this.options.session.send({ t: 'settings', settings });
   }
 

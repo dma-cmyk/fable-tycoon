@@ -1,4 +1,5 @@
-import type { GameState, YearReport } from '../../core/types';
+import type { PublicState } from '../../core/engine';
+import type {YearReport} from '../../core/types';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import { animateCounter, confettiBurst, motionReduced } from '../motion';
 import { characterSprite, charsById, displayPlayerName, formatDelta, formatOku, playerColor } from '../format';
@@ -6,14 +7,14 @@ import { assetLegend, drawAssetChart } from './assetChart';
 
 export interface YearEndOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   canAct: boolean;
   actorName: string;
   onAck: () => void;
 }
 
 export interface YearEndHandle {
-  update(state: GameState, canAct: boolean): void;
+  update(state: PublicState, canAct: boolean): void;
   close(): void;
 }
 
@@ -188,7 +189,7 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
   });
 
   return {
-    update(nextState: GameState, nextCanAct: boolean) {
+    update(nextState: PublicState, nextCanAct: boolean) {
       state = nextState;
       canAct = nextCanAct;
       if (state.phase.t === 'year_end') render();

@@ -1,5 +1,5 @@
-import { currentPrice } from '../../core/engine';
-import type { City, GameState } from '../../core/types';
+import {  currentPrice, type PublicState } from '../../core/engine';
+import type {City} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { h, type ModalHost } from '../dom';
 import {
@@ -12,7 +12,7 @@ import {
 
 export interface PropertyCatalogOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   seat: number;
 }
 

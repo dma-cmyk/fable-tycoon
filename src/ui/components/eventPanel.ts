@@ -1,4 +1,5 @@
-import type { EventChoice, GameEventDef, GameState } from '../../core/types';
+import type { PublicState } from '../../core/engine';
+import type {EventChoice, GameEventDef} from '../../core/types';
 import { h } from '../dom';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
 import {
@@ -30,7 +31,7 @@ export class EventPanel {
   private readonly metaToggle: HTMLButtonElement;
   private readonly seasonBadge: HTMLElement;
   private event: GameEventDef | null = null;
-  private state: GameState | null = null;
+  private state: PublicState | null = null;
   private canAct = false;
   private chosen = false;
   private open = false;
@@ -117,7 +118,7 @@ export class EventPanel {
     return this.open;
   }
 
-  show(event: GameEventDef, state: GameState, playerName: string): void {
+  show(event: GameEventDef, state: PublicState, playerName: string): void {
     this.event = event;
     this.chosen = false;
     this.open = true;
@@ -163,7 +164,7 @@ export class EventPanel {
     this.dialogueText.textContent = text;
   }
 
-  setState(state: GameState, canAct: boolean): void {
+  setState(state: PublicState, canAct: boolean): void {
     this.state = state;
     this.canAct = canAct;
     this.refreshChoices();

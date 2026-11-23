@@ -1,5 +1,6 @@
+import type { PublicState } from '../../core/engine';
 import { yearScale } from '../../core/economy';
-import type { CardDef, GameState } from '../../core/types';
+import type {CardDef} from '../../core/types';
 import { h, type ModalHandle, type ModalHost } from '../dom';
 import {
   assetUrl,
@@ -12,7 +13,7 @@ import { cardVehicle, vehicleBadge } from '../vehicles';
 
 export interface ShopDialogOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   canAct: boolean;
   onBuy: (cardId: string) => void;
   onSell: (cardId: string) => void;
@@ -20,7 +21,7 @@ export interface ShopDialogOptions {
 }
 
 export interface ShopHandle {
-  update(state: GameState, canAct: boolean): void;
+  update(state: PublicState, canAct: boolean): void;
   close(): void;
 }
 
@@ -189,7 +190,7 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
   });
 
   return {
-    update(nextState: GameState, nextCanAct: boolean) {
+    update(nextState: PublicState, nextCanAct: boolean) {
       state = nextState;
       canAct = nextCanAct;
       render();

@@ -1,11 +1,12 @@
-import type { GameState } from '../../core/types';
+import type { PublicState } from '../../core/engine';
+import type {} from '../../core/types';
 import { h, type ModalHandle, type ModalHost } from '../dom';
 import { cardsById } from '../format';
 import { cardVehicle, vehicleBadge } from '../vehicles';
 
 export interface CardsDialogOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   seat: number;
   canAct: boolean;
   onUse: (cardId: string) => void;

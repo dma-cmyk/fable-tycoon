@@ -1,5 +1,5 @@
-import { distance } from '../../core/engine';
-import { INDUSTRIES, type GameState, type Industry } from '../../core/types';
+import {  distance, type PublicState } from '../../core/engine';
+import { INDUSTRIES, type Industry } from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { h, type ModalHost } from '../dom';
 import {
@@ -22,7 +22,7 @@ export interface NewsLogEntry {
 
 export interface InfoDialogOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   newsLog: NewsLogEntry[];
   logs: string[];
 }

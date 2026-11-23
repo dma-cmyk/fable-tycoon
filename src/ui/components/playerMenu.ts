@@ -13,6 +13,7 @@ export interface PlayerMenuOptions {
   characterId: string | null;
   color: string;
   canReport: boolean;
+  flagged?: boolean;
   flags: MuteFlags;
   onMute: (flags: MuteFlags) => void;
 }
@@ -38,6 +39,11 @@ export function openPlayerMenu(options: PlayerMenuOptions): void {
   updateNote();
 
   const muteRows = h('div', { class: 'player-menu-mutes' });
+  if (options.flagged) {
+    muteRows.append(
+      h('p', { class: 'player-menu-flagged', text: '🚩 複数の通報により、この席は自動ミュートされています（再接続後も維持）。' }),
+    );
+  }
   const muteDefs: { key: keyof MuteFlags; icon: string; label: string; desc: string }[] = [
     { key: 'chat', icon: '💬', label: 'チャット', desc: '吹き出しとログを表示しない' },
     { key: 'emote', icon: '😆', label: 'エモート', desc: 'アニメと台詞を表示しない' },
@@ -46,7 +52,13 @@ export function openPlayerMenu(options: PlayerMenuOptions): void {
   for (const def of muteDefs) {
     const toggle = h('button', {
       class: 'toggle',
-      attrs: { type: 'button', role: 'switch', 'aria-pressed': String(flags[def.key]), 'aria-label': `${def.label}をミュート` },
+      attrs: {
+        type: 'button',
+        role: 'switch',
+        'aria-pressed': String(options.flagged ? true : flags[def.key]),
+        'aria-label': `${def.label}をミュート`,
+        ...(options.flagged ? { disabled: 'disabled' } : {}),
+      },
       on: {
         click: () => {
           flags[def.key] = !flags[def.key];
@@ -175,6 +187,7 @@ export interface PlayerView {
   rank: number;
   isCurrent: boolean;
   isCpu: boolean;
+  flagged?: boolean;
   connected: boolean | null;
   autoplay: boolean;
   piperLevel: number | null;
@@ -213,6 +226,7 @@ export function openPlayerRoster(options: PlayerRosterOptions): void {
             row.piperLevel ? h('span', { class: 'badge badge-red', text: `🎺 Lv${row.piperLevel}` }) : null,
             row.connected === false ? h('span', { class: 'badge', text: '切断' }) : null,
             row.autoplay ? h('span', { class: 'badge', text: 'CPU代行' }) : null,
+            row.flagged ? h('span', { class: 'badge badge-red', text: '🚩 自動ミュート' }) : null,
           ),
           h(
             'div',

@@ -1,4 +1,5 @@
-import type { Fx, GameState } from '../core/types';
+import type { PublicState } from '../core/engine';
+import type {Fx} from '../core/types';
 import type { UiSettings } from './settings';
 
 /**
@@ -10,7 +11,7 @@ import type { UiSettings } from './settings';
 export interface FxUpdate {
   seq: number;
   fx: Fx[];
-  state: GameState;
+  state: PublicState;
   deadline: number | null;
 }
 
@@ -27,8 +28,8 @@ export interface PlaybackControl {
 
 export interface FxPlayerHost {
   settings(): UiSettings;
-  handleFx(fx: Fx, state: GameState, control: PlaybackControl): Promise<void> | void;
-  applyState(state: GameState, deadline: number | null): void;
+  handleFx(fx: Fx, state: PublicState, control: PlaybackControl): Promise<void> | void;
+  applyState(state: PublicState, deadline: number | null, seq: number): void;
   setBusy(busy: boolean): void;
   setSkippable(skippable: boolean): void;
   onQueueChange(pending: number): void;
@@ -184,7 +185,7 @@ export class FxPlayer {
       this.skipCallbacks.clear();
       this.queue.shift();
       this.host.onQueueChange(this.queue.length);
-      if (!this.destroyed) this.host.applyState(update.state, update.deadline);
+      if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq);
     }
     if (this.epoch !== epoch) return;
     this.running = false;

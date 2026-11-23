@@ -1,6 +1,6 @@
 import { Audio, voiceKeyOf } from '../../audio/audio';
-import { annualIncome, netWorth } from '../../core/engine';
-import type { GameState } from '../../core/types';
+import {  annualIncome, netWorth, type PublicState } from '../../core/engine';
+import type {} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h } from '../dom';
 import {
@@ -13,7 +13,7 @@ import {
 import { assetLegend, drawAssetChart } from '../components/assetChart';
 
 export interface ResultScreenOptions {
-  state: GameState;
+  state: PublicState;
   mode: 'local' | 'online';
   isVoiceMuted: (seat: number) => boolean;
   onTitle: () => void;
@@ -196,8 +196,8 @@ export class ResultScreen {
   }
 
   private async playEndingVoice(
-    winner: GameState['players'][number] | undefined,
-    loser: GameState['players'][number] | undefined,
+    winner: PublicState['players'][number] | undefined,
+    loser: PublicState['players'][number] | undefined,
     isVoiceMuted: (seat: number) => boolean,
   ): Promise<void> {
     const winnerCharacter = winner ? charsById.get(winner.characterId) : undefined;

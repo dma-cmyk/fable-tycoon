@@ -1,5 +1,5 @@
-import { annualIncome, currentPrice, netWorth } from '../../core/engine';
-import type { GameState } from '../../core/types';
+import {  annualIncome, currentPrice, netWorth, type PublicState } from '../../core/engine';
+import type {} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { h, type ModalHost } from '../dom';
 import {
@@ -14,7 +14,7 @@ import {
 
 export interface OwnedDialogOptions {
   modal: ModalHost;
-  state: GameState;
+  state: PublicState;
   seat: number;
 }
 

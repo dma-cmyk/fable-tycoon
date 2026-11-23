@@ -165,6 +165,11 @@ export class ChatPanel {
     return this.open;
   }
 
+  /** Re-render the existing log, e.g. after a mute/flag change. */
+  refreshLog(): void {
+    this.renderLog();
+  }
+
   /** Call when the local seat / permission changes outside of a new message. */
   refresh(): void {
     this.updateInputState();

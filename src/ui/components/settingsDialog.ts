@@ -2,6 +2,7 @@ import { Audio, type VolumeKind } from '../../audio/audio';
 import { h, type ModalHost } from '../dom';
 import { saveUiSettings, uiSettings, type FxSpeed } from '../settings';
 import { applyMotionPreference } from '../motion';
+import type { Session } from '../../net/session-types';
 
 const VOLUME_ROWS: { kind: VolumeKind; label: string; icon: string }[] = [
   { kind: 'master', label: 'マスター', icon: '🔊' },
@@ -10,7 +11,7 @@ const VOLUME_ROWS: { kind: VolumeKind; label: string; icon: string }[] = [
   { kind: 'sfx', label: '効果音', icon: '✨' },
 ];
 
-export function openSettingsDialog(modal: ModalHost): void {
+export function openSettingsDialog(modal: ModalHost, session?: Session | null): void {
   const volumeBlock = h('div', { class: 'settings-block' });
   for (const row of VOLUME_ROWS) {
     const value = Math.round(Audio.getVolume(row.kind) * 100);
@@ -71,6 +72,60 @@ export function openSettingsDialog(modal: ModalHost): void {
     applyMotionPreference();
   });
 
+  let reportsSection: HTMLElement | null = null;
+  if (session && session.mode === 'online') {
+    const mySeat = session.mySeats()[0];
+    const isHost = mySeat !== undefined && session.lobby()?.seats[mySeat]?.isHost === true;
+    const feedback = h('p', { class: 'settings-report-feedback' });
+    const exportButton = h('button', {
+      class: 'btn btn-ghost',
+      text: '📥 通報記録を書き出す',
+      attrs: { type: 'button', disabled: !isHost },
+      on: {
+        click: async () => {
+          exportButton.disabled = true;
+          feedback.textContent = '書き出しています…';
+          try {
+            const online = await import('../../net/online-session');
+            const maybeExport = (online as unknown as { exportReports?: (s?: Session) => unknown }).exportReports;
+            if (typeof maybeExport !== 'function') {
+              feedback.textContent = 'このビルドでは通報記録の書き出しに対応していません。';
+              exportButton.disabled = !isHost;
+              return;
+            }
+            const data = await Promise.resolve(maybeExport.length > 0 ? maybeExport(session) : maybeExport());
+            if (data === null || data === undefined) {
+              feedback.textContent = '書き出せる通報記録がありません。';
+              exportButton.disabled = false;
+              return;
+            }
+            const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+            const blob = new Blob([text], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `reports-${session.roomId}.json`;
+            link.click();
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            feedback.textContent = '書き出しました。';
+          } catch {
+            feedback.textContent = '書き出しに失敗しました（ホストのみ）。';
+            exportButton.disabled = !isHost;
+          }
+        },
+      },
+    });
+    reportsSection = h(
+      'div',
+      { class: 'settings-reports' },
+      h('div', { class: 'divider' }),
+      h('h3', { class: 'settings-heading', text: '通報記録' }),
+      h('p', { class: 'settings-note', text: isHost ? 'このルームの通報記録を JSON で保存します。' : '通報記録を書き出せるのはホストだけです。' }),
+      h('div', { class: 'settings-reports-row' }, exportButton),
+      feedback,
+    );
+  }
+
   const body = h(
     'div',
     { class: 'settings-dialog' },
@@ -124,6 +179,7 @@ export function openSettingsDialog(modal: ModalHost): void {
       ),
       chatToggle,
     ),
+    reportsSection ?? h('span'),
     h('p', {
       class: 'settings-note',
       text: '音声は最初のタップで有効になります。設定はこの端末に保存されます。',

@@ -1,4 +1,5 @@
 import { Audio } from '../../audio/audio';
+import { ALLOWED_YEARS } from '../../core/engine';
 import type { PlayerSetup } from '../../core/types';
 import type { LocalSetup } from '../../net/local-session';
 import { GAME_DATA } from '../../data/index';
@@ -19,7 +20,7 @@ interface SeatDraft {
 }
 
 const DEFAULT_CHARS = ['momotaro', 'red_hood', 'aladdin', 'kaguya'];
-const YEAR_CHOICES = [1, 3, 5, 10, 20] as const;
+const YEAR_CHOICES = ALLOWED_YEARS;
 
 export interface SetupScreenOptions {
   mode: SetupMode;
