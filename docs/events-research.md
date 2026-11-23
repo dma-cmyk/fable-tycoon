@@ -1,6 +1,6 @@
 # events.json 取材・検証ノート
 
-対象: `src/data/events.json`（GameEventDef 36件）
+対象: `src/data/events.json`（初版36件 + 季節イベント18件 = 54件）
 作成: 2026-11-23
 
 ## 1. 検証方法
@@ -49,7 +49,7 @@
 | 31 | price-revolution | Price revolution - Wikipedia | https://en.wikipedia.org/wiki/Price_revolution | 1550 | read OK / 200 |
 | 32 | zimbabwe-hyperinflation | Hyperinflation in Zimbabwe - Wikipedia | https://en.wikipedia.org/wiki/Hyperinflation_in_Zimbabwe | 2008 | read OK / 200 |
 
-## 3. 件数と構成
+## 3. 件数と構成（初版36件時点）
 
 - 合計: 36件
 - kind: news 14 / history 14 / fable 8
@@ -98,4 +98,32 @@
 - `per_property` は選択時の即時精算として記述（「1件につき+10億」）。年次収益ではない。
 - `price_mod` の「恒久」はゲーム終了までの価格倍率。実世界の消費者物価ではない。
 - ソース日付は記事公開日または出来事の日付。Wikipedia は記事の主題年を入れた箇所がある。
-- fable 8件は完全創作のため `fact` / `sources` を持たない。
+- 初版の fable 8件は完全創作のため `fact` / `sources` を持たない。季節追加分は fable 14件 / news 4件。
+
+## 7. 季節イベント追加（18件、2026-11-23）
+
+### 7.1 構成
+
+- 合計: 54件（初版36 + 季節18）
+- kind 合計: news 18 / history 14 / fable 22
+- 季節追加分: news 4 / fable 14
+- `monthly: true`: 12件。months は 1〜12 をすべてカバー（各月1件）。
+- `months` 付き通常（ニュースマス）イベント: 6件。`monthly` は付けていない。
+- monthly の内訳: 10件が即時効果、2件が手番プレイヤーの選択（10月・1月）。
+- 季節イベントの lines は 2〜3行、全行60文字以内。
+- 使用効果: `cash`（who: all 主体）、`industry_mod`、`card`（全員に `express2`）、`gamble`（福袋・絵画）、`cash`（self）。
+
+### 7.2 追加ソースとHTTP結果
+
+| # | event id | ソース | URL | 日付 | 結果 |
+|---|---|---|---|---|---|
+| 1 | season-black-friday | Black Friday (shopping) - Wikipedia | https://en.wikipedia.org/wiki/Black_Friday_(shopping) | 2025 | read OK / 200 |
+| 2 | season-valentine-chocolate | Valentine's Day - Wikipedia | https://en.wikipedia.org/wiki/Valentine%27s_Day | 2025 | read OK / 200 |
+| 3 | season-hanami | Hanami - Wikipedia | https://en.wikipedia.org/wiki/Hanami | 2025 | read OK / 200 |
+| 4 | season-heatwave | Heat wave - Wikipedia | https://en.wikipedia.org/wiki/Heat_wave | 2024 | read OK / 200 |
+
+### 7.3 検証結果
+
+- `node -e "JSON.parse(require('fs').readFileSync('src/data/events.json','utf8'))"` → exit 0
+- イベント単体チェック: 54件、id重複なし、`monthly` 12件、全月カバー、通常の月限定6件、話者・文字数エラーなし。
+- `node tools/validate-data.mjs` は events.json に関するエラーを0件で通過するが、実行時点で `cities.json`（300都市 vs 期待150）と `board.json`（未生成の都市ノード）に既存の163エラーがあり、プロセス全体は exit 1。イベント追加とは無関係の同時進行作業。委譲元の Main に報告済み。

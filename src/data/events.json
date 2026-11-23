@@ -4072,5 +4072,945 @@
         "cpuWeight": 1.1
       }
     ]
+  },
+  {
+    "id": "season-new-fiscal",
+    "title": "新年度・入社式商戦",
+    "kind": "fable",
+    "satireNote": "新年度の商戦とAI新人を誇張した完全創作。実在の人物・企業とは関係ない。",
+    "weight": 6,
+    "months": [4],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "新年度です。社会は一斉に、同じスーツを買います。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "入社式のスーツ、去年の型はもう終わっています。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "新入社員はAIです。式典だけ人間が出席します。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": 12
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 1.2,
+        "years": 1,
+        "label": "入社式商戦"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.2,
+        "years": 1,
+        "label": "歓迎会"
+      }
+    ]
+  },
+  {
+    "id": "season-gw-traffic",
+    "title": "ゴールデンウィーク観光渋滞",
+    "kind": "fable",
+    "satireNote": "GW渋滞を題材にした完全創作。金額・効果はゲーム用。",
+    "weight": 6,
+    "months": [5],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "大型連休。観光地は人、高速道路は車、財布は軽くなります。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "おばあさんの家まで、いつもの三倍かかりました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "渋滞情報です。全方向、混んでいます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.4,
+        "years": 1,
+        "label": "GW特需"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -8
+      }
+    ]
+  },
+  {
+    "id": "season-agm-rain",
+    "title": "梅雨の株主総会シーズン",
+    "kind": "fable",
+    "satireNote": "梅雨と株主総会を組み合わせた完全創作。実在の企業・人物とは関係ない。",
+    "weight": 5,
+    "months": [6],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "梅雨です。総会の会場も、議案も、足元が悪い。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "株主総会は短時間で終わりました。質問は全員、傘の下です。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "議決権を行使しました。雨で滲んで読めません。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "finance",
+        "mult": 1.2,
+        "years": 1,
+        "label": "総会シーズン"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 1.1,
+        "years": 1,
+        "label": "総会中継"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -5
+      }
+    ]
+  },
+  {
+    "id": "season-summer-bonus",
+    "title": "夏のボーナス商戦",
+    "kind": "fable",
+    "satireNote": "夏のボーナス商戦を誇張した完全創作。",
+    "weight": 6,
+    "months": [7],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "ボーナスが出ました。出た瞬間に、出ていきます。"
+      },
+      {
+        "speaker": "char:stepsister",
+        "text": "欲しかった靴を買いました。サイズは合いませんが。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "ボーナスは預金へ。残念ながら、私の銀行へ。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": 25
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.2,
+        "years": 1,
+        "label": "ボーナス商戦"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.2,
+        "years": 1,
+        "label": "夏の旅行"
+      }
+    ]
+  },
+  {
+    "id": "season-typhoon",
+    "title": "台風で農作物被害",
+    "kind": "fable",
+    "satireNote": "台風被害を題材にした完全創作。実際の災害を軽視する意図はない。",
+    "weight": 5,
+    "months": [8],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "台風が来ています。農作物も、保険会社も、揺れています。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "畑が水没しました。パンは高くなります。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "自然の力は、経済の予想を毎回上回ります。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "agri",
+        "mult": 0.5,
+        "years": 1,
+        "label": "台風被害"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 0.9,
+        "years": 1,
+        "label": "原料高"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -10
+      }
+    ]
+  },
+  {
+    "id": "season-window-dressing",
+    "title": "決算前の数字のお化粧",
+    "kind": "fable",
+    "satireNote": "決算前の会計操作を「お化粧」に例えた完全創作。実際の粉飾決算を推奨するものではない。",
+    "weight": 5,
+    "months": [9],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "決算前です。数字は、少しだけ化粧をします。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "粉飾ではありません。美意識です。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "僕の鼻は、まだ伸びていません。たぶん。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": 10
+      },
+      {
+        "op": "industry_mod",
+        "industry": "finance",
+        "mult": 1.2,
+        "years": 1,
+        "label": "数字のお化粧"
+      }
+    ]
+  },
+  {
+    "id": "season-harvest-halloween",
+    "title": "豊作とハロウィン仮装経済",
+    "kind": "fable",
+    "satireNote": "豊作とハロウィン商戦を組み合わせた完全創作。",
+    "weight": 5,
+    "months": [10],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "十月。畑は豊作、街は仮装、財布はどちらも派手です。"
+      },
+      {
+        "speaker": "char:golden_goose",
+        "text": "実りの秋です。私の卵は、もともと金ですが。"
+      },
+      {
+        "speaker": "char:candy_witch",
+        "text": "お菓子をくれないなら、株を買います。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "豊作に備える",
+        "detail": "農林水産収益×1.5（1年）＋現金10億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.5,
+            "years": 1,
+            "label": "豊作"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "仮装経済に乗る",
+        "detail": "娯楽・メディア収益×1.4（1年）＋現金15億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.4,
+            "years": 1,
+            "label": "ハロウィン特需"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "season-black-friday",
+    "title": "ブラックフライデー",
+    "kind": "news",
+    "fact": "米国では感謝祭の翌金曜日を「ブラックフライデー」と呼び、小売店が大幅な値引きを行う。年末商戦の開始点とされ、一年で最も混雑する買い物日の一つとなっている。",
+    "sources": [
+      {
+        "title": "Black Friday (shopping) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Black_Friday_(shopping)",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "実在する商戦を題材にした風刺。金額・効果は創作。",
+    "weight": 6,
+    "months": [11],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "金曜日が黒くなりました。店の帳簿は、赤から黒へ。"
+      },
+      {
+        "speaker": "char:stepsister",
+        "text": "半額ですって。定価の意味が、半額になりました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "行列ができています。経済は元気です。行列の先は売り切れですが。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -15
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 1.4,
+        "years": 1,
+        "label": "ブラックフライデー"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "shipping",
+        "mult": 1.2,
+        "years": 1,
+        "label": "配送特需"
+      }
+    ]
+  },
+  {
+    "id": "season-santa-delay",
+    "title": "サンタの配送遅延",
+    "kind": "fable",
+    "satireNote": "サンタと物流遅延を題材にした完全創作。",
+    "weight": 6,
+    "months": [12],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "十二月。サンタの配達は、物流倉庫で止まっています。"
+      },
+      {
+        "speaker": "char:white_rabbit",
+        "text": "遅刻です、遅刻です。クリスマスに間に合いません。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "プレゼントは届かなくても、請求書は届きます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "card",
+        "who": "all",
+        "card": "express2",
+        "count": 1
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": 15
+      },
+      {
+        "op": "industry_mod",
+        "industry": "shipping",
+        "mult": 1.2,
+        "years": 1,
+        "label": "配送遅延特需"
+      }
+    ]
+  },
+  {
+    "id": "season-lucky-bag",
+    "title": "福袋インフレとお年玉",
+    "kind": "fable",
+    "satireNote": "福袋とお年玉を題材にした完全創作。",
+    "weight": 5,
+    "months": [1],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "正月です。福袋の中身は、だいたい空気です。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "中身が見えないから、高くても買えるのですね。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "お年玉をあげたら、私の財布が福袋になりました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "福袋を買う",
+        "detail": "メディア収益×1.2（1年）。50%で+30億、50%で-20億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.2,
+            "years": 1,
+            "label": "福袋商戦"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "お年玉を配る",
+        "detail": "現金-15億。全員が+10億（自分を含む）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "cash",
+            "who": "all",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "season-valentine-chocolate",
+    "title": "バレンタインのチョコ相場",
+    "kind": "news",
+    "fact": "2月14日のバレンタインデーには、チョコレートを贈る習慣が広がり、百貨店や製菓会社にとって重要な商戦となっている。ロマンスや愛情を祝う商業的な行事として、世界各地で贈り物の商戦が行われている。",
+    "sources": [
+      {
+        "title": "Valentine's Day - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Valentine%27s_Day",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "バレンタインの商業習慣は実在。金額・相場・効果は創作。",
+    "weight": 5,
+    "months": [2],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "二月。チョコの値段は、愛情より先に上がります。"
+      },
+      {
+        "speaker": "char:stepmother",
+        "text": "義理チョコの予算を、全部経費で落とします。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "百貨店のチョコ売り場は、戦場です。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.4,
+        "years": 1,
+        "label": "バレンタイン商戦"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 1.1,
+        "years": 1,
+        "label": "広告"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -8
+      }
+    ]
+  },
+  {
+    "id": "season-fiscal-year-end",
+    "title": "年度末の予算消化工事ラッシュ",
+    "kind": "fable",
+    "satireNote": "年度末の予算消化を題材にした完全創作。特定の自治体・企業を指すものではない。",
+    "weight": 5,
+    "months": [3],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "三月。使わなかった予算は、道路工事に生まれ変わります。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "予算は使うもの。使わなければ、来年減ります。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "道路を掘っています。理由は、予算です。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "industry",
+        "mult": 1.4,
+        "years": 1,
+        "label": "予算消化工事"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 0.9,
+        "years": 1,
+        "label": "工事渋滞"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -12
+      }
+    ]
+  },
+  {
+    "id": "season-hanami",
+    "title": "桜前線と花見特需",
+    "kind": "news",
+    "fact": "日本では3月下旬から5月上旬にかけて桜が開花し、花見を楽しむ習慣がある。気象庁の桜前線予想を見ながら、多くの人が行楽や宴会を計画する。",
+    "sources": [
+      {
+        "title": "Hanami - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Hanami",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "花見は実在。金額・収益効果は創作。",
+    "weight": 5,
+    "months": [3, 4],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "桜が咲きました。木の下には、シートと請求書が並びます。"
+      },
+      {
+        "speaker": "char:momotaro",
+        "text": "花見だんごを買いました。きびだんごより高いです。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "桜前線、北上中。観光収入も北上中です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "花見に行く",
+        "detail": "現金-10億。観光収益×1.3（1年）＋食品収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 1,
+            "label": "花見特需"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.2,
+            "years": 1,
+            "label": "花見だんご"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "屋台を出す",
+        "detail": "現金+20億。食品収益×1.3（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 1,
+            "label": "屋台商戦"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "season-rainy-mold",
+    "title": "梅雨のカビと傘商戦",
+    "kind": "fable",
+    "satireNote": "梅雨のカビと傘商戦を誇張した完全創作。",
+    "weight": 4,
+    "months": [6],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "梅雨です。洗濯物は乾かず、カビは元気です。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "押し入れのカビが、家賃を請求しています。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "除湿機をAI化しました。カビもAIです。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "industry",
+        "mult": 1.2,
+        "years": 1,
+        "label": "傘・除湿機"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 0.9,
+        "years": 1,
+        "label": "食料品の傷み"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -5
+      }
+    ]
+  },
+  {
+    "id": "season-heatwave",
+    "title": "猛暑で電力が悲鳴",
+    "kind": "news",
+    "fact": "夏に気温が異常に高くなる猛暑日が増えると、冷房需要の増加で電力供給が逼迫することがある。電力会社は需給調整や節電要請を行うことがある。",
+    "sources": [
+      {
+        "title": "Heat wave - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Heat_wave",
+        "date": "2024"
+      }
+    ],
+    "satireNote": "猛暑と電力需給は実在。金額・効果は創作。",
+    "weight": 5,
+    "months": [7, 8],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "猛暑です。電力網が、人類の冷房を背負っています。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "電力需給が逼迫しています。節電と売電の区別がつきません。"
+      },
+      {
+        "speaker": "char:kappa",
+        "text": "川も温くなりました。ゆでガエルです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "冷房を強める",
+        "detail": "現金-10億。エネルギー収益×1.5（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.5,
+            "years": 1,
+            "label": "猛暑需要"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "節電する",
+        "detail": "現金+10億。エネルギー収益×0.8（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 0.8,
+            "years": 1,
+            "label": "節電"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "season-art-autumn",
+    "title": "芸術の秋、値段の秋",
+    "kind": "fable",
+    "satireNote": "芸術市場を題材にした完全創作。実在の作品・人物とは関係ない。",
+    "weight": 4,
+    "months": [9, 10],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "秋です。芸術の価値は、競りで決まります。"
+      },
+      {
+        "speaker": "char:evil_queen",
+        "text": "鏡よ鏡、いちばん高い絵はどれ？"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "芸術は投資です。額縁は経費です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "絵を買う",
+        "detail": "50%で+35億、50%で-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 35
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "画廊を開く",
+        "detail": "現金-15億。娯楽・メディア収益×1.3（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.3,
+            "years": 1,
+            "label": "芸術の秋"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "鑑賞だけする",
+        "detail": "現金+5億。噂話カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "season-bonenkai",
+    "title": "忘年会シーズンの予約戦争",
+    "kind": "fable",
+    "satireNote": "忘年会商戦を題材にした完全創作。",
+    "weight": 4,
+    "months": [12],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "年末です。忘年会の予約は、戦争です。"
+      },
+      {
+        "speaker": "char:wolf",
+        "text": "店を押さえました。羊の席はありません。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "オオカミと同じ店は嫌です。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.4,
+        "years": 1,
+        "label": "忘年会特需"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.2,
+        "years": 1,
+        "label": "宴会場"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -10
+      }
+    ]
+  },
+  {
+    "id": "season-snow-logistics",
+    "title": "大雪で物流が止まる",
+    "kind": "fable",
+    "satireNote": "大雪と物流遅延を題材にした完全創作。",
+    "weight": 4,
+    "months": [1, 12],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "大雪です。道路も、鉄道も、言い訳も止まりました。"
+      },
+      {
+        "speaker": "char:white_rabbit",
+        "text": "遅刻です、遅刻です。荷物が来ません。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "船は動いています。港に荷物がありませんが。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "shipping",
+        "mult": 0.7,
+        "years": 1,
+        "label": "大雪被害"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.2,
+        "years": 1,
+        "label": "雪見需要"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -8
+      }
+    ]
   }
 ]
