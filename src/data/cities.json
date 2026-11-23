@@ -10168,5 +10168,1205 @@
         "yieldPct": 16
       }
     ]
+  },
+  {
+    "id": "omsk",
+    "nameJa": "オムスク",
+    "nameEn": "Omsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 54.99,
+    "lon": 73.37,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "シベリア鉄道と石油化学。通過する貨物で町が温まる。",
+    "properties": [
+      {
+        "id": "omsk-1",
+        "name": "石油化学",
+        "industry": "energy",
+        "price": 420,
+        "yieldPct": 6
+      },
+      {
+        "id": "omsk-2",
+        "name": "シベリア鉄道倉庫",
+        "industry": "shipping",
+        "price": 160,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "tyumen",
+    "nameJa": "チュメニ",
+    "nameEn": "Tyumen",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 57.15,
+    "lon": 65.53,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "石油サービスの城下町。冬はパイプも予算も凍る。",
+    "properties": [
+      {
+        "id": "tyumen-1",
+        "name": "石油サービス",
+        "industry": "energy",
+        "price": 380,
+        "yieldPct": 6
+      },
+      {
+        "id": "tyumen-2",
+        "name": "温室野菜",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 58
+      }
+    ]
+  },
+  {
+    "id": "perm",
+    "nameJa": "ペルミ",
+    "nameEn": "Perm",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 58.01,
+    "lon": 56.24,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "航空エンジンと木材。工場の煙が雲を作る。",
+    "properties": [
+      {
+        "id": "perm-1",
+        "name": "航空エンジン",
+        "industry": "industry",
+        "price": 240,
+        "yieldPct": 11
+      },
+      {
+        "id": "perm-2",
+        "name": "木材輸出",
+        "industry": "shipping",
+        "price": 130,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "samara",
+    "nameJa": "サマラ",
+    "nameEn": "Samara",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 53.2,
+    "lon": 50.15,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "自動車とロケット。空へ向かう部品と道路を売る。",
+    "properties": [
+      {
+        "id": "samara-1",
+        "name": "自動車工場",
+        "industry": "industry",
+        "price": 220,
+        "yieldPct": 12
+      },
+      {
+        "id": "samara-2",
+        "name": "ロケット工場",
+        "industry": "industry",
+        "price": 300,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "volgograd",
+    "nameJa": "ヴォルゴグラード",
+    "nameEn": "Volgograd",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 48.71,
+    "lon": 44.51,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "運河と穀物。川の通行料で夏を越す。",
+    "properties": [
+      {
+        "id": "volgograd-1",
+        "name": "運河通行料",
+        "industry": "shipping",
+        "price": 150,
+        "yieldPct": 10
+      },
+      {
+        "id": "volgograd-2",
+        "name": "穀物倉庫",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 54
+      }
+    ]
+  },
+  {
+    "id": "arkhangelsk",
+    "nameJa": "アルハンゲリスク",
+    "nameEn": "Arkhangelsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 64.54,
+    "lon": 40.54,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北洋木材と造船。白夜の港は眠らない。",
+    "properties": [
+      {
+        "id": "arkhangelsk-1",
+        "name": "北洋木材",
+        "industry": "shipping",
+        "price": 170,
+        "yieldPct": 9
+      },
+      {
+        "id": "arkhangelsk-2",
+        "name": "造船所",
+        "industry": "industry",
+        "price": 180,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "norilsk",
+    "nameJa": "ノリリスク",
+    "nameEn": "Norilsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 69.35,
+    "lon": 88.2,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ニッケルと極寒。世界で最も北の工業都市。",
+    "properties": [
+      {
+        "id": "norilsk-1",
+        "name": "ニッケル鉱山",
+        "industry": "energy",
+        "price": 600,
+        "yieldPct": 6
+      },
+      {
+        "id": "norilsk-2",
+        "name": "極寒物流",
+        "industry": "shipping",
+        "price": 120,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "tomsk",
+    "nameJa": "トムスク",
+    "nameEn": "Tomsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 56.5,
+    "lon": 84.97,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "大学と石油サービス。学生の頭脳を掘る。",
+    "properties": [
+      {
+        "id": "tomsk-1",
+        "name": "大学街",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 8
+      },
+      {
+        "id": "tomsk-2",
+        "name": "石油サービス",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "krasnoyarsk",
+    "nameJa": "クラスノヤルスク",
+    "nameEn": "Krasnoyarsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 56.01,
+    "lon": 92.87,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "アルミとシベリア鉄道。エニセイ川が工業を運ぶ。",
+    "properties": [
+      {
+        "id": "krasnoyarsk-1",
+        "name": "アルミ精錬",
+        "industry": "energy",
+        "price": 400,
+        "yieldPct": 6
+      },
+      {
+        "id": "krasnoyarsk-2",
+        "name": "鉄道ハブ",
+        "industry": "shipping",
+        "price": 180,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "chita",
+    "nameJa": "チタ",
+    "nameEn": "Chita",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 52.03,
+    "lon": 113.5,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "金鉱山と対中貿易。国境の倉庫が最も熱い。",
+    "properties": [
+      {
+        "id": "chita-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 320,
+        "yieldPct": 7
+      },
+      {
+        "id": "chita-2",
+        "name": "対中貿易倉庫",
+        "industry": "shipping",
+        "price": 140,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "ulan-ude",
+    "nameJa": "ウランウデ",
+    "nameEn": "Ulan-Ude",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 51.83,
+    "lon": 107.58,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "羊毛と仏教観光。草原の真ん中で祈る。",
+    "properties": [
+      {
+        "id": "ulan-ude-1",
+        "name": "羊毛組合",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 56
+      },
+      {
+        "id": "ulan-ude-2",
+        "name": "仏教観光",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "khabarovsk",
+    "nameJa": "ハバロフスク",
+    "nameEn": "Khabarovsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 48.48,
+    "lon": 135.07,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "アムール川の物流と軍港観光。東の玄関は広い。",
+    "properties": [
+      {
+        "id": "khabarovsk-1",
+        "name": "アムール物流",
+        "industry": "shipping",
+        "price": 190,
+        "yieldPct": 9
+      },
+      {
+        "id": "khabarovsk-2",
+        "name": "軍港観光",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "yakutsk",
+    "nameJa": "ヤクーツク",
+    "nameEn": "Yakutsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 62.03,
+    "lon": 129.68,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ダイヤモンドと永久凍土。データセンターの冷却費はゼロ。",
+    "properties": [
+      {
+        "id": "yakutsk-1",
+        "name": "ダイヤモンド鉱山",
+        "industry": "energy",
+        "price": 500,
+        "yieldPct": 6
+      },
+      {
+        "id": "yakutsk-2",
+        "name": "永久凍土データセンター",
+        "industry": "tech",
+        "price": 260,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "magadan",
+    "nameJa": "マガダン",
+    "nameEn": "Magadan",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 59.56,
+    "lon": 150.8,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "金鉱山と北洋漁業。オホーツク海の果てで稼ぐ。",
+    "properties": [
+      {
+        "id": "magadan-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 360,
+        "yieldPct": 7
+      },
+      {
+        "id": "magadan-2",
+        "name": "北洋漁業",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 55
+      }
+    ]
+  },
+  {
+    "id": "petropavlovsk-kamchatsky",
+    "nameJa": "ペトロパブロフスク・カムチャツキー",
+    "nameEn": "Petropavlovsk-Kamchatsky",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 53.02,
+    "lon": 158.65,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "カニと火山。噴火も観光パンフレットになる。",
+    "properties": [
+      {
+        "id": "petropavlovsk-kamchatsky-1",
+        "name": "カニ漁業",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 58
+      },
+      {
+        "id": "petropavlovsk-kamchatsky-2",
+        "name": "火山観光",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "yuzhno-sakhalinsk",
+    "nameJa": "ユジノサハリンスク",
+    "nameEn": "Yuzhno-Sakhalinsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 46.96,
+    "lon": 142.74,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "LNGと漁業。サハリンの南で資源を積む。",
+    "properties": [
+      {
+        "id": "yuzhno-sakhalinsk-1",
+        "name": "LNG基地",
+        "industry": "energy",
+        "price": 380,
+        "yieldPct": 6
+      },
+      {
+        "id": "yuzhno-sakhalinsk-2",
+        "name": "漁業組合",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 56
+      }
+    ]
+  },
+  {
+    "id": "anadyr",
+    "nameJa": "アナディリ",
+    "nameEn": "Anadyr",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 64.73,
+    "lon": 177.51,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北洋漁業と極東物流。白令海の向こうはアメリカ。",
+    "properties": [
+      {
+        "id": "anadyr-1",
+        "name": "北洋漁業",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 58
+      },
+      {
+        "id": "anadyr-2",
+        "name": "極東物流",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "vorkuta",
+    "nameJa": "ヴォルクタ",
+    "nameEn": "Vorkuta",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 67.5,
+    "lon": 64.03,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "石炭と凍土。閉山後も町は凍ったまま。",
+    "properties": [
+      {
+        "id": "vorkuta-1",
+        "name": "石炭鉱山",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 7
+      },
+      {
+        "id": "vorkuta-2",
+        "name": "凍土建設",
+        "industry": "industry",
+        "price": 110,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "chelyabinsk",
+    "nameJa": "チェリャビンスク",
+    "nameEn": "Chelyabinsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 55.16,
+    "lon": 61.4,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "鉄鋼と装甲車。重工業の街は今日も厚い。",
+    "properties": [
+      {
+        "id": "chelyabinsk-1",
+        "name": "鉄鋼工場",
+        "industry": "industry",
+        "price": 230,
+        "yieldPct": 11
+      },
+      {
+        "id": "chelyabinsk-2",
+        "name": "装甲車工場",
+        "industry": "industry",
+        "price": 250,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "ufa",
+    "nameJa": "ウファ",
+    "nameEn": "Ufa",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 54.74,
+    "lon": 55.97,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "石油化学と蜂蜜。甘い香りと原油が同居する。",
+    "properties": [
+      {
+        "id": "ufa-1",
+        "name": "石油化学",
+        "industry": "energy",
+        "price": 360,
+        "yieldPct": 6
+      },
+      {
+        "id": "ufa-2",
+        "name": "蜂蜜農園",
+        "industry": "agri",
+        "price": 22,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "nizhny-novgorod",
+    "nameJa": "ニジニ・ノヴゴロド",
+    "nameEn": "Nizhny Novgorod",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 56.33,
+    "lon": 44,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "自動車とIT。ヴォルガ川沿いにコードを書く。",
+    "properties": [
+      {
+        "id": "nizhny-novgorod-1",
+        "name": "自動車工場",
+        "industry": "industry",
+        "price": 220,
+        "yieldPct": 11
+      },
+      {
+        "id": "nizhny-novgorod-2",
+        "name": "ITパーク",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "whitehorse",
+    "nameJa": "ホワイトホース",
+    "nameEn": "Whitehorse",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 60.72,
+    "lon": -135.06,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "金鉱山とオーロラ。ユーコンの空は暗いほど光る。",
+    "properties": [
+      {
+        "id": "whitehorse-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 7
+      },
+      {
+        "id": "whitehorse-2",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "yellowknife",
+    "nameJa": "イエローナイフ",
+    "nameEn": "Yellowknife",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 62.45,
+    "lon": -114.37,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ダイヤモンドとオーロラ。湖の上に町が浮かぶ。",
+    "properties": [
+      {
+        "id": "yellowknife-1",
+        "name": "ダイヤモンド鉱山",
+        "industry": "energy",
+        "price": 420,
+        "yieldPct": 6
+      },
+      {
+        "id": "yellowknife-2",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "saskatoon",
+    "nameJa": "サスカトゥーン",
+    "nameEn": "Saskatoon",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 52.13,
+    "lon": -106.67,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "カリ鉱山と小麦。草原の地下は肥料でできている。",
+    "properties": [
+      {
+        "id": "saskatoon-1",
+        "name": "カリ鉱山",
+        "industry": "energy",
+        "price": 380,
+        "yieldPct": 6
+      },
+      {
+        "id": "saskatoon-2",
+        "name": "小麦農園",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 57
+      }
+    ]
+  },
+  {
+    "id": "regina",
+    "nameJa": "レジャイナ",
+    "nameEn": "Regina",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 50.45,
+    "lon": -104.62,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "穀物取引と石油サービス。風の強い平原の相場。",
+    "properties": [
+      {
+        "id": "regina-1",
+        "name": "穀物取引",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "regina-2",
+        "name": "石油サービス",
+        "industry": "energy",
+        "price": 260,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "thunder-bay",
+    "nameJa": "サンダーベイ",
+    "nameEn": "Thunder Bay",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 48.38,
+    "lon": -89.25,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "五大湖の穀物ターミナル。船と列車が小麦を運ぶ。",
+    "properties": [
+      {
+        "id": "thunder-bay-1",
+        "name": "穀物ターミナル",
+        "industry": "shipping",
+        "price": 160,
+        "yieldPct": 9
+      },
+      {
+        "id": "thunder-bay-2",
+        "name": "林業",
+        "industry": "industry",
+        "price": 120,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "sudbury",
+    "nameJa": "サドバリー",
+    "nameEn": "Sudbury",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 46.49,
+    "lon": -81.01,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ニッケル鉱山と鉱山観光。穴だらけの大地で稼ぐ。",
+    "properties": [
+      {
+        "id": "sudbury-1",
+        "name": "ニッケル鉱山",
+        "industry": "energy",
+        "price": 400,
+        "yieldPct": 6
+      },
+      {
+        "id": "sudbury-2",
+        "name": "鉱山観光",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "ottawa",
+    "nameJa": "オタワ",
+    "nameEn": "Ottawa",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 45.42,
+    "lon": -75.7,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "政府不動産と通信規制。首都の静けさは高く売れる。",
+    "properties": [
+      {
+        "id": "ottawa-1",
+        "name": "政府不動産",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 7
+      },
+      {
+        "id": "ottawa-2",
+        "name": "通信規制",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "st-johns",
+    "nameJa": "セントジョンズ",
+    "nameEn": "St. John's",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 47.56,
+    "lon": -52.71,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "漁業と沖合石油。大西洋の荒波が給料を運ぶ。",
+    "properties": [
+      {
+        "id": "st-johns-1",
+        "name": "漁業組合",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 57
+      },
+      {
+        "id": "st-johns-2",
+        "name": "沖合石油",
+        "industry": "energy",
+        "price": 320,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "churchill",
+    "nameJa": "チャーチル",
+    "nameEn": "Churchill",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 58.77,
+    "lon": -94.17,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ホッキョクグマ観光と穀物港。氷の上の税関。",
+    "properties": [
+      {
+        "id": "churchill-1",
+        "name": "ホッキョクグマ観光",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 17
+      },
+      {
+        "id": "churchill-2",
+        "name": "穀物港",
+        "industry": "shipping",
+        "price": 120,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "iqaluit",
+    "nameJa": "イカルイト",
+    "nameEn": "Iqaluit",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 63.75,
+    "lon": -68.52,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極物流とイヌイット工芸。ヌナブトの首都は小さい。",
+    "properties": [
+      {
+        "id": "iqaluit-1",
+        "name": "北極物流",
+        "industry": "shipping",
+        "price": 100,
+        "yieldPct": 10
+      },
+      {
+        "id": "iqaluit-2",
+        "name": "イヌイット工芸",
+        "industry": "industry",
+        "price": 60,
+        "yieldPct": 19
+      }
+    ]
+  },
+  {
+    "id": "prince-rupert",
+    "nameJa": "プリンスルパート",
+    "nameEn": "Prince Rupert",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 54.32,
+    "lon": -130.32,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "漁港とコンテナ港。アジアへの最短ルートを売る。",
+    "properties": [
+      {
+        "id": "prince-rupert-1",
+        "name": "漁港",
+        "industry": "agri",
+        "price": 25,
+        "yieldPct": 58
+      },
+      {
+        "id": "prince-rupert-2",
+        "name": "コンテナ港",
+        "industry": "shipping",
+        "price": 150,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "fairbanks",
+    "nameJa": "フェアバンクス",
+    "nameEn": "Fairbanks",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 64.84,
+    "lon": -147.72,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "石油パイプラインとオーロラ。北極圏の空港町。",
+    "properties": [
+      {
+        "id": "fairbanks-1",
+        "name": "石油パイプライン",
+        "industry": "energy",
+        "price": 360,
+        "yieldPct": 6
+      },
+      {
+        "id": "fairbanks-2",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "nome",
+    "nameJa": "ノーム",
+    "nameEn": "Nome",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 64.5,
+    "lon": -165.41,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "金鉱山と北洋漁業。ベーリング海の砂金町。",
+    "properties": [
+      {
+        "id": "nome-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 7
+      },
+      {
+        "id": "nome-2",
+        "name": "北洋漁業",
+        "industry": "agri",
+        "price": 23,
+        "yieldPct": 58
+      }
+    ]
+  },
+  {
+    "id": "juneau",
+    "nameJa": "ジュノー",
+    "nameEn": "Juneau",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 58.3,
+    "lon": -134.42,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "クルーズ観光と漁業。州都なのに道路がつながらない。",
+    "properties": [
+      {
+        "id": "juneau-1",
+        "name": "クルーズ観光",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 15
+      },
+      {
+        "id": "juneau-2",
+        "name": "漁業組合",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 57
+      }
+    ]
+  },
+  {
+    "id": "tromso",
+    "nameJa": "トロムソ",
+    "nameEn": "Tromso",
+    "country": "NO",
+    "countryJa": "ノルウェー",
+    "region": "europe",
+    "lat": 69.65,
+    "lon": 18.96,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "オーロラと北洋漁業。北極圏の文化資本。",
+    "properties": [
+      {
+        "id": "tromso-1",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 16
+      },
+      {
+        "id": "tromso-2",
+        "name": "北洋漁業",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 56
+      }
+    ]
+  },
+  {
+    "id": "bergen",
+    "nameJa": "ベルゲン",
+    "nameEn": "Bergen",
+    "country": "NO",
+    "countryJa": "ノルウェー",
+    "region": "europe",
+    "lat": 60.39,
+    "lon": 5.32,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "フィヨルド観光と海運。雨の港は船で混む。",
+    "properties": [
+      {
+        "id": "bergen-1",
+        "name": "フィヨルド観光",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 14
+      },
+      {
+        "id": "bergen-2",
+        "name": "海運会社",
+        "industry": "shipping",
+        "price": 200,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "rovaniemi",
+    "nameJa": "ロヴァニエミ",
+    "nameEn": "Rovaniemi",
+    "country": "FI",
+    "countryJa": "フィンランド",
+    "region": "europe",
+    "lat": 66.5,
+    "lon": 25.73,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "サンタ観光と森林資源。北極圏の話題性を輸出する。",
+    "properties": [
+      {
+        "id": "rovaniemi-1",
+        "name": "サンタ観光",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 16
+      },
+      {
+        "id": "rovaniemi-2",
+        "name": "森林資源",
+        "industry": "industry",
+        "price": 180,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "nuuk",
+    "nameJa": "ヌーク",
+    "nameEn": "Nuuk",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 64.18,
+    "lon": -51.72,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "漁業と北極観光。世界最大の島の小さな首都。",
+    "properties": [
+      {
+        "id": "nuuk-1",
+        "name": "漁業組合",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 58
+      },
+      {
+        "id": "nuuk-2",
+        "name": "北極観光",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "kiruna",
+    "nameJa": "キルナ",
+    "nameEn": "Kiruna",
+    "country": "SE",
+    "countryJa": "スウェーデン",
+    "region": "europe",
+    "lat": 67.86,
+    "lon": 20.23,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "鉄鉱山とアイスホテル。町ごと移転する鉱山都市。",
+    "properties": [
+      {
+        "id": "kiruna-1",
+        "name": "鉄鉱山",
+        "industry": "energy",
+        "price": 360,
+        "yieldPct": 6
+      },
+      {
+        "id": "kiruna-2",
+        "name": "アイスホテル",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 16
+      }
+    ]
   }
 ]

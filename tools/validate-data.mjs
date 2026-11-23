@@ -163,7 +163,7 @@ if (data['cities.json'] !== undefined) {
   if (!Array.isArray(data['cities.json'])) {
     err('cities.json', 'must be an array of City');
   } else {
-    if (cities.length !== 300) err('cities.json', `expected exactly 300 cities, got ${cities.length}`);
+    if (cities.length !== 340) err('cities.json', `expected exactly 340 cities, got ${cities.length}`);
     const seenIds = new Set();
     const seenPropertyIds = new Set();
     const seenLandmarks = new Map();

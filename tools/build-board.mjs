@@ -501,7 +501,77 @@ const rejected = [];
 const cityDegree = new Array(cities.length).fill(0);
 const degreeCap = (i) => (cities[i].tier === 1 ? 5 : 4);
 const rejectStats = { short: 0, gabriel: 0, cap: 0, near: 0, cross: 0, classify: 0, accepted: 0 };
+
+// Required northern backbone: Trans-Siberian, Canadian transcontinental,
+// Arctic lanes, and the seam-crossing Bering link. These are protected from
+// the pruning/de-cross passes; extra Gabriel links must route around them.
+const FORCED_LINKS = [
+  ['moscow', 'nizhny-novgorod', 'rail'], ['nizhny-novgorod', 'kazan', 'rail'],
+  ['kazan', 'yekaterinburg', 'rail'], ['yekaterinburg', 'tyumen', 'rail'],
+  ['tyumen', 'omsk', 'rail'], ['omsk', 'novosibirsk', 'rail'],
+  ['novosibirsk', 'krasnoyarsk', 'rail'], ['krasnoyarsk', 'irkutsk', 'rail'],
+  ['irkutsk', 'chita', 'rail'], ['chita', 'khabarovsk', 'rail'],
+  ['khabarovsk', 'vladivostok', 'rail'],
+  ['yekaterinburg', 'perm', 'rail'], ['moscow', 'samara', 'rail'],
+  ['samara', 'volgograd', 'rail'], ['samara', 'ufa', 'rail'],
+  ['ufa', 'chelyabinsk', 'rail'], ['chelyabinsk', 'yekaterinburg', 'rail'],
+  ['tomsk', 'novosibirsk', 'rail'], ['krasnoyarsk', 'norilsk', 'rail'],
+  ['arkhangelsk', 'murmansk', 'rail'], ['arkhangelsk', 'vorkuta', 'rail'],
+  ['vorkuta', 'norilsk', 'rail'],
+  ['chita', 'yakutsk', 'rail'], ['yakutsk', 'magadan', 'rail'],
+  ['khabarovsk', 'yuzhno-sakhalinsk', 'sea'],
+  ['vladivostok', 'yuzhno-sakhalinsk', 'sea'],
+  ['magadan', 'petropavlovsk-kamchatsky', 'sea'],
+  ['anadyr', 'nome', 'sea'],
+  ['nome', 'fairbanks', 'rail'], ['fairbanks', 'anchorage', 'rail'],
+  ['anchorage', 'juneau', 'sea'], ['juneau', 'prince-rupert', 'sea'],
+  ['prince-rupert', 'vancouver', 'sea'], ['fairbanks', 'whitehorse', 'rail'],
+  ['whitehorse', 'yellowknife', 'rail'], ['yellowknife', 'edmonton', 'rail'],
+  ['vancouver', 'calgary', 'rail'], ['calgary', 'saskatoon', 'rail'],
+  ['saskatoon', 'regina', 'rail'], ['saskatoon', 'winnipeg', 'rail'],
+  ['regina', 'winnipeg', 'rail'], ['winnipeg', 'thunder-bay', 'rail'],
+  ['thunder-bay', 'sudbury', 'rail'], ['sudbury', 'ottawa', 'rail'],
+  ['ottawa', 'toronto', 'rail'], ['ottawa', 'montreal', 'rail'],
+  ['montreal', 'quebec-city', 'rail'], ['quebec-city', 'halifax', 'rail'],
+  ['halifax', 'st-johns', 'sea'], ['winnipeg', 'churchill', 'rail'],
+  ['churchill', 'iqaluit', 'sea'], ['iqaluit', 'nuuk', 'sea'],
+  ['nuuk', 'reykjavik', 'sea'], ['bergen', 'tromso', 'sea'],
+  ['tromso', 'kiruna', 'rail'], ['kiruna', 'rovaniemi', 'rail'],
+  ['rovaniemi', 'murmansk', 'rail'],
+];
+const forcedKeys = new Set();
+for (const [aId, bId, mode] of FORCED_LINKS) {
+  const i = cityIndex.get(aId), j = cityIndex.get(bId);
+  if (i === undefined || j === undefined) throw new Error(`forced link city missing: ${aId}/${bId}`);
+  const key = `${Math.min(i, j)}:${Math.max(i, j)}`;
+  if (forcedKeys.has(key)) continue;
+  const ax = projected[i][0], ay = projected[i][1];
+  const bx = ax + wrapDx(ax, projected[j][0]), by = projected[j][1];
+  const seg = { i, j, len: Math.hypot(bx - ax, by - ay), ax, ay, bx, by };
+  const sample = sampleLand(i, j);
+  const classified = classify(i, j, sample);
+  if (!classified) console.warn(`forced link unclassified: ${aId}-${bId} (${mode}, land=${sample.landFrac.toFixed(2)})`);
+  else if (classified !== mode) console.warn(`forced link mode mismatch: ${aId}-${bId} ${classified} -> ${mode}`);
+  let blocked = false;
+  for (const e of accepted) {
+    if (e.i === i || e.j === i || e.i === j || e.j === j) continue;
+    const [x1, y1, x2, y2] = normalizeSeg(seg.ax, seg.ay, seg.bx, seg.by);
+    const [u1, v1, u2, v2] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
+    for (const k of [-1, 0, 1]) {
+      if (segIntersect(x1, y1, x2, y2, u1 + k * MAP_W, v1, u2 + k * MAP_W, v2)) { blocked = true; break; }
+    }
+    if (blocked) break;
+  }
+  if (blocked) { console.warn(`forced link skipped (crossing): ${aId}-${bId}`); continue; }
+  accepted.push({ ...seg, mode, sample });
+  cityDegree[i]++;
+  cityDegree[j]++;
+  forcedKeys.add(key);
+}
+console.log(`  forced northern backbone links: ${accepted.length}`);
 for (const seg of candidates) {
+  const forceKey = `${Math.min(seg.i, seg.j)}:${Math.max(seg.i, seg.j)}`;
+  if (forcedKeys.has(forceKey)) continue;
   if (seg.len < MIN_EDGE) { rejectStats.short++; rejected.push(seg); continue; }
   if (!isGabriel(seg.i, seg.j, seg.len)) { rejectStats.gabriel++; rejected.push(seg); continue; }
   if (cityDegree[seg.i] >= degreeCap(seg.i) || cityDegree[seg.j] >= degreeCap(seg.j)) { rejectStats.cap++; rejected.push(seg); continue; }
@@ -661,6 +731,7 @@ const corridors = [
   ['honolulu', 'san-francisco', 'sea'], // Hawaii <-> North America
 ];
 const protectedEdges = new Set();
+for (const key of forcedKeys) protectedEdges.add(key);
 for (const [aId, bId, mode] of corridors) {
   const i = cityIndex.get(aId), j = cityIndex.get(bId);
   if (i === undefined || j === undefined) throw new Error(`corridor city missing: ${aId}/${bId}`);
