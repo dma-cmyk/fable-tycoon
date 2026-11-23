@@ -66,7 +66,7 @@ let report = {
   phases: phaseLog,
   clients: [],
   screenshots,
-  errors: { pageErrors: [], consoleErrors: [], ignorableConsole: [] },
+  errors: { pageErrors: [], consoleErrors: [], ignorableConsole: [], canvasLimitWarnings: 0 },
 };
 
 function nowMs() {
@@ -285,6 +285,7 @@ const BENIGN_PATTERNS = [
   /net::ERR_(NAME_NOT_RESOLVED|CONNECTION_REFUSED|CONNECTION_RESET|TIMED_OUT)/i,
   /NotAllowedError|AudioContext|play\(\) request was interrupted|The operation was aborted/i,
   /ICE failed|WebRTC/i,
+  /downloadable font: download failed|font.*download failed/i,
   /favicon/i,
 ];
 
@@ -315,6 +316,10 @@ function attachErrorCollectors(client) {
     report.errors.pageErrors.push(entry);
   });
   page.on('console', (message) => {
+    if (/Canvas area exceeds/i.test(message.text())) {
+      client.canvasLimitWarnings = (client.canvasLimitWarnings || 0) + 1;
+      report.errors.canvasLimitWarnings += 1;
+    }
     if (message.type() === 'error') {
       const entry = {
         client: client.id,
@@ -363,6 +368,9 @@ async function launchClient(spec, webkitPreload) {
     consoleErrors: [],
     ignorableConsole: [],
     warnings: [],
+    canvasLimitWarnings: 0,
+    maxModals: 0,
+    maxModalsNonActor: 0,
     screenshots: [],
     transports: [],
     result: null,
@@ -597,6 +605,34 @@ function stopLiveScreenshots() {
   }
 }
 
+async function sampleModalDepth(client) {
+  const page = client.page;
+  if (!page || page.isClosed() || client.stopped) return;
+  const sample = await page
+    .evaluate(() => {
+      const visibleModals = [...document.querySelectorAll('.modal-backdrop')].filter((el) => {
+        if (el.hidden) return false;
+        const style = getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      }).length;
+      const status = (document.querySelector('.status-chip')?.textContent || '').trim();
+      return { visibleModals, status };
+    })
+    .catch(() => null);
+  if (!sample) return;
+  client.modalSamples = (client.modalSamples || 0) + 1;
+  if (sample.visibleModals > (client.maxModals || 0)) client.maxModals = sample.visibleModals;
+  // status-chip shows "あなたの番" only for the acting client; anything else
+  // ("<name> の番", "観戦中") means this client is a non-actor right now.
+  const isActorTurn = /あなたの番/.test(sample.status);
+  if (!isActorTurn && sample.visibleModals > (client.maxModalsNonActor || 0)) {
+    client.maxModalsNonActor = sample.visibleModals;
+    if (sample.visibleModals > 1) {
+      log(`${client.id}: ${sample.visibleModals} stacked modals while not acting (${sample.status || 'no status'})`);
+    }
+  }
+}
+
 async function pageDiagnostics(client) {
   const page = client.page;
   if (!page || page.isClosed()) return { closed: true };
@@ -617,6 +653,9 @@ async function pageDiagnostics(client) {
         status: text('.status-chip'),
         primary: text('.dice-primary'),
         primaryDisabled: document.querySelector('.dice-primary')?.disabled ?? null,
+        moveChips: document.querySelectorAll('.move-options .move-chip').length,
+        moveOptionsHidden: document.querySelector('.move-options')?.hidden ?? null,
+        selectedMove: document.querySelectorAll('.move-chip.is-selected').length,
         modals: [...document.querySelectorAll('.modal-backdrop')].map((el) => ({
           visible: !el.hidden && getComputedStyle(el).display !== 'none',
           text: (el.textContent || '').trim().slice(0, 240),
@@ -1172,6 +1211,10 @@ async function playLoop(client) {
     let action = false;
     try {
       action = await actOnce(client);
+      if ((Date.now() - (client.lastModalSampleAt || 0)) > 1500) {
+        client.lastModalSampleAt = Date.now();
+        await sampleModalDepth(client);
+      }
     } catch (error) {
       if (!page.isClosed()) {
         client.actionError = error.message;
@@ -1382,7 +1425,7 @@ async function main() {
   const activeGuests = clients.filter((client) => client.role === 'guest');
   const chatSender = activeGuests[0] ?? host;
   const chatReceiver = activeGuests[1] ?? host;
-  const pokeTarget = activeGuests.find((candidate) => candidate.seat !== chatSender.seat) ?? host;
+  let pokeTarget = host;
   if (activeGuests.length < 2) {
     log(`only ${activeGuests.length} guest(s); chat/emote/poke checks use the host as peer`);
   }
@@ -1462,6 +1505,9 @@ async function main() {
       throw new Error(`expected no open seats, got ${JSON.stringify(report.openSeats)}`);
     }
   }
+
+  pokeTarget = activeGuests.find((candidate) => candidate.seat !== chatSender.seat) ?? host;
+  log(`chat ${chatSender.id} -> ${chatReceiver.id}; poke -> ${pokeTarget.id}`);
 
   // Transport chips need a moment for the WebRTC upgrade.
   await sleep(5000);
@@ -1873,6 +1919,9 @@ try {
   report.durationMs = nowMs();
   report.timings = { ...timings, completedAt: new Date().toISOString() };
   report.screenshots = screenshots.map((file) => path.relative(ROOT, file));
+  report.maxModals = Math.max(0, ...clients.map((client) => client.maxModals || 0));
+  report.maxModalsNonActor = Math.max(0, ...clients.map((client) => client.maxModalsNonActor || 0));
+  report.canvasLimitWarnings = report.errors.canvasLimitWarnings;
   report.clients = clients.map((client) => ({
     id: client.id,
     label: client.label,
@@ -1888,6 +1937,9 @@ try {
     consoleErrors: client.consoleErrors,
     ignorableConsole: client.ignorableConsole,
     warnings: client.warnings,
+    canvasLimitWarnings: client.canvasLimitWarnings,
+    maxModals: client.maxModals || 0,
+    maxModalsNonActor: client.maxModalsNonActor || 0,
   }));
   await writeFile(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
   await cleanup();

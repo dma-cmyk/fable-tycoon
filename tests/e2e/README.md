@@ -42,7 +42,10 @@ Everything is written under `.tmp/e2e/`:
   `firefox-rejoined.png`
 - `report.json`: timings, room code/invite URL, seats, characters, transport
   chip text (`P2P 直結` / `中継`), final rankings, migration evidence,
-  console/page errors, and screenshot paths.
+  console/page errors, and screenshot paths. It also records
+  `maxModals`/`maxModalsNonActor` (visible `.modal-backdrop` depth sampled
+  during play), `canvasLimitWarnings` (browser `Canvas area exceeds` messages),
+  and `mobileDpr`.
 
 ## Environment
 
