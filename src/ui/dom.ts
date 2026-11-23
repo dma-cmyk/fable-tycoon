@@ -203,6 +203,7 @@ export class ModalHost {
       attrs: {
         role: 'dialog',
         'aria-modal': 'true',
+        tabindex: '-1',
         ...(options.title ? { 'aria-label': options.title } : {}),
       },
     });
@@ -268,6 +269,7 @@ export class ModalHost {
       window.setTimeout(() => backdrop.remove(), 120);
       entry.closed = true;
       options.onClose?.();
+      this.syncBackgroundInert();
       if (this.stack.length === 0 && previousFocus?.isConnected) {
         window.setTimeout(() => previousFocus.focus({ preventScroll: true }), 0);
       } else if (this.stack.length > 0) {
@@ -291,8 +293,10 @@ export class ModalHost {
     const focusTarget =
       options.initialFocus ??
       (panel.querySelector('.modal-close') as HTMLElement | null) ??
-      (panel.querySelector('button') as HTMLElement | null);
-    requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
+      (panel.querySelector('button') as HTMLElement | null) ??
+      panel;
+    this.syncBackgroundInert();
+    requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
     return {
       root: backdrop,
       panel,
@@ -304,6 +308,14 @@ export class ModalHost {
         });
       },
     };
+  }
+
+  private syncBackgroundInert(): void {
+    const inert = this.stack.length > 0;
+    document.querySelectorAll<HTMLElement>('.screen-host, .result-screen').forEach((el) => {
+      if (inert) el.setAttribute('inert', '');
+      else el.removeAttribute('inert');
+    });
   }
 
   closeTop(): boolean {

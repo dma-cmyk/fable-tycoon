@@ -13,6 +13,7 @@ export interface FxUpdate {
   fx: Fx[];
   state: PublicState;
   deadline: number | null;
+  gen?: number;
 }
 
 export interface PlaybackControl {
@@ -29,7 +30,7 @@ export interface PlaybackControl {
 export interface FxPlayerHost {
   settings(): UiSettings;
   handleFx(fx: Fx, state: PublicState, control: PlaybackControl): Promise<void> | void;
-  applyState(state: PublicState, deadline: number | null, seq: number): void;
+  applyState(state: PublicState, deadline: number | null, seq: number, gen?: number): void;
   setBusy(busy: boolean): void;
   setSkippable(skippable: boolean): void;
   onQueueChange(pending: number): void;
@@ -185,7 +186,7 @@ export class FxPlayer {
       this.skipCallbacks.clear();
       this.queue.shift();
       this.host.onQueueChange(this.queue.length);
-      if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq);
+      if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq, update.gen);
     }
     if (this.epoch !== epoch) return;
     this.running = false;

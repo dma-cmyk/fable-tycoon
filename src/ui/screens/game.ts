@@ -101,6 +101,10 @@ export class GameScreen implements ScreenHandle {
   private seq = 0;
   private latestSeq = -1;
   private appliedSeq = -1;
+  private latestGen = 0;
+  private appliedGen = -1;
+  private mapReady = false;
+  private readonly pendingMessages: ServerMsg[] = [];
   private deadline: number | null = null;
   private lobby: LobbyView | null = null;
   private mySeat: number | null = null;
@@ -600,7 +604,7 @@ export class GameScreen implements ScreenHandle {
     this.fxPlayer = new FxPlayer({
       settings: () => effectiveUiSettings(),
       handleFx: (fx, state, control) => this.handleFx(fx, state, control),
-      applyState: (state, deadline, seq) => this.applyState(state, deadline, seq),
+      applyState: (state, deadline, seq, gen) => this.applyState(state, deadline, seq, false, gen),
       setBusy: (busy) => {
         this.fxBusy = busy;
         this.updateHud();
@@ -628,6 +632,7 @@ export class GameScreen implements ScreenHandle {
   }
 
   async init(): Promise<void> {
+    this.bindSession();
     await this.initMap();
   }
 
@@ -697,7 +702,8 @@ export class GameScreen implements ScreenHandle {
       this.updateMapSafeArea();
       this.loadingBar.hidden = true;
       this.loadingText.textContent = '盤面を待っています…';
-      this.bindSession();
+      this.mapReady = true;
+      this.flushPendingMessages();
       this.loading.hidden = !!this.state;
       if (this.state) this.map.setState(this.state);
     } catch (error) {
@@ -717,7 +723,36 @@ export class GameScreen implements ScreenHandle {
     this.updateBgm();
   }
 
+  private messageGen(msg: ServerMsg): number {
+    return (msg as ServerMsg & { gen?: number }).gen ?? this.latestGen;
+  }
+
+  private isResync(msg: ServerMsg): boolean {
+    return (msg as ServerMsg & { resync?: boolean }).resync === true;
+  }
+
+  private beginGeneration(gen: number): void {
+    this.fxPlayer.reset();
+    this.latestGen = gen;
+    this.latestSeq = -1;
+    this.appliedSeq = -1;
+    this.seq = 0;
+    this.actionPending = false;
+    this.clearPendingTimer();
+    this.eventPanel.resetChosen();
+  }
+
+  private flushPendingMessages(): void {
+    if (!this.mapReady || this.pendingMessages.length === 0) return;
+    const messages = this.pendingMessages.splice(0);
+    for (const msg of messages) this.onMessage(msg);
+  }
+
   private onMessage(msg: ServerMsg): void {
+    if (!this.mapReady && (msg.t === 'snapshot' || msg.t === 'update')) {
+      this.pendingMessages.push(msg);
+      return;
+    }
     switch (msg.t) {
       case 'welcome':
         this.mySeat = msg.seat;
@@ -726,27 +761,39 @@ export class GameScreen implements ScreenHandle {
         for (const line of msg.chat) this.chat.addLine(line);
         this.renderConnections();
         break;
-      case 'snapshot':
-        if (msg.seq < this.latestSeq) break;
+      case 'snapshot': {
+        const gen = this.messageGen(msg);
+        if (gen < this.latestGen) break;
+        if (gen > this.latestGen) this.beginGeneration(gen);
+        const resync = this.isResync(msg);
+        if (!resync && msg.seq < this.latestSeq) break;
         this.fxPlayer.reset();
+        this.latestGen = gen;
         this.latestSeq = Math.max(this.latestSeq, msg.seq);
         this.lobby = msg.lobby;
         this.syncFlaggedSeats();
         this.deadline = msg.deadline;
         this.actionPending = false;
+        this.clearPendingTimer();
         this.endedVoicePlayed = false;
-        this.applyState(msg.state, msg.deadline, msg.seq, true);
+        this.applyState(msg.state, msg.deadline, msg.seq, true, gen);
         this.eventPanel.resetChosen();
         break;
-      case 'update':
-        if (msg.seq <= this.latestSeq) break;
+      }
+      case 'update': {
+        const gen = this.messageGen(msg);
+        if (gen < this.latestGen) break;
+        if (gen > this.latestGen) this.beginGeneration(gen);
+        if (gen === this.latestGen && msg.seq <= this.latestSeq) break;
+        this.latestGen = gen;
         this.latestSeq = msg.seq;
         this.deadline = msg.deadline;
         this.actionPending = false;
         this.clearPendingTimer();
-        this.fxPlayer.enqueue({ seq: msg.seq, fx: msg.fx, state: msg.state, deadline: msg.deadline });
+        this.fxPlayer.enqueue({ seq: msg.seq, fx: msg.fx, state: msg.state, deadline: msg.deadline, gen });
         this.updateHud();
         break;
+      }
       case 'lobby':
         this.lobby = msg.lobby;
         this.syncFlaggedSeats();
@@ -816,8 +863,14 @@ export class GameScreen implements ScreenHandle {
 
   // ---------------------------------------------------------------- state & hud
 
-  private applyState(state: PublicState, deadline: number | null, seq: number, instant = false): void {
-    if (seq < this.appliedSeq) return;
+  private applyState(state: PublicState, deadline: number | null, seq: number, instant = false, gen = this.latestGen): void {
+    if (gen < this.appliedGen) return;
+    if (gen === this.appliedGen && seq < this.appliedSeq) return;
+    if (gen > this.appliedGen) {
+      this.appliedGen = gen;
+      this.appliedSeq = -1;
+      this.seq = 0;
+    }
     this.appliedSeq = seq;
     this.seq = Math.max(this.seq, seq);
     const previousYear = this.state?.year;
