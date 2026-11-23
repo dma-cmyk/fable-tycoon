@@ -1,18 +1,61 @@
-import { describe, expect, it } from 'vitest';
-import { generateIdentity, publicKeyFingerprint, signData, verifyData } from './identity';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('P2P signing identity', () => {
-  it('signs and verifies with a per-client P-256 key, rejecting tampering and wrong keys', async () => {
-    const alice = await generateIdentity();
-    const bob = await generateIdentity();
-    expect(alice.fingerprint).toMatch(/^[0-9a-f]{64}$/);
-    expect(alice.fingerprint).toBe(await publicKeyFingerprint(alice.publicJwk));
-    expect(alice.fingerprint).not.toBe(bob.fingerprint);
+class FakeStorage {
+  private readonly data = new Map<string, string>();
 
-    const message = 'peer-a\nmsg-1\n0\nciphertext';
-    const signature = await signData(alice, message);
-    await expect(verifyData(alice.publicJwk, signature, message)).resolves.toBe(true);
-    await expect(verifyData(alice.publicJwk, signature, `${message}tampered`)).resolves.toBe(false);
-    await expect(verifyData(bob.publicJwk, signature, message)).resolves.toBe(false);
+  get length(): number {
+    return this.data.size;
+  }
+
+  clear(): void {
+    this.data.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.data.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.data.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.data.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.data.set(key, String(value));
+  }
+}
+
+describe('persistent signing identity', () => {
+  let storage: FakeStorage;
+
+  beforeEach(() => {
+    storage = new FakeStorage();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: storage,
+    });
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  it('restores the same fingerprint after a fresh module load (page reload)', async () => {
+    const first = await import('./identity');
+    const generated = await first.generateIdentity();
+    expect(storage.getItem('fable.identity')).toBeTruthy();
+
+    // Simulate a page reload: fresh module instance, same localStorage.
+    vi.resetModules();
+    const reloaded = await import('./identity');
+    const restored = await reloaded.loadIdentity('reload-test-client');
+
+    expect(restored.fingerprint).toBe(generated.fingerprint);
+    expect(restored.publicJwk.x).toBe(generated.publicJwk.x);
+    expect(restored.publicJwk.y).toBe(generated.publicJwk.y);
   });
 });

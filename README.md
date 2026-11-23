@@ -16,6 +16,7 @@
 npm install
 npm run dev        # http://127.0.0.1:5180
 npm test           # ルール・ルーム・通信のテスト
+npm run e2e:online # 4 ブラウザ実機 E2E（Chromium / WebKit / Firefox、約 5〜10 分）
 npm run build      # dist/ に静的ファイルを出力
 ```
 
@@ -23,6 +24,7 @@ npm run build      # dist/ に静的ファイルを出力
 |---|---|
 | `npm run board` | `src/data/cities.json` から盤面 `board.json` と地図 `land.json` を生成 |
 | `npm run validate` | 全データ（都市・盤面・キャラ・イベント・カード・エモート）の検証 |
+| `npm run e2e:online` | 4 つの別ブラウザでオンライン対戦を最後まで実プレイ（`tests/e2e/README.md`） |
 | `npm run voice` | VOICEVOX（`127.0.0.1:50021`）で未生成の台詞音声を生成 |
 
 都市・キャラクター・イベント・エモートの追加手順は [docs/CONTENT.md](docs/CONTENT.md)。

@@ -124,7 +124,13 @@ export async function generateIdentity(): Promise<ClientIdentity> {
   ]);
   const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
   const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
-  return fromJwks(privateJwk, publicJwk);
+  const identity = await fromJwks(privateJwk, publicJwk);
+  // fromJwks re-imports the private key as non-extractable, so this is the
+  // last point where the persistence copy can be written. Without it every
+  // page reload generated a new fingerprint and rejoin was treated as a new
+  // spectator (the host pins the peer id to the old key).
+  storageSet(JSON.stringify({ privateJwk, publicJwk }));
+  return identity;
 }
 
 /** Global browser identity; in Node, one cached identity per logical client id. */
@@ -152,14 +158,7 @@ export function loadIdentity(clientId: string): Promise<ClientIdentity> {
         // regenerate below
       }
     }
-    const identity = await generateIdentity();
-    try {
-      const privateJwk = await crypto.subtle.exportKey('jwk', identity.privateKey);
-      storageSet(JSON.stringify({ privateJwk, publicJwk: identity.publicJwk }));
-    } catch {
-      // best effort
-    }
-    return identity;
+    return generateIdentity();
   })();
   cache.set(clientId, promise);
   return promise;

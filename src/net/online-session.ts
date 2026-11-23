@@ -21,7 +21,7 @@ import { COMM, PROTOCOL_VERSION } from './protocol';
 import type { ConnectionState, Session } from './session-types';
 import { GAME_DATA } from '../data/index';
 import { MqttTransport, DEFAULT_BROKERS, isP2PControl } from './p2p/transport';
-import { loadIdentity, generateIdentity } from './p2p/identity';
+import { loadIdentity } from './p2p/identity';
 import type { ClientIdentity } from './p2p/identity';
 import type { P2PControl, P2PMessage, TransportStatus } from './p2p/transport';
 
@@ -1311,7 +1311,10 @@ export async function roomExists(roomId: string): Promise<boolean> {
   const normalized = normalizeRoomId(roomId);
   if (!isValidRoomId(normalized)) return false;
   const peerId = `probe_${randomToken(10)}`;
-  const identity = await generateIdentity();
+  // Load (or create once) the persistent identity. Generating a fresh one here
+  // overwrote `fable.identity`, so the subsequent real join/rejoin used a new
+  // fingerprint and could not reclaim its seat.
+  const identity = await loadIdentity('room-probe');
   const transport = new MqttTransport(peerId, {
     identity,
     brokers: networkConfig.brokers ?? DEFAULT_BROKERS,
