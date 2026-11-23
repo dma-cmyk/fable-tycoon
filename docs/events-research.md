@@ -1,6 +1,6 @@
 # events.json 取材・検証ノート
 
-対象: `src/data/events.json`（初版36件 + 季節イベント18件 = 54件）
+対象: `src/data/events.json`（初版36件 + 季節18件 + 異世界20件 = 74件）
 作成: 2026-11-23
 
 ## 1. 検証方法
@@ -98,7 +98,7 @@
 - `per_property` は選択時の即時精算として記述（「1件につき+10億」）。年次収益ではない。
 - `price_mod` の「恒久」はゲーム終了までの価格倍率。実世界の消費者物価ではない。
 - ソース日付は記事公開日または出来事の日付。Wikipedia は記事の主題年を入れた箇所がある。
-- 初版の fable 8件は完全創作のため `fact` / `sources` を持たない。季節追加分は fable 14件 / news 4件。
+- 初版の fable 8件は完全創作のため `fact` / `sources` を持たない。季節追加分は fable 14件 / news 4件、異世界追加分は fable 15件 / news 5件。
 
 ## 7. 季節イベント追加（18件、2026-11-23）
 
@@ -127,3 +127,38 @@
 - `node -e "JSON.parse(require('fs').readFileSync('src/data/events.json','utf8'))"` → exit 0
 - イベント単体チェック: 54件、id重複なし、`monthly` 12件、全月カバー、通常の月限定6件、話者・文字数エラーなし。
 - `node tools/validate-data.mjs` は events.json に関するエラーを0件で通過するが、実行時点で `cities.json`（300都市 vs 期待150）と `board.json`（未生成の都市ノード）に既存の163エラーがあり、プロセス全体は exit 1。イベント追加とは無関係の同時進行作業。委譲元の Main に報告済み。
+
+## 8. 異世界イベント追加（20件、2026-11-23）
+
+### 8.1 構成
+
+- 合計: 74件（初版36 + 季節18 + 異世界20）
+- kind 合計: news 23 / history 14 / fable 37
+- 異世界追加分: news 5 / fable 15
+- 地上入口イベント（`realms` なし）: 5件
+  - `world-angel-heaven-tour`, `world-hell-invitation`, `world-space-lottery`, `world-heaven-parachute`, `world-space-debris-business`
+- `realms: ['heaven']`: 5件
+- `realms: ['hell']`: 5件
+- `realms: ['space']`: 5件
+- `realm` 効果: 11個
+  - 天国行き3（Angel tour, 天下り, 蜘蛛の糸）
+  - 地獄行き1（借金地獄）
+  - 宇宙行き2（宇宙旅行, 宇宙ゴミ回収）
+  - 地上復帰5（天国の官僚主義、地獄のブラック企業、地獄の債務整理、月の土地、大気圏再突入）
+- 蜘蛛の糸（`hell-spider-thread`）は地獄→天国のクロスレルム送り。60%で成功、40%で現金-20億。
+- `world-hell-invitation` は指定通り `weight: 3`。借金の有無による重み補正はデータ表現できないため未実装。
+
+### 8.2 追加ソースとHTTP結果
+
+| # | event id | ソース | URL | 日付 | 結果 |
+|---|---|---|---|---|---|
+| 1 | world-space-lottery | Space tourism - Wikipedia | https://en.wikipedia.org/wiki/Space_tourism | 2025 | read OK / 200 |
+| 2 | world-space-debris-business / space-debris | Space debris - Wikipedia | https://en.wikipedia.org/wiki/Space_debris | 2025 | read OK / 200 |
+| 3 | space-moon-land | Extraterrestrial real estate - Wikipedia | https://en.wikipedia.org/wiki/Extraterrestrial_real_estate | 2025 | read OK / 200 |
+| 4 | space-mars-reservation | 火星片道移住計画（2012-2019） - Wikipedia | https://en.wikipedia.org/wiki/Mars_One | 2019 | read OK / 200 |
+
+### 8.3 検証結果
+
+- `node -e "JSON.parse(require('fs').readFileSync('src/data/events.json','utf8'))"` → exit 0
+- 独自イベントバリデータ（`realm` 効果・`realms` を含む）: 74件、0エラー、id重複なし、話者・文字数OK、地上入口5件・各レルム5件、`realm` 効果11個。
+- `node tools/validate-data.mjs` は現時点で exit 1（164エラー）。内訳は `board.json` の未生成都市ノード152件、`public/assets/map/land.json` の寸法1件、および validator が `op:'realm'` を未対応として出す11件。`events.json` の通常スキーマエラーは0件。board 生成と validator の realm 対応後に再実行が必要。

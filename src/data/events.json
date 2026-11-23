@@ -5012,5 +5012,1272 @@
         "amount": -8
       }
     ]
+  },
+  {
+    "id": "world-angel-heaven-tour",
+    "title": "エンジェル投資家の天国ツアー",
+    "kind": "fable",
+    "satireNote": "天国のツアーは完全創作。実際の投資勧誘ではない。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "雲の上まで、無料でご案内します。帰りは有料です。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "天国には、金で買えないものがある。だから金で買う。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "落ちたらどうなるんですか？"
+      }
+    ],
+    "choices": [
+      {
+        "label": "天国へ行く",
+        "detail": "天国へワープ。現金-10億（ツアー代）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "heaven"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "現金をもらう",
+        "detail": "現金+40億。天国には行かない。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "world-hell-invitation",
+    "title": "借金地獄への招待状",
+    "kind": "fable",
+    "satireNote": "借金地獄は完全創作。実際の債務者を揶揄する意図はない。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "借金には、返済と招待状の二種類があります。"
+      },
+      {
+        "speaker": "npc:piper3",
+        "text": "ようこそ。地獄は利子がつきません。元金が増えるだけです。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "招待状が来ました。断るにも、手数料がかかります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "借金を返す",
+        "detail": "現金-40億。地獄には行かない。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -40
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "地獄へ行く",
+        "detail": "地獄へワープ。現金+20億（歓迎金）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "hell"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "world-space-lottery",
+    "title": "宇宙旅行の抽選に当選",
+    "kind": "news",
+    "fact": "宇宙旅行は、2020年代に民間事業者が準軌道・軌道飛行を実施し、富裕層向けの商業サービスとして広がりつつある。旅行者は地球の眺めや無重力を目的とする。",
+    "sources": [
+      {
+        "title": "Space tourism - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Space_tourism",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "宇宙旅行は実在。抽選・当選・金額は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "宇宙旅行の抽選に当選しました。当選通知の送料は自己負担です。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "宇宙は近いです。ただし、片道の値段は遠いです。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "月から来ました。往復は、思ったより高いです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "宇宙へ行く",
+        "detail": "宇宙へワープ。現金-20億（搭乗費）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "space"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "チケットを売る",
+        "detail": "現金+50億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 50
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "world-heaven-parachute",
+    "title": "天下りのお誘い",
+    "kind": "fable",
+    "satireNote": "天下りを天国に例えた完全創作。特定の人物・団体を指すものではない。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天下りとは、空を飛ぶ官僚の一種です。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "退職後のGiveを、天国でTakeします。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "働きアリは、空を飛べません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "天国へ天下る",
+        "detail": "天国へワープ。謎の補助金カードを1枚得る。",
+        "effects": [
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "heaven"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "subsidy",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "断る",
+        "detail": "現金+20億。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "world-space-debris-business",
+    "title": "宇宙ゴミ回収ビジネス",
+    "kind": "news",
+    "fact": "地球軌道上には使用済みの衛星やロケット部品などの宇宙ゴミが多数あり、運用中の宇宙機への衝突リスクとなっている。回収や除去の技術開発が進められている。",
+    "sources": [
+      {
+        "title": "Space debris - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Space_debris",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "宇宙ゴミは実在。回収ビジネスの金額・効果は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "宇宙ゴミは増えています。片付ける人も、増やしています。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "回収ビジネスは成長産業です。ゴミが増えるほど。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "海のゴミも、宇宙のゴミも、誰かが捨てたものです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "宇宙で回収する",
+        "detail": "宇宙へワープ。現金-20億。製造業収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "space"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 2,
+            "label": "宇宙ゴミ回収"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "地球で資金を集める",
+        "detail": "現金+30億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "heaven-bureaucracy",
+    "title": "天国の官僚主義",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "天国の官僚主義を誇張した完全創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天国にも申請書があります。羽を付けるにも、申請書です。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "決裁は早いです。ただし、決裁者が定年で昇天しています。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "書類を三枚出しました。返ってきたのは、二枚です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "手続きに従う",
+        "detail": "現金-15億。謎の補助金カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "subsidy",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "現世に戻る",
+        "detail": "現世のランダムな都市へ戻る。現金+10億。",
+        "effects": [
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "world"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "heaven-real-estate-bubble",
+    "title": "雲の上の不動産バブル",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "雲の上の不動産バブルを描いた完全創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "雲の上の土地は有限です。空は無限ですが。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "雲を買いました。雨が降ると、減価償却です。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "バブルは膨らむ。雲は膨らむ。似ています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "雲の上に投資",
+        "detail": "現金-30億。観光収益×1.5（2年）。45%で+40億、55%で観光物件の価格-15%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.5,
+            "years": 2,
+            "label": "雲の上バブル"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "tourism",
+                "mult": 0.85
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "高値で売る",
+        "detail": "物件1件（持っていれば）を価格×1.4で売却＋現金10億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "any",
+            "count": 1,
+            "priceMult": 1.4
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "heaven-rating-agency",
+    "title": "天使の格付け会社",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "天使の格付け会社は完全創作。実在の格付け会社を指すものではない。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天使の格付けは、AAAから始まり、AAAで終わります。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "格付けは客観的です。客観的に、買収されました。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "この格付けは、鼻が伸びません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "AAAを買う",
+        "detail": "現金-25億。金融収益×1.5（2年）＋金の卵カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.5,
+            "years": 2,
+            "label": "天使の格付け"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "自主格付けする",
+        "detail": "現金+10億。50%で+20億、50%で-15億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 20
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -15
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "heaven-gatekeeper-tip",
+    "title": "天国の門番にチップ",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "天国の門番を題材にした完全創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天国の門は、寄付金で開きます。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "入場料は無料です。ただし、手数料がかかります。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "鍵はありません。あるのは、財布だけです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "チップを払う",
+        "detail": "現金-20億。噂話カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "こっそり入る",
+        "detail": "40%で+30億、60%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "heaven-resident-tax",
+    "title": "天使の住民税",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "天使の住民税は完全創作。実際の税制とは関係ない。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天国は無税ではありません。羽根税があります。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "住民税は、羽の枚数で決まります。"
+      },
+      {
+        "speaker": "char:golden_goose",
+        "text": "金の卵にも、税金がかかります。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash_pct",
+        "who": "all",
+        "pct": -5
+      },
+      {
+        "op": "per_property",
+        "who": "all",
+        "industry": "any",
+        "perProperty": -5
+      }
+    ]
+  },
+  {
+    "id": "hell-tax-audit",
+    "title": "閻魔の税務調査",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "閻魔の税務調査は完全創作。実際の税務行政を指すものではない。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "閻魔の税務調査は、死後も終わりません。"
+      },
+      {
+        "speaker": "npc:piper3",
+        "text": "領収書はありますか？ 地獄の領収書は、燃えますが。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "申告は正確に。罰則は、もっと正確に。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "正直に申告",
+        "detail": "現金-20億。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "黙秘する",
+        "detail": "45%で+30億、55%で-25億＋1回休み。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              },
+              {
+                "op": "skip",
+                "who": "self",
+                "turns": 1
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "hell-black-company",
+    "title": "地獄のブラック企業",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "地獄のブラック企業は完全創作。実在の企業・労働環境を指すものではない。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄の求人票です。休憩は、釜の外に出たときだけです。"
+      },
+      {
+        "speaker": "npc:piper2",
+        "text": "残業代は出ません。残業は永遠です。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "働くのは嫌いですが、地獄よりはマシです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "働く",
+        "detail": "現金+35億。1回休み。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 35
+          },
+          {
+            "op": "skip",
+            "who": "self",
+            "turns": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "逃げる",
+        "detail": "50%で現世へ戻る。50%で現金-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "realm",
+                "who": "self",
+                "realm": "world"
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "hell-spider-thread",
+    "title": "蜘蛛の糸の転売",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "蜘蛛の糸の転売は完全創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄に一本だけ、蜘蛛の糸が垂れています。転売中です。"
+      },
+      {
+        "speaker": "char:anansi",
+        "text": "糸は私のものです。ただし、転売権は別です。"
+      },
+      {
+        "speaker": "npc:piper1",
+        "text": "天国まで、片道切符です。到着保障はありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "糸をたどる",
+        "detail": "60%で天国へワープ、40%で現金-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.6,
+            "win": [
+              {
+                "op": "realm",
+                "who": "self",
+                "realm": "heaven"
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "糸を転売する",
+        "detail": "現金+30億。関税カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "tariff",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "hell-hot-spring",
+    "title": "地獄の釜ゆで温泉",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "地獄の釜ゆで温泉は完全創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄の釜は、温泉として再ブランドされました。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "源泉かけ流しです。源泉は、業火ですが。"
+      },
+      {
+        "speaker": "char:kappa",
+        "text": "河童には、熱すぎます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -5
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.3,
+        "years": 1,
+        "label": "地獄観光"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.1,
+        "years": 1,
+        "label": "釜飯"
+      }
+    ]
+  },
+  {
+    "id": "hell-debt-restructure",
+    "title": "地獄の債務整理",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "地獄の債務整理は完全創作。実際の債務処理を推奨するものではない。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄の債務整理は簡単です。借金が、魂に変わります。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "返済不要です。ただし、来世で分割払いです。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "長靴を売れば、少し返せます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "借り換える",
+        "detail": "現金-10億。大きすぎて潰せませんカードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "bailout",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "魂を売る",
+        "detail": "現金+40億。50%で現世へ戻る、50%で1回休み。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "realm",
+                "who": "self",
+                "realm": "world"
+              }
+            ],
+            "lose": [
+              {
+                "op": "skip",
+                "who": "self",
+                "turns": 1
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "space-moon-land",
+    "title": "月の土地の登記",
+    "kind": "news",
+    "realms": ["space"],
+    "fact": "月などの天体の土地所有権を主張し、証明書を販売する民間業者が存在する。しかし、1967年の宇宙条約は国家による天体の領有を禁じており、私的な所有権主張は法的に認められていない。",
+    "sources": [
+      {
+        "title": "Extraterrestrial real estate - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Extraterrestrial_real_estate",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "月の土地販売は実在するが法的効力はない。金額・確率は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "月の土地が、登記できます。法務局は、地球にあります。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "月の一区画を買いました。領収書は、月に置いてきました。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "月に土地はありません。あるのは、私の実家です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "登記する",
+        "detail": "現金-20億。50%で+50億、50%で-20億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "地球に戻る",
+        "detail": "現世のランダムな都市へ戻る＋現金10億。",
+        "effects": [
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "world"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "space-mars-reservation",
+    "title": "火星移住の先行予約",
+    "kind": "news",
+    "realms": ["space"],
+    "fact": "オランダの民間団体が2012年に火星への片道移住計画を発表し、2013年から応募を受け付けた。計画は資金不足で頓挫し、2019年に破産した。",
+    "sources": [
+      {
+        "title": "火星片道移住計画（2012-2019） - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Mars_One",
+        "date": "2019"
+      }
+    ],
+    "satireNote": "火星移住計画は実在。予約・金額・確率は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "火星の先行予約です。出発日は、未定です。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "片道切符です。帰りは、別料金です。"
+      },
+      {
+        "speaker": "char:white_rabbit",
+        "text": "遅刻です、遅刻です。火星には、まだ着いていません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "予約する",
+        "detail": "現金-15億。35%で+60億、65%で-15億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -15
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "返金を求める",
+        "detail": "現金+10億。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "space-station-rent",
+    "title": "宇宙ステーションの家賃",
+    "kind": "fable",
+    "realms": ["space"],
+    "satireNote": "宇宙ステーションの家賃は完全創作。実際の運用費とは異なる。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "宇宙ステーションの家賃は、重力より高いです。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "無重力だから、家賃も浮いています。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "船より狭いのに、船より高い。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -15
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tech",
+        "mult": 1.3,
+        "years": 1,
+        "label": "宇宙住宅"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.1,
+        "years": 1,
+        "label": "宇宙見学"
+      }
+    ]
+  },
+  {
+    "id": "space-debris",
+    "title": "宇宙ゴミの落とし物",
+    "kind": "news",
+    "realms": ["space"],
+    "fact": "地球軌道上の宇宙ゴミは、運用中の衛星や宇宙ステーションへの衝突リスクとなっている。民間企業による除去技術の実証も進められている。",
+    "sources": [
+      {
+        "title": "Space debris - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Space_debris",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "宇宙ゴミは実在。金額・確率・効果は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "宇宙ゴミが落ちてきました。落とし主は、宇宙です。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "拾って売れば、資源です。落ちる前に。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "ゴミが大きい。拾うのも一苦労です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "回収して売る",
+        "detail": "現金+30億。製造業収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 2,
+            "label": "宇宙ゴミ回収"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "地球に落とす",
+        "detail": "50%で+40億、50%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "space-reentry",
+    "title": "大気圏再突入の抽選",
+    "kind": "fable",
+    "realms": ["space"],
+    "satireNote": "大気圏再突入の抽選は完全創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "大気圏再突入の抽選です。当選者は、地球に戻れます。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "再突入は無料です。燃費は、あなたの体力です。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "落ちるのか、帰るのか。言葉の問題ですね。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "再突入する",
+        "detail": "現世のランダムな都市へ戻る＋現金10億。",
+        "effects": [
+          {
+            "op": "realm",
+            "who": "self",
+            "realm": "world"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "宇宙に残る",
+        "detail": "金の卵カードを1枚得る。現金+15億。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
   }
 ]
