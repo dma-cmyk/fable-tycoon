@@ -209,9 +209,9 @@ function validateConfig(data: GameData, config: GameConfig): void {
 /** Picks and announces a new destination. Mutates the (cloned) state and rng. */
 type DestinationMode = { kind: 'range' } | { kind: 'nearest'; minDistance: number };
 
-/** Normal goals are 18–50 steps away; tiny maps widen upward, then use farthest. */
+/** Initial goals are 18–44 steps away; tiny maps widen upward, then use farthest. */
 const DESTINATION_RANGE_MIN = 18;
-const DESTINATION_RANGE_MAX = 50;
+const DESTINATION_RANGE_MAX = 44;
 const DESTINATION_FLOOR = 18;
 
 /** Picks and announces a new destination. Mutates the (cloned) state and rng. */

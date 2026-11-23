@@ -839,6 +839,12 @@ async function pickCharacter(client) {
   );
   const card = page.locator('.char-card:not([disabled])').first();
   await domClick(card);
+  const confirm = page.locator('.char-picker-modal .char-confirm:not([disabled])').first();
+  await waitFor(
+    async () => isVisible(confirm),
+    { timeout: 5_000, label: `${client.id} character confirm` },
+  );
+  await domClick(confirm);
   await waitFor(
     async () => {
       const text = await charText();

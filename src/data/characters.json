@@ -41,7 +41,7 @@
     "personality": "忠誠心はあるが、財布の紐はゆるい。骨の貯金が趣味。",
     "perk": "lucky",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1.15,
       "pitch": 0.06,
       "intonation": 1.35
@@ -72,7 +72,7 @@
     "personality": "木の上から相場を読むが、降りるときに必ず転ぶ。",
     "perk": "card_shark",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1.22,
       "pitch": 0,
       "intonation": 1.4
@@ -103,7 +103,7 @@
     "personality": "空から儲けを探す。着地はいつも雑。",
     "perk": "lucky",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1.08,
       "pitch": 0.03,
       "intonation": 1.3
@@ -258,7 +258,7 @@
     "personality": "小さな体で大きな値引きを勝ち取る交渉人。",
     "perk": "haggler",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1.18,
       "pitch": 0.05,
       "intonation": 1.4
@@ -289,7 +289,7 @@
     "personality": "化けるのは値段だけ。茶釜の品質は保証しない。",
     "perk": "lucky",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 0.95,
       "pitch": -0.04,
       "intonation": 1.15
@@ -475,7 +475,7 @@
     "personality": "蜘蛛の巣のような人間関係を築く、詐欺師の鑑。",
     "perk": "tech_boost",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1.05,
       "pitch": 0,
       "intonation": 1.3
@@ -537,7 +537,7 @@
     "personality": "時間に追われながら、時間を売って儲ける。",
     "perk": "lucky",
     "voice": {
-      "speaker": 26,
+      "speaker": 24,
       "speed": 1.22,
       "pitch": 0.05,
       "intonation": 1.4
@@ -568,7 +568,7 @@
     "personality": "笑顔で消える。請求書だけは消えない。",
     "perk": "pickpocket",
     "voice": {
-      "speaker": 105,
+      "speaker": 106,
       "speed": 0.95,
       "pitch": 0,
       "intonation": 1.1
@@ -1250,7 +1250,7 @@
     "personality": "貯蓄と労働を愛するが、楽しみ方を知らない。",
     "perk": "agri_boost",
     "voice": {
-      "speaker": 105,
+      "speaker": 106,
       "speed": 1.1,
       "pitch": 0.04,
       "intonation": 1.1
@@ -1343,7 +1343,7 @@
     "personality": "森の不動産を仕切る、鶏の足の家の大家。",
     "perk": "tough",
     "voice": {
-      "speaker": 104,
+      "speaker": 87,
       "speed": 0.9,
       "pitch": -0.08,
       "intonation": 1.05
@@ -1467,7 +1467,7 @@
     "personality": "川の物流を押さえる、きゅうり好きの港湾王。",
     "perk": "sailor",
     "voice": {
-      "speaker": 28,
+      "speaker": 27,
       "speed": 1,
       "pitch": -0.02,
       "intonation": 1.2

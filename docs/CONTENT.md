@@ -42,6 +42,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 {
   "id": "new-city",
   "nameJa": "新都市",
+  "nameKana": "しんとし",
   "nameEn": "New City",
   "country": "JP",
   "countryJa": "日本",
@@ -61,6 +62,10 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ### 都市フィールド
 
+- `nameKana`: `nameJa` のひらがな読み（ふりがな）。**漢字を含む名前では必須**、カタカナだけの名前（ソウル・バンコク等）では
+  持たせない。使える文字はひらがな・長音 `ー`・中点 `・`・空白のみ（カタカナ不可）。読みは日本語メディアの標準（NHK 式）に
+  合わせる: 北京→`ぺきん`、上海→`しゃんはい`、香港→`ほんこん`、台北→`たいぺい`、釜山→`ぷさん`、済州→`さいしゅう`、
+  青島→`ちんたお`、廈門→`あもい`、高雄→`たかお`。異世界の駅（`realms.json`）も同じ規則。
 - `region`: `east_asia` `southeast_asia` `south_asia` `middle_east` `europe`
   `russia_central_asia` `africa` `north_america` `central_america` `south_america` `oceania`
 - `tier`: 1=世界都市（約35）、2=主要都市、3=地方都市。tier 1 は物件価格帯を高めにする。
@@ -125,13 +130,13 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ### 都市追加の手順
 
-1. `cities.json` を編集（340件・id・物件id・landmark を確認）。
+1. `cities.json` を編集（現在372件・id・物件id・landmark を確認）。
 2. `npm run board`。
    - world nodes は **2600〜3200** を目標にする（60/75–90 の spacing 制約で下振れする場合は validator が warning を出す）。`components: 1`、`sea squares on land: 0`、
      `rail squares on water: 0` を確認。
    - 新しい都市が孤立していないか、`components` とログを見る。
 3. `npm run validate`。エラー0を確認。
-4. 可能なら `.tmp/board-preview.png` のようなプレビューで、海路が陸を横切っていないか目視する。
+4. 可能なら `.tmp/board-preview.png` のようなプレビューで、海路が陸を横切っていないか、空路のマスが他の路線に重なっていないかを目視する。
 
 `build-board.mjs` は **cities.json から都市ノードを生成する**。board.json に古い都市IDが残っていたら、
 必ず `npm run board` で作り直す。`validate-data.mjs` は「board に cities.json にない都市」
@@ -148,17 +153,20 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
   - **rail**: ほぼ陸。短い川・海峡は1サンプルまで。`london-paris`（英仏トンネル）、
     `istanbul-belgrade`（ボスポラス）、`copenhagen-stockholm`（エーレスンド）などはホワイトリスト。
   - **sea**: 両端が港で、ほぼ海。内陸の陸地は小さな島だけ。港のアプローチは両端で許容。
-  - どちらでもない辺は落とす。長すぎる辺・短すぎる辺・交差する辺・都市を貫通する辺も落とす。
-- グラフが分断されたら、港同士の海路や陸路で最短の有効な辺を追加する。
+  - **air**: 両端が空港の長距離路線。陸・海・他の辺を飛び越えるため交差判定の対象外。
+    中間マスは約300 map unitsに1個（最低1個）で、ほかの路線の線分上には置かない。
+  - rail/sea/air のどれでもない辺は落とす。長すぎる辺・短すぎる辺・交差する辺・都市を貫通する辺も落とす。
+- グラフが分断されたら、港同士の海路や陸路の有効な辺でつなぐ。空路は先に追加して連結成分に含めるが、分断修復で新たに足す辺は rail/sea のみ。
 - 主要回廊（日本—韓国、英—仏、大西洋2〜3、太平洋2、インド洋1〜2、オセアニア—東南アジア1〜2）は
   保護され、混雑する海路は予算とハブ次数で間引く。
 - 投影後、駅をスケマティックに緩和する（駅同士は原則100 map units、tier1が絡む組は120。真の投影位置へバネで戻し、最大220まで移動。陸上を優先し、港は海岸線から25以内）。
-- 各辺に中間マスを `clamp(round(length / 75) - 1, 1, 9)` 個置く。ノード間は最低60 map units。
-  都市が近すぎる場合は辺を1マスの中継にまとめ、マスの重なりを避ける。
+- 各 rail/sea 辺に中間マスを `clamp(round(length / 75) - 1, 1, 9)` 個置く。ただし長さ150未満の辺は
+  駅への近接を避けるため中間マスを置かず直接つなぐ。空路は `max(1, round(length / 300))` 個。
+  ノード間は最低60 map units。
 - 中間マスの6種は 36:17:15:14:4:2 の比（city を除いた6種で正規化し、青40.9% / 赤19.3% / 黄17.0% / news15.9% / shop4.5% / warp2.3% 目安、±3%）。
   shop は都市に隣接するマスを優先し1辺1個まで。warp は都市に隣接させず、地図上に分散させる。news は隣接させない。
-  種類は blue 42% / red 22% / yellow 18% / news 18% 目安。news は隣接させない。
-- 海の辺の中間マスは必ず水上。陸の辺の中間マスは陸上に寄せる。
+- 海の辺の中間マスは必ず水上。陸の辺の中間マスは陸上に寄せる。空路の中間マスは陸水を問わないが、
+  ほかの rail/sea/air の線分から20 map units以上離す。
 - 異世界（天国・地獄・宇宙）は `realms.json` の8駅から、背景画像の名所に合わせた2〜3重ループ＋分岐＋行き止まり＋近道で約45〜55ノードの小盤面を作る。portal は heaven 1（門の近く）、hell 1（上中央の蜘蛛の糸）、space 2。node.realm を付け、world とは辺でつながない。
 - 出力: `src/data/board.json`（`Board`）と `public/assets/map/land.json`
   （`{ w, h, polygons }`、各 ring は `[x0,y0,x1,y1,...]` の平坦配列、0.5単位に丸め、600KB未満）。
@@ -168,6 +176,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 ## 2.5 異世界マップ（天国・地獄・宇宙）
 
 `src/data/realms.json` は `City` 形の駅を realm ごとに8件持つ。`lat`/`lon` は0、`landmark` なし、`realm` は `heaven` / `hell` / `space`、物件は2〜4件。
+駅名も `nameKana` を持つ（漢字を含む名前は必須。例: 天国の門→`てんごくのもん`、閻魔税務署→`えんまぜいむしょ`）。
 
 `npm run board` は `realms.json` の駅を `board.json` に `c:<cityId>` で追加し、背景画像の名所に合わせた次の小盤面を作る。
 
@@ -329,7 +338,8 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 `manifest.json` を作る。キーは `fnv1a(voiceKey + "\n" + text)`。
 
 - 対象: characters の `lines`、events の `lines` / `choices[].reply`、npcs の台詞、
-  ナレーター定型文。
+  ナレーター定型文。都市を追加すると、その都市名を含むナレーターの到着・目的地・一番乗りの
+  3台詞（`src/audio/narration.ts` の `arrive` / `destination` / `goal`）も生成対象になる。
 - **台詞は固定文**。変数・プレイヤー名・数値を混ぜない（事前生成が壊れる）。
 - 生成済みはスキップされる。文言を変えると新しいキーになる。
 - 声の利用規約は `docs/voicevox-licensing.md`。政治的利用を禁じる話者は使わない。
@@ -346,11 +356,13 @@ npm run validate
 - ファイルが無い → **warning**。
 - 内容が不正 → **error**。1件でもあれば exit 1。
 - 主なチェック:
-  - cities: 300件、id一意、物件idの接頭辞と連番、landmarkの許可リストと都市、地域の網羅、
+  - cities: 372件、id一意、物件idの接頭辞と連番、landmarkの許可リストと都市、地域の網羅、
     Africa 30前後 / 南米18前後 / オセアニア10前後、座標2桁、業種・価格・利回り。
-  - realms: 各realm 8駅、id一意、物件2〜4、lat/lon=0、landmarkなし。
+    `nameKana`: 漢字を含む `nameJa` では必須、含まない名前では禁止、ひらがな・`ー`・`・`・空白のみ。
+  - realms: 各realm 8駅、id一意、物件2〜4、lat/lon=0、landmarkなし。`nameKana` は cities と同じ規則。
   - board: ノードid一意、cityIdが cities∪realms に存在、全都市にノード、座標範囲（world 8192×3817 / realm 2400×1350）と0.1丸め、
     辺の両端存在、重複辺なし、world と各 realm がそれぞれ連結、news隣接なし、world ノード数（2600〜3200 目標は warning）、square mix は6種比の正規化 ±3%。
+    air 辺の都市端は airport=true の都市のみ、air マスは air 辺だけにつながり、他の路線の線分上にないこと。square が絡むノード間60未満はエラー、駅–駅のみ警告。
   - characters: 48 id、12 LineKey、voice、perk、role、spriteパス。
   - npcs: 許可id、voice。
   - events: kind/fact/sources、speaker（self禁止）、char/npc参照、Effectのopとフィールド（realm 含む）、
@@ -378,8 +390,8 @@ npm run validate
 1. 正本（types.ts / geo.ts / DESIGN.md / protocol.ts）を勝手に変えていない。
 2. id は一意、物件idは `<cityId>-<n>`、landmark は表の都市のみ。
 3. `npm run board` が成功し、world nodes が目標範囲（または spacing 制約の warning を理解）、`components: 1`、
-   `sea squares on land: 0`、`rail squares on water: 0`。
+   `sea squares on land: 0`、`rail squares on water: 0`。空路が空港だけを結び、air マスが他の路線に重なっていない。
 4. `npm run validate` が exit 0（warning は内容を確認）。
-5. 海路が大陸を横切っていない、鉄路が外洋を横切っていない（プレビュー目視）。
+5. 海路が大陸を横切っていない、鉄路が外洋を横切っていない、空路が空港間の長距離線になっている（プレビュー目視）。
 6. 台詞を変えたら `npm run voice`。固定文か確認。
 7. 実在人物・ヘイト・出典なしニュースがない。

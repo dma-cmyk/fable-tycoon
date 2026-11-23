@@ -80,14 +80,17 @@ const VOICE_CACHE_LIMIT = 30;
 const CROSSFADE_SECONDS = 0.8;
 const MAX_SFX_PER_NAME = 6;
 const CHATTER_DUCKED_GAIN = 0.4;
+const BGM_DUCKED_GAIN = 0.4;
 
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let voiceBus: GainNode | null = null;
 let chatterBus: GainNode | null = null;
 let bgmBus: GainNode | null = null;
+let bgmDuck: GainNode | null = null;
 let sfxBus: GainNode | null = null;
 let ready = false;
+let voicePending = false;
 
 const volumes: Volumes = readVolumes();
 
@@ -163,17 +166,20 @@ function unlock(): void {
     voiceBus = ctx.createGain();
     chatterBus = ctx.createGain();
     bgmBus = ctx.createGain();
+    bgmDuck = ctx.createGain();
     sfxBus = ctx.createGain();
     masterGain.connect(ctx.destination);
     voiceBus.connect(masterGain);
     chatterBus.connect(voiceBus);
-    bgmBus.connect(masterGain);
+    bgmBus.connect(bgmDuck);
+    bgmDuck.connect(masterGain);
     sfxBus.connect(masterGain);
 
     masterGain.gain.value = volumes.master;
     voiceBus.gain.value = volumes.voice;
     chatterBus.gain.value = 1;
     bgmBus.gain.value = volumes.bgm;
+    bgmDuck.gain.value = 1;
     sfxBus.gain.value = volumes.sfx;
 
     // Must happen inside the gesture. iOS keeps the context suspended otherwise.
@@ -194,6 +200,7 @@ function unlock(): void {
     voiceBus = null;
     chatterBus = null;
     bgmBus = null;
+    bgmDuck = null;
     sfxBus = null;
     ready = false;
   }
@@ -205,37 +212,49 @@ async function playVoice(voiceKey: string, text: string): Promise<void> {
 
   const token = ++voiceToken;
   stopActiveVoice();
+  stopActiveChatter();
+  voicePending = true;
+  updateBgmDuck();
 
-  const hash = voiceHash(voiceKey, text);
-  const manifest = await loadManifest();
-  if (token !== voiceToken || !ready) return;
+  try {
+    const hash = voiceHash(voiceKey, text);
+    const manifest = await loadManifest();
+    if (token !== voiceToken || !ready) return;
 
-  const relPath = manifest[hash];
-  if (typeof relPath !== 'string' || relPath.length === 0) return;
+    const relPath = manifest[hash];
+    if (typeof relPath !== 'string' || relPath.length === 0) return;
 
-  let buffer = voiceCache.get(hash);
-  if (buffer) {
-    rememberVoice(hash, buffer);
-  } else {
-    if (voiceFailed.has(hash)) return;
-    try {
-      buffer = await loadBuffer(`${ASSET_BASE}${relPath}`);
-    } catch {
-      voiceFailed.add(hash);
-      return;
+    let buffer = voiceCache.get(hash);
+    if (buffer) {
+      rememberVoice(hash, buffer);
+    } else {
+      if (voiceFailed.has(hash)) return;
+      try {
+        buffer = await loadBuffer(`${ASSET_BASE}${relPath}`);
+      } catch {
+        voiceFailed.add(hash);
+        return;
+      }
+      if (token !== voiceToken) return;
+      rememberVoice(hash, buffer);
     }
-    if (token !== voiceToken) return;
-    rememberVoice(hash, buffer);
-  }
 
-  if (token !== voiceToken || !ready) return;
-  await startVoice(buffer);
+    if (token !== voiceToken || !ready) return;
+    await startVoice(buffer);
+  } finally {
+    if (token === voiceToken) {
+      voicePending = false;
+      updateBgmDuck();
+    }
+  }
 }
 
 /** Stops the current line (its playVoice promise resolves) and prevents a pending one from starting. */
 function stopVoice(): void {
   voiceToken++;
+  voicePending = false;
   stopActiveVoice();
+  updateBgmDuck();
 }
 
 /**
@@ -244,7 +263,7 @@ function stopVoice(): void {
  * is ducked to 40% while a game voice line is speaking. Resolves on end, skip or missing line.
  */
 async function playChatter(voiceKey: string, text: string): Promise<void> {
-  if (!ready || !ctx || chatterBusy) return;
+  if (!ready || !ctx || chatterBusy || activeVoice || voicePending) return;
   chatterBusy = true;
   const hash = voiceHash(voiceKey, text);
   try {
@@ -525,6 +544,7 @@ function startVoice(buffer: AudioBuffer): Promise<void> {
   const active: ActiveVoice = { source, resolve: resolvePromise, done: false };
   activeVoice = active;
   updateChatterDuck();
+  updateBgmDuck();
   source.onended = () => {
     try {
       source.disconnect();
@@ -546,6 +566,7 @@ function finishVoice(voice: ActiveVoice): void {
   voice.done = true;
   if (activeVoice === voice) activeVoice = null;
   updateChatterDuck();
+  updateBgmDuck();
   voice.resolve();
 }
 
@@ -559,6 +580,18 @@ function stopActiveVoice(): void {
     /* not started or already stopped */
   }
   finishVoice(voice);
+}
+
+function stopActiveChatter(): void {
+  const chatter = activeChatter;
+  if (!chatter) return;
+  activeChatter = null;
+  try {
+    chatter.source.stop();
+  } catch {
+    /* not started or already stopped */
+  }
+  finishChatter(chatter);
 }
 
 function startChatter(buffer: AudioBuffer): Promise<void> {
@@ -605,6 +638,18 @@ function updateChatterDuck(): void {
   const now = ctx.currentTime;
   chatterBus.gain.cancelScheduledValues(now);
   chatterBus.gain.setTargetAtTime(activeVoice ? CHATTER_DUCKED_GAIN : 1, now, 0.05);
+}
+
+/** Ducks BGM by 8 dB while a game voice line is playing or loading. */
+function updateBgmDuck(): void {
+  if (!ctx || !bgmDuck) return;
+  const target = activeVoice || voicePending ? BGM_DUCKED_GAIN : 1;
+  const now = ctx.currentTime;
+  const gain = bgmDuck.gain;
+  const current = gain.value;
+  gain.cancelScheduledValues(now);
+  gain.setValueAtTime(current, now);
+  gain.linearRampToValueAtTime(target, now + (target < current ? 0.15 : 0.3));
 }
 
 function fadeOutBgm(track: ActiveBgm | null): void {

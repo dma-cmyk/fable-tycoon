@@ -34,6 +34,7 @@ import {
   speakerName,
 } from '../format';
 import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
+import { rubyName } from '../ruby';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
@@ -187,6 +188,9 @@ export class GameScreen implements ScreenHandle {
   private moveSelection: string | null = null;
   private moveOptionsKey = '';
   private moveOptionsCache: MoveOption[] = [];
+  /** 目的地までの残りホップ数（候補ノードID → 距離、不明は null）。 */
+  private moveRemain = new Map<string, number | null>();
+  private recommendedMoveNodeId: string | null = null;
   private readonly loading: HTMLElement;
   private readonly loadingText: HTMLElement;
   private readonly loadingBar: HTMLElement;
@@ -947,7 +951,9 @@ export class GameScreen implements ScreenHandle {
     const portalId = inRealm ? portalNodeFor(actorRealm) : undefined;
     const destNode = inRealm && portalId ? portalId : cityNodeId(state.destination);
     const destination = citiesById.get(state.destination);
-    this.destText.textContent = inRealm ? '出口' : destination?.nameJa ?? state.destination;
+    this.destText.replaceChildren(
+      inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
+    );
     this.destChip.classList.toggle('is-realm', inRealm);
     const distanceSeat = actor ?? displaySeat ?? 0;
     const destPlayer = state.players[distanceSeat];
@@ -1192,6 +1198,8 @@ export class GameScreen implements ScreenHandle {
       this.moveSelection = null;
       this.moveOptionsCache = [];
       this.moveOptionsKey = '';
+      this.moveRemain.clear();
+      this.recommendedMoveNodeId = null;
       this.moveOptionsHost.hidden = true;
       this.moveOptionsHost.replaceChildren();
       this.map?.setMoveOptions(null, () => undefined);
@@ -1199,36 +1207,65 @@ export class GameScreen implements ScreenHandle {
     }
     const options = state.phase.options;
     if (this.moveSelection && !options.some((option) => option.nodeId === this.moveSelection)) this.moveSelection = null;
-    const key = options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|');
+    const key = `${state.destination}#${this.playerRealm}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
     if (key !== this.moveOptionsKey) {
       this.moveOptionsKey = key;
-      this.moveOptionsCache = options;
-      this.map?.setMoveOptions(options, {
-        numbers: options.map((_, index) => index + 1),
-        onSelect: (nodeId) => this.selectMoveOption(nodeId, true),
+      this.moveRemain.clear();
+      for (const option of options) {
+        this.moveRemain.set(option.nodeId, this.map?.getMoveOptionDistance(option.nodeId) ?? null);
+      }
+      const anyKnown = options.some((option) => typeof this.moveRemain.get(option.nodeId) === 'number');
+      const ranked = options.map((option, index) => ({
+        option,
+        index,
+        remain: this.moveRemain.get(option.nodeId),
+        city: nodesById.get(option.nodeId)?.kind === 'city' ? 0 : 1,
+      }));
+      if (anyKnown) {
+        // 目的地に近い順。同距離は駅を優先し、最後は元の順序で安定させる。
+        ranked.sort((a, b) => {
+          const aKnown = typeof a.remain === 'number';
+          const bKnown = typeof b.remain === 'number';
+          if (aKnown !== bKnown) return aKnown ? -1 : 1;
+          if (aKnown && bKnown && a.remain !== b.remain) return (a.remain as number) - (b.remain as number);
+          if (a.city !== b.city) return a.city - b.city;
+          return a.index - b.index;
+        });
+      }
+      this.moveOptionsCache = ranked.map((entry) => entry.option);
+      const onSelect = (nodeId: string | null): void => this.selectMoveOption(nodeId, true);
+      this.map?.setMoveOptions(this.moveOptionsCache, {
+        numbers: this.moveOptionsCache.map((_, index) => index + 1),
+        onSelect,
       });
+      this.recommendedMoveNodeId = this.map?.getRecommendedMoveOption() ?? null;
     }
     this.moveOptionsHost.hidden = false;
     const actorNode = actor !== null ? state.players[actor]?.nodeId : undefined;
     const scroller = h('div', { class: 'move-chip-scroll' });
-    options.forEach((option, index) => {
+    this.moveOptionsCache.forEach((option, index) => {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
+      const kind = moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue');
+      const remain = this.moveRemain.get(option.nodeId) ?? null;
+      const remainText = remain === null ? '目的地まで —' : `目的地まで あと${remain}マス`;
+      const recommended = option.nodeId === this.recommendedMoveNodeId;
+      const selected = this.moveSelection === option.nodeId;
       const chip = h(
         'button',
         {
-          class: `move-chip ${this.moveSelection === option.nodeId ? 'is-selected' : ''}`.trim(),
+          class: `move-chip ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''}`.trim(),
           attrs: {
             type: 'button',
-            'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ`,
-            'aria-pressed': String(this.moveSelection === option.nodeId),
+            'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ。${remainText}`,
+            'aria-pressed': String(selected),
           },
           on: { click: () => this.selectMoveOption(option.nodeId) },
         },
         h('span', { class: 'move-chip-num', text: String(index + 1) }),
         h(
           'span',
-          { class: 'move-chip-kind', attrs: { style: `--kind-color:${moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').color}`, title: moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').label, 'aria-hidden': 'true' } },
-          moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').symbol,
+          { class: 'move-chip-kind', attrs: { style: `--kind-color:${kind.color}`, title: kind.label, 'aria-hidden': 'true' } },
+          kind.symbol,
         ),
         h(
           'span',
@@ -1239,9 +1276,21 @@ export class GameScreen implements ScreenHandle {
             { class: 'move-chip-vehicle' },
             summary.rail > 0 ? h('span', { text: `電車 ${summary.rail}マス` }) : null,
             summary.sea > 0 ? h('span', { text: `船 ${summary.sea}マス` }) : null,
+            summary.air > 0 ? h('span', { text: `✈ 空路 ${summary.air}マス` }) : null,
           ),
         ),
-        h('span', { class: 'move-chip-steps', text: `${option.path.length}歩` }),
+        h(
+          'span',
+          { class: 'move-chip-meta' },
+          recommended ? h('span', { class: 'move-chip-tag', text: 'おすすめ' }) : null,
+          h(
+            'span',
+            { class: 'move-chip-dest' },
+            h('span', { class: 'move-chip-dest-prefix', text: '目的地まで ' }),
+            remain === null ? '—' : `あと${remain}マス`,
+          ),
+          h('span', { class: 'move-chip-steps', text: `${option.path.length}歩` }),
+        ),
       );
       scroller.append(chip);
     });
@@ -1264,8 +1313,11 @@ export class GameScreen implements ScreenHandle {
       h(
         'div',
         { class: 'move-options-head' },
-        h('span', { class: 'move-options-label', text: `出目 ${state.phase.roll} ・ 候補 ${options.length}` }),
-        h('span', { class: 'move-options-hint', text: '1回目のタップで選択、下のボタンで決定' }),
+        h('span', { class: 'move-options-label', text: `出目 ${state.phase.roll}` }),
+        h('span', {
+          class: 'move-options-prompt',
+          text: `光っているマスから行き先をえらぼう（${options.length}か所）`,
+        }),
         prev,
         next,
       ),
@@ -2196,7 +2248,7 @@ export class GameScreen implements ScreenHandle {
     const city = citiesById.get(cityId);
     if (!city || motionReduced()) {
       if (city) {
-        this.rouletteName.textContent = city.nameJa;
+        this.rouletteName.replaceChildren(rubyName(city.nameJa, city.nameKana));
         this.rouletteCountry.textContent = city.countryJa;
       }
       void Audio.playVoice('narrator', destinationNarration(city?.nameJa ?? cityId));
@@ -2217,7 +2269,7 @@ export class GameScreen implements ScreenHandle {
     const stampFor = (candidate: typeof city): string =>
       candidate.tier === 1 ? 'metropolis' : candidate.tier === 2 && candidate.port ? 'port_town' : 'town';
     const paint = (candidate: typeof city): void => {
-      this.rouletteName.textContent = candidate.nameJa;
+      this.rouletteName.replaceChildren(rubyName(candidate.nameJa, candidate.nameKana));
       this.rouletteCountry.textContent = `${candidate.countryJa} ・ ${candidate.nameEn}`;
       this.rouletteBadge.textContent = countryFlag(candidate.country);
       this.rouletteBadge.className = `roulette-city-badge tier-${Math.min(3, Math.max(1, candidate.tier))}`;
@@ -2707,7 +2759,15 @@ export class GameScreen implements ScreenHandle {
         const city = citiesById.get(fx.cityId);
         await this.showDestinationRoulette(fx.cityId, control);
         if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 0.8, ms: 700 });
-        this.showGameBanner(`🎯 次の目的地は ${city?.nameJa ?? fx.cityId}！`);
+        this.showGameBanner(
+          h(
+            'span',
+            {},
+            '🎯 次の目的地は ',
+            city ? rubyName(city.nameJa, city.nameKana) : fx.cityId,
+            '！',
+          ),
+        );
         this.addLog(`🎯 目的地が ${city?.nameJa ?? fx.cityId} に決定`);
         await control.wait(260);
         return;
@@ -2925,8 +2985,8 @@ export class GameScreen implements ScreenHandle {
     }, 4100);
   }
 
-  private showGameBanner(text: string): void {
-    this.gameBanner.textContent = text;
+  private showGameBanner(text: string | Node): void {
+    this.gameBanner.replaceChildren(text);
     this.gameBanner.hidden = false;
     this.gameBanner.classList.add('is-visible');
     window.clearTimeout(this.bannerTimer);

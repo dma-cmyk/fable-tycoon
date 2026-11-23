@@ -33,6 +33,27 @@ import type { LayerTransform, Season } from './land';
 import type { PublicState } from '../core/engine';
 import { AmbientWorld } from './ambient';
 import { RectGrid } from './grid';
+import {
+  airLaneControl,
+  chooseRecommended,
+  hopDistances,
+  lanePointAt,
+  routeModeOf,
+  vehicleForStep,
+  type GraphEdge,
+  type RouteMode,
+} from './routes';
+import {
+  LabelFade,
+  bucketZoom,
+  placeLabels,
+  rectsOverlap,
+  zoomBucket,
+  type LabelItem,
+  type Rect,
+  type SceneDisc,
+  type SceneSegment,
+} from './labels';
 import { drawVehicle, vehicleMetrics, type VehicleKind } from './vehicles';
 import { resolveCancelledToken, shouldCancelForSnapshot } from './mapState';
 import {
@@ -59,6 +80,8 @@ export interface BorderData { w: number; h: number; lines: number[][] }
 export interface MapArtLabel {
   text?: string;
   nameJa?: string;
+  /** Hiragana reading of `text`, present only when the name contains kanji. */
+  kana?: string;
   x: number;
   y: number;
   kind?: 'ocean' | 'continent' | 'country' | 'river' | 'lake' | 'sea' | string;
@@ -98,13 +121,6 @@ export interface FrameStats {
   maxMs: number;
   fps: number;
   frames: number;
-}
-
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
 }
 
 export interface SafeArea {
@@ -157,7 +173,7 @@ interface DrawEdge {
   ay: number;
   dx: number;
   dy: number;
-  sea: boolean;
+  mode: RouteMode;
 }
 
 interface TokenRuntime {
@@ -264,6 +280,51 @@ interface CityVis {
   y: number;
 }
 
+/** Map-art name resolved for the active zoom bucket (stable, cached). */
+interface ArtLabelPlan {
+  id: string;
+  /** Anchor in world units. */
+  ax: number;
+  ay: number;
+  /** Box offset from the anchor, CSS px at the bucket zoom. */
+  dx: number;
+  dy: number;
+  w: number;
+  h: number;
+  fs: number;
+  text: string;
+  kana: string | null;
+  kanaFs: number;
+  water: boolean;
+  rotate: number;
+  /** Character layout for water names, resolved once per bucket. */
+  chars: Array<{ ch: string; x: number }> | null;
+  strokeWidth: number;
+  fill: string;
+}
+
+/** City name box resolved for the active zoom bucket (stable, cached). */
+interface CityLabelPlan {
+  dx: number;
+  dy: number;
+  w: number;
+  h: number;
+  fs: number;
+  kana: string | null;
+  kanaFs: number;
+  text: string;
+  /** Chosen slot for this bucket; -1 = crowded, drawn only when it is a priority label. */
+  slot: number;
+}
+
+/** A label box drawn this frame, with the anchor it hangs off (QA sampling). */
+interface DrawnLabel {
+  id: string;
+  rect: Rect;
+  ax: number;
+  ay: number;
+}
+
 const SEAT_COLORS = ['#e63946', '#2089c8', '#e08a1e', '#7c5cff'];
 const TAU = Math.PI * 2;
 const LABEL_FONT = '"M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif';
@@ -281,17 +342,21 @@ function edgeKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function rectsHit(a: Rect, b: Rect, pad = 0): boolean {
-  return (
-    a.x < b.x + b.w + pad &&
-    a.x + a.w + pad > b.x &&
-    a.y < b.y + b.h + pad &&
-    a.y + a.h + pad > b.y
-  );
-}
-
 function insideRect(x: number, y: number, r: Rect): boolean {
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+/** Hiragana reading stored next to a kanji city name (shared data contract). */
+function cityKana(city: City): string | null {
+  const kana = city.nameKana?.trim();
+  if (!kana || kana === city.nameJa) return null;
+  return kana;
+}
+
+function labelKana(label: MapArtLabel, text: string): string | null {
+  const kana = label.kana?.trim();
+  if (!kana || kana === text) return null;
+  return kana;
 }
 
 function splitLines(text: string, maxChars: number): string[] {
@@ -336,7 +401,10 @@ export class MapView {
   private readonly cityNodeId = new Map<string, string>();
   private readonly characterById = new Map<string, Character>();
   private readonly edges: DrawEdge[] = [];
-  private readonly edgeModes = new Map<string, 'rail' | 'sea'>();
+  private readonly edgeModes = new Map<string, RouteMode>();
+  private readonly airNodes = new Set<string>();
+  private readonly graphEdges: GraphEdge[] = [];
+  private destinationNodeIdCache: { nodeId: string; distances: Map<string, number> } | null = null;
   private readonly warpNodes: BoardNode[] = [];
   private readonly ambient: AmbientWorld;
 
@@ -392,7 +460,16 @@ export class MapView {
   private selectedOption: string | null = null;
   private lastPickAt = 0;
   private labelObstacles: MapLabelObstacle[] = [];
-  private artLabelRects: Rect[] = [];
+  private labelObstacleSignature = '';
+  /** Cached static label layout for the current view + zoom bucket. */
+  private labelLayoutKey = '';
+  private labelLayoutRefZoom = 1;
+  private labelLayoutMs = { art: 0, city: 0, total: 0 };
+  private cityLabelPlan = new Map<string, CityLabelPlan>();
+  private artLabelPlan: ArtLabelPlan[] = [];
+  private cityLabelDrawn: DrawnLabel[] = [];
+  private artLabelDrawn: DrawnLabel[] = [];
+  private readonly labelFade = new LabelFade();
   private overviewMode = false;
   private cityTap: ((cityId: string) => void) | null = null;
 
@@ -471,7 +548,12 @@ export class MapView {
       const a = this.nodeById.get(e.a);
       const b = this.nodeById.get(e.b);
       if (!a || !b) continue;
-      this.edgeModes.set(edgeKey(e.a, e.b), e.mode);
+      const mode = routeModeOf(e.mode);
+      this.edgeModes.set(edgeKey(e.a, e.b), mode);
+      if (mode === 'air') {
+        this.airNodes.add(a.id);
+        this.airNodes.add(b.id);
+      }
       const realm = a.realm;
       if (realm !== b.realm) continue;
       const draw: DrawEdge = {
@@ -479,7 +561,7 @@ export class MapView {
         ay: a.y,
         dx: wrapDx(a.x, b.x),
         dy: b.y - a.y,
-        sea: e.mode === 'sea',
+        mode,
       };
       if (realm) {
         const list = this.realmEdges.get(realm) ?? [];
@@ -489,6 +571,7 @@ export class MapView {
         this.edges.push(draw);
       }
     }
+    for (const edge of data.board.edges) this.graphEdges.push({ a: edge.a, b: edge.b });
     for (const node of data.board.nodes) {
       if (node.kind === 'warp') this.warpNodes.push(node);
     }
@@ -498,6 +581,8 @@ export class MapView {
 
     canvas.style.touchAction = 'none';
     canvas.style.display = 'block';
+    // QA hook: automated screenshots reach the view through the canvas node.
+    Object.defineProperty(canvas, '__fableMapView', { value: this, configurable: true });
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -1227,6 +1312,8 @@ export class MapView {
     const rect = this.canvas.getBoundingClientRect();
     const cssW = Math.max(1, rect.width || this.canvas.clientWidth || 640);
     const cssH = Math.max(1, rect.height || this.canvas.clientHeight || 480);
+    const prevW = this.cssW;
+    const prevH = this.cssH;
     const rawDpr = Math.max(1, window.devicePixelRatio || 1);
     this.budget = detectCanvasBudget();
     const fit = fitBackingStore(cssW, cssH, rawDpr, this.budget);
@@ -1248,6 +1335,9 @@ export class MapView {
     if (!this.initialized) {
       this.initialized = true;
       void this.camera.fitWorld(0);
+    } else if (Math.abs(cssW - prevW) > 1 || Math.abs(cssH - prevH) > 1) {
+      // A resize changes the HUD-free area; keep the candidates framed.
+      if (this.moveOptions && this.moveOptions.length > 0) this.frameMoveOptions();
     }
     this.landLayer.invalidate();
     this.requestRender();
@@ -1296,6 +1386,38 @@ export class MapView {
     return { avgMs: avg, p95Ms: p95, maxMs: max, fps: avg > 0 ? 1000 / avg : 0, frames: values.length };
   }
 
+  /**
+   * Remaining board hops from `nodeId` to the current destination.
+   * Works before `setMoveOptions`; returns null for unknown or unreachable nodes.
+   */
+  getMoveOptionDistance(nodeId: string): number | null {
+    if (!this.nodeById.has(nodeId)) return null;
+    const distances = this.destinationDistances();
+    if (!distances) return null;
+    return distances.get(nodeId) ?? null;
+  }
+
+  /** Candidate closest to the destination (ties: stations first), or null. */
+  getRecommendedMoveOption(): string | null {
+    if (!this.moveOptions || this.moveOptions.length === 0) return null;
+    const distances = this.destinationDistances();
+    if (!distances) return null;
+    const candidates = this.moveOptions.map((option) => ({
+      id: option.nodeId,
+      kind: this.nodeById.get(option.nodeId)?.kind ?? 'blue',
+    }));
+    return chooseRecommended(candidates, distances)?.id ?? null;
+  }
+
+  private destinationDistances(): Map<string, number> | null {
+    const destination = this.destinationNodeId;
+    if (!destination) return null;
+    if (this.destinationNodeIdCache?.nodeId === destination) return this.destinationNodeIdCache.distances;
+    const distances = hopDistances(destination, this.graphEdges);
+    this.destinationNodeIdCache = { nodeId: destination, distances };
+    return distances;
+  }
+
   getMoveProgress(): MoveProgress | null {
     const move = this.moveAnim;
     if (!move) return null;
@@ -1304,8 +1426,8 @@ export class MapView {
     const idx = Math.min(full.length - 2, Math.floor(raw));
     const a = this.nodeById.get(full[idx]);
     const b = this.nodeById.get(full[idx + 1]);
-    const sea = a && b ? (this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail') === 'sea' : false;
-    const vehicle = sea ? 'ferry' : move.dice >= 3 ? 'bullet_train' : move.dice === 2 ? 'express' : 'train';
+    const mode = a && b ? this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail' : 'rail';
+    const vehicle = vehicleForStep(mode, move.dice);
     return {
       playerId: move.playerId,
       path: full,
@@ -1324,6 +1446,33 @@ export class MapView {
   /** Debug/QA view of the effective DPR and the largest renderer-owned canvas. */
   getCanvasBudgetInfo(): { dpr: number; budget: CanvasBudget; largest: CanvasAllocation | null } {
     return { dpr: this.dpr, budget: { ...this.budget }, largest: getLargestCanvasAllocation() };
+  }
+
+  /**
+   * QA hook: label boxes drawn in the last frame plus the anchor each hangs
+   * off. Sampling consecutive frames proves a label never drifts relative to
+   * its anchor while tokens move or the camera pans.
+   */
+  getLabelLayoutSnapshot(): {
+    zoom: number;
+    layoutMs: { art: number; city: number; total: number };
+    city: Array<{ id: string; rect: Rect; anchor: { x: number; y: number } }>;
+    art: Array<{ id: string; rect: Rect; anchor: { x: number; y: number } }>;
+  } {
+    return {
+      zoom: this.camera.zoom,
+      layoutMs: { ...this.labelLayoutMs },
+      city: this.cityLabelDrawn.map((label) => ({
+        id: label.id,
+        rect: { ...label.rect },
+        anchor: { x: label.ax, y: label.ay },
+      })),
+      art: this.artLabelDrawn.map((label) => ({
+        id: label.id,
+        rect: { ...label.rect },
+        anchor: { x: label.ax, y: label.ay },
+      })),
+    };
   }
 
   /** Screen-space position of a board node (useful for HUD badges and tests). */
@@ -1380,7 +1529,16 @@ export class MapView {
    * HUD panels, modal edges, and any other chrome the page draws over the map.
    */
   setLabelObstacles(rects: ReadonlyArray<MapLabelObstacle>): void {
-    this.labelObstacles = rects.map((r) => ({ x: r.x, y: r.y, w: Math.max(0, r.w), h: Math.max(0, r.h) }));
+    const next = rects.map((r) => ({ x: r.x, y: r.y, w: Math.max(0, r.w), h: Math.max(0, r.h) }));
+    const signature = next
+      .map((r) => `${Math.round(r.x)}:${Math.round(r.y)}:${Math.round(r.w)}:${Math.round(r.h)}`)
+      .join('|');
+    const changed = signature !== this.labelObstacleSignature;
+    this.labelObstacles = next;
+    this.labelObstacleSignature = signature;
+    // HUD panels decide the free board area, so a real change re-frames the
+    // candidates that are being chosen.
+    if (changed && this.moveOptions && this.moveOptions.length > 0) this.frameMoveOptions();
     this.requestRender();
   }
 
@@ -1393,6 +1551,40 @@ export class MapView {
       w: Math.max(1, this.cssW - x - Math.max(0, this.safeArea.right)),
       h: Math.max(1, this.cssH - y - Math.max(0, this.safeArea.bottom)),
     };
+  }
+
+  /**
+   * Board area that the HUD panels leave free. Each overlapping obstacle cuts
+   * the cheapest of its four edges, so a top bar or a bottom action panel
+   * shrinks the frame without making camera framing ignore it.
+   */
+  private freeBoardBox(inset = 0): { x: number; y: number; w: number; h: number } {
+    const board = this.boardBox();
+    let x0 = board.x + inset;
+    let y0 = board.y + inset;
+    let x1 = board.x + board.w - inset;
+    let y1 = board.y + board.h - inset;
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false;
+      for (const o of this.labelObstacles) {
+        const overlapW = Math.min(x1, o.x + o.w) - Math.max(x0, o.x);
+        const overlapH = Math.min(y1, o.y + o.h) - Math.max(y0, o.y);
+        if (overlapW <= 0 || overlapH <= 0) continue;
+        const cutLeft = o.x + o.w - x0;
+        const cutRight = x1 - o.x;
+        const cutTop = o.y + o.h - y0;
+        const cutBottom = y1 - o.y;
+        const cut = Math.min(cutLeft, cutRight, cutTop, cutBottom);
+        if (cut <= 0) continue;
+        if (cut === cutLeft) x0 = Math.min(x1 - 60, o.x + o.w + 2);
+        else if (cut === cutRight) x1 = Math.max(x0 + 60, o.x - 2);
+        else if (cut === cutTop) y0 = Math.min(y1 - 60, o.y + o.h + 2);
+        else y1 = Math.max(y0 + 60, o.y - 2);
+        changed = true;
+      }
+      if (!changed) break;
+    }
+    return { x: x0, y: y0, w: Math.max(60, x1 - x0), h: Math.max(60, y1 - y0) };
   }
 
   private focusWorldPoint(x: number, y: number, zoom: number, ms: number): Promise<void> {
@@ -1410,24 +1602,75 @@ export class MapView {
     if (!id || !this.moveOptions || this.moveOptions.length === 0) return;
     const start = this.nodeById.get(id);
     if (!start) return;
-    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    const entries: Array<{ dx: number; dy: number; steps: number }> = [];
     for (const option of this.moveOptions) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
-      const dx = wrapDx(start.x, node.x);
-      minX = Math.min(minX, dx);
-      maxX = Math.max(maxX, dx);
-      minY = Math.min(minY, node.y - start.y);
-      maxY = Math.max(maxY, node.y - start.y);
+      entries.push({ dx: wrapDx(start.x, node.x), dy: node.y - start.y, steps: option.path.length });
     }
-    const box = this.boardBox();
-    const spanX = Math.max(1, maxX - minX);
-    const spanY = Math.max(1, maxY - minY);
-    const pad = 48;
-    const computed = Math.min((box.w - pad) / spanX, (box.h - pad) / spanY);
+    if (entries.length === 0) return;
+    const free = this.freeBoardBox();
+    const margin = Math.min(80, Math.max(30, Math.min(free.w, free.h) * 0.08));
+    // Phones cannot show 40 candidates at play zoom; allow the frame to pull
+    // back further (never below the world fit) so every lit square is visible.
+    const floor = Math.max(this.camera.minZoom(), this.playZoom() * 0.42);
+    const fitZoom = (list: ReadonlyArray<{ dx: number; dy: number }>): number => {
+      let minX = 0;
+      let maxX = 0;
+      let minY = 0;
+      let maxY = 0;
+      for (const entry of list) {
+        minX = Math.min(minX, entry.dx);
+        maxX = Math.max(maxX, entry.dx);
+        minY = Math.min(minY, entry.dy);
+        maxY = Math.max(maxY, entry.dy);
+      }
+      const spanX = Math.max(60, maxX - minX);
+      const spanY = Math.max(60, maxY - minY);
+      // Same reserves as the final fit, so a candidate kept here really fits.
+      return Math.min((free.w - margin * 2 - 68) / spanX, (free.h - margin * 2 - 86) / spanY);
+    };
+    let kept = entries;
+    if (fitZoom(entries) < floor * 0.98) {
+      // Too far apart to show every candidate: keep the actor and the nearest
+      // ones, and let the edge badges point at the rest.
+      kept = [];
+      for (const entry of [...entries].sort((a, b) => a.steps - b.steps)) {
+        const trial = [...kept, entry];
+        if (kept.length > 0 && fitZoom(trial) < floor) continue;
+        kept.push(entry);
+      }
+    }
+    let minX = 0;
+    let maxX = 0;
+    let minY = 0;
+    let maxY = 0;
+    for (const entry of kept) {
+      minX = Math.min(minX, entry.dx);
+      maxX = Math.max(maxX, entry.dx);
+      minY = Math.min(minY, entry.dy);
+      maxY = Math.max(maxY, entry.dy);
+    }
+    // Reserved screen space for pins and pulse rings is handled below by
+    // shrinking the free area and nudging the target down.
+    const spanX = Math.max(60, maxX - minX);
+    const spanY = Math.max(60, maxY - minY);
+    // 68px for ring/label sides, 86px for the pin above and the ring below.
+    const computed = Math.min(
+      (free.w - margin * 2 - 68) / spanX,
+      (free.h - margin * 2 - 86) / spanY,
+    );
     const cap = Math.max(this.playZoom(), Math.min(this.camera.zoom, this.playZoom() * 1.6));
-    const zoom = this.camera.clampZoom(Math.min(computed, cap));
-    void this.focusWorldPoint(start.x + (minX + maxX) / 2, start.y + (minY + maxY) / 2, zoom, 420);
+    const zoom = Math.max(floor, Math.min(computed, cap));
+    const cam = this.camera;
+    const centerX = start.x + (minX + maxX) / 2;
+    const centerY = start.y + (minY + maxY) / 2;
+    const offsetX = free.x + free.w / 2 - cam.vw / 2;
+    const offsetY = free.y + free.h / 2 - cam.vh / 2 - 13;
+    const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
+    const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
+    this.overviewMode = false;
+    void cam.startTween(targetX, targetY, cam.clampZoom(zoom), 420, Math.min(cam.minZoom(), zoom));
   }
 
   /** Fit the selected option's whole path, including both endpoints, inside the HUD-free board box. */
@@ -1499,18 +1742,17 @@ export class MapView {
       && (this.overviewMode || this.camera.zoom <= this.camera.minZoom() * 1.18);
   }
 
-  private detailLevel(): number {
-    if (this.view !== 'world') return this.camera.zoom < 0.8 ? 1 : 2;
-    const z = this.camera.zoom;
-    return z < 0.6 ? 0 : z < 1.45 ? 1 : 2;
+  private detailLevel(zoom = this.camera.zoom): number {
+    if (this.view !== 'world') return zoom < 0.8 ? 1 : 2;
+    return zoom < 0.6 ? 0 : zoom < 1.45 ? 1 : 2;
   }
 
-  private tileRadius(): number {
-    return Math.min(this.view === 'world' ? 11 : 50, Math.max(5, (5.2 + this.camera.zoom * 6.4) * this.viewScale()));
+  private tileRadius(zoom = this.camera.zoom): number {
+    return Math.min(this.view === 'world' ? 11 : 50, Math.max(5, (5.2 + zoom * 6.4) * this.viewScale()));
   }
 
-  private cityRadius(): number {
-    return Math.min(38, Math.max(5.5, (4.5 + this.camera.zoom * 4.2) * this.viewScale()));
+  private cityRadius(zoom = this.camera.zoom): number {
+    return Math.min(38, Math.max(5.5, (4.5 + zoom * 4.2) * this.viewScale()));
   }
 
   private tokenHeight(): number {
@@ -1846,7 +2088,8 @@ export class MapView {
       this.drawOverviewMarkers(ctx);
     } else {
       const layouts = this.computeLayouts(now);
-      this.drawCities(ctx, now, layouts);
+      this.drawMoveSpotlight(ctx);
+      this.drawCities(ctx, now);
       this.drawMoveUi(ctx, now);
       this.drawTokens(ctx, layouts, now);
       this.drawSelectedPathOverlay(ctx);
@@ -1911,121 +2154,306 @@ export class MapView {
     ctx.restore();
   }
 
-  private drawMapArtLabels(ctx: CanvasRenderingContext2D): void {
-    const data = this.assets.mapArt?.labels;
-    if (!data) return;
-    const labels = Array.isArray(data) ? [...data] : [];
-    if (labels.length === 0) return;
-    const cam = this.camera;
+  /**
+   * Resolve every label box from static board data for the active zoom bucket.
+   *
+   * This runs only when the zoom bucket or the view changes, never per frame:
+   * a label's slot (and therefore its offset from its anchor) cannot drift
+   * while tokens walk, HUD panels open, or the camera pans.
+   */
+  private ensureLabelLayout(): void {
+    const bucket = zoomBucket(this.camera.zoom);
+    const key = `${this.view}|${bucket}`;
+    if (key === this.labelLayoutKey) return;
+    this.labelLayoutKey = key;
+    const started = performance.now();
+    const refZoom = bucketZoom(bucket);
+    const invZoom = 1 / refZoom;
+    this.labelLayoutRefZoom = refZoom;
+    const detail = this.detailLevel(refZoom);
+    const playZoom = this.playZoom();
+    const ctx = this.ctx;
+
+    // ---- map-art terrain names -------------------------------------------
+    const source = this.assets.mapArt?.labels;
+    const labels = Array.isArray(source) ? [...source] : [];
     const rank = (kind: string): number =>
       kind === 'ocean' ? 0 : kind === 'sea' ? 1 : kind === 'continent' ? 2 : kind === 'country' ? 3 : kind === 'lake' ? 4 : 5;
     labels.sort((a, b) => rank(a.kind ?? 'country') - rank(b.kind ?? 'country'));
-    const placed = new RectGrid<Rect>(48);
-    this.artLabelRects = [];
-    const blockers: Rect[] = [...this.labelObstacles];
+    const artItems: LabelItem[] = [];
+    const artPlans: ArtLabelPlan[] = [];
+    for (let i = 0; i < labels.length; i++) {
+      const label = labels[i];
+      const text = label.text ?? label.nameJa;
+      if (!text) continue;
+      if (refZoom < (label.minZoom ?? 0) || refZoom > (label.maxZoom ?? 99)) continue;
+      const kind = label.kind ?? 'country';
+      if (kind === 'country' && (detail >= 2 || refZoom >= 0.9)) continue;
+      const base = label.size ?? 24;
+      const zoomedIn = refZoom >= playZoom * 0.95;
+      const cap = kind === 'ocean' || kind === 'continent'
+        ? (zoomedIn ? 20 : 80)
+        : kind === 'sea'
+          ? (zoomedIn ? 20 : 40)
+          : kind === 'country'
+            ? (zoomedIn ? 20 : 24)
+            : (refZoom >= 0.9 ? 12 : 18);
+      const fs = Math.min(cap, Math.max(6, base * refZoom));
+      const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
+      const font = `${water ? 'italic ' : ''}800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      let width = this.measureText(ctx, text, font);
+      const gap = water ? fs * 0.12 : 0;
+      if (water) width += Math.max(0, Array.from(text).length - 1) * gap;
+      // Furigana only once the terrain name is big enough to keep it legible.
+      const kana = fs >= 14 ? labelKana(label, text) : null;
+      const kanaFs = kana ? Math.max(8, fs * 0.5) : 0;
+      const kanaWidth = kana ? this.measureText(ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
+      const boxW = Math.max(width, kanaWidth);
+      const boxH = fs * 1.15 + (kana ? kanaFs * 1.15 : 0);
+      let chars: Array<{ ch: string; x: number }> | null = null;
+      if (water) {
+        chars = [];
+        let cx = -width / 2;
+        for (const ch of Array.from(text)) {
+          const cw = this.measureText(ctx, ch, font);
+          chars.push({ ch, x: cx + cw / 2 });
+          cx += cw + gap;
+        }
+      }
+      const id = `art:${i}`;
+      artPlans.push({
+        id,
+        ax: label.x,
+        ay: label.y,
+        dx: 0,
+        dy: 0,
+        w: boxW,
+        h: boxH,
+        fs,
+        text,
+        kana,
+        kanaFs,
+        water,
+        rotate: label.rotate ?? label.angle ?? 0,
+        chars,
+        strokeWidth: water ? (zoomedIn ? 1.05 : Math.max(2, fs * 0.08)) : (zoomedIn ? 1.05 : Math.max(2, fs * 0.1)),
+        fill: water
+          ? 'rgba(255, 255, 255, 0.78)'
+          : kind === 'country'
+            ? 'rgba(100, 66, 32, 0.8)'
+            : 'rgba(34, 98, 136, 0.9)',
+      });
+      artItems.push({
+        id,
+        x: label.x,
+        y: label.y,
+        w: (boxW + 6) * invZoom,
+        h: (boxH + 4) * invZoom,
+        slots: [{ dx: 0, dy: 0 }],
+        disc: 0,
+      });
+    }
+    const artStarted = performance.now();
+    const artChoice = placeLabels({
+      worldW: MAP_W,
+      wrap: true,
+      occupied: [],
+      discs: [],
+      segments: [],
+      clearance: 3 * invZoom,
+      reach: 900 * invZoom,
+    }, artItems);
+    this.artLabelPlan = artPlans.filter((plan) => (artChoice.get(plan.id) ?? -1) >= 0);
+    this.labelLayoutMs.art = performance.now() - artStarted;
+
+    // ---- city names -------------------------------------------------------
+    const entries = this.cityEntriesForView();
+    const sorted = [...entries].sort((a, b) => {
+      const pa = this.staticCityPriority(a);
+      const pb = this.staticCityPriority(b);
+      if (pa !== pb) return pb - pa;
+      return a.city.id < b.city.id ? -1 : 1;
+    });
+    const tileR = this.tileRadius(refZoom);
+    const cityR = this.cityRadius(refZoom);
+    const discs: SceneDisc[] = [];
+    for (const node of this.nodesForView()) {
+      if (node.kind === 'city') continue;
+      discs.push({ x: node.x, y: node.y, r: tileR * 1.25 * invZoom });
+    }
+    for (const entry of entries) {
+      discs.push({ x: entry.node.x, y: entry.node.y, r: cityR * 1.05 * invZoom });
+      if (!entry.city.landmark) continue;
+      if (detail === 0 && entry.city.tier !== 1) continue;
+      if (!this.assets.landmarks.has(entry.city.landmark)) continue;
+      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
+      // Label reservation used a square of this screen size; as world units the
+      // zoom cancels out, which keeps the landmark disc stable across buckets.
+      const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192);
+      const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
+      discs.push({
+        x: entry.node.x + dir * (cityR * invZoom + sz * 0.85),
+        y: entry.node.y + cityR * invZoom * 1.35 + sz * 0.55,
+        r: sz * 0.55,
+      });
+    }
+    const segments: SceneSegment[] = (this.view === 'world' ? this.edges : this.realmEdges.get(this.view) ?? [])
+      .map((e) => ({ ax: e.ax, ay: e.ay, bx: e.ax + e.dx, by: e.ay + e.dy }));
+    const cityItems: LabelItem[] = [];
+    const plans = new Map<string, CityLabelPlan>();
+    const showKana = detail >= 1;
+    for (const entry of sorted) {
+      const text = entry.city.nameJa;
+      const fs = this.view === 'world'
+        ? Math.min(14, Math.max(12, 10.5 + refZoom * 1.3))
+        : Math.min(28, 12 * this.viewScale());
+      const kana = showKana ? cityKana(entry.city) : null;
+      const kanaFs = kana ? Math.max(8, fs * 0.5) : 0;
+      const nameWidth = this.measureText(this.ctx, text, `800 ${fs.toFixed(1)}px ${LABEL_FONT}`);
+      const kanaWidth = kana ? this.measureText(this.ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
+      const w = Math.max(nameWidth, kanaWidth) + 13;
+      const h = fs + 8 + (kana ? kanaFs + 2 : 0);
+      const slotPx: Array<{ dx: number; dy: number }> = [
+        { dx: cityR + 6 + w / 2, dy: -h * 0.12 },
+        { dx: -(cityR + 6 + w / 2), dy: -h * 0.12 },
+        { dx: 0, dy: -(cityR + 5 + h / 2) },
+        { dx: 0, dy: cityR + 5 + h / 2 },
+      ];
+      for (const rr of [cityR + 14, cityR + 30]) {
+        for (let a = 0; a < 12; a++) {
+          const ang = (a / 12) * TAU;
+          slotPx.push({ dx: Math.cos(ang) * (rr + w / 2), dy: Math.sin(ang) * (rr * 0.85 + h / 2) });
+        }
+      }
+      plans.set(entry.city.id, { dx: slotPx[0].dx, dy: slotPx[0].dy, w, h, fs, kana, kanaFs, text, slot: -1 });
+      // At overview zoom only tier-1 names can be drawn, so skip the costly
+      // slot search for the rest; priority labels still fall back to slot 0.
+      if (detail === 0 && entry.city.tier !== 1) continue;
+      cityItems.push({
+        id: entry.city.id,
+        x: entry.node.x,
+        y: entry.node.y,
+        w: (w + 2) * invZoom,
+        h: (h + 2) * invZoom,
+        slots: slotPx.map((s) => ({ dx: s.dx * invZoom, dy: s.dy * invZoom })),
+        disc: cityR * invZoom,
+      });
+    }
+    const occupied: Rect[] = this.artLabelPlan.map((plan) => ({
+      x: plan.ax - (plan.w + 6) / 2 * invZoom,
+      y: plan.ay - (plan.h + 4) / 2 * invZoom,
+      w: (plan.w + 6) * invZoom,
+      h: (plan.h + 4) * invZoom,
+    }));
+    const choice = placeLabels({
+      worldW: MAP_W,
+      wrap: true,
+      occupied,
+      discs,
+      segments,
+      clearance: 3 * invZoom,
+      reach: 900,
+    }, cityItems);
+    for (const item of cityItems) {
+      const plan = plans.get(item.id);
+      if (!plan) continue;
+      const idx = choice.get(item.id) ?? -1;
+      plan.slot = idx;
+      if (idx >= 0) {
+        plan.dx = item.slots[idx].dx * refZoom;
+        plan.dy = item.slots[idx].dy * refZoom;
+      }
+    }
+    this.cityLabelPlan = plans;
+    this.labelLayoutMs.city = performance.now() - artStarted - this.labelLayoutMs.art;
+    this.labelLayoutMs.total = performance.now() - started;
+    this.labelFade.pruneAlive(new Set([...this.artLabelPlan.map((plan) => plan.id), ...plans.keys()]));
+  }
+
+  /** Placement order score; only static city data, so slots never follow game state. */
+  private staticCityPriority(entry: CityEntry): number {
+    return (entry.city.tier === 1 ? 3000 : entry.city.tier === 2 ? 600 : 100) + (entry.city.landmark ? 60 : 0);
+  }
+
+  /** Screen boxes that may temporarily cover a label. They only fade it, never move it. */
+  private dynamicLabelBlockers(now: number): Rect[] {
+    const cam = this.camera;
+    const out: Rect[] = [...this.labelObstacles];
+    const th = this.tokenHeight();
     for (const token of this.tokens) {
-      const world = this.tokenWorldPosition(token.playerId, performance.now());
+      const world = this.tokenWorldPosition(token.playerId, now);
       if (!world) continue;
       const sx = cam.screenX(world.x);
       const sy = cam.screenY(world.y);
-      blockers.push({ x: sx - 34, y: sy - this.tokenHeight() - 16, w: 68, h: this.tokenHeight() + 24 });
+      out.push({ x: sx - 30, y: sy - th - 16, w: 60, h: th + 24 });
     }
+    const r = this.tileRadius();
     for (const option of this.moveOptions ?? []) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
-      const sx = cam.screenX(node.x);
-      const sy = cam.screenY(node.y);
-      blockers.push({ x: sx - 30, y: sy - this.tileRadius() - 70, w: 60, h: 96 });
+      out.push({
+        x: cam.screenX(node.x) - 28,
+        y: cam.screenY(node.y) - r - 62,
+        w: 56,
+        h: 62 + r,
+      });
     }
-    // Reserve room for the priority city labels (current / destination / options)
-    // before background terrain names are placed, so a sea name cannot steal
-    // the only collision-free slot from them.
-    const priorityCityNodes = new Set<string>();
-    if (this.destinationNodeId) priorityCityNodes.add(this.destinationNodeId);
-    if (this.state) {
-      const current = this.cityNodeIdOfPlayer(this.state.current);
-      if (current) priorityCityNodes.add(current);
-    }
-    for (const option of this.moveOptions ?? []) {
-      const node = this.nodeById.get(option.nodeId);
-      if (node?.kind === 'city') priorityCityNodes.add(node.id);
-    }
-    for (const id of priorityCityNodes) {
-      const node = this.nodeById.get(id);
-      if (!node) continue;
-      const sx = cam.screenX(node.x);
-      const sy = cam.screenY(node.y);
-      blockers.push({ x: sx - 85, y: sy - 58, w: 170, h: 86 });
-    }
-    for (const label of labels) {
-      const text = label.text ?? label.nameJa;
-      if (!text) continue;
-      if (cam.zoom < (label.minZoom ?? 0) || cam.zoom > (label.maxZoom ?? 99)) continue;
-      const x = cam.screenX(label.x);
-      const y = cam.screenY(label.y);
-      if (x < -320 || x > cam.vw + 320 || y < -160 || y > cam.vh + 160) continue;
-      const kind = label.kind ?? 'country';
-      if (kind === 'country' && (this.detailLevel() >= 2 || cam.zoom >= 0.9)) continue;
-      const base = label.size ?? 24;
-      const playZoom = cam.zoom >= this.playZoom() * 0.95;
-      const cap = kind === 'ocean' || kind === 'continent'
-        ? (playZoom ? 20 : 80)
-        : kind === 'sea'
-          ? (playZoom ? 20 : 40)
-          : kind === 'country'
-            ? (playZoom ? 20 : 24)
-            : (cam.zoom >= 0.9 ? 12 : 18);
-      const fs = Math.min(cap, Math.max(6, base * cam.zoom));
-      const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
+    return out;
+  }
+
+  private drawMapArtLabels(ctx: CanvasRenderingContext2D): void {
+    this.ensureLabelLayout();
+    this.artLabelDrawn = [];
+    const cam = this.camera;
+    const board = this.boardBox();
+    const now = performance.now();
+    const blockers = this.dynamicLabelBlockers(now);
+    const ratio = cam.zoom / this.labelLayoutRefZoom;
+    for (const plan of this.artLabelPlan) {
+      const sx = cam.screenX(plan.ax);
+      const sy = cam.screenY(plan.ay);
+      if (sx < -320 || sx > cam.vw + 320 || sy < -160 || sy > cam.vh + 160) continue;
+      const w = plan.w * ratio;
+      const h = plan.h * ratio;
+      const fs = plan.fs * ratio;
+      const kanaFs = plan.kanaFs * ratio;
+      const rect = { x: sx + plan.dx * ratio - w / 2, y: sy + plan.dy * ratio - h / 2, w, h };
+      if (rect.x < board.x + 2 || rect.y < board.y + 2
+        || rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) continue;
+      const occluded = blockers.some((o) => rectsOverlap(rect, o, 2));
+      const alpha = this.labelFade.update(plan.id, !occluded, now);
+      if (alpha <= 0.02) continue;
       ctx.save();
-      ctx.translate(x, y);
-      const rot = label.rotate ?? label.angle ?? 0;
-      ctx.rotate((-rot * Math.PI) / 180);
-      ctx.font = `${water ? 'italic ' : ''}800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.globalAlpha = alpha;
+      ctx.translate(sx, sy);
+      ctx.rotate((-plan.rotate * Math.PI) / 180);
+      ctx.font = `${plan.water ? 'italic ' : ''}800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      let width = ctx.measureText(text).width;
-      if (water) width += Math.max(0, Array.from(text).length - 1) * fs * 0.12;
-      const height = fs * 1.15;
-      const rect = { x: x - width / 2, y: y - height / 2, w: width, h: height };
-      const board = this.boardBox();
-      if (rect.x < board.x + 2 || rect.y < board.y + 2
-        || rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) {
-        ctx.restore();
-        continue;
-      }
-      if (blockers.some((o) => rectsHit(rect, o, 3))) {
-        ctx.restore();
-        continue;
-      }
-      if (placed.queryRect(rect).some((r) => rectsHit(rect, r, 2))) {
-        ctx.restore();
-        continue;
-      }
-      placed.add(rect, rect);
-      this.artLabelRects.push(rect);
-      if (water) {
-        const chars = Array.from(text);
-        const gap = fs * 0.12;
-        let cx = -width / 2;
-        for (const ch of chars) {
-          const cw = ctx.measureText(ch).width;
-          ctx.strokeStyle = 'rgba(24, 72, 104, 0.22)';
-          ctx.lineWidth = playZoom && water ? 1.05 : Math.max(2, fs * 0.08);
-          ctx.strokeText(ch, cx + cw / 2, 0);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-          ctx.fillText(ch, cx + cw / 2, 0);
-          cx += cw + gap;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = plan.strokeWidth;
+      ctx.strokeStyle = plan.water ? 'rgba(24, 72, 104, 0.22)' : 'rgba(255, 255, 245, 0.72)';
+      ctx.fillStyle = plan.fill;
+      const blockH = fs * 1.15 + (plan.kana ? kanaFs * 1.15 : 0);
+      const nameY = plan.kana ? blockH / 2 - fs * 0.575 : 0;
+      if (plan.chars) {
+        for (const glyph of plan.chars) {
+          ctx.strokeText(glyph.ch, glyph.x * ratio, nameY);
+          ctx.fillText(glyph.ch, glyph.x * ratio, nameY);
         }
       } else {
-        ctx.strokeStyle = 'rgba(255, 255, 245, 0.72)';
-        ctx.lineWidth = playZoom ? 1.05 : Math.max(2, fs * 0.1);
-        ctx.lineJoin = 'round';
-        ctx.strokeText(text, 0, 0);
-        ctx.fillStyle = kind === 'country' ? 'rgba(100, 66, 32, 0.8)' : 'rgba(34, 98, 136, 0.9)';
-        ctx.fillText(text, 0, 0);
+        ctx.strokeText(plan.text, 0, nameY);
+        ctx.fillText(plan.text, 0, nameY);
+      }
+      if (plan.kana) {
+        ctx.font = `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`;
+        ctx.lineWidth = Math.max(1, plan.strokeWidth * 0.8);
+        const kanaY = -blockH / 2 + kanaFs * 0.575;
+        ctx.strokeText(plan.kana, 0, kanaY);
+        ctx.fillText(plan.kana, 0, kanaY);
       }
       ctx.restore();
+      this.artLabelDrawn.push({ id: plan.id, rect, ax: sx, ay: sy });
     }
   }
 
@@ -2119,6 +2547,7 @@ export class MapView {
     const toY = (y: number): number => cam.screenY(y);
     const edges = this.realmEdges.get(realm) ?? [];
     const path = new Path2D();
+    const airPath = new Path2D();
     for (const e of edges) {
       const x1 = toX(e.ax);
       const y1 = toY(e.ay);
@@ -2126,6 +2555,12 @@ export class MapView {
       const y2 = y1 + e.dy * cam.zoom;
       if (Math.max(x1, x2) < -margin || Math.min(x1, x2) > cam.vw + margin) continue;
       if (Math.max(y1, y2) < -margin || Math.min(y1, y2) > cam.vh + margin) continue;
+      if (e.mode === 'air') {
+        const { qx, qy } = airLaneControl(x1, y1, x2, y2);
+        airPath.moveTo(x1, y1);
+        airPath.quadraticCurveTo(qx, qy, x2, y2);
+        continue;
+      }
       path.moveTo(x1, y1);
       path.lineTo(x2, y2);
     }
@@ -2142,6 +2577,11 @@ export class MapView {
     ctx.strokeStyle = accent.core;
     ctx.lineWidth = 3 * rs;
     ctx.stroke(path);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 2 * rs;
+    ctx.setLineDash([5 * rs, 11 * rs]);
+    ctx.stroke(airPath);
+    ctx.setLineDash([]);
     ctx.restore();
 
     if (detail >= 1) {
@@ -2296,11 +2736,13 @@ export class MapView {
     this.drawTerrain(ctx, layer, detail0);
     this.drawCityClusters(ctx, layer, detail0);
 
-    // --- sea routes + rails ---------------------------------------------------
+    // --- sea routes + rails + sky lanes --------------------------------------
     const railPath = new Path2D();
     const seaPath = new Path2D();
     const sleeperPath = new Path2D();
     const chevronPath = new Path2D();
+    const airPath = new Path2D();
+    const airGlyphPath = new Path2D();
     const zoomForTrack = this.camera.zoom;
     const detailForTrack = this.detailLevel();
     for (const e of this.edges) {
@@ -2312,9 +2754,6 @@ export class MapView {
       const [x2, y2] = toCanvas(bx, by);
       if (Math.max(x1, x2) < -margin || Math.min(x1, x2) > wPx + margin) continue;
       if (Math.max(y1, y2) < -margin || Math.min(y1, y2) > hPx + margin) continue;
-      const path = e.sea ? seaPath : railPath;
-      path.moveTo(x1, y1);
-      path.lineTo(x2, y2);
       const lx = x2 - x1;
       const ly = y2 - y1;
       const len = Math.hypot(lx, ly);
@@ -2323,7 +2762,29 @@ export class MapView {
       const uy = ly / len;
       const nx = -uy;
       const ny = ux;
-      if (e.sea && zoomForTrack >= 0.5 && !overview) {
+      if (e.mode === 'air') {
+        // Sky lanes bow away from the straight line so flights read as arcs.
+        const { qx, qy } = airLaneControl(x1, y1, x2, y2, 0.16, 66 * dpr);
+        airPath.moveTo(x1, y1);
+        airPath.quadraticCurveTo(qx, qy, x2, y2);
+        if (!overview) {
+          const sc = Math.max(2.6, 3.2 * dpr);
+          for (let t = 0.28; t < 0.95; t += 0.32) {
+            const p = lanePointAt(t, x1, y1, qx, qy, x2, y2);
+            // small swept-wing plane glyph pointing along the lane
+            airGlyphPath.moveTo(p.x + p.hx * sc, p.y + p.hy * sc);
+            airGlyphPath.lineTo(p.x - p.hx * sc * 0.5 - p.hy * sc, p.y - p.hy * sc * 0.5 + p.hx * sc);
+            airGlyphPath.lineTo(p.x - p.hx * sc * 0.15, p.y - p.hy * sc * 0.15);
+            airGlyphPath.lineTo(p.x - p.hx * sc * 0.5 + p.hy * sc, p.y - p.hy * sc * 0.5 - p.hx * sc);
+            airGlyphPath.closePath();
+          }
+        }
+        continue;
+      }
+      const path = e.mode === 'sea' ? seaPath : railPath;
+      path.moveTo(x1, y1);
+      path.lineTo(x2, y2);
+      if (e.mode === 'sea' && zoomForTrack >= 0.5 && !overview) {
         const interval = 34 * dpr;
         for (let d = interval; d < len; d += interval) {
           const t = d / len;
@@ -2333,7 +2794,7 @@ export class MapView {
           chevronPath.lineTo(px + nx * 2 * dpr, py + ny * 2 * dpr);
           chevronPath.lineTo(px - ux * 3 * dpr - nx * 2 * dpr, py - uy * 3 * dpr - ny * 2 * dpr);
         }
-      } else if (!e.sea && detailForTrack >= 1 && zoomForTrack >= 0.75 && !overview) {
+      } else if (e.mode === 'rail' && detailForTrack >= 1 && zoomForTrack >= 0.75 && !overview) {
         const interval = 15 * dpr;
         const half = Math.max(2 * dpr, zoomForTrack * 1.5 * dpr);
         for (let d = interval * 0.5; d < len; d += interval) {
@@ -2392,6 +2853,23 @@ export class MapView {
       ctx.lineWidth = railW * dpr;
       ctx.stroke(railPath);
     }
+    // Sky lanes: a soft white underlay, a dotted blue line and plane glyphs.
+    // Kept faint at play zoom so the lanes never compete with the squares.
+    if (!overview) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+      ctx.lineWidth = 3.4 * dpr;
+      ctx.stroke(airPath);
+      ctx.strokeStyle = zoom >= 0.8 ? 'rgba(104, 190, 255, 0.38)' : 'rgba(104, 190, 255, 0.62)';
+      ctx.lineWidth = Math.max(1, 1.25 * dpr);
+      ctx.setLineDash([Math.max(1.5, 1.2 * dpr), Math.max(5, 6.5 * dpr)]);
+      ctx.stroke(airPath);
+      ctx.setLineDash([]);
+      ctx.fillStyle = zoom >= 0.8 ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.92)';
+      ctx.fill(airGlyphPath);
+      ctx.strokeStyle = 'rgba(40, 110, 160, 0.32)';
+      ctx.lineWidth = 0.8 * dpr;
+      ctx.stroke(airGlyphPath);
+    }
     ctx.restore();
 
     const detail = this.detailLevel();
@@ -2432,12 +2910,13 @@ export class MapView {
     }
   }
 
-  private drawCities(ctx: CanvasRenderingContext2D, now: number, layouts: TokenLayout[]): void {
+  private drawCities(ctx: CanvasRenderingContext2D, now: number): void {
     const cam = this.camera;
     const radius = this.cityRadius();
     const detail = this.detailLevel();
     this.cityHits = [];
     this.cityLabelHits = [];
+    this.cityLabelDrawn = [];
     this.cityHitGrid.clear();
     this.cityLabelGrid.clear();
     const visible: CityVis[] = [];
@@ -2452,9 +2931,6 @@ export class MapView {
     const destination = this.view === 'world' ? visible.find((v) => v.entry.node.id === this.destinationNodeId) ?? null : null;
     if (destination) this.drawDestinationPulse(ctx, destination, radius, now);
 
-    // Landmarks are drawn behind labels; labels do not treat them as obstacles.
-    const reserved: Rect[] = [];
-
     for (const v of visible) {
       const hit = {
         cityId: v.entry.city.id,
@@ -2466,10 +2942,7 @@ export class MapView {
       this.cityHitGrid.add({ x: hit.x - hit.r, y: hit.y - hit.r, w: hit.r * 2, h: hit.r * 2 }, hit);
     }
 
-    if (destination) {
-      const flagRect = this.drawDestinationFlag(ctx, destination, radius, now);
-      if (flagRect) reserved.push(flagRect);
-    }
+    if (destination) this.drawDestinationFlag(ctx, destination, radius, now);
     for (const v of visible) {
       if (!v.entry.city.landmark) continue;
       if (detail === 0 && v.entry.city.tier !== 1) continue;
@@ -2504,16 +2977,8 @@ export class MapView {
       ctx.restore();
     }
 
-    // Do not bury city names under character sprites; labels that cannot find a
-    // free slot are hidden (the pedestal remains visible).
-    for (const layout of layouts) {
-      if (layout.x < -100 || layout.x > cam.vw + 100 || layout.y < -100 || layout.y > cam.vh + 100) continue;
-      const big = layout.height * (this.state?.current === layout.playerId ? 1.12 : 1);
-      const tw = big * 1.05;
-      reserved.push({ x: layout.x - tw / 2, y: layout.y - big - 8, w: tw, h: big + 16 });
-    }
-
-    this.drawCityLabels(ctx, visible, radius, detail, reserved);
+    // Labels are placed statically; sprites over them only fade the name out.
+    this.drawCityLabels(ctx, visible, detail);
   }
 
   private landmarkSize(tier: number): number {
@@ -2656,6 +3121,15 @@ export class MapView {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(((hashString(node.id) % 100) / 100 - 0.5) * 0.1);
+    if (this.airNodes.has(node.id) && detail >= 1) {
+      // cloud base: sky squares float on a small cloud instead of bare ground
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.5, r * 0.5, r * 0.62, r * 0.3, 0, 0, TAU);
+      ctx.ellipse(r * 0.5, r * 0.48, r * 0.58, r * 0.28, 0, 0, TAU);
+      ctx.ellipse(0, r * 0.38, r * 0.82, r * 0.36, 0, 0, TAU);
+      ctx.fill();
+    }
     ctx.fillStyle = 'rgba(6, 40, 70, 0.26)';
     ctx.beginPath();
     ctx.ellipse(0.8, r * 0.56 + 2, r * 1.03, r * 0.44, 0, 0, TAU);
@@ -2806,184 +3280,66 @@ export class MapView {
     return { x: poleX - 3, y: topY - 4, w: fw + 8, h: baseY - topY + 8 };
   }
 
-  private drawCityLabels(
-    ctx: CanvasRenderingContext2D,
-    visible: CityVis[],
-    radius: number,
-    detail: number,
-    reserved: Rect[],
-  ): void {
-    const cam = this.camera;
+  private drawCityLabels(ctx: CanvasRenderingContext2D, visible: CityVis[], detail: number): void {
+    this.ensureLabelLayout();
+    const board = this.boardBox();
+    const now = performance.now();
     const currentCityId = this.state ? this.cityNodeIdOfPlayer(this.state.current) : null;
     const tokenNodeIds = new Set(this.tokens.map((t) => t.nodeId));
-    const tokenCityAt = (v: CityVis): boolean => tokenNodeIds.has(v.entry.node.id);
-    const discGrid = new RectGrid<Rect>(64);
-    const tr = this.tileRadius();
-    const board = this.boardBox();
-    if (this.labelObstacles.length > 0) reserved.push(...this.labelObstacles);
-    if (this.artLabelRects.length > 0) reserved.push(...this.artLabelRects);
-    for (const option of this.moveOptions ?? []) {
-      const node = this.nodeById.get(option.nodeId);
-      if (!node) continue;
-      const px = cam.screenX(node.x);
-      const py = cam.screenY(node.y);
-      reserved.push({ x: px - 26, y: py - tr - 78, w: 52, h: 78 + tr });
-    }
-    // Keep city labels off the landmark town cluster.
-    if (this.view === 'world' && detail >= 1) {
-      for (const entry of this.cityEntries) {
-        if (!entry.city.landmark) continue;
-        const px = cam.screenX(entry.node.x);
-        const py = cam.screenY(entry.node.y);
-        if (px < -120 || px > cam.vw + 120 || py < -120 || py > cam.vh + 120) continue;
-        const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
-        const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192) * cam.zoom;
-        const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
-        const cx = px + dir * (radius + sz * 0.85);
-        const cy = py + radius * 1.35 + sz * 0.55;
-        reserved.push({ x: cx - sz / 2, y: cy - sz * 0.62, w: sz, h: sz });
+    const optionCities = new Set(
+      (this.moveOptions ?? []).filter((o) => this.nodeById.get(o.nodeId)?.kind === 'city').map((o) => o.nodeId),
+    );
+    // Labels that must never fade out, and whose slot never changes with game state.
+    const priority = (v: CityVis): boolean =>
+      v.entry.node.id === this.destinationNodeId
+      || v.entry.node.id === currentCityId
+      || tokenNodeIds.has(v.entry.node.id)
+      || optionCities.has(v.entry.node.id);
+    const blockers = this.dynamicLabelBlockers(now);
+    const ratio = this.camera.zoom / this.labelLayoutRefZoom;
+    for (const v of visible) {
+      const city = v.entry.city;
+      const plan = this.cityLabelPlan.get(city.id);
+      if (!plan) continue;
+      const isPriority = priority(v);
+      if (detail === 0 && !isPriority && city.tier !== 1) continue;
+      // A crowded bucket hides the label; it is never pushed to another slot.
+      if (plan.slot < 0 && !isPriority) continue;
+      const w = plan.w * ratio;
+      const h = plan.h * ratio;
+      const rect = {
+        x: v.x + plan.dx * ratio - w / 2,
+        y: v.y + plan.dy * ratio - h / 2,
+        w,
+        h,
+      };
+      if (rect.x < board.x + 3 || rect.y < board.y + 3
+        || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
+      let alpha = 1;
+      if (!isPriority) {
+        alpha = this.labelFade.update(
+          `city:${city.id}`,
+          !blockers.some((b) => rectsOverlap(rect, b, 2)),
+          now,
+        );
+        if (alpha <= 0.02) continue;
       }
-    }
-    for (const node of this.nodesForView()) {
-      if (node.kind === 'city') continue;
-      const dx = cam.screenX(node.x);
-      const dy = cam.screenY(node.y);
-      if (dx < -tr || dx > cam.vw + tr || dy < -tr || dy > cam.vh + tr) continue;
-      discGrid.add({ x: dx - tr, y: dy - tr, w: tr * 2, h: tr * 2 }, { x: dx - tr, y: dy - tr, w: tr * 2, h: tr * 2 });
-    }
-    const trackGrid = new RectGrid<Rect>(48);
-    for (const e of this.view === 'world' ? this.edges : this.realmEdges.get(this.view) ?? []) {
-      const x1 = cam.screenX(e.ax);
-      const y1 = cam.screenY(e.ay);
-      const x2 = x1 + e.dx * cam.zoom;
-      const y2 = y1 + e.dy * cam.zoom;
-      const len = Math.hypot(x2 - x1, y2 - y1);
-      const steps = Math.max(1, Math.ceil(len / 34));
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const px = x1 + (x2 - x1) * t;
-        const py = y1 + (y2 - y1) * t;
-        if (px < -30 || px > cam.vw + 30 || py < -30 || py > cam.vh + 30) continue;
-        const r = { x: px - 7, y: py - 7, w: 14, h: 14 };
-        trackGrid.add(r, r);
-      }
-    }
-    const freeOfDiscs = (rect: Rect): boolean => !discGrid.queryRect(rect).some((d) => rectsHit(rect, d, 2));
-    const freeOfTrack = (rect: Rect): boolean => !trackGrid.queryRect(rect).some((d) => rectsHit(rect, d, 2));
-    const freeOfAll = (rect: Rect): boolean => freeOfDiscs(rect) && freeOfTrack(rect);
-    const optionCities = new Set((this.moveOptions ?? []).filter(o => this.nodeById.get(o.nodeId)?.kind === 'city').map(o => o.nodeId));
-    const mustShow = (v: CityVis): boolean =>
-      v.entry.node.id === this.destinationNodeId ||
-      v.entry.node.id === currentCityId ||
-      tokenCityAt(v) ||
-      optionCities.has(v.entry.node.id);
-    const candidates = visible
-      .filter((v) => {
-        if (detail > 0) return true;
-        if (v.entry.node.id === this.destinationNodeId) return true;
-        if (v.entry.node.id === currentCityId) return true;
-        if (tokenCityAt(v)) return true;
-        return v.entry.city.tier === 1;
-      })
-      .slice()
-      .sort((a, b) => {
-        const pa = this.cityPriority(a, currentCityId, tokenCityAt(a)) + (optionCities.has(a.entry.node.id) ? 40000 : 0);
-        const pb = this.cityPriority(b, currentCityId, tokenCityAt(b)) + (optionCities.has(b.entry.node.id) ? 40000 : 0);
-        if (pa !== pb) return pb - pa;
-        return a.entry.city.id < b.entry.city.id ? -1 : 1;
-      });
-
-    for (const v of candidates) {
-      const text = v.entry.city.nameJa;
-      const priorityLabel = mustShow(v);
-      const fs = this.view === 'world'
-        ? priorityLabel
-          ? Math.min(14, Math.max(13, 10.5 + cam.zoom * 1.2))
-          : Math.min(12, Math.max(11, 9.5 + cam.zoom * 0.9))
-        : priorityLabel
-          ? Math.min(30, 13 * this.viewScale())
-          : Math.min(26, 11 * this.viewScale());
-      const font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
-      ctx.font = font;
-      const tw = this.measureText(ctx, text, font);
-      const w = tw + 13;
-      const h = fs + 8;
-      const placements: Array<[number, number]> = [
-        [v.x + radius + 6 + w / 2, v.y - h * 0.12],
-        [v.x - radius - 6 - w / 2, v.y - h * 0.12],
-        [v.x, v.y - radius - 5 - h / 2],
-        [v.x, v.y + radius + 5 + h / 2],
-      ];
-      let chosen: Rect | null = null;
-      for (const [cx, cy] of placements) {
-        const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-        if (rect.x < board.x + 3 || rect.y < board.y + 3
-          || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
-        if (reserved.some((r) => rectsHit(rect, r, 3))) continue;
-        if (!freeOfAll(rect)) continue;
-        chosen = rect;
-        break;
-      }
-      if (!chosen) {
-        for (const rr of [radius + 14, radius + 28, radius + 44]) {
-          for (let i = 0; i < 12 && !chosen; i++) {
-            const a = (i / 12) * TAU;
-            const cx = v.x + Math.cos(a) * rr;
-            const cy = v.y + Math.sin(a) * rr * 0.85;
-            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
-            if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
-            if (!freeOfDiscs(rect)) continue;
-            chosen = rect;
-          }
-          if (chosen) break;
-        }
-      }
-      if (!chosen && mustShow(v)) {
-        for (const rr of [radius + 16, radius + 34, radius + 58, radius + 84]) {
-          for (let i = 0; i < 12 && !chosen; i++) {
-            const a = (i / 12) * TAU;
-            const cx = v.x + Math.cos(a) * rr;
-            const cy = v.y + Math.sin(a) * rr * 0.85;
-            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
-            if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
-            if (!freeOfDiscs(rect)) continue;
-            chosen = rect;
-          }
-          if (chosen) break;
-        }
-        if (!chosen) {
-          for (const [cx, cy] of placements) {
-            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
-            if (rect.x < board.x + 3 || rect.y < board.y + 3 || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
-            if (reserved.some((r) => rectsHit(rect, r, 1))) continue;
-            chosen = rect;
-            break;
-          }
-        }
-      }
-      if (!chosen) continue;
-      reserved.push(chosen);
-      const labelHit = { cityId: v.entry.city.id, rect: chosen };
+      const labelHit = { cityId: city.id, rect };
       this.cityLabelHits.push(labelHit);
-      this.cityLabelGrid.add(chosen, labelHit);
-      this.drawLabelBubble(ctx, v.x, v.y, chosen, text, fs, v.entry.node.id === this.destinationNodeId, this.ownership.get(v.entry.city.id));
+      this.cityLabelGrid.add(rect, labelHit);
+      this.cityLabelDrawn.push({ id: city.id, rect, ax: v.x, ay: v.y });
+      this.drawLabelBubble(
+        ctx,
+        v.x,
+        v.y,
+        rect,
+        plan,
+        ratio,
+        v.entry.node.id === this.destinationNodeId,
+        this.ownership.get(city.id),
+        alpha,
+      );
     }
-  }
-
-  private cityPriority(v: CityVis, currentCityId: string | null, hasToken: boolean): number {
-    let p = 0;
-    if (v.entry.node.id === this.destinationNodeId) p += 100000;
-    if (hasToken) p += 50000;
-    if (v.entry.node.id === currentCityId) p += 20000;
-    if (v.entry.city.tier === 1) p += 3000;
-    else if (v.entry.city.tier === 2) p += 600;
-    else p += 100;
-    if (v.entry.city.landmark) p += 60;
-    const owner = this.ownership.get(v.entry.city.id);
-    if (owner && owner.monopoly >= 0) p += 80;
-    return p;
   }
 
   private cityNodeIdOfPlayer(playerId: number): string | null {
@@ -2999,12 +3355,16 @@ export class MapView {
     nodeX: number,
     nodeY: number,
     rect: Rect,
-    text: string,
-    fs: number,
+    plan: CityLabelPlan,
+    ratio: number,
     isDestination: boolean,
     owner: { counts: number[]; total: number; monopoly: number } | undefined,
+    alpha: number,
   ): void {
+    const fs = plan.fs * ratio;
+    const kanaFs = plan.kanaFs * ratio;
     ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
     // leader/tail
     const nx = Math.max(rect.x, Math.min(nodeX, rect.x + rect.w));
     const ny = Math.max(rect.y, Math.min(nodeY, rect.y + rect.h));
@@ -3058,10 +3418,21 @@ export class MapView {
     }
 
     ctx.fillStyle = '#1a2b4c';
-    ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, rect.x + rect.w / 2 + (owner && owner.total > 0 ? 2 : 0), rect.y + rect.h / 2 + 0.5);
+    const centerX = rect.x + rect.w / 2 + (owner && owner.total > 0 ? 2 : 0);
+    if (plan.kana) {
+      // Furigana sits above the name inside the same bubble, centred on it.
+      const nameY = rect.y + rect.h - 4 - fs / 2;
+      ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.fillText(plan.text, centerX, nameY);
+      ctx.font = `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.fillStyle = '#44557a';
+      ctx.fillText(plan.kana, centerX, rect.y + 3 + kanaFs / 2);
+    } else {
+      ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.fillText(plan.text, centerX, rect.y + rect.h / 2 + 0.5);
+    }
     ctx.restore();
   }
 
@@ -3073,7 +3444,9 @@ export class MapView {
     ctx.font = font;
     const width = ctx.measureText(text).width;
     ctx.restore();
-    if (this.measureCache.size > 3000) this.measureCache.clear();
+    // Label layouts measure the same names at every zoom bucket; a larger cap
+    // avoids clearing the cache (and re-measuring every name) mid-session.
+    if (this.measureCache.size > 12000) this.measureCache.clear();
     this.measureCache.set(key, width);
     return width;
   }
@@ -3082,183 +3455,17 @@ export class MapView {
 
   private drawMoveUi(ctx: CanvasRenderingContext2D, now: number): void {
     if (!this.moveOptions || this.moveOptions.length === 0) return;
-    const cam = this.camera;
-    const r = this.tileRadius();
-    this.moveOptions.forEach((option, index) => {
-      const node = this.nodeById.get(option.nodeId);
-      if (!node) return;
-      const x = cam.screenX(node.x);
-      const y = cam.screenY(node.y);
-      if (x < -80 || x > cam.vw + 80 || y < -80 || y > cam.vh + 80) return;
-      const pulse = (Math.sin(now / 260 + index * 1.7) + 1) / 2;
-      const selected = this.selectedOption === option.nodeId;
-      const hovered = this.hoveredOption === option.nodeId;
-      ctx.save();
-      ctx.globalAlpha = selected ? 0.95 : 0.7;
-      const halo = r + 5 + pulse * 5 + (selected ? 3 : 0);
-      const grad = ctx.createRadialGradient(x, y, r * 0.4, x, y, halo);
-      grad.addColorStop(0, selected ? 'rgba(255, 238, 120, 0.5)' : 'rgba(255,255,255,0.28)');
-      grad.addColorStop(1, 'rgba(255, 240, 130, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, halo, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = selected ? '#ffd83d' : hovered ? '#ffffff' : 'rgba(255, 246, 180, 0.95)';
-      ctx.lineWidth = selected ? 3 : 2;
-      ctx.beginPath();
-      ctx.ellipse(x, y + 1, (r + 4 + pulse * 2.5) * 1.12, (r + 4 + pulse * 2.5) * 0.82, 0, 0, TAU);
-      ctx.stroke();
-      if (selected) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(x, y, (r + 11 + pulse * 3) * 1.1, 0, TAU);
-        ctx.stroke();
-      }
-      ctx.restore();
-    });
-
-    const shown = this.selectedOption ?? this.hoveredOption;
-    if (shown) {
-      const option = this.moveOptions.find((o) => o.nodeId === shown);
-      if (option) this.drawPathPreview(ctx, option, this.selectedOption === shown);
-    }
+    this.drawMoveRoutes(ctx, now);
   }
 
-  private drawSelectedPathOverlay(ctx: CanvasRenderingContext2D): void {
-    if (!this.selectedOption || !this.moveOptions) return;
-    const option = this.moveOptions.find((o) => o.nodeId === this.selectedOption);
-    if (!option) return;
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    this.drawPathPreview(ctx, option, true);
-    ctx.restore();
-  }
-
-  private drawOptionMarkers(ctx: CanvasRenderingContext2D, now: number): void {
-    this.optionPinHits = [];
-    this.edgePinHits = [];
-    if (!this.moveOptions) return;
-    const cam = this.camera;
-    const r = this.tileRadius();
-    this.moveOptions.forEach((option, index) => {
-      const node = this.nodeById.get(option.nodeId);
-      if (!node) return;
-      const x = cam.screenX(node.x);
-      const y = cam.screenY(node.y);
-      if (x < -60 || x > cam.vw + 60 || y < -90 || y > cam.vh + 60) return;
-      const selected = this.selectedOption === option.nodeId;
-      const chip = moveKindChip(node.kind);
-      const bob = Math.sin(now / 280 + index * 1.8) * 2;
-      const pinY = y - r - 26 - bob;
-      const number = this.moveHooks?.numbers?.[index] ?? index + 1;
-      this.optionPinHits.push({ nodeId: option.nodeId, x, y: pinY, r: 22 });
-      ctx.save();
-      ctx.fillStyle = 'rgba(10, 30, 55, 0.28)';
-      ctx.beginPath();
-      ctx.ellipse(x + 1, y + 2, 9, 3.5, 0, 0, TAU);
-      ctx.fill();
-      // pin tail + body
-      ctx.beginPath();
-      ctx.moveTo(x, pinY + 12);
-      ctx.lineTo(x, y - r - 2);
-      ctx.strokeStyle = selected ? '#ffd83d' : '#f6efe0';
-      ctx.lineWidth = 2.4;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, pinY, 14, 0, TAU);
-      ctx.fillStyle = chip.color;
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.strokeStyle = selected ? '#ffd83d' : '#23385c';
-      ctx.lineWidth = selected ? 3 : 1.5;
-      ctx.stroke();
-      // shared square-kind symbol chip
-      ctx.beginPath();
-      ctx.arc(x + 11, pinY + 9, 7.5, 0, TAU);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-      ctx.strokeStyle = '#23385c';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.fillStyle = chip.color;
-      ctx.font = `900 9px ${LABEL_FONT}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(chip.symbol, x + 11, pinY + 9.5);
-      const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
-      ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
-      ctx.font = `800 15px ${LABEL_FONT}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(number), x, pinY + 0.5);
-      ctx.restore();
-    });
-
-    // Endpoint indicator for a selected path whose far node cannot fit in the
-    // HUD-free board area. 44px diameter so it is a legal touch target.
-    if (this.selectedOption) {
-      const option = this.moveOptions.find((o) => o.nodeId === this.selectedOption);
-      const node = option ? this.nodeById.get(option.nodeId) : null;
-      if (node) {
-        const x = cam.screenX(node.x);
-        const y = cam.screenY(node.y);
-        const board = this.boardBox();
-        const m = 26;
-        if (x < board.x + m || x > board.x + board.w - m || y < board.y + m || y > board.y + board.h - m) {
-          const bx = Math.max(board.x + m, Math.min(board.x + board.w - m, x));
-          const by = Math.max(board.y + m, Math.min(board.y + board.h - m, y));
-          const chip = moveKindChip(node.kind);
-          const number = this.moveHooks?.numbers?.[this.moveOptions.findIndex((o) => o.nodeId === node.id)] ?? 1;
-          const ang = Math.atan2(y - by, x - bx);
-          this.edgePinHits.push({ nodeId: node.id, x: bx, y: by, r: 24 });
-          ctx.save();
-          ctx.fillStyle = 'rgba(8, 26, 48, 0.36)';
-          ctx.beginPath();
-          ctx.arc(bx + 1, by + 2, 22, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(bx, by, 22, 0, TAU);
-          ctx.fillStyle = chip.color;
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-          ctx.strokeStyle = '#ffd83d';
-          ctx.lineWidth = 2.4;
-          ctx.stroke();
-          // arrow pointing to the off-screen endpoint
-          ctx.beginPath();
-          ctx.moveTo(bx + Math.cos(ang) * 27, by + Math.sin(ang) * 27);
-          ctx.lineTo(bx + Math.cos(ang + 2.5) * 16, by + Math.sin(ang + 2.5) * 16);
-          ctx.lineTo(bx + Math.cos(ang - 2.5) * 16, by + Math.sin(ang - 2.5) * 16);
-          ctx.closePath();
-          ctx.fillStyle = '#ffd83d';
-          ctx.fill();
-          ctx.strokeStyle = '#23385c';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
-          ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
-          ctx.font = `800 15px ${LABEL_FONT}`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(number), bx, by + 0.5);
-          ctx.restore();
-        }
-      }
-    }
-  }
-
-  private drawPathPreview(ctx: CanvasRenderingContext2D, option: MoveOption, selected: boolean): void {
+  /** Screen polyline for an option, starting at the actor's current square. */
+  private optionScreenPath(option: MoveOption): Array<[number, number]> | null {
     const currentId = this.state?.players[this.state.current]?.nodeId;
     const ids = currentId && option.path[0] !== currentId ? [currentId, ...option.path] : option.path;
-    if (ids.length < 2) return;
+    if (ids.length < 2) return null;
     const cam = this.camera;
     const first = this.nodeById.get(ids[0]);
-    if (!first) return;
+    if (!first) return null;
     let sx = cam.screenX(first.x);
     let sy = cam.screenY(first.y);
     const points: Array<[number, number]> = [[sx, sy]];
@@ -3271,7 +3478,72 @@ export class MapView {
       points.push([sx, sy]);
       prev = node;
     }
-    if (points.length < 2) return;
+    return points.length >= 2 ? points : null;
+  }
+
+  /**
+   * Dim everything except the actor, the candidate squares and their corridors.
+   *
+   * One path: a board-sized rect wound one way plus reverse-wound holes. With
+   * the non-zero fill rule overlapping holes stay open, unlike even-odd.
+   */
+  private drawMoveSpotlight(ctx: CanvasRenderingContext2D): void {
+    if (!this.moveOptions || this.moveOptions.length === 0) return;
+    const cam = this.camera;
+    const r = this.tileRadius();
+    const currentId = this.state?.players[this.state.current]?.nodeId ?? null;
+    const current = currentId ? this.nodeById.get(currentId) : null;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cam.vw, cam.vh);
+    const hole = (x: number, y: number, radius: number): void => {
+      ctx.moveTo(x + radius, y);
+      ctx.arc(x, y, radius, 0, TAU, true);
+    };
+    if (current) hole(cam.screenX(current.x), cam.screenY(current.y), r + 44);
+    for (const option of this.moveOptions) {
+      const points = this.optionScreenPath(option);
+      if (!points) continue;
+      for (let i = 1; i < points.length; i++) {
+        const [x1, y1] = points[i - 1];
+        const [x2, y2] = points[i];
+        const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 12));
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          hole(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 15);
+        }
+      }
+    }
+    for (const option of this.moveOptions) {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) continue;
+      hole(cam.screenX(node.x), cam.screenY(node.y), r + 32);
+    }
+    ctx.fillStyle = 'rgba(4, 12, 26, 0.57)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Gold route for every candidate; the current pick is thicker, the rest fade back. */
+  private drawMoveRoutes(ctx: CanvasRenderingContext2D, now: number): void {
+    if (!this.moveOptions || this.moveOptions.length === 0) return;
+    const shown = this.selectedOption ?? this.hoveredOption ?? this.getRecommendedMoveOption();
+    for (const option of this.moveOptions) {
+      if (option.nodeId === shown) continue;
+      this.strokeOptionRoute(ctx, option, false, now);
+    }
+    const picked = shown ? this.moveOptions.find((o) => o.nodeId === shown) : null;
+    if (picked) this.strokeOptionRoute(ctx, picked, true, now);
+  }
+
+  private strokeOptionRoute(
+    ctx: CanvasRenderingContext2D,
+    option: MoveOption,
+    selected: boolean,
+    now: number,
+  ): void {
+    const points = this.optionScreenPath(option);
+    if (!points) return;
     const trace = (): void => {
       ctx.beginPath();
       ctx.moveTo(points[0][0], points[0][1]);
@@ -3281,20 +3553,384 @@ export class MapView {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     trace();
-    ctx.strokeStyle = 'rgba(12, 34, 62, 0.9)';
-    ctx.lineWidth = selected ? 9 : 7;
+    ctx.strokeStyle = selected ? 'rgba(12, 34, 62, 0.85)' : 'rgba(12, 34, 62, 0.35)';
+    ctx.lineWidth = selected ? 11 : 3.2;
     ctx.stroke();
     trace();
-    ctx.strokeStyle = selected ? 'rgba(255, 216, 61, 0.98)' : 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = selected ? 5 : 3.5;
+    ctx.strokeStyle = selected ? 'rgba(255, 214, 45, 0.98)' : 'rgba(255, 224, 120, 0.28)';
+    ctx.lineWidth = selected ? 6.5 : 1.6;
     ctx.stroke();
+    if (!selected) {
+      ctx.restore();
+      return;
+    }
+    this.drawRouteChevrons(ctx, points, true, now);
     const end = points[points.length - 1];
-    ctx.fillStyle = selected ? '#ffd83d' : 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = selected ? '#ffd83d' : 'rgba(255, 216, 61, 0.9)';
     ctx.beginPath();
-    ctx.arc(end[0], end[1], selected ? 7 : 5, 0, TAU);
+    ctx.arc(end[0], end[1], selected ? 7 : 5.5, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = '#23385c';
     ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Direction arrows marching along a route; static when reduced motion is on. */
+  private drawRouteChevrons(
+    ctx: CanvasRenderingContext2D,
+    points: Array<[number, number]>,
+    strong: boolean,
+    now: number,
+  ): void {
+    const step = strong ? 44 : 52;
+    const drift = this.reducedMotion ? 0 : (now / 26) % step;
+    const size = strong ? 6.5 : 5;
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = strong ? 'rgba(255, 253, 240, 0.98)' : 'rgba(255, 253, 240, 0.8)';
+    ctx.strokeStyle = 'rgba(20, 40, 66, 0.6)';
+    ctx.lineWidth = 1;
+    let travelled = 0;
+    for (let i = 1; i < points.length; i++) {
+      const [x1, y1] = points[i - 1];
+      const [x2, y2] = points[i];
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      if (len < 1) continue;
+      const ux = (x2 - x1) / len;
+      const uy = (y2 - y1) / len;
+      let d = (step - ((travelled + drift) % step)) % step;
+      for (; d <= len; d += step) {
+        const px = x1 + ux * d;
+        const py = y1 + uy * d;
+        const nx = -uy * size * 0.85;
+        const ny = ux * size * 0.85;
+        ctx.moveTo(px + ux * size, py + uy * size);
+        ctx.lineTo(px - ux * size + nx, py - uy * size + ny);
+        ctx.lineTo(px - ux * size - nx, py - uy * size - ny);
+        ctx.closePath();
+      }
+      travelled += len;
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawSelectedPathOverlay(ctx: CanvasRenderingContext2D): void {
+    if (!this.selectedOption || !this.moveOptions) return;
+    const option = this.moveOptions.find((o) => o.nodeId === this.selectedOption);
+    if (!option) return;
+    this.strokeOptionRoute(ctx, option, true, performance.now());
+  }
+
+  private drawOptionMarkers(ctx: CanvasRenderingContext2D, now: number): void {
+    this.optionPinHits = [];
+    this.edgePinHits = [];
+    if (!this.moveOptions || this.moveOptions.length === 0) return;
+    const cam = this.camera;
+    const r = this.tileRadius();
+    const board = this.boardBox();
+    const recommended = this.getRecommendedMoveOption();
+    const pinEveryCandidate = this.moveOptions.length <= 8;
+    const chipRadius = Math.min(12, Math.max(7, r * 0.72));
+    const pinBoxes: Rect[] = [];
+    const chips: Array<{ x: number; y: number; r: number }> = [];
+    this.moveOptions.forEach((option, index) => {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) return;
+      const x = cam.screenX(node.x);
+      const y = cam.screenY(node.y);
+      // Markers stay inside the HUD-free board; outside candidates get edge badges.
+      if (x < board.x - 12 || x > board.x + board.w + 12 || y < board.y - 12 || y > board.y + board.h + 12) return;
+      const selected = this.selectedOption === option.nodeId;
+      const isRecommended = option.nodeId === recommended;
+      const hovered = this.hoveredOption === option.nodeId;
+      const chip = moveKindChip(node.kind);
+      const number = this.moveHooks?.numbers?.[index] ?? index + 1;
+      const pulse = this.reducedMotion ? 0.35 : (Math.sin(now / 320 + index * 1.4) + 1) / 2;
+      const ring = r + 7 + pulse * 3 + (selected ? 4 : 0);
+      // 光っているマス: kind-coloured glow + clean rings, no pin.
+      ctx.save();
+      const glow = ctx.createRadialGradient(x, y, r * 0.3, x, y, ring + 14);
+      glow.addColorStop(0, chip.color);
+      glow.addColorStop(0.5, chip.color);
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.globalAlpha = selected ? 0.52 : isRecommended ? 0.44 : 0.34;
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, ring + 14, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, ring * 1.1 + 2, ring * 0.88 + 2, 0, 0, TAU);
+      ctx.strokeStyle = 'rgba(8, 24, 44, 0.5)';
+      ctx.lineWidth = selected ? 6 : 4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, ring * 1.1, ring * 0.88, 0, 0, TAU);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = selected ? 4.4 : 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, ring * 0.88, ring * 0.68, 0, 0, TAU);
+      ctx.strokeStyle = selected ? '#ffd83d' : isRecommended ? '#ffe46b' : hovered ? '#ffffff' : chip.color;
+      ctx.lineWidth = selected || isRecommended ? 3.2 : 2.2;
+      ctx.stroke();
+      ctx.restore();
+
+      // Big numbered pin only for the selected, the recommended, or few candidates.
+      const wantsPin = selected || isRecommended || pinEveryCandidate;
+      const pinBox = { x: x - 20, y: y - r - 50, w: 40, h: 50 + r };
+      const pinFree = pinBox.y >= board.y + 2 && !pinBoxes.some((box) => rectsOverlap(pinBox, box, 2));
+      if (wantsPin && (pinFree || ((selected || isRecommended) && pinBox.y >= board.y + 2))) {
+        pinBoxes.push(pinBox);
+        this.drawOptionPin(ctx, option.nodeId, x, y, r, node.kind, chip, number, selected, isRecommended, now, index);
+        return;
+      }
+      if (r < 9) return;
+      // Crowded case: small number chip inside the ring, never stacked.
+      const cx = x;
+      const cy = y - r * 0.1;
+      const chipBox = { x: cx - chipRadius, y: cy - chipRadius, w: chipRadius * 2, h: chipRadius * 2 };
+      if (pinBoxes.some((box) => rectsOverlap(chipBox, box, 1))) return;
+      if (chips.some((c) => Math.hypot(cx - c.x, cy - c.y) < c.r + chipRadius + 3)) return;
+      chips.push({ x: cx, y: cy, r: chipRadius });
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, chipRadius, 0, TAU);
+      ctx.fillStyle = chip.color;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
+      ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
+      ctx.font = `800 ${Math.max(8, chipRadius * 1.2).toFixed(0)}px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(number), cx, cy + 0.5);
+      ctx.restore();
+      this.optionPinHits.push({ nodeId: option.nodeId, x: cx, y: cy, r: Math.max(14, chipRadius + 6) });
+    });
+
+    // Edge badges only for candidates off the usable board, nearest first and
+    // capped so a crowded turn never becomes a wall of badges. The remainder
+    // collapses into one "+N" counter.
+    const offBoard: Array<{ index: number; node: BoardNode; x: number; y: number }> = [];
+    this.moveOptions.forEach((option, index) => {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) return;
+      const x = cam.screenX(node.x);
+      const y = cam.screenY(node.y);
+      if (x >= board.x - 24 && x <= board.x + board.w + 24
+        && y >= board.y - 24 && y <= board.y + board.h + 24) return;
+      offBoard.push({ index, node, x, y });
+    });
+    offBoard.sort((a, b) => {
+      const pinA = a.node.id === recommended || a.node.id === this.selectedOption ? 1 : 0;
+      const pinB = b.node.id === recommended || b.node.id === this.selectedOption ? 1 : 0;
+      if (pinA !== pinB) return pinB - pinA;
+      return (this.moveOptions?.[a.index]?.path.length ?? 0) - (this.moveOptions?.[b.index]?.path.length ?? 0);
+    });
+    const MAX_EDGE_BADGES = 6;
+    const hiddenOffBoard = Math.max(0, offBoard.length - MAX_EDGE_BADGES);
+    const placedBadges: Array<{ x: number; y: number }> = [];
+    offBoard.slice(0, MAX_EDGE_BADGES).forEach(({ index, node, x, y }) => {
+      let bx = Math.max(board.x + 26, Math.min(board.x + board.w - 26, x));
+      let by = Math.max(board.y + 26, Math.min(board.y + board.h - 26, y));
+      for (let guard = 0; guard < 10; guard++) {
+        const clash = placedBadges.some((p) => Math.hypot(p.x - bx, p.y - by) < 46);
+        if (!clash) break;
+        if (bx <= board.x + 30 || bx >= board.x + board.w - 30) {
+          by += by < cam.vh / 2 ? 46 : -46;
+        } else {
+          bx += bx < cam.vw / 2 ? 46 : -46;
+        }
+        bx = Math.max(board.x + 26, Math.min(board.x + board.w - 26, bx));
+        by = Math.max(board.y + 26, Math.min(board.y + board.h - 26, by));
+      }
+      placedBadges.push({ x: bx, y: by });
+      const selected = this.selectedOption === node.id;
+      const isRecommended = node.id === recommended;
+      const chip = moveKindChip(node.kind);
+      const number = this.moveHooks?.numbers?.[index] ?? index + 1;
+      const ang = Math.atan2(y - by, x - bx);
+      this.edgePinHits.push({ nodeId: node.id, x: bx, y: by, r: 22 });
+      ctx.save();
+      ctx.fillStyle = 'rgba(8, 26, 48, 0.4)';
+      ctx.beginPath();
+      ctx.arc(bx + 1, by + 2, 17, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(bx, by, 17, 0, TAU);
+      ctx.fillStyle = chip.color;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+      ctx.strokeStyle = selected || isRecommended ? '#ffd83d' : 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = selected || isRecommended ? 2.8 : 1.4;
+      ctx.stroke();
+      // small outward arrow: this candidate is off the usable board
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(ang) * 23, by + Math.sin(ang) * 23);
+      ctx.lineTo(bx + Math.cos(ang + 2.5) * 14, by + Math.sin(ang + 2.5) * 14);
+      ctx.lineTo(bx + Math.cos(ang - 2.5) * 14, by + Math.sin(ang - 2.5) * 14);
+      ctx.closePath();
+      ctx.fillStyle = '#ffd83d';
+      ctx.fill();
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      const darkText = node.kind === 'yellow' || node.kind === 'shop' || node.kind === 'portal';
+      ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
+      ctx.font = `800 15px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(number), bx, by + 0.5);
+      ctx.restore();
+    });
+    if (hiddenOffBoard > 0) this.drawHiddenCandidateCounter(ctx, board, hiddenOffBoard);
+  }
+
+  /** One compact "+N" chip standing in for off-board candidates past the cap. */
+  private drawHiddenCandidateCounter(
+    ctx: CanvasRenderingContext2D,
+    board: { x: number; y: number; w: number; h: number },
+    hidden: number,
+  ): void {
+    const w = 52;
+    const h = 20;
+    const x = board.x + board.w - w - 12;
+    const y = board.y + board.h - h - 12;
+    ctx.save();
+    ctx.fillStyle = 'rgba(8, 26, 48, 0.72)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 216, 61, 0.8)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 11px ${LABEL_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`ほか ${hidden}`, x + w / 2, y + h / 2 + 0.5);
+    ctx.restore();
+  }
+
+  /** Big numbered pin for the selected / recommended / few-candidate cases. */
+  private drawOptionPin(
+    ctx: CanvasRenderingContext2D,
+    nodeId: string,
+    x: number,
+    y: number,
+    r: number,
+    kind: SquareKind,
+    chip: MoveKindChip,
+    number: number,
+    selected: boolean,
+    isRecommended: boolean,
+    now: number,
+    index: number,
+  ): void {
+    const bob = this.reducedMotion ? 0 : Math.sin(now / 280 + index * 1.8) * 2;
+    // Keep the badge (and its おすすめ flag) inside the HUD-free board.
+    const board = this.boardBox();
+    const pinY = Math.max(board.y + 22, y - r - 26 - bob);
+    const pinX = Math.max(board.x + 34, Math.min(board.x + board.w - 34, x));
+    this.optionPinHits.push({ nodeId, x: pinX, y: pinY, r: 24 });
+    ctx.save();
+    ctx.fillStyle = 'rgba(10, 30, 55, 0.28)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1, y + 2, 10, 3.8, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(pinX, pinY + 14);
+    ctx.lineTo(x, y - r - 2);
+    ctx.strokeStyle = selected || isRecommended ? '#ffd83d' : '#f6efe0';
+    ctx.lineWidth = 2.8;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pinX, pinY, 16, 0, TAU);
+    ctx.fillStyle = chip.color;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = selected || isRecommended ? '#ffd83d' : '#23385c';
+    ctx.lineWidth = selected ? 3.2 : 1.6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pinX + 12, pinY + 10, 8.5, 0, TAU);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#23385c';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = chip.color;
+    ctx.font = `900 10px ${LABEL_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(chip.symbol, pinX + 12, pinY + 10.5);
+    const darkText = kind === 'yellow' || kind === 'shop' || kind === 'portal';
+    ctx.fillStyle = darkText ? '#20315a' : '#ffffff';
+    ctx.font = `800 16px ${LABEL_FONT}`;
+    ctx.fillText(String(number), pinX, pinY + 0.5);
+    ctx.restore();
+    if (isRecommended) this.drawRecommendedTag(ctx, pinX, pinY);
+  }
+
+  /** Gold 「おすすめ」 flag with a small arrow toward the destination. */
+  private drawRecommendedTag(ctx: CanvasRenderingContext2D, x: number, pinY: number): void {
+    const w = 58;
+    const h = 18;
+    const board = this.boardBox();
+    const x0 = Math.max(board.x + 2, Math.min(board.x + board.w - w - 2, x - w / 2));
+    const y0 = Math.max(board.y + 2, pinY - 16 - h - 6);
+    const cx = x0 + w / 2;
+    const dest = this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) : null;
+    const toward = dest
+      ? Math.atan2(this.camera.screenY(dest.y) - (y0 + h / 2), this.camera.screenX(dest.x) - x)
+      : -Math.PI / 4;
+    ctx.save();
+    ctx.font = `800 10px ${LABEL_FONT}`;
+    ctx.fillStyle = 'rgba(8, 26, 48, 0.35)';
+    ctx.beginPath();
+    ctx.roundRect(x0 + 1, y0 + 2, w, h, 9);
+    ctx.fill();
+    ctx.fillStyle = '#ffd83d';
+    ctx.beginPath();
+    ctx.roundRect(x0, y0, w, h, 9);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = '#23385c';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, y0 + h);
+    ctx.lineTo(x, pinY - 16);
+    ctx.strokeStyle = '#ffd83d';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#23385c';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('おすすめ', cx, y0 + h / 2 + 0.5);
+    const ax = x0 + w + 9;
+    const ay = y0 + h / 2;
+    ctx.beginPath();
+    ctx.moveTo(ax + Math.cos(toward) * 8, ay + Math.sin(toward) * 8);
+    ctx.lineTo(ax + Math.cos(toward + 2.5) * 6, ay + Math.sin(toward + 2.5) * 6);
+    ctx.lineTo(ax + Math.cos(toward - 2.5) * 6, ay + Math.sin(toward - 2.5) * 6);
+    ctx.closePath();
+    ctx.fillStyle = '#ffe46b';
+    ctx.fill();
+    ctx.strokeStyle = '#23385c';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
   }
@@ -3363,8 +3999,7 @@ export class MapView {
         if (a && b) {
           const dx = wrapDx(a.x, b.x);
           const mode = this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail';
-          const vehicle: VehicleKind =
-            mode === 'sea' ? 'ferry' : move.dice >= 3 ? 'bullet_train' : move.dice === 2 ? 'express' : 'train';
+          const vehicle = vehicleForStep(mode, move.dice);
           const prevNode = idx > 0 ? this.nodeById.get(full[idx - 1]) : null;
           const prevMode = prevNode ? this.edgeModes.get(edgeKey(prevNode.id, a.id)) ?? 'rail' : null;
           const wx = a.x + dx * frac;
@@ -4251,7 +4886,7 @@ export class MapView {
         const rx = Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, cand.x));
         const ry = Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, cand.y));
         const rect = { x: rx, y: ry, w: tw, h: th };
-        if (!used.some((r) => rectsHit(rect, r, 4))) {
+        if (!used.some((r) => rectsOverlap(rect, r, 4))) {
           bx = rx;
           by = ry;
           break;

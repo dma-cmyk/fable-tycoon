@@ -1029,3 +1029,28 @@ textarea.input {
   background: linear-gradient(90deg, var(--gold-2), var(--gold));
   transition: width 250ms ease;
 }
+/* ---------------------------------------------------------------- ふりがな */
+
+.ruby-name {
+  ruby-position: over;
+  ruby-align: center;
+}
+
+.ruby-name rt {
+  font-size: max(9px, 0.46em);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+
+/* 幅の狭い場所ではふりがな込みで折り返させない。 */
+.city-hero-name .ruby-name,
+.dest-name .ruby-name,
+.roulette-name .ruby-name {
+  white-space: nowrap;
+}
+
+.dest-name .ruby-name rt {
+  font-size: 9px;
+}

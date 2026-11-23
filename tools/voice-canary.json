@@ -1,0 +1,9 @@
+{
+  "note": "Known-good VOICEVOX 0.25.2 canary. If the engine output for this fixed text does not match sha256, gen-voice aborts: the engine is producing corrupted/noise audio. Regenerate this file only after verifying a clean synthesis.",
+  "text": "世界を巡って、一番儲けた者の勝ちです。",
+  "speaker": 46,
+  "speed": 0.9,
+  "pitch": 0,
+  "intonation": 1.0,
+  "sha256": "9b222d532920e61e7072be7b33f03186da100153707c5205fb8e2dc529f8f512"
+}

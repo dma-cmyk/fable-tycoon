@@ -245,22 +245,24 @@ export function realmLabel(realm: RealmId | 'world'): string {
   return REALM_JA[realm];
 }
 
-const EDGE_MODE_BY_KEY = new Map<string, 'rail' | 'sea'>();
+const EDGE_MODE_BY_KEY = new Map<string, 'rail' | 'sea' | 'air'>();
 for (const edge of GAME_DATA.board.edges) {
   EDGE_MODE_BY_KEY.set(`${edge.a}|${edge.b}`, edge.mode);
   EDGE_MODE_BY_KEY.set(`${edge.b}|${edge.a}`, edge.mode);
 }
 
-/** Counts rail/sea hops along a node path (path should include the starting node). */
-export function transportSummary(path: string[]): { rail: number; sea: number } {
+/** Counts rail/sea/air hops along a node path (path should include the starting node). */
+export function transportSummary(path: string[]): { rail: number; sea: number; air: number } {
   let rail = 0;
   let sea = 0;
+  let air = 0;
   for (let i = 1; i < path.length; i++) {
     const mode = EDGE_MODE_BY_KEY.get(`${path[i - 1]}|${path[i]}`);
     if (mode === 'sea') sea++;
+    else if (mode === 'air') air++;
     else rail++;
   }
-  return { rail, sea };
+  return { rail, sea, air };
 }
 
 /** Player-facing name: CPU players are always named after their fairy-tale character. */

@@ -3,6 +3,7 @@ import { purchasePrice } from '../../core/economy';
 import type {Property} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
+import { rubyName } from '../ruby';
 import { LANDMARK_FILES } from '../assetManifest';
 import {
   assetUrl,
@@ -157,7 +158,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         h(
           'div',
           { class: 'city-hero-title-row' },
-          h('h3', { class: 'city-hero-name', text: city.nameJa }),
+          h('h3', { class: 'city-hero-name' }, rubyName(city.nameJa, city.nameKana)),
           h('span', { class: 'city-flag', text: countryFlag(city.country) }),
           destination ? h('span', { class: 'badge badge-gold', text: '🎯 目的地' }) : null,
         ),

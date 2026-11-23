@@ -2,6 +2,7 @@
   {
     "id": "tokyo",
     "nameJa": "東京",
+    "nameKana": "とうきょう",
     "nameEn": "Tokyo",
     "country": "JP",
     "countryJa": "日本",
@@ -61,6 +62,7 @@
   {
     "id": "yokohama",
     "nameJa": "横浜",
+    "nameKana": "よこはま",
     "nameEn": "Yokohama",
     "country": "JP",
     "countryJa": "日本",
@@ -98,6 +100,7 @@
   {
     "id": "osaka",
     "nameJa": "大阪",
+    "nameKana": "おおさか",
     "nameEn": "Osaka",
     "country": "JP",
     "countryJa": "日本",
@@ -143,6 +146,7 @@
   {
     "id": "kyoto",
     "nameJa": "京都",
+    "nameKana": "きょうと",
     "nameEn": "Kyoto",
     "country": "JP",
     "countryJa": "日本",
@@ -180,6 +184,7 @@
   {
     "id": "nagoya",
     "nameJa": "名古屋",
+    "nameKana": "なごや",
     "nameEn": "Nagoya",
     "country": "JP",
     "countryJa": "日本",
@@ -217,6 +222,7 @@
   {
     "id": "fukuoka",
     "nameJa": "福岡",
+    "nameKana": "ふくおか",
     "nameEn": "Fukuoka",
     "country": "JP",
     "countryJa": "日本",
@@ -254,6 +260,7 @@
   {
     "id": "sapporo",
     "nameJa": "札幌",
+    "nameKana": "さっぽろ",
     "nameEn": "Sapporo",
     "country": "JP",
     "countryJa": "日本",
@@ -291,6 +298,7 @@
   {
     "id": "sendai",
     "nameJa": "仙台",
+    "nameKana": "せんだい",
     "nameEn": "Sendai",
     "country": "JP",
     "countryJa": "日本",
@@ -328,6 +336,7 @@
   {
     "id": "hiroshima",
     "nameJa": "広島",
+    "nameKana": "ひろしま",
     "nameEn": "Hiroshima",
     "country": "JP",
     "countryJa": "日本",
@@ -365,6 +374,7 @@
   {
     "id": "naha",
     "nameJa": "那覇",
+    "nameKana": "なは",
     "nameEn": "Naha",
     "country": "JP",
     "countryJa": "日本",
@@ -402,6 +412,7 @@
   {
     "id": "kanazawa",
     "nameJa": "金沢",
+    "nameKana": "かなざわ",
     "nameEn": "Kanazawa",
     "country": "JP",
     "countryJa": "日本",
@@ -432,6 +443,7 @@
   {
     "id": "kobe",
     "nameJa": "神戸",
+    "nameKana": "こうべ",
     "nameEn": "Kobe",
     "country": "JP",
     "countryJa": "日本",
@@ -462,6 +474,7 @@
   {
     "id": "beijing",
     "nameJa": "北京",
+    "nameKana": "ぺきん",
     "nameEn": "Beijing",
     "country": "CN",
     "countryJa": "中国",
@@ -514,6 +527,7 @@
   {
     "id": "shanghai",
     "nameJa": "上海",
+    "nameKana": "しゃんはい",
     "nameEn": "Shanghai",
     "country": "CN",
     "countryJa": "中国",
@@ -558,6 +572,7 @@
   {
     "id": "guangzhou",
     "nameJa": "広州",
+    "nameKana": "こうしゅう",
     "nameEn": "Guangzhou",
     "country": "CN",
     "countryJa": "中国",
@@ -595,6 +610,7 @@
   {
     "id": "shenzhen",
     "nameJa": "深圳",
+    "nameKana": "しんせん",
     "nameEn": "Shenzhen",
     "country": "CN",
     "countryJa": "中国",
@@ -632,6 +648,7 @@
   {
     "id": "chengdu",
     "nameJa": "成都",
+    "nameKana": "せいと",
     "nameEn": "Chengdu",
     "country": "CN",
     "countryJa": "中国",
@@ -669,6 +686,7 @@
   {
     "id": "chongqing",
     "nameJa": "重慶",
+    "nameKana": "じゅうけい",
     "nameEn": "Chongqing",
     "country": "CN",
     "countryJa": "中国",
@@ -706,6 +724,7 @@
   {
     "id": "xian",
     "nameJa": "西安",
+    "nameKana": "せいあん",
     "nameEn": "Xi'an",
     "country": "CN",
     "countryJa": "中国",
@@ -789,6 +808,7 @@
   {
     "id": "busan",
     "nameJa": "釜山",
+    "nameKana": "ぷさん",
     "nameEn": "Busan",
     "country": "KR",
     "countryJa": "韓国",
@@ -826,6 +846,7 @@
   {
     "id": "jeju",
     "nameJa": "済州",
+    "nameKana": "さいしゅう",
     "nameEn": "Jeju",
     "country": "KR",
     "countryJa": "韓国",
@@ -863,6 +884,7 @@
   {
     "id": "taipei",
     "nameJa": "台北",
+    "nameKana": "たいぺい",
     "nameEn": "Taipei",
     "country": "TW",
     "countryJa": "台湾",
@@ -900,6 +922,7 @@
   {
     "id": "hong-kong",
     "nameJa": "香港",
+    "nameKana": "ほんこん",
     "nameEn": "Hong Kong",
     "country": "HK",
     "countryJa": "香港",
@@ -5385,6 +5408,7 @@
   {
     "id": "shizuoka",
     "nameJa": "静岡",
+    "nameKana": "しずおか",
     "nameEn": "Shizuoka",
     "country": "JP",
     "countryJa": "日本",
@@ -5423,6 +5447,7 @@
   {
     "id": "nara",
     "nameJa": "奈良",
+    "nameKana": "なら",
     "nameEn": "Nara",
     "country": "JP",
     "countryJa": "日本",
@@ -5453,6 +5478,7 @@
   {
     "id": "kumamoto",
     "nameJa": "熊本",
+    "nameKana": "くまもと",
     "nameEn": "Kumamoto",
     "country": "JP",
     "countryJa": "日本",
@@ -5490,6 +5516,7 @@
   {
     "id": "matsuyama",
     "nameJa": "松山",
+    "nameKana": "まつやま",
     "nameEn": "Matsuyama",
     "country": "JP",
     "countryJa": "日本",
@@ -5520,6 +5547,7 @@
   {
     "id": "niigata",
     "nameJa": "新潟",
+    "nameKana": "にいがた",
     "nameEn": "Niigata",
     "country": "JP",
     "countryJa": "日本",
@@ -5557,6 +5585,7 @@
   {
     "id": "toyama",
     "nameJa": "富山",
+    "nameKana": "とやま",
     "nameEn": "Toyama",
     "country": "JP",
     "countryJa": "日本",
@@ -5587,6 +5616,7 @@
   {
     "id": "takamatsu",
     "nameJa": "高松",
+    "nameKana": "たかまつ",
     "nameEn": "Takamatsu",
     "country": "JP",
     "countryJa": "日本",
@@ -5617,6 +5647,7 @@
   {
     "id": "nagasaki",
     "nameJa": "長崎",
+    "nameKana": "ながさき",
     "nameEn": "Nagasaki",
     "country": "JP",
     "countryJa": "日本",
@@ -5654,6 +5685,7 @@
   {
     "id": "kagoshima",
     "nameJa": "鹿児島",
+    "nameKana": "かごしま",
     "nameEn": "Kagoshima",
     "country": "JP",
     "countryJa": "日本",
@@ -5691,6 +5723,7 @@
   {
     "id": "okayama",
     "nameJa": "岡山",
+    "nameKana": "おかやま",
     "nameEn": "Okayama",
     "country": "JP",
     "countryJa": "日本",
@@ -5728,6 +5761,7 @@
   {
     "id": "akita",
     "nameJa": "秋田",
+    "nameKana": "あきた",
     "nameEn": "Akita",
     "country": "JP",
     "countryJa": "日本",
@@ -5758,6 +5792,7 @@
   {
     "id": "aomori",
     "nameJa": "青森",
+    "nameKana": "あおもり",
     "nameEn": "Aomori",
     "country": "JP",
     "countryJa": "日本",
@@ -5788,6 +5823,7 @@
   {
     "id": "hakodate",
     "nameJa": "函館",
+    "nameKana": "はこだて",
     "nameEn": "Hakodate",
     "country": "JP",
     "countryJa": "日本",
@@ -5818,6 +5854,7 @@
   {
     "id": "ishigaki",
     "nameJa": "石垣",
+    "nameKana": "いしがき",
     "nameEn": "Ishigaki",
     "country": "JP",
     "countryJa": "日本",
@@ -5855,6 +5892,7 @@
   {
     "id": "tianjin",
     "nameJa": "天津",
+    "nameKana": "てんしん",
     "nameEn": "Tianjin",
     "country": "CN",
     "countryJa": "中国",
@@ -5892,6 +5930,7 @@
   {
     "id": "wuhan",
     "nameJa": "武漢",
+    "nameKana": "ぶかん",
     "nameEn": "Wuhan",
     "country": "CN",
     "countryJa": "中国",
@@ -5929,6 +5968,7 @@
   {
     "id": "nanjing",
     "nameJa": "南京",
+    "nameKana": "なんきん",
     "nameEn": "Nanjing",
     "country": "CN",
     "countryJa": "中国",
@@ -5966,6 +6006,7 @@
   {
     "id": "hangzhou",
     "nameJa": "杭州",
+    "nameKana": "こうしゅう",
     "nameEn": "Hangzhou",
     "country": "CN",
     "countryJa": "中国",
@@ -6003,6 +6044,7 @@
   {
     "id": "suzhou",
     "nameJa": "蘇州",
+    "nameKana": "そしゅう",
     "nameEn": "Suzhou",
     "country": "CN",
     "countryJa": "中国",
@@ -6033,6 +6075,7 @@
   {
     "id": "qingdao",
     "nameJa": "青島",
+    "nameKana": "ちんたお",
     "nameEn": "Qingdao",
     "country": "CN",
     "countryJa": "中国",
@@ -6070,6 +6113,7 @@
   {
     "id": "dalian",
     "nameJa": "大連",
+    "nameKana": "だいれん",
     "nameEn": "Dalian",
     "country": "CN",
     "countryJa": "中国",
@@ -6100,6 +6144,7 @@
   {
     "id": "xiamen",
     "nameJa": "廈門",
+    "nameKana": "あもい",
     "nameEn": "Xiamen",
     "country": "CN",
     "countryJa": "中国",
@@ -6137,6 +6182,7 @@
   {
     "id": "kunming",
     "nameJa": "昆明",
+    "nameKana": "こんめい",
     "nameEn": "Kunming",
     "country": "CN",
     "countryJa": "中国",
@@ -6241,6 +6287,7 @@
   {
     "id": "changchun",
     "nameJa": "長春",
+    "nameKana": "ちょうしゅん",
     "nameEn": "Changchun",
     "country": "CN",
     "countryJa": "中国",
@@ -6271,6 +6318,7 @@
   {
     "id": "shenyang",
     "nameJa": "瀋陽",
+    "nameKana": "しんよう",
     "nameEn": "Shenyang",
     "country": "CN",
     "countryJa": "中国",
@@ -6301,6 +6349,7 @@
   {
     "id": "zhengzhou",
     "nameJa": "鄭州",
+    "nameKana": "ていしゅう",
     "nameEn": "Zhengzhou",
     "country": "CN",
     "countryJa": "中国",
@@ -6338,6 +6387,7 @@
   {
     "id": "changsha",
     "nameJa": "長沙",
+    "nameKana": "ちょうさ",
     "nameEn": "Changsha",
     "country": "CN",
     "countryJa": "中国",
@@ -6375,6 +6425,7 @@
   {
     "id": "kaohsiung",
     "nameJa": "高雄",
+    "nameKana": "たかお",
     "nameEn": "Kaohsiung",
     "country": "TW",
     "countryJa": "台湾",
@@ -11366,6 +11417,966 @@
         "industry": "tourism",
         "price": 100,
         "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "inuvik",
+    "nameJa": "イヌヴィック",
+    "nameEn": "Inuvik",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 68.36,
+    "lon": -133.72,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極圏の石油とトナカイ。道路は冬になると川の上に現れる。",
+    "properties": [
+      {
+        "id": "inuvik-1",
+        "name": "北極圏ガス田",
+        "industry": "energy",
+        "price": 260,
+        "yieldPct": 6
+      },
+      {
+        "id": "inuvik-2",
+        "name": "マッケンジー川フェリー",
+        "industry": "shipping",
+        "price": 70,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "cambridge-bay",
+    "nameJa": "ケンブリッジベイ",
+    "nameEn": "Cambridge Bay",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 69.12,
+    "lon": -105.06,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極海の研究とカリブー。会議の結論はいつも「寒い」。",
+    "properties": [
+      {
+        "id": "cambridge-bay-1",
+        "name": "北極海研究ステーション",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "cambridge-bay-2",
+        "name": "カリブー加工食品",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 45
+      }
+    ]
+  },
+  {
+    "id": "rankin-inlet",
+    "nameJa": "ランキンインレット",
+    "nameEn": "Rankin Inlet",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 62.81,
+    "lon": -92.09,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ニッケルとイヌイット陶芸。物流費が作品の値段を超える。",
+    "properties": [
+      {
+        "id": "rankin-inlet-1",
+        "name": "北極ニッケル鉱山",
+        "industry": "energy",
+        "price": 320,
+        "yieldPct": 6
+      },
+      {
+        "id": "rankin-inlet-2",
+        "name": "イヌイット陶芸工房",
+        "industry": "industry",
+        "price": 55,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "resolute",
+    "nameJa": "レゾリュート",
+    "nameEn": "Resolute",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 74.70,
+    "lon": -94.83,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極観測と極地ツアー。地球温暖化のせいで滑走路がぬかるむ。",
+    "properties": [
+      {
+        "id": "resolute-1",
+        "name": "北極観測基地",
+        "industry": "tech",
+        "price": 230,
+        "yieldPct": 6
+      },
+      {
+        "id": "resolute-2",
+        "name": "極地探検ツアー",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "pond-inlet",
+    "nameJa": "ポンドインレット",
+    "nameEn": "Pond Inlet",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 72.70,
+    "lon": -77.96,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "氷山クルーズとアザラシ漁。観光客は氷を「映え」と呼ぶ。",
+    "properties": [
+      {
+        "id": "pond-inlet-1",
+        "name": "氷山クルーズ",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 16
+      },
+      {
+        "id": "pond-inlet-2",
+        "name": "アザラシ漁業",
+        "industry": "agri",
+        "price": 20,
+        "yieldPct": 52
+      }
+    ]
+  },
+  {
+    "id": "baker-lake",
+    "nameJa": "ベイカーレイク",
+    "nameEn": "Baker Lake",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 64.32,
+    "lon": -96.02,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "金鉱山とカリブー狩猟。湖の名前を地図で確認する人しか来ない。",
+    "properties": [
+      {
+        "id": "baker-lake-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 280,
+        "yieldPct": 7
+      },
+      {
+        "id": "baker-lake-2",
+        "name": "カリブー狩猟ツアー",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "dawson-city",
+    "nameJa": "ドーソンシティ",
+    "nameEn": "Dawson City",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 64.06,
+    "lon": -139.43,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "金鉱山博物館と蒸留所。観光客は砂金より土産に金を使う。",
+    "properties": [
+      {
+        "id": "dawson-city-1",
+        "name": "金鉱山博物館",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      },
+      {
+        "id": "dawson-city-2",
+        "name": "北部クラフト蒸留所",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 40
+      }
+    ]
+  },
+  {
+    "id": "fort-mcmurray",
+    "nameJa": "フォートマクマリー",
+    "nameEn": "Fort McMurray",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 56.73,
+    "lon": -111.38,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "オイルサンドと森林。景気は油の値段、住民は火事の季節に祈る。",
+    "properties": [
+      {
+        "id": "fort-mcmurray-1",
+        "name": "オイルサンド鉱区",
+        "industry": "energy",
+        "price": 800,
+        "yieldPct": 6
+      },
+      {
+        "id": "fort-mcmurray-2",
+        "name": "森林資源開発",
+        "industry": "industry",
+        "price": 120,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "thompson",
+    "nameJa": "トンプソン",
+    "nameEn": "Thompson",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 55.74,
+    "lon": -97.86,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ニッケルと凍土物流。冬の物流費はニッケルの値段より高い。",
+    "properties": [
+      {
+        "id": "thompson-1",
+        "name": "ニッケル鉱山",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 6
+      },
+      {
+        "id": "thompson-2",
+        "name": "凍土物流センター",
+        "industry": "shipping",
+        "price": 80,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "happy-valley-goose-bay",
+    "nameJa": "ハッピーバレー・グースベイ",
+    "nameEn": "Happy Valley-Goose Bay",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 53.30,
+    "lon": -60.33,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極基地とサーモン。名前は長いが人口は短い。",
+    "properties": [
+      {
+        "id": "happy-valley-goose-bay-1",
+        "name": "北極基地リゾート",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 13
+      },
+      {
+        "id": "happy-valley-goose-bay-2",
+        "name": "サーモン養殖",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 48
+      }
+    ]
+  },
+  {
+    "id": "kuujjuaq",
+    "nameJa": "クージュアク",
+    "nameEn": "Kuujjuaq",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 58.10,
+    "lon": -68.40,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極フェリーと毛皮工芸。フェリーの時刻表は天気に従う。",
+    "properties": [
+      {
+        "id": "kuujjuaq-1",
+        "name": "北極フェリー",
+        "industry": "shipping",
+        "price": 80,
+        "yieldPct": 12
+      },
+      {
+        "id": "kuujjuaq-2",
+        "name": "イヌイット毛皮工芸",
+        "industry": "industry",
+        "price": 45,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "fort-smith",
+    "nameJa": "フォートスミス",
+    "nameEn": "Fort Smith",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 60.00,
+    "lon": -111.89,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ウラン鉱山跡とオーロラ。過去の採掘と未来の観光で暮らす。",
+    "properties": [
+      {
+        "id": "fort-smith-1",
+        "name": "ウラン鉱山跡地",
+        "industry": "energy",
+        "price": 240,
+        "yieldPct": 6
+      },
+      {
+        "id": "fort-smith-2",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "ilulissat",
+    "nameJa": "イルリサット",
+    "nameEn": "Ilulissat",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 69.22,
+    "lon": -51.10,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "氷峡湾とオヒョウ。氷山が溶ける速さで観光収入が増える。",
+    "properties": [
+      {
+        "id": "ilulissat-1",
+        "name": "氷峡湾クルーズ",
+        "industry": "tourism",
+        "price": 130,
+        "yieldPct": 15
+      },
+      {
+        "id": "ilulissat-2",
+        "name": "オヒョウ漁業",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "sisimiut",
+    "nameJa": "シシミウト",
+    "nameEn": "Sisimiut",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 66.94,
+    "lon": -53.67,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "エビ加工と犬ぞり。工場の匂いと氷山の景色が同居する。",
+    "properties": [
+      {
+        "id": "sisimiut-1",
+        "name": "エビ加工工場",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 42
+      },
+      {
+        "id": "sisimiut-2",
+        "name": "犬ぞりツアー",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "kangerlussuaq",
+    "nameJa": "カンゲルルススアーク",
+    "nameEn": "Kangerlussuaq",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 67.01,
+    "lon": -50.69,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "氷床研究と北極物流。滑走路は氷の上、会計は赤字の上。",
+    "properties": [
+      {
+        "id": "kangerlussuaq-1",
+        "name": "氷床研究センター",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 6
+      },
+      {
+        "id": "kangerlussuaq-2",
+        "name": "北極物流拠点",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "tasiilaq",
+    "nameJa": "タシーラク",
+    "nameEn": "Tasiilaq",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 65.61,
+    "lon": -37.63,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "氷山カヤックとアザラシ革。本土からの船は気分で来る。",
+    "properties": [
+      {
+        "id": "tasiilaq-1",
+        "name": "氷山カヤック",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 16
+      },
+      {
+        "id": "tasiilaq-2",
+        "name": "アザラシ革工芸",
+        "industry": "industry",
+        "price": 40,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "qaanaaq",
+    "nameJa": "カーナーク",
+    "nameEn": "Qaanaaq",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 77.47,
+    "lon": -69.23,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "極北ハンターズツアーと隕石。世界の端で物価は世界一。",
+    "properties": [
+      {
+        "id": "qaanaaq-1",
+        "name": "極北ハンターズツアー",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      },
+      {
+        "id": "qaanaaq-2",
+        "name": "北極隕石採掘",
+        "industry": "energy",
+        "price": 220,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "narsarsuaq",
+    "nameJa": "ナルサルスアーク",
+    "nameEn": "Narsarsuaq",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 61.16,
+    "lon": -45.43,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "フィヨルド林業と北極リゾート。緑の谷に氷の商機。",
+    "properties": [
+      {
+        "id": "narsarsuaq-1",
+        "name": "フィヨルド林業",
+        "industry": "agri",
+        "price": 20,
+        "yieldPct": 35
+      },
+      {
+        "id": "narsarsuaq-2",
+        "name": "北極リゾート",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "ittoqqortoormiit",
+    "nameJa": "イットコルトーミット",
+    "nameEn": "Ittoqqortoormiit",
+    "country": "GL",
+    "countryJa": "グリーンランド",
+    "region": "north_america",
+    "lat": 70.49,
+    "lon": -21.97,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ホッキョクグマ観光と漁業。名前の長さが最大の産業。",
+    "properties": [
+      {
+        "id": "ittoqqortoormiit-1",
+        "name": "ホッキョクグマ観光",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 18
+      },
+      {
+        "id": "ittoqqortoormiit-2",
+        "name": "北極漁業",
+        "industry": "agri",
+        "price": 18,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "salekhard",
+    "nameJa": "サレハルド",
+    "nameEn": "Salekhard",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 66.53,
+    "lon": 66.60,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極圏ガス田とトナカイ食肉。緯度の割に会計は熱い。",
+    "properties": [
+      {
+        "id": "salekhard-1",
+        "name": "北極圏ガス田",
+        "industry": "energy",
+        "price": 420,
+        "yieldPct": 6
+      },
+      {
+        "id": "salekhard-2",
+        "name": "トナカイ食肉加工",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 45
+      }
+    ]
+  },
+  {
+    "id": "dudinka",
+    "nameJa": "ドゥディンカ",
+    "nameEn": "Dudinka",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 69.40,
+    "lon": 86.18,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ニッケル積出港と永久凍土倉庫。港が凍る前に帳簿を閉める。",
+    "properties": [
+      {
+        "id": "dudinka-1",
+        "name": "ニッケル積出港",
+        "industry": "shipping",
+        "price": 160,
+        "yieldPct": 10
+      },
+      {
+        "id": "dudinka-2",
+        "name": "永久凍土倉庫",
+        "industry": "industry",
+        "price": 90,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "tiksi",
+    "nameJa": "ティクシ",
+    "nameEn": "Tiksi",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 71.64,
+    "lon": 128.87,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極海航路と気象観測。氷が解ければ航路、解けなければ観測。",
+    "properties": [
+      {
+        "id": "tiksi-1",
+        "name": "北極海航路",
+        "industry": "shipping",
+        "price": 110,
+        "yieldPct": 11
+      },
+      {
+        "id": "tiksi-2",
+        "name": "北極気象観測",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "khatanga",
+    "nameJa": "ハタンガ",
+    "nameEn": "Khatanga",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 71.98,
+    "lon": 102.47,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "マンモス象牙と北極ツアー。発掘より先に永久凍土が解ける。",
+    "properties": [
+      {
+        "id": "khatanga-1",
+        "name": "マンモス象牙採掘",
+        "industry": "energy",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "khatanga-2",
+        "name": "北極ツアー",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "mirny",
+    "nameJa": "ミールヌイ",
+    "nameEn": "Mirny",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 62.54,
+    "lon": 113.96,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ダイヤモンド鉱山と凍土研究所。キラキラは地下、寒さは地上。",
+    "properties": [
+      {
+        "id": "mirny-1",
+        "name": "ミールヌイ・ダイヤ",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 6
+      },
+      {
+        "id": "mirny-2",
+        "name": "永久凍土研究所",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "pevek",
+    "nameJa": "ペヴェク",
+    "nameEn": "Pevek",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 69.70,
+    "lon": 170.31,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極海航路と金鉱山。世界で最も北の赤字港。",
+    "properties": [
+      {
+        "id": "pevek-1",
+        "name": "北極海航路",
+        "industry": "shipping",
+        "price": 130,
+        "yieldPct": 10
+      },
+      {
+        "id": "pevek-2",
+        "name": "チュコト金鉱山",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "verkhoyansk",
+    "nameJa": "ベルホヤンスク",
+    "nameEn": "Verkhoyansk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 67.55,
+    "lon": 133.39,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "極寒観測と毛皮取引。マイナス50度でも商談は熱い。",
+    "properties": [
+      {
+        "id": "verkhoyansk-1",
+        "name": "極寒気象観測",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 7
+      },
+      {
+        "id": "verkhoyansk-2",
+        "name": "毛皮取引所",
+        "industry": "industry",
+        "price": 45,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "okhotsk",
+    "nameJa": "オホーツク",
+    "nameEn": "Okhotsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 59.36,
+    "lon": 143.24,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "オホーツク漁業と北極海運。港の名前がそのまま海の名前。",
+    "properties": [
+      {
+        "id": "okhotsk-1",
+        "name": "オホーツク漁業",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 50
+      },
+      {
+        "id": "okhotsk-2",
+        "name": "北極海運",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "bratsk",
+    "nameJa": "ブラーツク",
+    "nameEn": "Bratsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 56.13,
+    "lon": 101.61,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "水力発電とアルミ精錬。電気代が安いので何でも作る。",
+    "properties": [
+      {
+        "id": "bratsk-1",
+        "name": "ブラーツク水力発電",
+        "industry": "energy",
+        "price": 500,
+        "yieldPct": 6
+      },
+      {
+        "id": "bratsk-2",
+        "name": "アルミ精錬所",
+        "industry": "industry",
+        "price": 180,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "nadym",
+    "nameJa": "ナディム",
+    "nameEn": "Nadym",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 65.53,
+    "lon": 72.52,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ガス田とトナカイ牧場。パイプラインの下をトナカイが通る。",
+    "properties": [
+      {
+        "id": "nadym-1",
+        "name": "ナディム・ガス田",
+        "industry": "energy",
+        "price": 450,
+        "yieldPct": 6
+      },
+      {
+        "id": "nadym-2",
+        "name": "トナカイ牧場",
+        "industry": "agri",
+        "price": 20,
+        "yieldPct": 45
+      }
+    ]
+  },
+  {
+    "id": "pechora",
+    "nameJa": "ペチョラ",
+    "nameEn": "Pechora",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 65.15,
+    "lon": 57.11,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ペチョラ炭田と北方林業。石炭と木が競争で値崩れ。",
+    "properties": [
+      {
+        "id": "pechora-1",
+        "name": "ペチョラ炭田",
+        "industry": "energy",
+        "price": 260,
+        "yieldPct": 7
+      },
+      {
+        "id": "pechora-2",
+        "name": "北方林業",
+        "industry": "industry",
+        "price": 90,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "syktyvkar",
+    "nameJa": "シクティフカル",
+    "nameEn": "Syktyvkar",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 61.67,
+    "lon": 50.84,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "製紙と森林バイオ。紙の書類を減らすための紙を作る。",
+    "properties": [
+      {
+        "id": "syktyvkar-1",
+        "name": "製紙工場",
+        "industry": "industry",
+        "price": 120,
+        "yieldPct": 13
+      },
+      {
+        "id": "syktyvkar-2",
+        "name": "森林バイオ技術",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "longyearbyen",
+    "nameJa": "ロングイェールビーン",
+    "nameEn": "Longyearbyen",
+    "country": "SJ",
+    "countryJa": "スバールバル諸島",
+    "region": "europe",
+    "lat": 78.22,
+    "lon": 15.65,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "北極研究とスバールバル観光。世界最北の町で温暖化を研究する。",
+    "properties": [
+      {
+        "id": "longyearbyen-1",
+        "name": "北極研究センター",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 6
+      },
+      {
+        "id": "longyearbyen-2",
+        "name": "スバールバル観光",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 14
       }
     ]
   }

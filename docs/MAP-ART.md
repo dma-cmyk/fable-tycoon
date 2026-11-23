@@ -39,7 +39,7 @@ x 頂点は `i * w / cols`（周期的、列 0 が x=0 と x=w の両方）、y 
 | `public/assets/map/rivers.json` | 約 138 KB | 主要河川 607 本（50m rivers, scalerank ≤ 6） |
 | `public/assets/map/lakes.json` | 約 244 KB | 湖 287 ポリゴン（50m + 有名な 10m 湖 + カスピ海） |
 | `public/assets/map/borders.json` | 約 61 KB | 国境の共有辺のみ（海岸線を含まない）176 本 |
-| `public/assets/map/labels.json` | 約 16 KB | 海・大陸・国・川・湖のラベル 143 件 |
+| `public/assets/map/labels.json` | 約 18 KB | 海・大陸・国・川・湖のラベル 143 件 |
 
 ### terrain.webp
 
@@ -103,12 +103,15 @@ x 頂点は `i * w / cols`（周期的、列 0 が x=0 と x=w の両方）、y 
 
 ```json
 [
-  { "text": "太平洋", "x": 7123.5, "y": 1350.2, "kind": "ocean",
+  { "text": "太平洋", "kana": "たいへいよう", "x": 7123.5, "y": 1350.2, "kind": "ocean",
     "size": 150, "minZoom": 0.08, "maxZoom": 1.1, "rotate": 0 }
 ]
 ```
 
 - `kind`: `ocean` | `sea` | `continent` | `country` | `river` | `lake`。
+- `kana`: `text` のひらがな読み。**漢字を含むラベルだけ**が持つ（カタカナだけのラベルには無い）。
+  正本は `tools/build-map-art.py` の `LABEL_KANA`。漢字を含むラベルに読みが無いと生成が止まる。
+  ひらがな・長音 `ー`・中点 `・`・空白のみ。
 - `size` は**map 単位のフォントサイズ**。画面 px は `size * zoom`。
 - `minZoom` / `maxZoom` はカメラの zoom（CSS px / map 単位）。目安:
   - ワールド全体フィット（1280×720 で `minZoom ≈ 0.15`）: 海・大陸のみ。

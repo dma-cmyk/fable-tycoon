@@ -30,6 +30,24 @@ const isInt = (v) => Number.isInteger(v);
 const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
 const oneOf = (v, values) => values.includes(v);
 
+// nameKana: nameJa のふりがな。漢字（CJK統合漢字と々）を含む名前だけが持つ。
+const KANJI = /[\u4e00-\u9fff\u3005]/;
+const NAME_KANA = /^[\u3041-\u3096\u30fc\u30fb ]+$/; // ひらがな + 長音ー + 中点・ + 半角空白
+
+function validateNameKana(c, p) {
+  if (!isStr(c.nameJa) || !KANJI.test(c.nameJa)) {
+    if (c.nameKana !== undefined) err(`${p}.nameKana`, 'must be absent when nameJa has no kanji');
+    return;
+  }
+  if (!isStr(c.nameKana)) {
+    err(`${p}.nameKana`, 'required when nameJa contains kanji');
+    return;
+  }
+  if (!NAME_KANA.test(c.nameKana)) {
+    err(`${p}.nameKana`, `must be hiragana (ー ・ space allowed), got "${c.nameKana}"`);
+  }
+}
+
 const INDUSTRIES = ['agri', 'food', 'tourism', 'industry', 'tech', 'finance', 'energy', 'shipping', 'media'];
 const REGIONS = [
   'east_asia', 'southeast_asia', 'south_asia', 'middle_east', 'europe', 'russia_central_asia',
@@ -49,7 +67,7 @@ const CARD_KINDS = ['move', 'money', 'attack', 'defense', 'special'];
 const SQUARE_KINDS = ['blue', 'red', 'yellow', 'news', 'shop', 'warp', 'portal'];
 const REALM_IDS = ['heaven', 'hell', 'space'];
 const REALM_OR_WORLD = [...REALM_IDS, 'world'];
-const EDGE_MODES = ['rail', 'sea'];
+const EDGE_MODES = ['rail', 'sea', 'air'];
 const EFFECT_OPS = [
   'cash', 'cash_pct', 'per_property', 'industry_mod', 'price_mod', 'sell',
   'card', 'move', 'skip', 'piper', 'gamble', 'realm',
@@ -163,7 +181,7 @@ if (data['cities.json'] !== undefined) {
   if (!Array.isArray(data['cities.json'])) {
     err('cities.json', 'must be an array of City');
   } else {
-    if (cities.length !== 340) err('cities.json', `expected exactly 340 cities, got ${cities.length}`);
+    if (cities.length !== 372) err('cities.json', `expected exactly 372 cities, got ${cities.length}`);
     const seenIds = new Set();
     const seenPropertyIds = new Set();
     const seenLandmarks = new Map();
@@ -182,6 +200,7 @@ if (data['cities.json'] !== undefined) {
       for (const key of ['nameJa', 'nameEn', 'countryJa', 'blurb']) {
         if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
       }
+      validateNameKana(c, p);
       if (isStr(c.blurb) && c.blurb.includes('\n')) err(`${p}.blurb`, 'must be one line');
       if (!isStr(c.country) || !/^[A-Z]{2}$/.test(c.country)) err(`${p}.country`, 'must be ISO 3166-1 alpha-2 uppercase');
       if (!oneOf(c.region, REGIONS)) err(`${p}.region`, `invalid region "${c.region}"`);
@@ -307,6 +326,7 @@ if (data['realms.json'] !== undefined) {
       for (const key of ['nameJa', 'nameEn', 'countryJa', 'blurb']) {
         if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
       }
+      validateNameKana(c, p);
       if (isStr(c.blurb) && c.blurb.includes('\n')) err(`${p}.blurb`, 'must be one line');
       if (!isStr(c.country) || !/^[A-Z]{2}$/.test(c.country)) err(`${p}.country`, 'must be 2 uppercase letters');
       if (!oneOf(c.region, REGIONS)) err(`${p}.region`, `invalid region "${c.region}"`);
@@ -452,6 +472,56 @@ if (data['board.json'] !== undefined) {
         adj.get(e.b).push(e.a);
       }
     });
+    // Air routes: endpoints must be airport cities or intermediate squares.
+    // Air squares are fly-over nodes; they may only join air edges and must not
+    // sit on another route's line (they may cross over, not share the line).
+    const airportById = new Map((cities || []).map((c) => [c.id, c.airport === true]));
+    const airSquares = new Set();
+    for (const e of b.edges) {
+      if (e.mode !== 'air') continue;
+      for (const nodeId of [e.a, e.b]) {
+        const n = nodeById.get(nodeId);
+        if (!n) continue;
+        if (n.realm) err('board.json', `air edge ${e.a} - ${e.b} must stay on the world map`);
+        if (n.kind === 'city' && n.cityId && airportById.get(n.cityId) !== true) {
+          err('board.json', `air edge ${e.a} - ${e.b} has non-airport city ${n.cityId}`);
+        }
+        if (n.kind !== 'city') airSquares.add(n);
+      }
+    }
+    const pointSegmentDistance = (px, py, ax, ay, bx, by) => {
+      const dx = bx - ax, dy = by - ay;
+      const l2 = dx * dx + dy * dy;
+      if (l2 === 0) return Math.hypot(px - ax, py - ay);
+      let t = ((px - ax) * dx + (py - ay) * dy) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+    };
+    for (const square of airSquares) {
+      for (const nb of adj.get(square.id) || []) {
+        const edge = b.edges.find((e) =>
+          (e.a === square.id && e.b === nb) || (e.b === square.id && e.a === nb),
+        );
+        if (edge && edge.mode !== 'air') {
+          err('board.json', `air square ${square.id} is attached to non-air edge ${edge.a}-${edge.b}`);
+        }
+      }
+      for (const e of b.edges) {
+        if (e.a === square.id || e.b === square.id) continue;
+        const p = nodeById.get(e.a), q = nodeById.get(e.b);
+        if (!p || !q) continue;
+        if (p.realm !== undefined || q.realm !== undefined) continue;
+        const ax = p.x;
+        const bx = ax + spacingWrapDx(p.x, q.x);
+        let nearest = Infinity;
+        for (const shift of [-MAP_W, 0, MAP_W]) {
+          nearest = Math.min(nearest, pointSegmentDistance(square.x + shift, square.y, ax, p.y, bx, q.y));
+        }
+        if (nearest < 12) {
+          err('board.json', `air square ${square.id} sits on another route line ${e.a}-${e.b} (${nearest.toFixed(1)})`);
+        }
+      }
+    }
     // Every city should be reachable and not isolated.
     for (const [nodeId, cityId] of cityNodeIds) {
       if ((adj.get(nodeId) || []).length === 0) err('board.json', `city node ${cityId} is isolated`);

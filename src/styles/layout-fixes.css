@@ -323,14 +323,26 @@
   white-space: nowrap;
 }
 
-.move-options-hint {
+.move-options-prompt {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--text-muted);
-  font-size: 9.5px;
+  color: var(--gold-pale);
+  font-size: 10.5px;
+  font-weight: 800;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  /* 狭い画面では「出目」より案内文を優先し、1行で読み切れるようにする。 */
+  .move-options-label {
+    display: none;
+  }
+
+  .move-options-prompt {
+    font-size: 10px;
+  }
 }
 
 .move-scroll-btn {
@@ -1362,8 +1374,8 @@
     max-height: 82px;
   }
 
-  .move-options-hint {
-    display: none;
+  .move-options-prompt {
+    font-size: 10px;
   }
 
   .move-chip {
@@ -1504,10 +1516,6 @@
   .move-chip {
     min-width: 138px;
   }
-
-  .move-options-hint {
-    display: none;
-  }
 }
 
 .yearend-modal .modal-body {
@@ -1602,19 +1610,13 @@
 }
 
 /* Readability floor for decision text. */
-.char-card-personality,
 .char-card-origin {
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
-.char-card-perk-desc {
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .char-card-perk-label {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .shop-card-name {
@@ -1644,10 +1646,6 @@
 }
 
 @media (max-width: 899px) {
-  .char-card-art {
-    min-height: 96px;
-  }
-
   .shop-card-desc {
     -webkit-line-clamp: 6;
   }
@@ -2065,4 +2063,261 @@
 
 .game-chips .steps-counter[hidden] {
   display: none !important;
+}
+
+/* Character picker on short landscape: collapse filters into one horizontal strip and use a side detail. */
+@media (max-height: 520px) and (min-width: 700px) {
+  .char-picker-toolbar {
+    flex-wrap: nowrap;
+    gap: 5px;
+  }
+
+  .char-search {
+    flex: 1 1 auto;
+  }
+
+  .char-available-toggle,
+  .char-filter-reset {
+    min-height: 44px;
+  }
+
+  .char-filters {
+    flex-direction: row;
+    align-items: center;
+    gap: 9px;
+    overflow-x: auto;
+    padding: 4px 0;
+    scrollbar-width: none;
+  }
+
+  .char-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .char-filter-row {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .char-filter-label {
+    flex: 0 0 auto;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .char-filter-chips {
+    overflow: visible;
+  }
+
+  .char-filter-chip {
+    min-height: 44px;
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .char-picker-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 8px;
+    min-height: 0;
+  }
+
+  .char-results {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .char-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+  }
+
+  .char-card-art {
+    height: 68px;
+  }
+
+  .char-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .char-detail-art-wrap {
+    min-height: 82px;
+    height: 82px;
+  }
+
+  .char-detail-art {
+    height: 82px;
+  }
+
+  .char-detail-role {
+    display: inline-flex;
+  }
+
+  .char-detail-name {
+    font-size: 16px;
+  }
+
+  .char-detail-personality {
+    display: none;
+  }
+
+  .char-detail-profile {
+    display: block;
+  }
+
+  .char-detail-profile summary {
+    min-height: 34px;
+    padding: 6px 2px;
+  }
+
+  .char-detail-perk {
+    padding-top: 4px;
+  }
+
+  .char-detail-perk-label,
+  .char-detail-perk-desc {
+    font-size: 12px;
+  }
+
+  .char-confirm {
+    position: sticky;
+    bottom: 0;
+    min-height: 48px;
+    font-size: 13px;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .char-filters {
+    flex: 0 0 auto;
+    min-height: 48px;
+    max-height: 48px;
+    align-items: center;
+  }
+
+  .char-filter-row {
+    min-height: 44px;
+  }
+
+  .char-filter-chips {
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* ---------------------------------------------------------------- move chips: destination proximity */
+.move-chip-main {
+  flex: 0 1 auto;
+}
+
+.move-chip-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.move-chip-tag {
+  padding: 0 6px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #fff3b0, #ffd23f 65%, #f2a800);
+  color: #5a2b00;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.move-chip-dest {
+  color: #cfe6ff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.move-chip.is-selected .move-chip-dest {
+  color: #4a3400;
+}
+
+.move-chip.is-selected .move-chip-tag {
+  background: #fff8dd;
+  color: #8a5c00;
+}
+
+.move-chip-steps {
+  margin-left: 0;
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.move-chip.is-selected .move-chip-steps {
+  color: #6c4700;
+}
+
+.move-chip.is-recommended {
+  border-color: rgba(255, 210, 63, 0.9);
+}
+
+.move-chip.is-recommended:not(.is-selected) {
+  box-shadow: 0 0 0 1.5px rgba(255, 210, 63, 0.3);
+}
+
+/* スマホは「名前・種別・あとN」に絞り、横スクロールを短くする。 */
+@media (max-width: 899px) {
+  .move-chip {
+    gap: 5px;
+    min-width: 126px;
+    min-height: 44px;
+    padding: 4px 8px;
+  }
+
+  .move-chip-kind {
+    width: 24px;
+    height: 24px;
+  }
+
+  .move-chip-name {
+    max-width: 96px;
+    font-size: 12px;
+  }
+
+  .move-chip-vehicle,
+  .move-chip-steps,
+  .move-chip-dest-prefix {
+    display: none;
+  }
+
+  .move-chip-dest {
+    font-size: 9.5px;
+  }
+
+  .move-chip-tag {
+    padding: 0 5px;
+    font-size: 8.5px;
+    line-height: 13px;
+  }
+}
+
+/* 横向きの低い画面: 案内行＋チップが 82px に収まらず切れるため、高さ制限を外す。 */
+@media (max-height: 520px) and (min-width: 700px) {
+  .move-options {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .move-scroll-btn {
+    min-height: 34px;
+  }
 }

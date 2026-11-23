@@ -11,7 +11,7 @@ import type { BoardEdge, BoardNode, GameData, MoveOption } from './types';
 
 export interface Neighbour {
   id: string;
-  mode: 'rail' | 'sea';
+  mode: 'rail' | 'sea' | 'air';
 }
 
 export interface Graph {

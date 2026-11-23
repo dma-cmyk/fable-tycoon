@@ -6,6 +6,7 @@
 // Usage: node tools/gen-voice.mjs [--dry-run] [--only=char|npc|event|narration|emote]
 
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { statSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,16 +21,41 @@ const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA_DIR = path.join(ROOT, 'src/data');
 const VOICE_DIR = path.join(ROOT, 'public/assets/voice');
-const ENGINE = 'http://127.0.0.1:50021';
+const VOICE_META_PATH = path.join(VOICE_DIR, 'voices.json');
+const CANARY_PATH = path.join(ROOT, 'tools/voice-canary.json');
+const DEFAULT_ENGINE = 'http://127.0.0.1:50021';
 const CONCURRENCY = 2;
+const MAX_ATTEMPTS = 3;
+const VOICE_REVISION = 2;
+const ENCODE_BITRATE = '64k';
+const CHECK_RATE = 16000;
+const CHECK_WINDOW = 1024;
+const CHECK_HOP = 512;
+const CHECK_MAX_SECONDS = 3;
 const GROUPS = ['char', 'npc', 'event', 'narration', 'emote'];
 
 const args = process.argv.slice(2);
 let dryRun = false;
+let force = false;
 let only = null;
+let limit = Infinity;
+let checkOnly = false;
+let engine = DEFAULT_ENGINE;
 for (const arg of args) {
   if (arg === '--dry-run') {
     dryRun = true;
+  } else if (arg === '--check-only') {
+    checkOnly = true;
+  } else if (arg.startsWith('--engine=')) {
+    engine = arg.slice('--engine='.length).replace(/\/$/, '');
+  } else if (arg === '--force') {
+    force = true;
+  } else if (arg.startsWith('--limit=')) {
+    limit = Number.parseInt(arg.slice('--limit='.length), 10);
+    if (!Number.isFinite(limit) || limit < 0) {
+      console.error(`invalid --limit value "${arg}"`);
+      process.exit(2);
+    }
   } else if (arg.startsWith('--only=')) {
     only = arg.slice('--only='.length);
     if (!GROUPS.includes(only)) {
@@ -37,7 +63,9 @@ for (const arg of args) {
       process.exit(2);
     }
   } else if (arg === '--help' || arg === '-h') {
-    console.log('usage: node tools/gen-voice.mjs [--dry-run] [--only=char|npc|event|narration|emote]');
+    console.log(
+      'usage: node tools/gen-voice.mjs [--dry-run] [--force] [--check-only] [--limit=N] [--only=char|npc|event|narration|emote]',
+    );
     process.exit(0);
   } else {
     console.error(`unknown argument "${arg}"`);
@@ -183,13 +211,48 @@ function inGroup(item, group) {
   return group === null || item.groups.has(group);
 }
 
+/** Clarity-first VOICEVOX params. Per-character speed/pitch/intonation are ignored: 1.0/0/1.0
+ * measured better CER than a global 0.95 slowdown, and extreme pitch/intonation values can hurt
+ * intelligibility. Character identity still comes from the speaker style id. */
+function voiceMeta(item) {
+  return {
+    speaker: item.voice.speaker,
+    speed: 1.0,
+    pitch: 0,
+    intonation: 1.0,
+    rev: VOICE_REVISION,
+  };
+}
+
+function metaMatches(a, b) {
+  return Boolean(
+    a &&
+      a.speaker === b.speaker &&
+      a.speed === b.speed &&
+      a.pitch === b.pitch &&
+      a.intonation === b.intonation &&
+      a.rev === b.rev,
+  );
+}
+
+let previousMeta = {};
+try {
+  const raw = JSON.parse(await readFile(VOICE_META_PATH, 'utf8'));
+  if (raw && typeof raw === 'object') previousMeta = raw;
+} catch {
+  /* first run after this change: no sidecar yet */
+}
+
+const currentMeta = { ...previousMeta };
+
 function mp3Path(item) {
   return path.join(VOICE_DIR, `${item.hash}.mp3`);
 }
 
 function isPresent(item) {
   try {
-    return statSync(mp3Path(item)).size > 0;
+    if (statSync(mp3Path(item)).size <= 0) return false;
+    return metaMatches(currentMeta[item.hash], voiceMeta(item));
   } catch {
     return false;
   }
@@ -204,8 +267,10 @@ function groupCounts() {
 }
 
 const selected = items.filter((item) => inGroup(item, only));
-const missing = selected.filter((item) => !isPresent(item));
-const present = items.filter(isPresent);
+const missing = selected.filter((item) => force || !isPresent(item));
+const present = force
+  ? items.filter((item) => !inGroup(item, only) && isPresent(item))
+  : items.filter(isPresent);
 
 if (dryRun) {
   const counts = groupCounts();
@@ -222,14 +287,14 @@ if (dryRun) {
 // Engine preflight: fail fast with the exact command to start VOICEVOX.
 let speakerNames;
 try {
-  const response = await fetch(`${ENGINE}/speakers`, { signal: AbortSignal.timeout(3000) });
+  const response = await fetch(`${engine}/speakers`, { signal: AbortSignal.timeout(3000) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   speakerNames = new Map();
   for (const speaker of await response.json()) {
     for (const style of speaker.styles ?? []) speakerNames.set(style.id, speaker.name);
   }
 } catch (error) {
-  console.error(`gen-voice: VOICEVOX is not reachable at ${ENGINE} (${error.message})`);
+  console.error(`gen-voice: VOICEVOX is not reachable at ${engine} (${error.message})`);
   console.error(
     'Start it with: podman run -d --rm --name voicevox -p 127.0.0.1:50021:50021 docker.io/voicevox/voicevox_engine:cpu-latest',
   );
@@ -245,7 +310,9 @@ for (const item of badVoices) {
     error: `speaker style id ${item.voice.speaker} does not exist in VOICEVOX`,
   });
 }
-const runnable = missing.filter((item) => speakerNames.has(item.voice.speaker));
+const runnable = missing
+  .filter((item) => speakerNames.has(item.voice.speaker))
+  .slice(0, limit);
 
 console.log(
   `gen-voice: ${items.length} unique lines, ${present.length} present, ` +
@@ -262,10 +329,10 @@ try {
   process.exit(1);
 }
 
-async function synthesize(item) {
-  const queryUrl = `${ENGINE}/audio_query?${new URLSearchParams({
-    speaker: String(item.voice.speaker),
-    text: item.text,
+async function synthesizeToWav(text, speaker, params) {
+  const queryUrl = `${engine}/audio_query?${new URLSearchParams({
+    speaker: String(speaker),
+    text,
   })}`;
   const queryResponse = await fetch(queryUrl, {
     method: 'POST',
@@ -275,15 +342,15 @@ async function synthesize(item) {
     throw new Error(`audio_query HTTP ${queryResponse.status}: ${(await queryResponse.text()).slice(0, 200)}`);
   }
   const query = await queryResponse.json();
-  query.speedScale = 1.0;
-  query.pitchScale = 1.0;
-  query.intonationScale = 1.0;
+  query.speedScale = params.speed;
+  query.pitchScale = params.pitch;
+  query.intonationScale = params.intonation;
   query.volumeScale = 1.0;
   query.prePhonemeLength = 0.05;
   query.postPhonemeLength = 0.12;
 
   const synthesisResponse = await fetch(
-    `${ENGINE}/synthesis?${new URLSearchParams({ speaker: String(item.voice.speaker) })}`,
+    `${engine}/synthesis?${new URLSearchParams({ speaker: String(speaker) })}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -296,39 +363,292 @@ async function synthesize(item) {
       `synthesis HTTP ${synthesisResponse.status}: ${(await synthesisResponse.text()).slice(0, 200)}`,
     );
   }
+  return Buffer.from(await synthesisResponse.arrayBuffer());
+}
 
-  const wavPath = path.join(tmpDir, `${item.hash}.wav`);
+const CHECK_HANN = new Float64Array(CHECK_WINDOW);
+for (let i = 0; i < CHECK_WINDOW; i += 1) {
+  CHECK_HANN[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (CHECK_WINDOW - 1));
+}
+const CHECK_BIN_LO = Math.ceil((100 * CHECK_WINDOW) / CHECK_RATE);
+const CHECK_BIN_HI = Math.floor((8000 * CHECK_WINDOW) / CHECK_RATE);
+
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let tmp = re[i];
+      re[i] = re[j];
+      re[j] = tmp;
+      tmp = im[i];
+      im[i] = im[j];
+      im[j] = tmp;
+    }
+  }
+  for (let length = 2; length <= n; length <<= 1) {
+    const angle = (-2 * Math.PI) / length;
+    const wr = Math.cos(angle);
+    const wi = Math.sin(angle);
+    const half = length >> 1;
+    for (let start = 0; start < n; start += length) {
+      let cr = 1;
+      let ci = 0;
+      for (let offset = 0; offset < half; offset += 1) {
+        const a = start + offset;
+        const b = a + half;
+        const vr = re[b] * cr - im[b] * ci;
+        const vi = re[b] * ci + im[b] * cr;
+        const ur = re[a];
+        const ui = im[a];
+        re[a] = ur + vr;
+        im[a] = ui + vi;
+        re[b] = ur - vr;
+        im[b] = ui - vi;
+        const nextCr = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = nextCr;
+      }
+    }
+  }
+}
+
+function mean(values) {
+  return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
+}
+
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function percentile(values, p) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length * p) / 100))];
+}
+
+function std(values) {
+  if (values.length === 0) return 0;
+  const average = mean(values);
+  return Math.sqrt(mean(values.map((value) => (value - average) ** 2)));
+}
+
+/** Cheap speech-vs-noise check used after synthesis and after MP3 encoding. */
+async function analyzeSpeech(file) {
+  const { stdout } = await execFileAsync(
+    'ffmpeg',
+    ['-v', 'error', '-i', file, '-ac', '1', '-ar', String(CHECK_RATE), '-f', 'f32le', '-'],
+    { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 },
+  );
+  const pcm = new Float32Array(
+    stdout.buffer.slice(stdout.byteOffset, stdout.byteOffset + stdout.byteLength),
+  );
+  const maxSamples = Math.min(pcm.length, CHECK_RATE * CHECK_MAX_SECONDS);
+  const flat = [];
+  const centroids = [];
+  const zcrs = [];
+  const rmsValues = [];
+
+  for (let start = 0; start + CHECK_WINDOW <= maxSamples; start += CHECK_HOP) {
+    const re = new Float64Array(CHECK_WINDOW);
+    const im = new Float64Array(CHECK_WINDOW);
+    let sum = 0;
+    let sumSq = 0;
+    let crossings = 0;
+    let previousSign = pcm[start] >= 0;
+    for (let i = 0; i < CHECK_WINDOW; i += 1) {
+      const sample = pcm[start + i];
+      sum += sample;
+      sumSq += sample * sample;
+      const sign = sample >= 0;
+      if (sign !== previousSign) crossings += 1;
+      previousSign = sign;
+    }
+    const frameMean = sum / CHECK_WINDOW;
+    const rms = Math.sqrt(sumSq / CHECK_WINDOW);
+    if (rms < 1e-3) continue;
+    for (let i = 0; i < CHECK_WINDOW; i += 1) {
+      re[i] = (pcm[start + i] - frameMean) * CHECK_HANN[i];
+    }
+    fft(re, im);
+
+    let logSum = 0;
+    let powerSum = 0;
+    let centroidWeighted = 0;
+    let bins = 0;
+    for (let bin = CHECK_BIN_LO; bin <= CHECK_BIN_HI; bin += 1) {
+      const power = re[bin] * re[bin] + im[bin] * im[bin] + 1e-20;
+      logSum += Math.log(power);
+      powerSum += power;
+      centroidWeighted += power * ((bin * CHECK_RATE) / CHECK_WINDOW);
+      bins += 1;
+    }
+    flat.push(Math.exp(logSum / bins) / (powerSum / bins));
+    centroids.push(centroidWeighted / powerSum);
+    zcrs.push(crossings / CHECK_WINDOW);
+    rmsValues.push(rms);
+  }
+
+  if (flat.length < 3) {
+    return { ok: false, reasons: ['too little speech energy'], frames: flat.length };
+  }
+  const flatMean = mean(flat);
+  const flatMed = median(flat);
+  const centroidMean = mean(centroids);
+  const centroidStd = std(centroids);
+  const zcrMean = mean(zcrs);
+  const rmsDb = 20 * Math.log10(mean(rmsValues) + 1e-12);
+  const rmsCv = std(rmsValues) / (mean(rmsValues) + 1e-12);
+  const reasons = [];
+  if (flatMed > 0.055) reasons.push(`flat_med ${flatMed.toFixed(3)} > 0.055`);
+  if (centroidStd < 700 && flatMed > 0.04) reasons.push('stationary/high-flat spectrum');
+  if (zcrMean > 0.35) reasons.push(`zcr ${zcrMean.toFixed(2)} > 0.35`);
+  if (rmsDb < -38) reasons.push(`rms ${rmsDb.toFixed(1)} dB < -38`);
+  if (rmsCv > 1.3) reasons.push(`rms_cv ${rmsCv.toFixed(2)} > 1.30`);
+  return {
+    ok: reasons.length === 0,
+    reasons,
+    frames: flat.length,
+    features: {
+      flatMean,
+      flatMed,
+      flatP90: percentile(flat, 90),
+      centroidMean,
+      centroidStd,
+      zcrMean,
+      rmsDb,
+      rmsCv,
+    },
+  };
+}
+
+async function checkCanary() {
+  let spec;
+  try {
+    spec = JSON.parse(await readFile(CANARY_PATH, 'utf8'));
+  } catch {
+    console.error(`gen-voice: missing canary ${path.relative(ROOT, CANARY_PATH)}; refusing to batch-generate`);
+    process.exit(1);
+  }
+  const wav = await synthesizeToWav(spec.text, spec.speaker, {
+    speed: spec.speed,
+    pitch: spec.pitch,
+    intonation: spec.intonation,
+  });
+  const hash = createHash('sha256').update(wav).digest('hex');
+  if (hash !== spec.sha256) {
+    console.error('gen-voice: VOICEVOX canary mismatch — the engine is returning corrupted/not-speech audio.');
+    console.error(`  expected ${spec.sha256}`);
+    console.error(`  got      ${hash}`);
+    console.error('Restart the engine and retry: podman restart voicevox');
+    process.exit(1);
+  }
+  const canaryPath = path.join(tmpDir, 'canary.wav');
+  await writeFile(canaryPath, wav);
+  const check = await analyzeSpeech(canaryPath);
+  await rm(canaryPath, { force: true });
+  if (!check.ok) {
+    console.error(`gen-voice: VOICEVOX canary failed speech check: ${check.reasons.join('; ')}`);
+    console.error('Restart the engine and retry: podman restart voicevox');
+    process.exit(1);
+  }
+  console.log('gen-voice: canary OK');
+}
+
+async function synthesize(item) {
+  const meta = voiceMeta(item);
   const outPath = mp3Path(item);
   const tempPath = `${outPath}.tmp.mp3`;
-  await writeFile(wavPath, Buffer.from(await synthesisResponse.arrayBuffer()));
+  const wavPath = path.join(tmpDir, `${item.hash}.wav`);
+  let lastError;
   try {
-    await execFileAsync('ffmpeg', [
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      wavPath,
-      '-af',
-      'loudnorm=I=-18:TP=-1.5:LRA=11',
-      '-ac',
-      '1',
-      '-ar',
-      '24000',
-      '-c:a',
-      'libmp3lame',
-      '-b:a',
-      '40k',
-      tempPath,
-    ]);
-    const info = await stat(tempPath);
-    if (info.size < 100) throw new Error(`ffmpeg produced an empty mp3 (${info.size} bytes)`);
-    await rename(tempPath, outPath);
-    return info.size;
+    await rm(outPath, { force: true });
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const wav = await synthesizeToWav(item.text, meta.speaker, meta);
+        await writeFile(wavPath, wav);
+        const wavCheck = await analyzeSpeech(wavPath);
+        if (!wavCheck.ok) {
+          throw new Error(`speech check failed (wav): ${wavCheck.reasons.join('; ')}`);
+        }
+        await execFileAsync('ffmpeg', [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          wavPath,
+          '-af',
+          'loudnorm=I=-18:TP=-2.0:LRA=11',
+          '-ac',
+          '1',
+          '-ar',
+          '24000',
+          '-c:a',
+          'libmp3lame',
+          '-b:a',
+          ENCODE_BITRATE,
+          tempPath,
+        ]);
+        const info = await stat(tempPath);
+        if (info.size < 100) throw new Error(`ffmpeg produced an empty mp3 (${info.size} bytes)`);
+        await rename(tempPath, outPath);
+        currentMeta[item.hash] = meta;
+        return info.size;
+      } catch (error) {
+        lastError = error;
+        await rm(wavPath, { force: true });
+        await rm(tempPath, { force: true });
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      }
+    }
+    throw new Error(`all ${MAX_ATTEMPTS} attempts failed: ${lastError?.message ?? lastError}`);
   } finally {
     await rm(wavPath, { force: true });
     await rm(tempPath, { force: true });
   }
+}
+
+await checkCanary();
+
+if (checkOnly) {
+  const targets = items.filter((item) => {
+    try {
+      return statSync(mp3Path(item)).size > 0;
+    } catch {
+      return false;
+    }
+  });
+  let cursor = 0;
+  let checked = 0;
+  let bad = 0;
+  async function checkWorker() {
+    for (;;) {
+      const index = cursor++;
+      if (index >= targets.length) return;
+      const item = targets[index];
+      checked += 1;
+      const result = await analyzeSpeech(mp3Path(item));
+      if (!result.ok) {
+        bad += 1;
+        console.log(`BAD ${item.voiceKey}: ${result.reasons.join('; ')} :: ${item.text.slice(0, 30)}`);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, targets.length) }, () => checkWorker()));
+  console.log(`speech check: ${checked - bad}/${checked} OK, ${bad} bad`);
+  await rm(tmpDir, { recursive: true, force: true });
+  process.exit(bad > 0 ? 1 : 0);
+}
+
+async function checkpointMeta() {
+  await writeFile(VOICE_META_PATH, `${JSON.stringify(currentMeta, null, 2)}\n`);
 }
 
 const failures = [...collectionErrors];
@@ -346,6 +666,7 @@ async function worker() {
     try {
       generatedBytes += await synthesize(item);
       generated += 1;
+      if (generated % 20 === 0) await checkpointMeta();
     } catch (error) {
       const failure = { voiceKey: item.voiceKey, text: item.text, error: String(error?.message ?? error) };
       failures.push(failure);
@@ -369,11 +690,16 @@ const elapsed = (Date.now() - startedAt) / 1000;
 
 // Manifest: every current item that actually has a file (not just this scope).
 const manifest = {};
+const nextMeta = {};
 for (const item of items) {
-  if (isPresent(item)) manifest[item.hash] = `voice/${item.hash}.mp3`;
+  if (isPresent(item)) {
+    manifest[item.hash] = `voice/${item.hash}.mp3`;
+    nextMeta[item.hash] = currentMeta[item.hash];
+  }
 }
 const manifestPath = path.join(VOICE_DIR, 'manifest.json');
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+await writeFile(VOICE_META_PATH, `${JSON.stringify(nextMeta, null, 2)}\n`);
 
 // Remove stale mp3s that no current item references.
 let removedOrphans = 0;
@@ -406,6 +732,7 @@ console.log(`skipped already present: ${selected.length - missing.length} in sco
 console.log(`failures: ${failures.length}`);
 console.log(`orphan mp3 removed: ${removedOrphans}`);
 console.log(`manifest entries: ${Object.keys(manifest).length} -> ${path.relative(ROOT, manifestPath)}`);
+console.log(`parameter sidecar: ${Object.keys(nextMeta).length} -> ${path.relative(ROOT, VOICE_META_PATH)}`);
 console.log(
   `voice library: ${voiceFiles} files, ${(voiceBytes / 1024 / 1024).toFixed(2)} MB ` +
     `(avg ${(voiceBytes / Math.max(voiceFiles, 1) / 1024).toFixed(1)} KB/file)`,

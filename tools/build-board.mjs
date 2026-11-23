@@ -487,7 +487,9 @@ const RAIL_STRAIT_WHITELIST = new Set([
   'sapporo|sendai',      // Seikan tunnel via Sendai
 ]);
 // Archipelagos where a sea lane may weave through a handful of small islands.
-const SEA_ARCHIPELAGO_WHITELIST = new Set(['helsinki|stockholm', 'hobart|melbourne']);
+const SEA_ARCHIPELAGO_WHITELIST = new Set([
+  'helsinki|stockholm', 'hobart|melbourne', 'singapore|jakarta', 'darwin|denpasar',
+]);
 
 function classify(i, j, sample) {
   const a = cities[i], b = cities[j];
@@ -542,6 +544,7 @@ function segIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
 function crossesAccepted(seg, accepted) {
   const [ax, ay, bx, by] = normalizeSeg(seg.ax, seg.ay, seg.bx, seg.by);
   for (const e of accepted) {
+    if (e.mode === 'air') continue;
     if (e.i === seg.i || e.j === seg.i || e.i === seg.j || e.j === seg.j) continue;
     for (const k of [-1, 0, 1]) {
       const [cx0, cy0, dx0, dy0] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
@@ -620,7 +623,8 @@ const FORCED_LINKS = [
   ['montreal', 'quebec-city', 'rail'], ['quebec-city', 'halifax', 'rail'],
   ['halifax', 'st-johns', 'sea'], ['winnipeg', 'churchill', 'rail'],
   ['churchill', 'iqaluit', 'sea'], ['iqaluit', 'nuuk', 'sea'],
-  ['nuuk', 'reykjavik', 'sea'], ['bergen', 'tromso', 'sea'],
+  ['sisimiut', 'nuuk', 'sea'],
+  ['bergen', 'tromso', 'sea'],
   ['tromso', 'kiruna', 'rail'], ['kiruna', 'rovaniemi', 'rail'],
   ['rovaniemi', 'murmansk', 'rail'],
   // Japan/Korea/Taiwan land chains (stations and track stay on their islands)
@@ -634,21 +638,121 @@ const FORCED_LINKS = [
   ['matsuyama', 'takamatsu', 'rail'], ['takamatsu', 'okayama', 'rail'],
   ['seoul', 'busan', 'rail'], ['taipei', 'kaohsiung', 'rail'],
 ];
+
+// Deliberate extra sea lanes requested for the northern / intercontinental board.
+// Forced sea links may warn if OSM land sampling says they clip a coast; the
+// post-build mode warnings and previews are checked before shipping.
+const EXTRA_SEA_LINKS = [
+  ['murmansk', 'longyearbyen', 'sea'],           // Barents Sea
+  ['okhotsk', 'yuzhno-sakhalinsk', 'sea'],       // Sea of Okhotsk
+  ['pond-inlet', 'ilulissat', 'sea'],            // Baffin Bay
+  ['miami', 'havana', 'sea'],                    // Florida Straits
+  ['san-juan', 'cartagena', 'sea'],              // Caribbean
+  ['barcelona', 'tunis', 'sea'],                 // Mediterranean
+  ['athens', 'alexandria', 'sea'],               // Mediterranean
+  ['dubai', 'mumbai', 'sea'],                    // Arabian Sea
+  ['singapore', 'jakarta', 'sea'],               // Malacca / Java Sea
+  ['manila', 'cebu', 'sea'],                     // Philippine islands
+  ['darwin', 'denpasar', 'sea'],                 // Timor Sea
+  ['brisbane', 'suva', 'sea'],                   // South Pacific
+  ['suva', 'honolulu', 'sea'],                   // Pacific islands
+  ['tokyo', 'seoul', 'sea'],                     // Japan Sea
+  ['shanghai', 'busan', 'sea'],                  // East China Sea
+  ['hong-kong', 'manila', 'sea'],                // South China Sea
+  ['manila', 'davao', 'sea'],                    // Philippine archipelago
+  ['jakarta', 'surabaya', 'sea'],                // Java Sea
+  ['perth', 'singapore', 'sea'],                 // Indian Ocean
+  ['sydney', 'brisbane', 'sea'],                 // east coast
+  ['auckland', 'brisbane', 'sea'],               // Tasman Sea
+  ['wellington', 'sydney', 'sea'],               // Tasman Sea
+  ['miami', 'san-juan', 'sea'],                  // Caribbean
+  ['dakar', 'casablanca', 'sea'],                // Atlantic coast
+  ['lagos', 'accra', 'sea'],                     // Gulf of Guinea
+  ['cape-town', 'durban', 'sea'],                // South African coast
+  ['mombasa', 'dar-es-salaam', 'sea'],           // East African coast
+  ['durban', 'maputo', 'sea'],                   // Mozambique Channel
+  ['lisbon', 'casablanca', 'sea'],               // Atlantic
+  ['copenhagen', 'oslo', 'sea'],                 // Skagerrak
+  ['dublin', 'liverpool', 'sea'],                // Irish Sea
+  ['muscat', 'dubai', 'sea'],                    // Gulf of Oman
+  ['dubai', 'doha', 'sea'],                      // Persian Gulf
+  ['vladivostok', 'tokyo', 'sea'],               // Sea of Japan
+  ['osaka', 'busan', 'sea'],                     // Korea Strait
+];
+
+// Long-haul air routes. Air edges connect airports, fly over land/sea, and are
+// exempt from the planar crossing rule. Square insertion is one per ~300 units.
+// They are added after rail/sea topology so they cannot influence that layout.
+const AIR_LINKS = [
+  // Canada / Alaska / Arctic
+  ['inuvik', 'anchorage', 'air'],
+  ['cambridge-bay', 'yellowknife', 'air'],
+  ['rankin-inlet', 'iqaluit', 'air'],
+  ['resolute', 'iqaluit', 'air'],
+  ['pond-inlet', 'resolute', 'air'],
+  ['baker-lake', 'yellowknife', 'air'],
+  ['dawson-city', 'whitehorse', 'air'],
+  ['fort-mcmurray', 'toronto', 'air'],
+  ['thompson', 'winnipeg', 'air'],
+  ['happy-valley-goose-bay', 'montreal', 'air'],
+  ['kuujjuaq', 'montreal', 'air'],
+  ['fort-smith', 'yellowknife', 'air'],
+  // Greenland
+  ['nuuk', 'ilulissat', 'air'],
+  ['kangerlussuaq', 'reykjavik', 'air'],
+  ['qaanaaq', 'resolute', 'air'],
+  ['narsarsuaq', 'reykjavik', 'air'],
+  ['tasiilaq', 'narsarsuaq', 'air'],
+  // Russia / Siberia / Arctic
+  ['salekhard', 'moscow', 'air'],
+  ['nadym', 'moscow', 'air'],
+  ['pechora', 'syktyvkar', 'air'],
+  ['syktyvkar', 'moscow', 'air'],
+  ['tiksi', 'yakutsk', 'air'],
+  ['khatanga', 'yakutsk', 'air'],
+  ['mirny', 'irkutsk', 'air'],
+  ['pevek', 'anchorage', 'air'],
+  ['verkhoyansk', 'yakutsk', 'air'],
+  ['bratsk', 'beijing', 'air'],
+  ['dudinka', 'moscow', 'air'],
+  // Svalbard
+  ['longyearbyen', 'tromso', 'air'],
+  // Long-haul trunks
+  ['tokyo', 'san-francisco', 'air'],
+  ['new-york', 'london', 'air'],
+  ['singapore', 'sydney', 'air'],
+  ['lagos', 'sao-paulo', 'air'],
+  ['cape-town', 'rio-de-janeiro', 'air'],
+  ['anchorage', 'tokyo', 'air'],
+];
+
+const allForcedLinks = [...FORCED_LINKS, ...AIR_LINKS];
 const forcedKeys = new Set();
-for (const [aId, bId, mode] of FORCED_LINKS) {
+for (const [aId, bId, mode] of allForcedLinks) {
   const i = cityIndex.get(aId), j = cityIndex.get(bId);
   if (i === undefined || j === undefined) throw new Error(`forced link city missing: ${aId}/${bId}`);
+  if (mode === 'air' && (!cities[i].airport || !cities[j].airport)) {
+    throw new Error(`air link endpoints must be airports: ${aId}/${bId}`);
+  }
   const key = `${Math.min(i, j)}:${Math.max(i, j)}`;
   if (forcedKeys.has(key)) continue;
   const ax = projected[i][0], ay = projected[i][1];
   const bx = ax + wrapDx(ax, projected[j][0]), by = projected[j][1];
   const seg = { i, j, len: Math.hypot(bx - ax, by - ay), ax, ay, bx, by };
   const sample = sampleLand(i, j);
+  if (mode === 'air') {
+    // Air routes are intentionally non-planar: they fly over land, sea and
+    // other routes. No classification or crossing test applies.
+    accepted.push({ ...seg, mode, sample });
+    forcedKeys.add(key);
+    continue;
+  }
   const classified = classify(i, j, sample);
   if (!classified) console.warn(`forced link unclassified: ${aId}-${bId} (${mode}, land=${sample.landFrac.toFixed(2)})`);
   else if (classified !== mode) console.warn(`forced link mode mismatch: ${aId}-${bId} ${classified} -> ${mode}`);
   let blocked = false;
   for (const e of accepted) {
+    if (e.mode === 'air') continue;
     if (e.i === i || e.j === i || e.i === j || e.j === j) continue;
     const [x1, y1, x2, y2] = normalizeSeg(seg.ax, seg.ay, seg.bx, seg.by);
     const [u1, v1, u2, v2] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
@@ -663,7 +767,7 @@ for (const [aId, bId, mode] of FORCED_LINKS) {
   cityDegree[j]++;
   forcedKeys.add(key);
 }
-console.log(`  forced northern backbone links: ${accepted.length}`);
+console.log(`  forced links (rail/sea/air): ${accepted.length}`);
 for (const seg of candidates) {
   const forceKey = `${Math.min(seg.i, seg.j)}:${Math.max(seg.i, seg.j)}`;
   if (forcedKeys.has(forceKey)) continue;
@@ -786,6 +890,7 @@ while (componentCount() > 1) {
       throw new Error(`cannot connect ${groups.size} components: ${summary}`);
     }
     const blockers = accepted.filter((e) => {
+      if (e.mode === 'air') return false;
       if (e.i === fallback.i || e.j === fallback.i || e.i === fallback.j || e.j === fallback.j) return false;
       const [x1, y1, x2, y2] = normalizeSeg(fallback.ax, fallback.ay, fallback.bx, fallback.by);
       const [u1, v1, u2, v2] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
@@ -845,6 +950,7 @@ for (const [aId, bId, mode] of corridors) {
   // blockers if doing so keeps the graph connected.
   const blockers = [];
   for (const e of accepted) {
+    if (e.mode === 'air') continue;
     if (e.i === i || e.j === i || e.i === j || e.j === j) continue;
     const [x1, y1, x2, y2] = normalizeSeg(seg.ax, seg.ay, seg.bx, seg.by);
     const [u1, v1, u2, v2] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
@@ -1009,9 +1115,11 @@ function deCross() {
     let pair = null;
     for (let x = 0; x < accepted.length && !pair; x++) {
       const e = accepted[x];
+      if (e.mode === 'air') continue;
       const [ax, ay, bx, by] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
       for (let y = x + 1; y < accepted.length; y++) {
         const f = accepted[y];
+        if (f.mode === 'air') continue;
         if (e.i === f.i || e.i === f.j || e.j === f.i || e.j === f.j) continue;
         const [cx, cy, dx, dy] = normalizeSeg(f.ax, f.ay, f.bx, f.by);
         for (const k of [-1, 0, 1]) {
@@ -1044,6 +1152,69 @@ function deCross() {
 }
 deCross();
 
+// Extra sea lanes are inserted after the planar backbone is final. If a lane
+// crosses existing (non-air) edges, the blockers are removed when connectivity
+// survives; protected crossings cause the lane to be skipped. This keeps the
+// no-crossing rule while allowing more ferries than the Gabriel backbone alone.
+function addExtraSeaRoutes() {
+  let added = 0;
+  let skipped = 0;
+  for (const [aId, bId] of EXTRA_SEA_LINKS) {
+    const i = cityIndex.get(aId), j = cityIndex.get(bId);
+    if (i === undefined || j === undefined) throw new Error(`extra sea city missing: ${aId}/${bId}`);
+    if (!cities[i].port || !cities[j].port) { skipped++; continue; }
+    const key = edgeKey(i, j);
+    if (edgeSet.has(key)) { protectedEdges.add(key); continue; }
+    const ax = projected[i][0], ay = projected[i][1];
+    const bx = ax + wrapDx(ax, projected[j][0]), by = projected[j][1];
+    const sample = sampleLand(i, j);
+    if (sample.landFrac > 0.6) { skipped++; continue; }
+    const seg = { i, j, len: Math.hypot(bx - ax, by - ay), ax, ay, bx, by };
+    const blockers = [];
+    let protectedBlock = false;
+    for (const e of accepted) {
+      if (e.mode === 'air') continue;
+      if (e.i === i || e.j === i || e.i === j || e.j === j) continue;
+      const [x1, y1, x2, y2] = normalizeSeg(seg.ax, seg.ay, seg.bx, seg.by);
+      const [u1, v1, u2, v2] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
+      let hit = false;
+      for (const k of [-1, 0, 1]) {
+        if (segIntersect(x1, y1, x2, y2, u1 + k * MAP_W, v1, u2 + k * MAP_W, v2)) { hit = true; break; }
+      }
+      if (!hit) continue;
+      if (protectedEdges.has(edgeKey(e.i, e.j))) { protectedBlock = true; break; }
+      blockers.push(e);
+    }
+    if (protectedBlock) { skipped++; continue; }
+    for (const blocker of blockers) {
+      const idx = accepted.indexOf(blocker);
+      if (idx >= 0) accepted.splice(idx, 1);
+      edgeSet.delete(edgeKey(blocker.i, blocker.j));
+    }
+    accepted.push(seg);
+    edgeSet.add(key);
+    if (!graphConnected()) {
+      const idx = accepted.indexOf(seg);
+      if (idx >= 0) accepted.splice(idx, 1);
+      edgeSet.delete(key);
+      for (const blocker of blockers) {
+        accepted.push(blocker);
+        edgeSet.add(edgeKey(blocker.i, blocker.j));
+      }
+      skipped++;
+      continue;
+    }
+    // The bare seg was only for the connectivity test; replace it with a sea edge.
+    const idx = accepted.indexOf(seg);
+    if (idx >= 0) accepted.splice(idx, 1);
+    accepted.push({ ...seg, mode: 'sea', sample });
+    protectedEdges.add(key);
+    added++;
+  }
+  console.log(`  extra sea lanes: +${added} (skipped ${skipped})`);
+}
+addExtraSeaRoutes();
+
 // Post-build guarantees. These catch regressions in wrap/crossing/mode logic.
 {
   const missing = corridors.filter(([aId, bId]) => {
@@ -1056,6 +1227,7 @@ deCross();
   for (let x = 0; x < accepted.length; x++) {
     for (let y = x + 1; y < accepted.length; y++) {
       const e = accepted[x], f = accepted[y];
+      if (e.mode === 'air' || f.mode === 'air') continue;
       if (e.i === f.i || e.i === f.j || e.j === f.i || e.j === f.j) continue;
       const [ax, ay, bx, by] = normalizeSeg(e.ax, e.ay, e.bx, e.by);
       const [cx, cy, dx, dy] = normalizeSeg(f.ax, f.ay, f.bx, f.by);
@@ -1165,7 +1337,9 @@ let skippedSquares = 0;
 const placed = [];
 const nodeGrid = new Map();
 const NODE_CELL = 60;
-const cellKey = (x, y) => `${Math.floor(x / NODE_CELL)},${Math.floor(y / NODE_CELL)}`;
+const NODE_COLS = Math.ceil(MAP_W / NODE_CELL);
+const cellX = (x) => ((Math.floor(x / NODE_CELL) % NODE_COLS) + NODE_COLS) % NODE_COLS;
+const cellKey = (x, y) => `${cellX(x)},${Math.floor(y / NODE_CELL)}`;
 const addPlaced = (x, y, kind = 'square') => {
   const key = cellKey(x, y);
   if (!nodeGrid.has(key)) nodeGrid.set(key, []);
@@ -1173,8 +1347,9 @@ const addPlaced = (x, y, kind = 'square') => {
   placed.push([x, y, kind]);
 };
 const farEnough = (x, y, minDist = 60, cityMin = minDist) => {
-  const cx = Math.floor(x / NODE_CELL), cy = Math.floor(y / NODE_CELL);
-  for (let ix = cx - 1; ix <= cx + 1; ix++) {
+  const cx = cellX(x), cy = Math.floor(y / NODE_CELL);
+  for (let dx = -1; dx <= 1; dx++) {
+    const ix = (cx + dx + NODE_COLS) % NODE_COLS;
     for (let iy = cy - 1; iy <= cy + 1; iy++) {
       const arr = nodeGrid.get(`${ix},${iy}`);
       if (!arr) continue;
@@ -1188,11 +1363,34 @@ const farEnough = (x, y, minDist = 60, cityMin = minDist) => {
 };
 for (const n of nodes) addPlaced(n.x, n.y, 'city');
 
+function pointSegmentDistance(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / l2;
+  t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+/** True when an air square would sit on (or too close to) another route line. */
+function nearOtherRouteLine(edge, x, y, minDist = 20) {
+  for (const f of accepted) {
+    if (f.i === edge.i && f.j === edge.j) continue;
+    const [ax, ay, bx, by] = normalizeSeg(f.ax, f.ay, f.bx, f.by);
+    for (const shift of [-MAP_W, 0, MAP_W]) {
+      if (pointSegmentDistance(x + shift, y, ax, ay, bx, by) < minDist) return true;
+    }
+  }
+  return false;
+}
+
 accepted.sort((a, b) => a.len - b.len);
 const edgeSquares = [];
 const records = [];
 for (const [edgeIndex, e] of accepted.entries()) {
-  const count = e.len < 150 ? 0 : clamp(Math.round(e.len / 75) - 1, 1, 9);
+  const count = e.mode === 'air'
+    ? Math.max(1, Math.round(e.len / 300))
+    : e.len < 150 ? 0 : clamp(Math.round(e.len / 75) - 1, 1, 9);
   const dx = e.bx - e.ax, dy = e.by - e.ay;
   const minT = Math.min(0.45, 60 / Math.max(e.len, 1));
   const list = [];
@@ -1210,7 +1408,11 @@ for (const [edgeIndex, e] of accepted.entries()) {
       const rx = round1(x), ry = round1(y);
       if (!farEnough(rx, ry)) continue;
       let px = rx, py = ry;
-      if (e.mode === 'sea') {
+      if (e.mode === 'air') {
+        // Fly-over squares have no land/water constraint, but must not sit on
+        // another route's line (including another air lane).
+        if (nearOtherRouteLine(e, px, py, 20)) continue;
+      } else if (e.mode === 'sea') {
         if (isLandAt(px, py)) continue;
         if (!isWaterArea(px, py)) continue;
       } else if (!isLandAt(px, py)) {

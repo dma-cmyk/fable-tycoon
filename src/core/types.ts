@@ -33,6 +33,8 @@ export interface Property {
 export interface City {
   id: string; // ascii slug, e.g. "tokyo"
   nameJa: string;
+  /** nameJa のひらがな読み（ふりがな）。漢字を含む nameJa では必須。カタカナだけの名前では持たない。 */
+  nameKana?: string;
   nameEn: string;
   country: string; // ISO 3166-1 alpha-2
   countryJa: string;
@@ -62,7 +64,7 @@ export type SquareKind =
 /** 異世界マップ。地上 (world) とはつながっておらず、イベント・カード・特殊マスで出入りする。 */
 export type RealmId = 'heaven' | 'hell' | 'space';
 
-export type EdgeMode = 'rail' | 'sea';
+export type EdgeMode = 'rail' | 'sea' | 'air';
 
 export interface BoardNode {
   id: string; // "c:<cityId>" for cities, "s:<n>" for squares

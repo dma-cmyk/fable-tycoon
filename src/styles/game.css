@@ -1062,109 +1062,6 @@
   display: none;
 }
 
-/* ---------------------------------------------------------------- dice overlay */
-
-.dice-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 44;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 150ms ease;
-}
-
-.dice-overlay.is-visible {
-  opacity: 1;
-}
-
-.dice-overlay-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 22px 30px;
-  border-radius: 26px;
-  border: 3px solid rgba(255, 255, 255, 0.9);
-  background: rgba(5, 14, 32, 0.55);
-  backdrop-filter: blur(3px);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
-}
-
-.dice-host {
-  display: flex;
-  gap: 12px;
-}
-
-.dice-face {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 4px;
-  width: 84px;
-  height: 84px;
-  padding: 12px;
-  border-radius: 17px;
-  border: 3px solid #fff;
-  background: linear-gradient(145deg, #ffffff, #e7e2d2 65%, #cfc6ad);
-  box-shadow:
-    0 6px 0 #9a8e72,
-    0 12px 20px rgba(0, 0, 0, 0.4),
-    inset 0 3px 0 rgba(255, 255, 255, 0.9);
-}
-
-.dice-face.is-spin {
-  animation: dice-roll 0.52s linear infinite;
-}
-
-@keyframes dice-roll {
-  from {
-    transform: rotate(0deg) translateY(0) scale(1);
-  }
-  35% {
-    transform: rotate(140deg) translateY(-7px) scale(1.05);
-  }
-  70% {
-    transform: rotate(280deg) translateY(3px) scale(0.97);
-  }
-  to {
-    transform: rotate(360deg) translateY(0) scale(1);
-  }
-}
-
-.dice-pip {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #62708a, #1c2433 75%);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.3);
-  align-self: center;
-  justify-self: center;
-}
-
-.dice-overlay.is-settled .dice-face {
-  animation: dice-settle 0.24s cubic-bezier(0.2, 1.4, 0.5, 1);
-}
-
-@keyframes dice-settle {
-  from {
-    transform: scale(1.15);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-.dice-total {
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
-  min-height: 26px;
-}
-
 /* ---------------------------------------------------------------- desktop-only vs mobile-only */
 
 .subtitle-bar {
@@ -1594,18 +1491,6 @@
     height: 48px;
   }
 
-  .dice-face {
-    width: 68px;
-    height: 68px;
-    padding: 9px;
-    gap: 3px;
-    border-radius: 14px;
-  }
-
-  .dice-overlay-inner {
-    padding: 16px 20px;
-  }
-
   .conn-banner {
     font-size: 10.5px;
   }
@@ -1929,22 +1814,5 @@
   .handoff-avatar {
     width: 42px;
     height: 42px;
-  }
-
-  .dice-face {
-    width: 58px;
-    height: 58px;
-    padding: 8px;
-    gap: 2px;
-    border-radius: 12px;
-  }
-
-  .dice-overlay-inner {
-    flex-direction: row;
-    padding: 10px 16px;
-  }
-
-  .dice-total {
-    font-size: 15px;
   }
 }

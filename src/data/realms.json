@@ -2,6 +2,7 @@
   {
     "id": "heaven-gate",
     "nameJa": "天国の門",
+    "nameKana": "てんごくのもん",
     "nameEn": "Heaven Gate",
     "country": "XX",
     "countryJa": "異世界",
@@ -33,6 +34,7 @@
   {
     "id": "heaven-cloud-mansion",
     "nameJa": "雲上豪邸",
+    "nameKana": "うんじょうごうてい",
     "nameEn": "Cloud Mansion",
     "country": "XX",
     "countryJa": "異世界",
@@ -64,6 +66,7 @@
   {
     "id": "heaven-angel-fund",
     "nameJa": "エンジェル投資ファンド",
+    "nameKana": "えんじぇるとうしふぁんど",
     "nameEn": "Angel Investment Fund",
     "country": "XX",
     "countryJa": "異世界",
@@ -95,6 +98,7 @@
   {
     "id": "heaven-halo-bank",
     "nameJa": "天使の輪銀行",
+    "nameKana": "てんしのわぎんこう",
     "nameEn": "Halo Bank",
     "country": "XX",
     "countryJa": "異世界",
@@ -126,6 +130,7 @@
   {
     "id": "heaven-pearl-hotel",
     "nameJa": "真珠の門ホテル",
+    "nameKana": "しんじゅのもんほてる",
     "nameEn": "Pearl Gate Hotel",
     "country": "XX",
     "countryJa": "異世界",
@@ -157,6 +162,7 @@
   {
     "id": "hell-gate",
     "nameJa": "地獄の門",
+    "nameKana": "じごくのもん",
     "nameEn": "Hell Gate",
     "country": "XX",
     "countryJa": "異世界",
@@ -188,6 +194,7 @@
   {
     "id": "hell-cauldron-onsen",
     "nameJa": "釜ゆで温泉リゾート",
+    "nameKana": "かまゆでおんせんりぞーと",
     "nameEn": "Cauldron Hot Spring Resort",
     "country": "XX",
     "countryJa": "異世界",
@@ -219,6 +226,7 @@
   {
     "id": "hell-needle-ski",
     "nameJa": "針の山スキー場",
+    "nameKana": "はりのやますきーじょう",
     "nameEn": "Needle Mountain Ski Resort",
     "country": "XX",
     "countryJa": "異世界",
@@ -250,6 +258,7 @@
   {
     "id": "hell-enma-tax-office",
     "nameJa": "閻魔税務署",
+    "nameKana": "えんまぜいむしょ",
     "nameEn": "Enma Tax Office",
     "country": "XX",
     "countryJa": "異世界",
@@ -281,6 +290,7 @@
   {
     "id": "hell-spider-thread",
     "nameJa": "蜘蛛の糸",
+    "nameKana": "くものいと",
     "nameEn": "Spider's Thread",
     "country": "XX",
     "countryJa": "異世界",
@@ -312,6 +322,7 @@
   {
     "id": "space-gate",
     "nameJa": "宇宙港",
+    "nameKana": "うちゅうこう",
     "nameEn": "Space Port",
     "country": "XX",
     "countryJa": "異世界",
@@ -343,6 +354,7 @@
   {
     "id": "space-moon-hotel",
     "nameJa": "月面ホテル",
+    "nameKana": "げつめんほてる",
     "nameEn": "Lunar Hotel",
     "country": "XX",
     "countryJa": "異世界",
@@ -374,6 +386,7 @@
   {
     "id": "space-mars-lots",
     "nameJa": "火星の分譲地",
+    "nameKana": "かせいのぶんじょうち",
     "nameEn": "Mars Lots",
     "country": "XX",
     "countryJa": "異世界",
@@ -405,6 +418,7 @@
   {
     "id": "space-asteroid-mine",
     "nameJa": "小惑星レアメタル採掘",
+    "nameKana": "しょうわくせいれあめたるさいくつ",
     "nameEn": "Asteroid Rare Metal Mine",
     "country": "XX",
     "countryJa": "異世界",
@@ -436,6 +450,7 @@
   {
     "id": "space-orbit-data",
     "nameJa": "軌道データセンター",
+    "nameKana": "きどうでーたせんたー",
     "nameEn": "Orbital Data Center",
     "country": "XX",
     "countryJa": "異世界",
@@ -467,6 +482,7 @@
   {
     "id": "heaven-golden-gate",
     "nameJa": "黄金の門",
+    "nameKana": "おうごんのもん",
     "nameEn": "Golden Gate",
     "country": "XX",
     "countryJa": "異世界",
@@ -498,6 +514,7 @@
   {
     "id": "heaven-rainbow-bridge",
     "nameJa": "虹の橋",
+    "nameKana": "にじのはし",
     "nameEn": "Rainbow Bridge",
     "country": "XX",
     "countryJa": "異世界",
@@ -529,6 +546,7 @@
   {
     "id": "heaven-fountain-plaza",
     "nameJa": "泉の広場",
+    "nameKana": "いずみのひろば",
     "nameEn": "Fountain Plaza",
     "country": "XX",
     "countryJa": "異世界",
@@ -560,6 +578,7 @@
   {
     "id": "hell-lava-bridge",
     "nameJa": "溶岩橋",
+    "nameKana": "ようがんばし",
     "nameEn": "Lava Bridge",
     "country": "XX",
     "countryJa": "異世界",
@@ -591,6 +610,7 @@
   {
     "id": "hell-needle-peak",
     "nameJa": "針の山頂上",
+    "nameKana": "はりのやまちょうじょう",
     "nameEn": "Needle Peak",
     "country": "XX",
     "countryJa": "異世界",
@@ -622,6 +642,7 @@
   {
     "id": "hell-cauldron-station",
     "nameJa": "釜ゆで駅",
+    "nameKana": "かまゆでえき",
     "nameEn": "Cauldron Station",
     "country": "XX",
     "countryJa": "異世界",
@@ -653,6 +674,7 @@
   {
     "id": "space-moon-base",
     "nameJa": "月面基地",
+    "nameKana": "げつめんきち",
     "nameEn": "Moon Base",
     "country": "XX",
     "countryJa": "異世界",
@@ -684,6 +706,7 @@
   {
     "id": "space-asteroid-belt",
     "nameJa": "小惑星ベルト",
+    "nameKana": "しょうわくせいべると",
     "nameEn": "Asteroid Belt",
     "country": "XX",
     "countryJa": "異世界",
@@ -715,6 +738,7 @@
   {
     "id": "space-launch-pad",
     "nameJa": "発射台",
+    "nameKana": "はっしゃだい",
     "nameEn": "Launch Pad",
     "country": "XX",
     "countryJa": "異世界",
