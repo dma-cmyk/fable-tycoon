@@ -56,7 +56,8 @@ def run(job: dict) -> None:
             pngs = sorted((GEN / thread).glob("*.png")) if thread and (GEN / thread).exists() else []
             if pngs:
                 shutil.copy(pngs[-1], out)
-                rec = {"job": job["id"], "thread": thread, "usage": usage, "secs": round(time.time() - t0), "file": str(out)}
+                rec = {"job": job["id"], "thread": thread, "usage": usage, "secs": round(time.time() - t0),
+                       "file": str(out.relative_to(ROOT))}
                 with LOG.open("a") as f:
                     f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 print(f"ok {job['id']} {thread} {rec['secs']}s", flush=True)
