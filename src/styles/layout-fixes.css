@@ -1,0 +1,1669 @@
+/* UI review round 1: layout, hierarchy and readability fixes.
+   Loaded after the other stylesheets so these rules can normalize the HUD. */
+
+/* ---------------------------------------------------------------- communication controls */
+.app-root:has(.modal-backdrop) .hud-comm,
+.app-root:has(.modal-backdrop) .lobby-comm-slot {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.hud-comm {
+  display: contents;
+}
+
+.chat-panel {
+  bottom: calc(214px + var(--safe-bottom) + var(--kb-inset, 0px));
+}
+
+@media (max-width: 700px) {
+  .chat-panel {
+    bottom: calc(196px + var(--safe-bottom) + var(--kb-inset, 0px));
+  }
+}
+
+.hud-icons .hud-comm-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 60px;
+  min-height: 60px;
+  padding: 3px;
+  border-radius: 13px;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.28);
+}
+
+.hud-icons .hud-comm-button .comm-fab-icon {
+  font-size: 21px;
+}
+
+.hud-icons .hud-comm-button .comm-fab-icon img {
+  width: 26px;
+  height: 26px;
+}
+
+.hud-icons .hud-comm-button .comm-fab-label {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hud-icons .hud-comm-button.emote-fab .comm-fab-label {
+  color: #4a2200;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.hud-icons .hud-comm-button .comm-fab-ring {
+  border-radius: 12px;
+}
+
+.lobby-comm-slot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lobby-comm-slot .comm-fab {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 3px 8px;
+  border-width: 1.5px;
+}
+
+.lobby-comm-slot .comm-fab-icon {
+  font-size: 18px;
+}
+
+.lobby-comm-slot .comm-fab-icon img {
+  width: 24px;
+  height: 24px;
+}
+
+.lobby-comm-slot .comm-fab-label {
+  font-size: 10px;
+}
+
+.lobby-header .transport-chips {
+  flex: 0 1 auto;
+}
+
+.lobby-bottom-bar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- command bar / money */
+@media (min-width: 900px) {
+  .money-panel {
+    bottom: calc(96px + var(--safe-bottom));
+    border-width: 1px;
+    border-color: var(--panel-line);
+    background: var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+  }
+
+  .choosing-dest .money-panel {
+    display: none;
+  }
+
+  .game-minimap {
+    display: block;
+  }
+}
+
+.game-bottom-bar {
+  z-index: 35;
+}
+
+.dice-primary {
+  letter-spacing: 0.02em;
+}
+
+.primary-label {
+  white-space: nowrap;
+}
+
+.hud-icon .icon-btn-icon img,
+.hud-icons .hud-comm-button .comm-fab-icon img {
+  width: 27px;
+  height: 27px;
+}
+
+.top-actions .icon-btn-icon img {
+  width: 24px;
+  height: 24px;
+}
+
+.game-menu-icon img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.title-menu-icon .ui-icon img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+/* ---------------------------------------------------------------- top bar / turn / money labels */
+.game-turn-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: #eaf2ff;
+}
+
+.game-turn-label.is-mine {
+  color: #5a2b00;
+}
+
+.ranking-panel::before {
+  display: none;
+}
+
+.ranking-caption {
+  display: block;
+  padding: 0 3px 1px;
+  color: #dce8ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.rank-money,
+.money-value,
+.money-label,
+.player-plate-cash,
+.result-row-stats,
+.yearend-income strong,
+.yearend-assets strong,
+.yearend-bar-value,
+.yearend-bar-meta,
+.property-price,
+.property-income,
+.property-yield,
+.steps-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.money-label {
+  font-size: 10.5px;
+}
+
+.money-value {
+  font-size: 14px;
+}
+
+.money-cell-net .money-value {
+  font-size: 16px;
+}
+
+.player-plate-name {
+  font-size: 13px;
+}
+
+.player-plate-cash {
+  font-size: 16px;
+}
+
+.game-chips .steps-counter {
+  position: static;
+  z-index: auto;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 3px;
+  height: 36px;
+  min-height: 36px;
+  padding: 2px 10px;
+  border: 1.5px solid rgba(255, 210, 63, 0.8);
+  border-radius: 999px;
+  background: rgba(6, 18, 43, 0.94);
+  box-shadow: none;
+  transform: none;
+}
+
+.game-chips .steps-counter .steps-value {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.game-chips .steps-counter .steps-label,
+.game-chips .steps-counter .steps-unit {
+  font-size: 11px;
+}
+
+.is-moving .dest-chip {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- minimap / recenter */
+.game-minimap {
+  display: none;
+  position: absolute;
+  right: calc(12px + var(--safe-right));
+  bottom: calc(236px + var(--safe-bottom));
+  z-index: 23;
+  width: 160px;
+  height: 80px;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  background: #1e7fba;
+  box-shadow: var(--panel-shadow);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.event-open .game-minimap {
+  display: none;
+}
+
+.map-recenter {
+  position: absolute;
+  top: calc(82px + var(--safe-top));
+  left: 50%;
+  z-index: 26;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 13px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  border-width: 1.5px;
+  background: rgba(7, 20, 47, 0.92);
+}
+
+.map-recenter[hidden] {
+  display: none;
+}
+
+.map-recenter-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.event-open .map-recenter,
+.app-root:has(.modal-backdrop) .map-recenter {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- move selection */
+.move-options {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.move-options-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.move-options-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold-pale);
+  white-space: nowrap;
+}
+
+.move-options-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.move-scroll-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  min-height: 44px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.move-chip-scroll {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.move-chip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.move-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 56px;
+  min-width: 164px;
+  padding: 5px 8px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.38);
+  background: #18396f;
+  color: #fff;
+  text-align: left;
+}
+
+.move-chip.is-selected {
+  border: 2px solid var(--gold);
+  background: linear-gradient(180deg, #fff5c6, #ffe28a);
+  color: #4c2a00;
+  box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.25);
+}
+
+.move-chip-num {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.move-chip-icon {
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.move-chip-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 0;
+}
+
+.move-chip-name {
+  max-width: 118px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-chip-vehicle {
+  display: flex;
+  gap: 5px;
+  font-size: 10px;
+  color: #ffe9a8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.move-chip.is-selected .move-chip-vehicle {
+  color: #6c4700;
+}
+
+.move-chip-steps {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffe58a;
+  white-space: nowrap;
+}
+
+.move-chip.is-selected .move-chip-steps {
+  color: #6c4700;
+}
+
+.choosing-dest .dice-primary:not(:disabled) {
+  min-height: 56px;
+  font-size: 18px;
+}
+
+.choosing-dest .map-recenter {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- cards */
+.cards-list {
+  flex-direction: row;
+}
+
+.cards-list .card-item {
+  width: calc(50% - 4px);
+}
+
+.card-item-desc {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cards-summary {
+  font-size: 12.5px;
+}
+
+/* ---------------------------------------------------------------- emote tabs */
+.emote-tabs {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 10px, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 10px, #000 calc(100% - 20px), transparent 100%);
+  padding-right: 22px;
+  scroll-snap-type: x proximity;
+}
+
+.emote-tab {
+  scroll-snap-align: start;
+  min-width: max-content;
+}
+
+/* ---------------------------------------------------------------- event panel */
+.event-choice {
+  min-height: 56px;
+}
+
+.event-choice-label {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.event-choice-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.event-choice-effect {
+  color: #4b4232;
+  font-weight: 800;
+}
+
+.event-choice-risk {
+  color: #a3261e;
+  font-weight: 700;
+}
+
+.event-byline {
+  font-size: 11px;
+}
+
+.event-dialogue-text {
+  font-size: 13px;
+}
+
+.event-meta-body {
+  font-size: 11.5px;
+}
+
+@media (max-width: 899px) {
+  .event-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .event-ribbon {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .event-panel-scroll {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .event-hero {
+    height: 138px;
+  }
+
+  .event-byline {
+    margin: 8px 12px 0;
+  }
+
+  .event-speaker {
+    margin: 9px 12px;
+    padding: 9px 10px;
+  }
+
+  .event-dialogue-text {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .event-meta {
+    margin: 8px 12px 10px;
+  }
+
+  .event-choice-area {
+    position: static;
+    margin-top: 8px;
+    padding: 9px 12px calc(12px + var(--safe-bottom));
+    border-top: 1px solid var(--panel-line);
+    background: rgba(3, 10, 26, 0.5);
+  }
+
+  .event-choices {
+    gap: 8px;
+  }
+
+  .event-choice {
+    min-height: 58px;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .event-choice-label {
+    font-size: 15px;
+  }
+
+  .event-choice-detail {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .event-choices-note {
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+
+  .event-footnote {
+    font-size: 9.5px;
+    padding-bottom: calc(7px + var(--safe-bottom));
+  }
+}
+
+/* ---------------------------------------------------------------- lobby / online entry */
+.lobby-title {
+  white-space: nowrap;
+}
+
+.lobby-room-code {
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby-room-left .muted {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.online-title {
+  line-height: 1.25;
+}
+
+@media (max-width: 740px) {
+  .lobby-header {
+    gap: 5px;
+  }
+
+  .lobby-title {
+    font-size: 18px;
+    letter-spacing: 0.01em;
+  }
+
+  .lobby-header .transport-chips {
+    flex: 0 0 auto;
+    max-width: 108px;
+    overflow: hidden;
+  }
+
+  .lobby-header .transport-chip {
+    min-height: 30px;
+    padding: 1px 7px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .lobby-comm-header {
+    display: none;
+  }
+
+  .lobby-scroll {
+    padding-bottom: calc(88px + var(--safe-bottom));
+  }
+
+  .lobby-start {
+    display: none;
+  }
+
+  .lobby-bottom-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 31;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: calc(62px + var(--safe-bottom));
+    padding: 7px calc(8px + var(--safe-right)) calc(7px + var(--safe-bottom)) calc(8px + var(--safe-left));
+    background: rgba(7, 20, 47, 0.98);
+    border-top: 1px solid var(--panel-line);
+    box-shadow: 0 -6px 18px rgba(7, 18, 37, 0.3);
+  }
+
+  .lobby-comm-bottom {
+    gap: 4px;
+  }
+
+  .lobby-comm-bottom .comm-fab {
+    min-width: 44px;
+    width: 44px;
+    min-height: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 13px;
+  }
+
+  .lobby-comm-bottom .comm-fab-icon {
+    font-size: 19px;
+  }
+
+  .lobby-comm-bottom .comm-fab-label {
+    display: none;
+  }
+
+  .lobby-bottom-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .lobby-bottom-start {
+    flex: 0 0 auto;
+    min-height: 48px;
+    padding: 5px 12px;
+    font-size: 14px;
+  }
+
+  .lobby-bottom-leave {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .lobby-room-code {
+    font-size: 26px;
+    letter-spacing: 0.1em;
+  }
+
+  .lobby-seat-open {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-height: 60px;
+    padding: 7px 10px;
+  }
+
+  .lobby-seat-open .lobby-seat-head {
+    flex: 0 0 auto;
+  }
+
+  .lobby-seat-open .lobby-seat-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .lobby-seat-open .lobby-seat-empty-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 19px;
+  }
+
+  .lobby-seat-open .lobby-seat-character,
+  .lobby-seat-open .lobby-seat-perk {
+    display: none;
+  }
+
+  .lobby-seat-open .lobby-seat-actions {
+    flex: 0 1 auto;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 1px;
+  }
+
+  .lobby-seat-open .lobby-seat-menu {
+    display: none;
+  }
+
+  .online-title {
+    font-size: 20px;
+  }
+}
+
+/* ---------------------------------------------------------------- year end */
+.yearend-modal .modal-body {
+  padding: 0;
+  overflow: hidden;
+  background: #f7f1e1;
+}
+
+.yearend {
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+
+.yearend-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.yearend-footer {
+  flex: 0 0 auto;
+  padding: 10px 16px calc(10px + var(--safe-bottom));
+  background: #f1e8d2;
+  border-top: 2px solid #ded3b8;
+  box-shadow: 0 -5px 14px rgba(88, 64, 20, 0.1);
+}
+
+.yearend-scroll > * {
+  flex-shrink: 0;
+}
+
+.yearend-bar-values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  flex: 0 1 auto;
+  min-width: 78px;
+}
+
+.yearend-bar-track {
+  min-width: 24px;
+}
+
+.yearend-bar-meta {
+  color: #6b5b3d;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yearend-row {
+  min-height: 56px;
+}
+
+.yearend-income,
+.yearend-assets {
+  gap: 1px;
+  font-size: 10px;
+}
+
+.yearend-income strong,
+.yearend-assets strong {
+  font-size: 14px;
+}
+
+.yearend-ack {
+  min-height: 48px;
+}
+
+@media (max-width: 899px) {
+  .yearend-scroll {
+    padding: 10px 12px;
+  }
+
+  .yearend-footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .yearend-bar-meta {
+    font-size: 10.5px;
+  }
+}
+
+/* ---------------------------------------------------------------- result */
+.result-actions {
+  margin: 14px auto 16px;
+}
+
+.result-chart-card {
+  margin-bottom: 4px;
+}
+
+.result-row-stats {
+  font-size: 13px;
+}
+
+.result-row-stats strong {
+  font-size: 15px;
+}
+
+@media (max-width: 700px) {
+  .result-actions {
+    margin-top: 12px;
+    margin-bottom: 14px;
+  }
+}
+
+/* ---------------------------------------------------------------- city sheet */
+.property-table-head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 86px 98px 52px 118px;
+  gap: 6px;
+  padding: 5px 14px;
+  text-align: right;
+}
+
+.property-table-head span:first-child,
+.property-table-head span:nth-child(2) {
+  text-align: left;
+}
+
+.property-table-spacer {
+  display: block;
+}
+
+.property-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 248px minmax(90px, auto);
+  align-items: center;
+  gap: 6px;
+}
+
+.property-main {
+  min-width: 0;
+}
+
+.property-stats {
+  display: grid;
+  grid-template-columns: 86px 98px 52px;
+  gap: 6px;
+  align-items: center;
+}
+
+.property-price,
+.property-income,
+.property-yield {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.property-income {
+  color: #147a41;
+}
+
+.property-yield {
+  color: #7c735e;
+  font-size: 11px;
+}
+
+.property-side {
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.property-owner {
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.city-monopoly-label {
+  font-size: 12px;
+}
+
+.city-monopoly-note {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.city-buy-all {
+  min-height: 48px;
+  font-size: 13px;
+}
+
+.city-bulk-shortfall {
+  align-self: center;
+  color: #8a2c1c;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.city-sheet-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+@media (max-width: 700px) {
+  .property-table-head {
+    display: none;
+  }
+
+  .property-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'icon main side'
+      'icon stats side';
+    gap: 4px 7px;
+    padding: 8px;
+  }
+
+  .property-industry-chip {
+    grid-area: icon;
+  }
+
+  .property-main {
+    grid-area: main;
+  }
+
+  .property-stats {
+    grid-area: stats;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 9px;
+    justify-content: flex-start;
+  }
+
+  .property-price,
+  .property-income,
+  .property-yield {
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .property-price::before {
+    content: '価格 ';
+    color: #8a7a58;
+    font-weight: 600;
+  }
+
+  .property-income::before {
+    content: '収益 ';
+    color: #8a7a58;
+    font-weight: 600;
+  }
+
+  .property-yield::before {
+    content: '率 ';
+    color: #8a7a58;
+    font-weight: 600;
+  }
+
+  .property-side {
+    grid-area: side;
+  }
+
+  .city-buy-all {
+    width: 100%;
+  }
+}
+
+.city-bulk-summary {
+  flex-basis: 100%;
+  color: #7b4a12;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- typography & mobile HUD */
+@media (max-width: 899px) {
+  .cards-list .card-item {
+    width: 100%;
+  }
+
+  .ranking-caption {
+    display: none;
+  }
+
+  .game-turn-label {
+    display: inline-flex;
+    flex: 0 1 auto;
+    max-width: 118px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 2px 7px;
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .logo-mini,
+  .game-turn-chip {
+    display: none;
+  }
+
+  .status-chip {
+    display: inline-flex;
+  }
+
+  .dest-distance-label,
+  .dest-distance-unit {
+    display: inline;
+  }
+
+  .dest-distance {
+    font-size: 10px;
+    padding: 1px 5px;
+  }
+
+  .hud-icons {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .hud-icon,
+  .hud-icons .hud-comm-button {
+    min-width: 0;
+    min-height: 52px;
+    padding: 2px 0;
+    border-radius: 9px;
+  }
+
+  .hud-icon .icon-btn-icon,
+  .hud-icons .hud-comm-button .comm-fab-icon {
+    font-size: 19px;
+  }
+
+  .hud-icon .icon-btn-icon img,
+  .hud-icons .hud-comm-button .comm-fab-icon img {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hud-icon .icon-btn-label,
+  .hud-icons .hud-comm-button .comm-fab-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.1;
+    letter-spacing: -0.05em;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .money-panel {
+    bottom: calc(146px + var(--safe-bottom));
+  }
+
+  .money-label {
+    font-size: 10px;
+  }
+
+  .money-value,
+  .money-cell-net .money-value {
+    font-size: 14px;
+  }
+
+  .player-plate-name {
+    font-size: 11px;
+  }
+
+  .player-plate-cash {
+    font-size: 16px;
+  }
+
+  .dice-primary {
+    min-height: 56px;
+    font-size: 17px;
+  }
+
+  .map-recenter {
+    top: calc(150px + var(--safe-top));
+  }
+
+  .choosing-dest .money-panel {
+    display: none;
+  }
+
+  .chat-input {
+    font-size: 16px;
+  }
+
+  .chat-chip {
+    font-size: 12px;
+  }
+
+  .chat-text {
+    font-size: 13px;
+  }
+}
+
+/* ---------------------------------------------------------------- landscape HUD */
+@media (max-height: 520px) and (min-width: 700px) {
+  .game-topbar {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .player-plate {
+    order: 0;
+    flex: 0 1 180px;
+    min-height: 38px;
+  }
+
+  .player-plate-sub {
+    display: none;
+  }
+
+  .player-plate-name {
+    font-size: 11px;
+  }
+
+  .player-plate-cash {
+    font-size: 15px;
+  }
+
+  .logo-mini,
+  .game-turn-chip {
+    display: none;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    flex: 0 1 auto;
+    max-width: 92px;
+    overflow: hidden;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .game-chips {
+    order: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 3px;
+  }
+
+  .game-chips .chip {
+    min-height: 36px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+  }
+
+  .game-year-chip {
+    font-size: 10px !important;
+  }
+
+  .dest-chip {
+    flex: 1 1 110px;
+    max-width: 190px;
+    min-width: 0;
+  }
+
+  .top-actions {
+    order: 0;
+    gap: 2px;
+  }
+
+  .top-actions .icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .top-actions .icon-btn-label {
+    display: none;
+  }
+
+  .turn-timer {
+    order: 0;
+    width: 40px;
+    height: 40px;
+  }
+
+  .ranking-panel {
+    display: flex;
+    flex-direction: row;
+    top: calc(46px + var(--safe-top));
+    left: calc(6px + var(--safe-left));
+    right: auto;
+    width: auto;
+    gap: 3px;
+    z-index: 25;
+  }
+
+  .rank-row {
+    width: 44px;
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding: 2px;
+  }
+
+  .rank-avatar {
+    --avatar-size: 30px !important;
+  }
+
+  .rank-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 8px;
+  }
+
+  .ranking-panel::before {
+    display: none;
+  }
+
+  .game-bottom-bar {
+    left: calc(6px + var(--safe-left));
+    right: calc(6px + var(--safe-right));
+    bottom: calc(4px + var(--safe-bottom));
+    display: block;
+    transform: none;
+  }
+
+  .bottom-primary-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) auto;
+    align-items: end;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .dice-primary {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    height: 48px;
+    padding: 0 12px;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+  }
+
+  .primary-icon {
+    width: 27px;
+    height: 27px;
+    font-size: 13px;
+  }
+
+  .hud-icons {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+
+  .hud-icon,
+  .hud-icons .hud-comm-button {
+    min-width: 44px;
+    width: 44px;
+    min-height: 48px;
+    padding: 2px;
+    border-radius: 9px;
+  }
+
+  .hud-icon .icon-btn-icon,
+  .hud-icons .hud-comm-button .comm-fab-icon {
+    font-size: 17px;
+  }
+
+  .hud-icon .icon-btn-label,
+  .hud-icons .hud-comm-button .comm-fab-label {
+    font-size: 10px;
+    letter-spacing: -0.08em;
+  }
+
+  .money-panel {
+    bottom: calc(58px + var(--safe-bottom));
+  }
+
+  .choosing-dest .money-panel {
+    display: none;
+  }
+
+  .move-options {
+    max-height: 82px;
+  }
+
+  .move-options-hint {
+    display: none;
+  }
+
+  .move-chip {
+    min-height: 50px;
+    min-width: 150px;
+  }
+
+  .move-chip-name {
+    font-size: 12px;
+  }
+
+  .move-chip-vehicle {
+    font-size: 9px;
+  }
+
+  .map-recenter {
+    top: calc(46px + var(--safe-top));
+    left: auto;
+    right: calc(6px + var(--safe-right));
+    transform: none;
+    min-height: 38px;
+    padding: 3px 9px;
+    font-size: 10.5px;
+  }
+
+  .game-minimap {
+    display: none;
+  }
+
+  .ranking-caption {
+    display: none;
+  }
+}
+
+/* Title artwork is decorative and must never intercept menu taps. */
+.title-keyart,
+.title-shade,
+.title-clouds,
+.title-mobile-sky,
+.title-logo-mobile,
+.title-logo-art,
+.title-parade {
+  pointer-events: none;
+}
+
+/* Normal panels use the flat hierarchy tokens; gold stays on the primary CTA. */
+.rank-row {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-line);
+  box-shadow: var(--panel-shadow);
+}
+
+.rank-row.is-current {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(255, 210, 63, 0.3), var(--panel-shadow);
+}
+
+.lobby-seat {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-line);
+  box-shadow: var(--panel-shadow);
+}
+
+.lobby-seat.is-self {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(255, 210, 63, 0.3), var(--panel-shadow);
+}
+
+.lobby-seat-open {
+  border-style: dashed;
+  background: rgba(4, 12, 30, 0.4);
+  box-shadow: none;
+}
+
+.event-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-line);
+  box-shadow: var(--panel-shadow);
+}
+
+.game-menu-item {
+  border: 1px solid var(--panel-line);
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow);
+}
+
+.map-view-tab {
+  border: 1px solid var(--panel-line);
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow);
+}
+
+.map-view-tab.is-selected {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(255, 210, 63, 0.28);
+}
+
+/* Keep chat/emote reachable while the mobile event panel covers the board. */
+@media (max-width: 899px) {
+  .event-comm {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .event-comm .hud-comm {
+    display: flex;
+    gap: 4px;
+  }
+
+  .event-comm .hud-comm-button {
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 38px;
+    width: 38px;
+    min-height: 36px;
+    height: 36px;
+    padding: 1px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(7, 20, 47, 0.62);
+  }
+
+  .event-comm .hud-comm-button .comm-fab-label {
+    display: none;
+  }
+
+  .event-comm .hud-comm-button .comm-fab-icon {
+    font-size: 17px;
+  }
+
+  .event-comm .hud-comm-button .comm-fab-icon img {
+    width: 22px;
+    height: 22px;
+  }
+
+  .move-chip {
+    min-width: 138px;
+  }
+
+  .move-options-hint {
+    display: none;
+  }
+}
+
+.yearend-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.yearend {
+  flex: 1 1 auto;
+}
+
+
+/* The canvas is created before its media block; keep desktop display explicit. */
+@media (min-width: 900px) {
+  .game-minimap {
+    display: block;
+  }
+}
+
+/* Result footer: next/rematch/title stay visible before the chart on every viewport. */
+.result-screen .result-scroll {
+  padding-bottom: calc(130px + var(--safe-bottom));
+}
+
+.result-screen .result-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 10px calc(12px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  border-top: 1px solid var(--panel-line);
+  background: linear-gradient(180deg, rgba(7, 20, 47, 0.92), rgba(7, 18, 37, 0.99));
+  box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.result-screen .result-note {
+  flex: 1 1 260px;
+  text-align: left;
+}
+
+.result-screen .result-btn {
+  min-height: 48px;
+  min-width: 170px;
+}
+
+@media (max-width: 700px) {
+  .result-screen .result-scroll {
+    padding-bottom: calc(142px + var(--safe-bottom));
+  }
+
+  .result-screen .result-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 8px;
+  }
+
+  .result-screen .result-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    width: auto;
+  }
+
+  .result-screen .result-note {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .result-screen .result-actions {
+    flex-wrap: nowrap;
+  }
+
+  .result-screen .result-btn {
+    flex: 1 1 0;
+    width: auto;
+  }
+}
+
+.lobby-bottom-start[hidden],
+.lobby-bottom-status[hidden] {
+  display: none;
+}
+
+/* Readability floor for decision text. */
+.char-card-personality,
+.char-card-origin {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.char-card-perk-desc {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.char-card-perk-label {
+  font-size: 13px;
+}
+
+.shop-card-name {
+  font-size: 13px;
+}
+
+.shop-card-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-line-clamp: 5;
+}
+
+.shop-hand-name {
+  font-size: 12.5px;
+}
+
+.shop-hand-meta {
+  font-size: 11px;
+}
+
+.shop-speech {
+  font-size: 12.5px;
+}
+
+.shop-section-head h3 {
+  font-size: 14px;
+}
+
+@media (max-width: 899px) {
+  .char-card-art {
+    min-height: 96px;
+  }
+
+  .shop-card-desc {
+    -webkit-line-clamp: 6;
+  }
+}
+
+@media (max-width: 700px) {
+  .property-price,
+  .property-income,
+  .property-yield {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .result-screen .result-actions {
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+}

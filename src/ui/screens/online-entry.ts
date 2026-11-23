@@ -57,7 +57,7 @@ export class OnlineEntryScreen implements ScreenHandle {
         autocapitalize: 'characters',
         spellcheck: 'false',
         placeholder: 'ABC123-K7Q9',
-        'aria-label': 'あいことば（6文字）',
+        'aria-label': 'あいことば（6文字＋4文字）',
         autocomplete: 'off',
         value: options.initialRoom ?? '',
       },
@@ -97,7 +97,7 @@ export class OnlineEntryScreen implements ScreenHandle {
       h('h2', { class: 'section-title', text: 'ルームをつくる' }),
       h('p', {
         class: 'online-copy',
-        text: 'あいことば（6文字）が発行されます。招待URLを友だちに送って、同じ世界で遊ぼう。ホストが年数と制限時間を決めます。',
+        text: 'あいことば（6文字＋4文字）が発行されます。招待URLを友だちに送って、同じ世界で遊ぼう。ホストが年数と制限時間を決めます。',
       }),
       createButton,
     );
@@ -106,7 +106,7 @@ export class OnlineEntryScreen implements ScreenHandle {
       'section',
       { class: 'online-panel panel' },
       h('h2', { class: 'section-title', text: 'あいことばで参加' }),
-      h('p', { class: 'online-copy', text: 'ルーム ID を入力してください。招待URLから来た場合は自動で入っています。' }),
+      h('p', { class: 'online-copy', text: 'あいことば（6文字＋4文字）を入力してください。招待URLから来た場合は自動で入っています。' }),
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'あいことば' }), this.roomInput),
       joinButton,
     );
@@ -158,7 +158,7 @@ export class OnlineEntryScreen implements ScreenHandle {
           h(
             'div',
             { class: 'online-card-head' },
-            h('h2', { class: 'online-title', text: '世界はひとつ。ルームは6文字。' }),
+            h('h2', { class: 'online-title', text: '世界はひとつ。ルームは6+4。' }),
             h('p', {
               class: 'online-subtitle',
               text: 'URL をひらくと参加画面に直行します。ルームが満員なら観戦モードになります。',

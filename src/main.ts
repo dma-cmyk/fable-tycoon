@@ -6,6 +6,7 @@ import './styles/screens.css';
 import './styles/components.css';
 import './styles/game.css';
 import './styles/effects.css';
+import './styles/layout-fixes.css';
 import { App } from './ui/app';
 
 const root = document.getElementById('app');

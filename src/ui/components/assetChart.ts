@@ -57,9 +57,11 @@ export function drawAssetChart(options: AssetChartOptions): void {
   let min = Math.min(0, ...allValues);
   let max = Math.max(1, ...allValues);
   if (max - min < 10) max = min + 10;
-  const pad = (max - min) * 0.08;
-  min -= pad;
-  max += pad;
+  const step = niceStep((max - min) / 4);
+  min = Math.floor(min / step) * step;
+  max = Math.ceil(max / step) * step;
+  if (max <= min) max = min + step;
+  const tickCount = Math.max(1, Math.round((max - min) / step));
 
   const xAt = (index: number): number =>
     padLeft + (pointCount <= 1 ? plotW / 2 : (index / (pointCount - 1)) * plotW);
@@ -72,8 +74,8 @@ export function drawAssetChart(options: AssetChartOptions): void {
   ctx.font = "600 10px 'M PLUS Rounded 1c', sans-serif";
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  for (let i = 0; i <= 4; i++) {
-    const value = min + ((max - min) * i) / 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const value = min + i * step;
     const y = yAt(value);
     ctx.beginPath();
     ctx.moveTo(padLeft, y);
@@ -132,6 +134,14 @@ export function drawAssetChart(options: AssetChartOptions): void {
     ctx.lineWidth = 3;
     ctx.stroke();
   });
+}
+
+function niceStep(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / magnitude;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
 }
 
 export function assetLegend(state: PublicState): HTMLElement {

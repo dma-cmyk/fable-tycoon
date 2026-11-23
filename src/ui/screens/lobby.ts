@@ -39,6 +39,13 @@ export class LobbyScreen implements ScreenHandle {
   private readonly transportHost: HTMLElement;
   private readonly chat: ChatPanel;
   private readonly emotes: EmotePalette;
+  private readonly commHeader: HTMLElement;
+  private readonly commBottom: HTMLElement;
+  private readonly bottomBar: HTMLElement;
+  private readonly bottomStatus: HTMLElement;
+  private readonly bottomStart: HTMLButtonElement;
+  private readonly bottomLeave: HTMLButtonElement;
+  private readonly commMedia = window.matchMedia('(max-width: 740px)');
   private readonly muteCache = new Map<number, MuteFlags>();
   private flaggedSeats = new Set<number>();
   private lobby: LobbyView | null = null;
@@ -95,6 +102,36 @@ export class LobbyScreen implements ScreenHandle {
       },
     });
 
+    this.commHeader = h('div', { class: 'lobby-comm-slot lobby-comm-header' });
+    this.commBottom = h('div', { class: 'lobby-comm-slot lobby-comm-bottom' });
+    this.bottomStatus = h('span', { class: 'lobby-bottom-status muted', attrs: { role: 'status' } });
+    this.bottomStart = h(
+      'button',
+      {
+        class: 'btn btn-gold lobby-bottom-start',
+        text: '▶ ゲームを開始',
+        attrs: { type: 'button' },
+        on: { click: () => options.session.send({ t: 'start' }) },
+      },
+    );
+    this.bottomLeave = h(
+      'button',
+      {
+        class: 'btn btn-ghost lobby-bottom-leave',
+        text: '退出',
+        attrs: { type: 'button' },
+        on: { click: () => options.onLeave() },
+      },
+    );
+    this.bottomBar = h(
+      'div',
+      { class: 'lobby-bottom-bar' },
+      this.commBottom,
+      this.bottomStatus,
+      this.bottomStart,
+      this.bottomLeave,
+    );
+
     const header = h(
       'header',
       { class: 'lobby-header' },
@@ -106,10 +143,10 @@ export class LobbyScreen implements ScreenHandle {
         h('p', { class: 'lobby-subtitle', text: '同じ世界に集まった 4 席。ホストが開始します。' }),
       ),
       this.transportHost,
+      this.commHeader,
       h('span', { class: 'lobby-header-mark', text: '🌐', attrs: { 'aria-hidden': 'true' } }),
     );
 
-    const commDock = h('div', { class: 'comm-dock' }, this.chat.fab, this.emotes.fab);
     this.el = h(
       'div',
       { class: 'screen lobby-screen' },
@@ -118,10 +155,14 @@ export class LobbyScreen implements ScreenHandle {
       this.migrateBanner,
       h('div', { class: 'lobby-scroll scroll-y' }, this.main),
       this.loading,
-      commDock,
+      this.bottomBar,
       this.chat.panel,
       this.emotes.panel,
     );
+    this.placeComm();
+    const onCommMedia = () => this.placeComm();
+    this.commMedia.addEventListener('change', onCommMedia);
+    this.cleanup.push(() => this.commMedia.removeEventListener('change', onCommMedia));
 
     const unsubscribe = session.subscribe((msg) => this.onMessage(msg));
     this.cleanup.push(unsubscribe);
@@ -243,7 +284,7 @@ export class LobbyScreen implements ScreenHandle {
         { class: 'lobby-room-left' },
         h('span', { class: 'lobby-room-label', text: 'あいことば' }),
         h('div', { class: 'lobby-room-code', text: lobby.roomId }),
-        h('span', { class: 'muted', text: '6文字。招待URLをひらくと自動で入ります。' }),
+        h('span', { class: 'muted', text: '6文字＋4文字。招待URLをひらくと自動で入ります。' }),
       ),
       h(
         'div',
@@ -375,6 +416,29 @@ export class LobbyScreen implements ScreenHandle {
       roomCard,
       h('div', { class: 'lobby-grid' }, seatsPanel, h('div', { class: 'lobby-side' }, settingsPanel, startPanel)),
     );
+    this.bottomStatus.hidden = isHost;
+    this.bottomStart.hidden = !isHost;
+    this.bottomStart.disabled = !canStart;
+    if (isHost) {
+      this.bottomStart.textContent = canStart
+        ? '▶ ゲームを開始'
+        : !humansReady
+          ? 'キャラクター選択待ち'
+          : occupied.length < 2
+            ? 'あと1人（CPU可）'
+            : '準備中…';
+    } else if (mySeat === null) {
+      this.bottomStatus.hidden = false;
+      this.bottomStatus.textContent = '観戦中。空き席の「座る」で参加できます。';
+    } else {
+      this.bottomStatus.hidden = false;
+      this.bottomStatus.textContent = 'ホストの開始を待っています…';
+    }
+  }
+
+  private placeComm(): void {
+    const target = this.commMedia.matches ? this.commBottom : this.commHeader;
+    if (this.chat.fab.parentElement !== target) target.append(this.chat.fab, this.emotes.fab);
   }
 
   private seatCard(seat: SeatInfo, isHost: boolean): HTMLElement {

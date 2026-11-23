@@ -3,6 +3,7 @@ import { h, type ModalHost } from '../dom';
 import { saveUiSettings, uiSettings, type FxSpeed } from '../settings';
 import { applyMotionPreference } from '../motion';
 import type { Session } from '../../net/session-types';
+import { exportReports } from '../../net/online-session';
 
 const VOLUME_ROWS: { kind: VolumeKind; label: string; icon: string }[] = [
   { kind: 'master', label: 'マスター', icon: '🔊' },
@@ -86,20 +87,12 @@ export function openSettingsDialog(modal: ModalHost, session?: Session | null): 
           exportButton.disabled = true;
           feedback.textContent = '書き出しています…';
           try {
-            const online = await import('../../net/online-session');
-            const maybeExport = (online as unknown as { exportReports?: (s?: Session) => unknown }).exportReports;
-            if (typeof maybeExport !== 'function') {
-              feedback.textContent = 'このビルドでは通報記録の書き出しに対応していません。';
-              exportButton.disabled = !isHost;
-              return;
-            }
-            const data = await Promise.resolve(maybeExport.length > 0 ? maybeExport(session) : maybeExport());
-            if (data === null || data === undefined) {
+            const text = exportReports();
+            if (!text || text === '[]') {
               feedback.textContent = '書き出せる通報記録がありません。';
               exportButton.disabled = false;
               return;
             }
-            const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
             const blob = new Blob([text], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');

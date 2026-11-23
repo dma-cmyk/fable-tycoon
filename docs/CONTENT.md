@@ -22,7 +22,7 @@ npm run dev        # Vite 開発サーバー
 
 | ファイル | 内容 | 生成 |
 |---|---|---|
-| `src/data/cities.json` | 300都市と物件 | 手書き |
+| `src/data/cities.json` | 340都市と物件 | 手書き |
 | `src/data/board.json` | 盤面ノード・辺 | `npm run board` |
 | `public/assets/map/land.json` | 投影済み陸地ポリゴン | `npm run board` |
 | `src/data/characters.json` | 48キャラクター | 手書き |
@@ -35,7 +35,7 @@ npm run dev        # Vite 開発サーバー
 
 ## 1. 都市を追加する
 
-`src/data/cities.json` は `City[]`。**必ず300件**。追加するなら、同じ数を保つため既存の1件を置き換えるか、
+`src/data/cities.json` は `City[]`。**必ず340件**。追加するなら、同じ数を保つため既存の1件を置き換えるか、
 DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一意。異世界の駅は `realms.json` に分ける。
 
 ```json
@@ -125,7 +125,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ### 都市追加の手順
 
-1. `cities.json` を編集（300件・id・物件id・landmark を確認）。
+1. `cities.json` を編集（340件・id・物件id・landmark を確認）。
 2. `npm run board`。
    - world nodes は **2600〜3200** を目標にする（60/75–90 の spacing 制約で下振れする場合は validator が warning を出す）。`components: 1`、`sea squares on land: 0`、
      `rail squares on water: 0` を確認。

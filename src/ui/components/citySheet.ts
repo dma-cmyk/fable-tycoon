@@ -7,10 +7,10 @@ import { LANDMARK_FILES } from '../assetManifest';
 import {
   assetUrl,
   citiesById,
-  cityNodeId,
   countryFlag,
   characterSprite,
   charsById,
+  displayPlayerName,
   formatOku,
   formatOkuShort,
   INDUSTRY_ICON,
@@ -88,7 +88,6 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
   const footer = h('div', { class: 'city-sheet-footer' });
 
   const render = (): void => {
-    const nodeId = cityNodeId(city.id);
     const landmarkAsset =
       city.landmark && LANDMARK_FILES.has(city.landmark)
         ? assetUrl(`assets/landmarks/${city.landmark}.webp`)
@@ -124,7 +123,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
           h('span', { class: 'city-flag', text: countryFlag(city.country) }),
           destination ? h('span', { class: 'badge badge-gold', text: '🎯 目的地' }) : null,
         ),
-        h('p', { class: 'city-hero-sub', text: `${city.countryJa} ・ ${city.nameEn} ・ tier${city.tier}` }),
+        h('p', { class: 'city-hero-sub', text: `${city.countryJa} ・ ${city.nameEn}` }),
         h('p', { class: 'city-hero-blurb', text: city.blurb }),
         h(
           'div',
@@ -136,21 +135,24 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       ),
     );
 
-    const ownerCounts = new Map<number, number>();
-    for (const property of city.properties) {
-      const owner = state.owner[property.id];
-      if (owner !== undefined) ownerCounts.set(owner, (ownerCounts.get(owner) ?? 0) + 1);
-    }
-    const maxOwned = Math.max(0, ...ownerCounts.values());
-    const progressPct = Math.round((maxOwned / Math.max(1, city.properties.length)) * 100);
+    const actorOwned = city.properties.filter((property) => state.owner[property.id] === state.current).length;
+    const occupied = city.properties.filter((property) => state.owner[property.id] !== undefined).length;
+    const otherOwned = occupied - actorOwned;
+    const progressPct = Math.round((actorOwned / Math.max(1, city.properties.length)) * 100);
+    const actorName = actor ? displayPlayerName(actor) : '手番プレイヤー';
+    const monopolyLabel = allSameOwner
+      ? '👑 都市独占！ 収益 2 倍'
+      : otherOwned === city.properties.length
+        ? '他のプレイヤーが全て所有中'
+        : `${actorName}の所有`;
     const monopoly = h(
       'div',
       { class: `city-monopoly-progress ${allSameOwner ? 'is-monopoly' : ''}`.trim() },
       h(
         'div',
         { class: 'city-monopoly-top' },
-        h('span', { class: 'city-monopoly-label', text: allSameOwner ? '👑 都市独占！ 収益 2 倍' : '独占まであと少し' }),
-        h('span', { class: 'city-monopoly-count', text: `${maxOwned} / ${city.properties.length} 件` }),
+        h('span', { class: 'city-monopoly-label', text: monopolyLabel }),
+        h('span', { class: 'city-monopoly-count', text: `${actorOwned} / ${city.properties.length} 件` }),
       ),
       h(
         'div',
@@ -158,8 +160,10 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         h('span', { attrs: { style: `width:${progressPct}%` } }),
       ),
       allSameOwner
-        ? h('p', { class: 'city-monopoly-note', text: `${soleOwner !== undefined ? state.players[soleOwner]?.name ?? '誰か' : '誰か'} がすべての物件を所有。決算収益 2 倍。` })
-        : null,
+        ? h('p', { class: 'city-monopoly-note', text: `${soleOwner !== undefined ? displayPlayerName(state.players[soleOwner]) : '誰か'} がすべての物件を所有。決算収益 2 倍。` })
+        : otherOwned > 0
+          ? h('p', { class: 'city-monopoly-note', text: `他のプレイヤー所有 ${otherOwned} 件。独占には残り ${Math.max(0, city.properties.length - actorOwned)} 件（うち他所有 ${otherOwned} 件）の買い戻しが必要。` })
+          : null,
     );
 
     const list = h('div', { class: 'property-list' });
@@ -172,11 +176,14 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       h(
         'div',
         { class: 'property-table-head' },
+        h('span', { class: 'property-table-spacer', attrs: { 'aria-hidden': 'true' } }),
         h('span', { text: '物件' }),
-        h('span', { text: '価格 / オーナー' }),
+        h('span', { text: '価格' }),
+        h('span', { text: '年間収益' }),
+        h('span', { text: '収益率' }),
+        h('span', { text: '所有者' }),
       ),
       list,
-      h('p', { class: 'city-node-note muted', text: `盤面マス: ${nodeId}` }),
       footer,
     );
     previousOwners = new Map(city.properties.map((property) => [property.id, state.owner[property.id]]));
@@ -201,7 +208,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
             attrs: { style: `--owner-color:${playerColor(ownerPlayer)}` },
           },
           avatar(characterSprite(ownerPlayer ? charsById.get(ownerPlayer.characterId) : undefined), playerColor(ownerPlayer), 26),
-          h('span', { text: ownerPlayer?.name ?? '所有' }),
+          h('span', { text: ownerPlayer ? displayPlayerName(ownerPlayer) : '所有' }),
         );
       } else if (options.buyMode) {
         const buyButton = h('button', {
@@ -235,17 +242,17 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
           'div',
           { class: 'property-main' },
           h('span', { class: 'property-name', text: property.name }),
-          h(
-            'span',
-            { class: 'property-meta' },
-            h('span', { text: `収益率 ${property.yieldPct}%` }),
-            h('span', { text: `約 ${formatOkuShort(baseIncome)}/年` }),
-          ),
+        ),
+        h(
+          'div',
+          { class: 'property-stats' },
+          h('span', { class: 'property-price', text: formatOku(price) }),
+          h('span', { class: 'property-income', text: `約 ${formatOkuShort(baseIncome)}/年` }),
+          h('span', { class: 'property-yield', text: `${property.yieldPct}%` }),
         ),
         h(
           'div',
           { class: 'property-side' },
-          h('span', { class: 'property-price', text: formatOku(price) }),
           action,
         ),
       );
@@ -255,33 +262,44 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       if (!city) return;
       footer.replaceChildren();
       if (options.buyMode) {
+        const vacant = city.properties.filter((property) => state.owner[property.id] === undefined);
+        const priced = vacant.map((property) => ({
+          property,
+          price: Math.round(purchasePrice(GAME_DATA, state, state.current, property.id)),
+        }));
+        const affordable = priced.filter((entry) => entry.price <= actorCash);
+        const bulkTotal = affordable.reduce((sum, entry) => sum + entry.price, 0);
+        const allTotal = priced.reduce((sum, entry) => sum + entry.price, 0);
+        const shortfall = Math.max(0, allTotal - actorCash);
         footer.append(
           h(
             'div',
             { class: 'city-footer-cash' },
-            h('span', { class: 'muted', text: '手番プレイヤーの所持金' }),
+            h('span', { class: 'muted', text: '所持金' }),
             h('strong', { class: actorCash < 0 ? 'money-negative' : '', text: formatOku(actorCash) }),
             !canAct ? h('span', { class: 'badge', text: '他のプレイヤーの手番' }) : null,
+            canAct && vacant.length > 0
+              ? h('span', {
+                  class: 'city-bulk-summary',
+                  text: `空き${vacant.length}件 合計 ${formatOku(allTotal)}${shortfall > 0 ? ` ・ 不足 ${formatOku(shortfall)}` : ''}`,
+                })
+              : null,
           ),
         );
         if (canAct) {
-          const affordable = city.properties.filter(
-            (property) => state.owner[property.id] === undefined && actorCash >= Math.round(purchasePrice(GAME_DATA, state, state.current, property.id)),
-          ).length;
-          if (affordable > 1 && options.onBuyAll) {
-            footer.append(
-              h('button', {
-                class: 'btn btn-red city-buy-all',
-                text: `🛒 まとめて買う（${affordable}件）`,
-                attrs: { type: 'button' },
-                on: {
-                  click: (event) => {
-                    (event.currentTarget as HTMLButtonElement).disabled = true;
-                    options.onBuyAll?.();
-                  },
+          if (affordable.length > 1 && options.onBuyAll) {
+            const buyAll = h('button', {
+              class: 'btn btn-red city-buy-all',
+              text: `🛒 まとめて買う（${affordable.length}件・${formatOku(bulkTotal)}）`,
+              attrs: { type: 'button' },
+              on: {
+                click: (event) => {
+                  (event.currentTarget as HTMLButtonElement).disabled = true;
+                  options.onBuyAll?.();
                 },
-              }),
-            );
+              },
+            });
+            footer.append(buyAll);
           }
           footer.append(
             h('button', {
@@ -306,7 +324,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
           h(
             'div',
             { class: 'city-footer-cash' },
-            h('span', { class: 'muted', text: '現在の所持金（手番）' }),
+            h('span', { class: 'muted', text: '所持金' }),
             h('strong', { class: actorCash < 0 ? 'money-negative' : '', text: formatOku(actorCash) }),
           ),
         );

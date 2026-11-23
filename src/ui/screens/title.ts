@@ -75,16 +75,16 @@ export class TitleScreen implements ScreenHandle {
     const primary = h(
       'div',
       { class: 'title-primary' },
-      this.menuButton('🎲', 'ひとりで', 'CPU 対戦で世界を買い占める', callbacks.onSolo, 'btn-gold title-btn-primary'),
-      this.menuButton('👥', 'みんなで', '同じ端末で 2〜4 人のホットシート', callbacks.onHotseat),
-      this.menuButton('🌐', 'オンライン', 'ルームをつくる / あいことばで参加', callbacks.onOnline),
+      this.menuButton('coins', 'ひとりで', 'CPU 対戦で世界を買い占める', callbacks.onSolo, 'btn-gold title-btn-primary'),
+      this.menuButton('chat', 'みんなで', '同じ端末で 2〜4 人のホットシート', callbacks.onHotseat),
+      this.menuButton('globe', 'オンライン', 'ルームをつくる / あいことばで参加', callbacks.onOnline),
     );
 
     const secondary = h(
       'div',
       { class: 'title-secondary' },
       callbacks.hasResume
-        ? this.smallButton('⏯️', 'つづきから', callbacks.onResume, 'title-btn-resume')
+        ? this.smallButton('hourglass', 'つづきから', callbacks.onResume, 'title-btn-resume')
         : null,
       this.smallButton('help', '遊び方', callbacks.onHelp),
       this.smallButton('gear', '設定', callbacks.onSettings),
@@ -131,7 +131,7 @@ export class TitleScreen implements ScreenHandle {
         attrs: { type: 'button' },
         on: { click: onClick },
       },
-      h('span', { class: 'title-menu-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
+      h('span', { class: 'title-menu-icon' }, uiIcon(icon, '▶')),
       h(
         'span',
         { class: 'title-menu-text' },

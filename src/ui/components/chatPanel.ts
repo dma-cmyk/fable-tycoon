@@ -36,6 +36,7 @@ export class ChatPanel {
   private unread = 0;
   private cooldown = false;
   private readonly cleanup: (() => void)[] = [];
+  private readonly onViewportChange = (): void => this.syncKeyboardInset();
   private rendered: ChatLine[] = [];
 
   constructor(private readonly options: ChatPanelOptions) {
@@ -190,10 +191,16 @@ export class ChatPanel {
     this.updateUnread();
     this.renderLog();
     this.scrollToBottom();
+    window.visualViewport?.addEventListener('resize', this.onViewportChange);
+    window.visualViewport?.addEventListener('scroll', this.onViewportChange);
+    this.syncKeyboardInset();
     requestAnimationFrame(() => this.input.focus({ preventScroll: true }));
   }
 
   close(): void {
+    window.visualViewport?.removeEventListener('resize', this.onViewportChange);
+    window.visualViewport?.removeEventListener('scroll', this.onViewportChange);
+    this.panel.style.removeProperty('--kb-inset');
     this.open = false;
     this.panel.classList.remove('is-open');
     this.fab.setAttribute('aria-label', 'チャットをひらく');
@@ -207,6 +214,13 @@ export class ChatPanel {
 
   destroy(): void {
     for (const fn of this.cleanup) fn();
+  }
+
+  private syncKeyboardInset(): void {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const inset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+    this.panel.style.setProperty('--kb-inset', `${Math.round(inset)}px`);
   }
 
   private appendMutedNotice(): void {

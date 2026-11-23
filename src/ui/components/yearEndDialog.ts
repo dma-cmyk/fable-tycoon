@@ -36,40 +36,6 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
     const incomeById = new Map(report.income.map((entry) => [entry.playerId, entry.amount]));
     const finalYear = report.year >= state.config.years;
 
-    const table = h('div', { class: 'yearend-table' });
-    rows.forEach((asset, index) => {
-      const player = state.players[asset.playerId];
-      if (!player) return;
-      const income = incomeById.get(asset.playerId) ?? 0;
-      const character = charsById.get(player.characterId);
-      table.append(
-        h(
-          'div',
-          { class: `yearend-row ${index === 0 ? 'is-top' : ''}`.trim() },
-          h('span', { class: `yearend-rank rank-${index + 1}` }, h('span', { text: `${index + 1}` })),
-          avatar(characterSprite(character), character?.color ?? playerColor(player), 44),
-          h(
-            'span',
-            { class: 'yearend-player' },
-            h('strong', { class: 'yearend-name', text: displayPlayerName(player) }),
-            h('span', { class: 'yearend-char muted', text: player.isCpu ? `CPU ・ ${character?.originRegion ?? ''}` : character?.nameJa ?? '' }),
-          ),
-          h(
-            'span',
-            { class: 'yearend-income' },
-            h('span', { class: 'muted', text: '収益' }),
-            h('strong', { class: income < 0 ? 'money-negative' : 'money-positive', text: formatDelta(income) }),
-          ),
-          h(
-            'span',
-            { class: 'yearend-assets' },
-            h('span', { class: 'muted', text: '総資産' }),
-            h('strong', { text: formatOku(asset.total) }),
-          ),
-        ),
-      );
-    });
-
     const maxAssets = Math.max(1, ...report.assets.map((asset) => asset.total));
     const raceHost = h('div', { class: 'yearend-bars' });
     rows.forEach((asset, index) => {
@@ -86,7 +52,12 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
           h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), character?.color ?? playerColor(player), 32)),
           h('span', { class: 'yearend-bar-name', text: index === 0 ? `👑 ${displayPlayerName(player)}` : displayPlayerName(player) }),
           h('span', { class: 'yearend-bar-track' }, fill),
-          valueEl,
+          h(
+            'span',
+            { class: 'yearend-bar-values' },
+            valueEl,
+            h('span', { class: 'yearend-bar-meta', text: `収益 ${formatDelta(incomeById.get(asset.playerId) ?? 0)}` }),
+          ),
         ),
       );
       requestAnimationFrame(() => {
@@ -126,7 +97,9 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
       },
     );
 
-    body.replaceChildren(
+    const scroll = h(
+      'div',
+      { class: 'yearend-scroll scroll-y' },
       h(
         'header',
         { class: 'yearend-head' },
@@ -142,12 +115,14 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
         raceHost,
         confettiHost,
       ),
-      table,
       chartCard,
       h('p', {
         class: 'yearend-note muted',
         text: '物件収益と独占ボーナスを精算し、全員の総資産が確定しました。',
       }),
+    );
+    body.replaceChildren(
+      scroll,
       h(
         'div',
         { class: 'yearend-footer' },

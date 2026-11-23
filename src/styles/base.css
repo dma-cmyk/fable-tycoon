@@ -7,6 +7,10 @@
   --navy-deep: #0b1b3d;
   --navy-ink: #071225;
   --navy-panel: rgba(15, 35, 80, 0.94);
+  --panel-bg: #12284f;
+  --panel-line: rgba(255, 255, 255, 0.22);
+  --panel-shadow: 0 3px 10px rgba(7, 18, 37, 0.25);
+  --modal-line: rgba(255, 255, 255, 0.88);
   --navy-panel-2: rgba(25, 54, 112, 0.95);
   --white: #ffffff;
   --paper: #f6f1e3;
@@ -217,22 +221,22 @@ textarea {
 /* ---------------------------------------------------------------- panels */
 
 .panel {
-  background: linear-gradient(180deg, var(--navy-panel-2) 0%, var(--navy-panel) 58%, rgba(8, 20, 48, 0.97) 100%);
-  border: 3px solid var(--border);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-panel);
+  box-shadow: var(--panel-shadow);
 }
 
 .panel-soft {
-  background: rgba(9, 24, 56, 0.78);
-  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-line);
   border-radius: var(--radius-small);
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--panel-shadow);
 }
 
 .panel-gold-edge {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.28), var(--shadow-panel);
+  border: 2px solid var(--gold);
+  box-shadow: var(--panel-shadow);
 }
 
 .section-title {
@@ -276,9 +280,9 @@ textarea {
   min-height: 44px;
   padding: 9px 18px;
   border-radius: 999px;
-  border: 2px solid rgba(255, 255, 255, 0.85);
-  background: linear-gradient(180deg, #31549a, #1a3268);
-  box-shadow: 0 3px 0 rgba(4, 12, 30, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  background: #1b3b73;
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.28);
   color: var(--white);
   font-weight: 700;
   line-height: 1.2;
@@ -301,7 +305,7 @@ textarea {
 
 .btn-gold {
   background: linear-gradient(180deg, #fff2a6 0%, var(--gold) 30%, var(--gold-2) 68%, #e89000 100%);
-  border-color: #fff8cf;
+  border: 2.5px solid #fff8cf;
   color: #5a2b00;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
   box-shadow:
@@ -695,9 +699,9 @@ textarea.input {
   width: min(720px, 100%);
   max-height: min(88dvh, 900px);
   background: linear-gradient(180deg, #f8f3e4, #ece3cd);
-  border: 4px solid #fff;
+  border: 2px solid var(--modal-line);
   border-radius: 24px;
-  box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.55), 0 22px 50px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
   color: var(--ink);
   overflow: hidden;
   animation: modal-pop 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2);

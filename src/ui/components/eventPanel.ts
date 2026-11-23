@@ -16,6 +16,7 @@ export interface EventPanelOptions {
 
 export class EventPanel {
   readonly el: HTMLElement;
+  readonly commHost: HTMLElement;
   private readonly ribbonTitle: HTMLElement;
   private readonly kindBadge: HTMLElement;
   private readonly image: HTMLImageElement;
@@ -39,6 +40,7 @@ export class EventPanel {
   constructor(private readonly options: EventPanelOptions) {
     this.ribbonTitle = h('span', { class: 'event-ribbon-title', text: '世界ニュースイベント！' });
     this.kindBadge = h('span', { class: 'event-kind-badge' });
+    this.commHost = h('div', { class: 'event-comm' });
     this.seasonBadge = h('span', { class: 'event-season-badge', attrs: { hidden: 'hidden' } });
     this.image = h('img', {
       class: 'event-image',
@@ -87,6 +89,7 @@ export class EventPanel {
         this.ribbonTitle,
         this.seasonBadge,
         this.kindBadge,
+        this.commHost,
       ),
       h(
         'div',
@@ -234,7 +237,7 @@ export class EventPanel {
         'span',
         { class: 'event-choice-main' },
         h('span', { class: 'event-choice-label', text: choice.label }),
-        h('span', { class: 'event-choice-detail', text: choice.detail }),
+        h('span', { class: 'event-choice-detail' }, ...choiceDetailParts(choice.detail)),
       ),
     );
   }
@@ -296,6 +299,20 @@ export class EventPanel {
     );
     this.metaBody.replaceChildren(...parts);
   }
+}
+
+function choiceDetailParts(detail: string): HTMLElement[] {
+  const sentences = detail
+    .split('。')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return sentences.map((sentence, index) => {
+    const risk = /崩壊|失敗|不足|損失|損|リスク|売却/.test(sentence) && index > 0;
+    return h('span', {
+      class: risk ? 'event-choice-risk' : 'event-choice-effect',
+      text: `${sentence}。`,
+    });
+  });
 }
 
 function seasonOf(month: number): { key: string; label: string; emoji: string } {

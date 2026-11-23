@@ -4,7 +4,7 @@ import {  actorOf, annualIncome, distance, netWorth, type PublicState } from '..
 import { REALMS } from '../../core/realm';
 import { wrapDx } from '../../core/geo';
 import { purchasePrice } from '../../core/economy';
-import type {Action, Fx, RealmId, SpeakerRef} from '../../core/types';
+import type {Action, Fx, MoveOption, RealmId, SpeakerRef} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
@@ -17,6 +17,7 @@ import {
   displayPlayerName,
   citiesById,
   cityNodeId,
+  countryFlag,
   emotesById,
   eventsById,
   formatDelta,
@@ -177,6 +178,11 @@ export class GameScreen implements ScreenHandle {
   private readonly moveOptionsHost: HTMLElement;
   private readonly cardBadge: HTMLElement;
   private readonly statusChip: HTMLElement;
+  private readonly miniMapCanvas: HTMLCanvasElement;
+  private readonly recenterButton: HTMLButtonElement;
+  private moveSelection: string | null = null;
+  private moveOptionsKey = '';
+  private moveOptionsCache: MoveOption[] = [];
   private readonly loading: HTMLElement;
   private readonly loadingText: HTMLElement;
   private readonly loadingBar: HTMLElement;
@@ -192,6 +198,7 @@ export class GameScreen implements ScreenHandle {
   private readonly handoffAvatar: HTMLElement;
   private readonly skipHint: HTMLElement;
   private readonly commDock: HTMLElement;
+  private readonly hudIcons: HTMLElement;
   private readonly timerHost: HTMLElement;
   private readonly bottomBar: HTMLElement;
   private readonly topbar: HTMLElement;
@@ -212,6 +219,7 @@ export class GameScreen implements ScreenHandle {
   private readonly monthFlipValue: HTMLElement;
   private readonly rouletteOverlay: HTMLElement;
   private readonly rouletteImage: HTMLImageElement;
+  private readonly rouletteBadge: HTMLElement;
   private readonly rouletteName: HTMLElement;
   private readonly rouletteCountry: HTMLElement;
   private readonly rouletteLandmark: HTMLImageElement;
@@ -234,9 +242,9 @@ export class GameScreen implements ScreenHandle {
     this.destDistance = h(
       'span',
       { class: 'dest-distance' },
-      h('span', { class: 'dest-distance-label', text: 'あと ' }),
+      h('span', { class: 'dest-distance-label', text: '・あと' }),
       h('span', { class: 'dest-distance-value', text: '—' }),
-      h('span', { class: 'dest-distance-unit', text: ' マス' }),
+      h('span', { class: 'dest-distance-unit', text: 'マス' }),
     );
     this.destChip = h(
       'button',
@@ -249,7 +257,7 @@ export class GameScreen implements ScreenHandle {
       this.destText,
       this.destDistance,
     );
-    this.statusChip = h('span', { class: 'chip chip-small status-chip', text: '' });
+    this.statusChip = h('span', { class: 'chip chip-small status-chip game-turn-label', text: '' });
 
     this.timer = new TurnTimer();
     this.timerHost = this.timer.el;
@@ -290,7 +298,11 @@ export class GameScreen implements ScreenHandle {
       { class: 'month-flip', attrs: { hidden: 'hidden', 'aria-hidden': 'true' } },
       h('div', { class: 'month-flip-card' }, this.monthFlipIcon, this.monthFlipValue),
     );
-    this.rouletteImage = h('img', { class: 'roulette-thumb', attrs: { alt: '', draggable: 'false' } });
+    this.rouletteImage = h('img', {
+      class: 'roulette-thumb',
+      attrs: { alt: '', draggable: 'false', hidden: 'hidden' },
+    });
+    this.rouletteBadge = h('span', { class: 'roulette-city-badge', text: '🏙️', attrs: { 'aria-hidden': 'true' } });
     this.rouletteName = h('span', { class: 'roulette-name', text: '' });
     this.rouletteCountry = h('span', { class: 'roulette-country', text: '' });
     this.rouletteLandmark = h('img', { class: 'roulette-landmark', attrs: { alt: '', draggable: 'false' } });
@@ -301,7 +313,7 @@ export class GameScreen implements ScreenHandle {
         'div',
         { class: 'roulette-panel' },
         h('span', { class: 'roulette-kicker', text: '🎯 目的地ルーレット' }),
-        h('div', { class: 'roulette-reel' }, this.rouletteImage, h('span', { class: 'roulette-names' }, this.rouletteName, this.rouletteCountry)),
+        h('div', { class: 'roulette-reel' }, this.rouletteBadge, this.rouletteImage, h('span', { class: 'roulette-names' }, this.rouletteName, this.rouletteCountry)),
         this.rouletteLandmark,
         h('span', { class: 'roulette-hint', text: '目的地が決まる…' }),
       ),
@@ -332,6 +344,21 @@ export class GameScreen implements ScreenHandle {
       h('span', { class: 'dest-arrow-label', text: '目的地' }),
     );
 
+    this.miniMapCanvas = h('canvas', {
+      class: 'game-minimap',
+      attrs: { 'aria-label': 'ミニマップ。タップで now その地点へ移動' },
+    });
+    this.recenterButton = h(
+      'button',
+      {
+        class: 'btn btn-ghost map-recenter',
+        attrs: { type: 'button', hidden: 'hidden' },
+        on: { click: () => this.recenterOnActor() },
+      },
+      uiIcon('flag', '🎯', 'map-recenter-icon'),
+      h('span', { text: '手番へ戻る' }),
+    );
+
     this.topbar = h(
       'header',
       { class: 'game-topbar' },
@@ -342,7 +369,7 @@ export class GameScreen implements ScreenHandle {
         h('span', { class: 'logo-mini-crown', text: '👑' }),
         h('span', { class: 'logo-mini-text', text: '寓話大富豪' }),
       ),
-      h('div', { class: 'game-chips' }, this.yearChip, this.turnChip, this.destChip, this.statusChip, this.realmChip),
+      h('div', { class: 'game-chips' }, this.yearChip, this.statusChip, this.destChip, this.stepsCounter, this.turnChip, this.realmChip),
       this.timerHost,
       h(
         'div',
@@ -410,15 +437,18 @@ export class GameScreen implements ScreenHandle {
     this.cardBadge = h('span', { class: 'icon-btn-badge', text: '0', attrs: { hidden: 'hidden' } });
     const cardButton = iconButton('cards', 'カード', () => this.openHand(), { class: 'hud-icon' });
     cardButton.append(this.cardBadge);
+    this.commDock = h('div', { class: 'hud-comm' });
     const iconRow = h(
       'div',
       { class: 'hud-icons' },
       cardButton,
-      iconButton('property', '物件情報', () => this.openCatalog(), { class: 'hud-icon' }),
+      iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon' }),
       iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon' }),
-      iconButton('globe', '全体地図', () => this.openMapViewDialog(), { class: 'hud-icon' }),
+      iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon' }),
       iconButton('menu', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
+      this.commDock,
     );
+    this.hudIcons = iconRow;
     this.moveOptionsHost = h('div', { class: 'move-options', attrs: { hidden: 'hidden' } });
     this.bottomBar = h('div', { class: 'game-bottom-bar' }, this.moveOptionsHost, h('div', { class: 'bottom-primary-row' }, this.primary, iconRow));
     this.moneyHost = h('div', { class: 'money-panel' });
@@ -530,7 +560,9 @@ export class GameScreen implements ScreenHandle {
       ),
     );
     this.skipHint = h('div', { class: 'skip-hint', attrs: { hidden: 'hidden' }, text: 'タップでスキップ ▶▶' });
-    this.commDock = h('div', { class: 'comm-dock game-comm-dock' }, this.chat.fab, this.emotes.fab);
+    this.chat.fab.classList.add('hud-comm-button');
+    this.emotes.fab.classList.add('hud-comm-button');
+    this.commDock.append(this.chat.fab, this.emotes.fab);
 
     this.el = h(
       'div',
@@ -538,12 +570,13 @@ export class GameScreen implements ScreenHandle {
       this.mapWrap,
       h('div', { class: 'map-vignette', attrs: { 'aria-hidden': 'true' } }),
       this.topbar,
+      this.recenterButton,
+      this.miniMapCanvas,
       this.rankingHost,
       this.portraitHost,
       this.subtitleBar,
       this.moneyHost,
       this.bottomBar,
-      this.commDock,
       this.eventPanel.el,
       this.emoteHost,
       this.dice.el,
@@ -553,7 +586,6 @@ export class GameScreen implements ScreenHandle {
       this.turnBanner,
       this.monthFlip,
       this.rouletteOverlay,
-      this.stepsCounter,
       this.destArrow,
       this.confettiHost,
       this.cityPickBanner,
@@ -609,6 +641,7 @@ export class GameScreen implements ScreenHandle {
     this.shop?.close();
     this.transient?.handle.close();
     this.citySheet?.close();
+    this.map?.setMiniMap(null);
     this.map?.destroy();
     for (const unsub of this.unsubscribeFns) unsub();
     window.clearTimeout(this.pendingTimer);
@@ -623,6 +656,10 @@ export class GameScreen implements ScreenHandle {
     this.clearCityPick();
     window.clearInterval(this.rouletteInterval);
     this.rouletteFinish?.(true);
+    this.canvas.removeEventListener('pointerdown', this.onMapInteract);
+    this.canvas.removeEventListener('pointerup', this.onMapInteract);
+    this.canvas.removeEventListener('wheel', this.onMapInteract);
+    window.removeEventListener('resize', this.onWindowResize);
     Audio.stopVoice();
     this.el.remove();
   }
@@ -644,11 +681,18 @@ export class GameScreen implements ScreenHandle {
         this.loadingText.textContent = `世界地図をひらいています… ${progress.label}`;
       });
       if (this.destroyed) return;
+      this.map?.setMiniMap(null);
       this.map?.destroy();
       this.map = new MapView(this.canvas, GAME_DATA, assets);
       this.map.setReducedMotion(motionReduced());
       this.map.onCityTap((cityId) => this.onCityTap(cityId));
+      this.map.setMiniMap(this.miniMapCanvas);
       this.map.resize();
+      this.canvas.addEventListener('pointerdown', this.onMapInteract, { passive: true });
+      this.canvas.addEventListener('pointerup', this.onMapInteract, { passive: true });
+      this.canvas.addEventListener('wheel', this.onMapInteract, { passive: true });
+      window.addEventListener('resize', this.onWindowResize);
+      this.updateMapSafeArea();
       this.loadingBar.hidden = true;
       this.loadingText.textContent = '盤面を待っています…';
       this.bindSession();
@@ -873,6 +917,7 @@ export class GameScreen implements ScreenHandle {
     const hand = privateSeat !== null ? state.players[privateSeat]?.cards.length ?? 0 : 0;
     this.cardBadge.textContent = String(hand);
     this.cardBadge.hidden = hand === 0;
+    requestAnimationFrame(() => this.updateMapSafeArea());
   }
 
   private renderRanking(state: PublicState, actor: number | null): void {
@@ -891,7 +936,7 @@ export class GameScreen implements ScreenHandle {
         oldIndexes.set(seat, index);
       });
     }
-    this.rankingHost.replaceChildren();
+    this.rankingHost.replaceChildren(h('span', { class: 'ranking-caption', text: '総資産順' }));
     order.forEach((player, index) => {
       const character = charsById.get(player.characterId);
       const displayName = player.isCpu ? character?.nameJa ?? player.name : player.name;
@@ -1057,7 +1102,7 @@ export class GameScreen implements ScreenHandle {
         h(
           'div',
           { class: 'money-cell' },
-          h('span', { class: 'money-label', text: '物件収益（年間）' }),
+          h('span', { class: 'money-label', text: '年間収益' }),
           h('strong', { class: 'money-value money-positive', text: '' }),
         ),
         h(
@@ -1077,53 +1122,117 @@ export class GameScreen implements ScreenHandle {
   }
 
   private renderMoveOptions(state: PublicState, actor: number | null): void {
-    if (state.phase.t !== 'choose_dest') {
-      this.moveOptionsHost.hidden = true;
-      this.moveOptionsHost.replaceChildren();
-      this.map?.setMoveOptions(null, () => undefined);
-      return;
-    }
     const canAct = actor !== null && this.myPlayerIds().includes(actor) && !this.fxBusy && !this.actionPending;
-    if (!canAct) {
+    if (state.phase.t !== 'choose_dest' || !canAct) {
+      this.moveSelection = null;
+      this.moveOptionsCache = [];
+      this.moveOptionsKey = '';
       this.moveOptionsHost.hidden = true;
       this.moveOptionsHost.replaceChildren();
       this.map?.setMoveOptions(null, () => undefined);
       return;
     }
-    this.map?.setMoveOptions(state.phase.options, (nodeId) => {
-      this.map?.setMoveOptions(null, () => undefined);
-      this.moveOptionsHost.hidden = true;
-      this.sendAction({ t: 'move', nodeId });
-    });
+    const options = state.phase.options;
+    if (this.moveSelection && !options.some((option) => option.nodeId === this.moveSelection)) this.moveSelection = null;
+    const key = options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|');
+    if (key !== this.moveOptionsKey) {
+      this.moveOptionsKey = key;
+      this.moveOptionsCache = options;
+      this.map?.setMoveOptions(options, {
+        numbers: options.map((_, index) => index + 1),
+        onSelect: (nodeId) => this.selectMoveOption(nodeId, true),
+        onConfirm: (nodeId) => this.confirmMoveOption(nodeId),
+      });
+    }
     this.moveOptionsHost.hidden = false;
     const actorNode = actor !== null ? state.players[actor]?.nodeId : undefined;
-    this.moveOptionsHost.replaceChildren(
-      h('span', { class: 'move-options-label', text: `出目 ${state.phase.roll} ・ 行き先` }),
-      ...state.phase.options.map((option) => {
-        const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
-        return h('button', {
-          class: 'move-chip',
-          attrs: { type: 'button', 'aria-label': `${nodeLabel(option.nodeId)} へ移動` },
-          on: {
-            click: () => {
-              this.map?.setMoveOptions(null, () => undefined);
-              this.moveOptionsHost.hidden = true;
-              this.sendAction({ t: 'move', nodeId: option.nodeId });
-            },
+    const scroller = h('div', { class: 'move-chip-scroll' });
+    options.forEach((option, index) => {
+      const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
+      const chip = h(
+        'button',
+        {
+          class: `move-chip ${this.moveSelection === option.nodeId ? 'is-selected' : ''}`.trim(),
+          attrs: {
+            type: 'button',
+            'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ`,
+            'aria-pressed': String(this.moveSelection === option.nodeId),
           },
+          on: { click: () => this.selectMoveOption(option.nodeId) },
         },
-          h('span', { class: 'move-chip-icon', text: squareIcon(option.nodeId), attrs: { 'aria-hidden': 'true' } }),
-          h('span', { class: 'move-chip-main' },
-            h('span', { class: 'move-chip-name', text: nodeLabel(option.nodeId) }),
-            h('span', { class: 'move-chip-vehicle' },
-              summary.rail > 0 ? h('span', { text: `🚃 電車で${summary.rail}マス` }) : null,
-              summary.sea > 0 ? h('span', { text: `🚢 船で${summary.sea}マス` }) : null,
-            ),
+        h('span', { class: 'move-chip-num', text: String(index + 1) }),
+        h('span', { class: 'move-chip-icon', text: squareIcon(option.nodeId), attrs: { 'aria-hidden': 'true' } }),
+        h(
+          'span',
+          { class: 'move-chip-main' },
+          h('span', { class: 'move-chip-name', text: nodeLabel(option.nodeId) }),
+          h(
+            'span',
+            { class: 'move-chip-vehicle' },
+            summary.rail > 0 ? h('span', { text: `電車 ${summary.rail}マス` }) : null,
+            summary.sea > 0 ? h('span', { text: `船 ${summary.sea}マス` }) : null,
           ),
-          h('span', { class: 'move-chip-steps', text: `${option.path.length}歩` }),
-        );
-      }),
+        ),
+        h('span', { class: 'move-chip-steps', text: `${option.path.length}歩` }),
+      );
+      scroller.append(chip);
+    });
+    const page = (direction: number): void => {
+      scroller.scrollBy({ left: direction * Math.max(180, scroller.clientWidth * 0.7), behavior: 'smooth' });
+    };
+    const prev = h('button', {
+      class: 'move-scroll-btn',
+      text: '‹',
+      attrs: { type: 'button', 'aria-label': '前の行き先' },
+      on: { click: (event) => { event.stopPropagation(); page(-1); } },
+    });
+    const next = h('button', {
+      class: 'move-scroll-btn',
+      text: '›',
+      attrs: { type: 'button', 'aria-label': '次の行き先' },
+      on: { click: (event) => { event.stopPropagation(); page(1); } },
+    });
+    this.moveOptionsHost.replaceChildren(
+      h(
+        'div',
+        { class: 'move-options-head' },
+        h('span', { class: 'move-options-label', text: `出目 ${state.phase.roll} ・ 候補 ${options.length}` }),
+        h('span', { class: 'move-options-hint', text: '1回目のタップで選択、下のボタンで決定' }),
+        prev,
+        next,
+      ),
+      scroller,
     );
+    this.updateMoveSelectionUi();
+  }
+
+  private selectMoveOption(nodeId: string, fromMap = false): void {
+    if (!this.moveOptionsCache.some((option) => option.nodeId === nodeId)) return;
+    this.moveSelection = nodeId;
+    if (!fromMap) this.map?.selectMoveOption(nodeId);
+    this.updateMoveSelectionUi();
+    if (this.state) this.updatePrimary(this.state, actorOf(this.state));
+  }
+
+  private confirmMoveOption(nodeId?: string): void {
+    const target = nodeId ?? this.moveSelection;
+    if (!target || !this.moveOptionsCache.some((option) => option.nodeId === target)) return;
+    this.moveSelection = null;
+    this.moveOptionsCache = [];
+    this.moveOptionsKey = '';
+    this.moveOptionsHost.hidden = true;
+    this.moveOptionsHost.replaceChildren();
+    this.map?.setMoveOptions(null, () => undefined);
+    this.sendAction({ t: 'move', nodeId: target });
+  }
+
+  private updateMoveSelectionUi(): void {
+    this.moveOptionsHost.querySelectorAll<HTMLElement>('.move-chip').forEach((chip, index) => {
+      const option = this.moveOptionsCache[index];
+      const selected = !!option && option.nodeId === this.moveSelection;
+      chip.classList.toggle('is-selected', selected);
+      chip.setAttribute('aria-pressed', String(selected));
+    });
   }
 
   private updatePrimary(state: PublicState, actor: number | null): void {
@@ -1154,8 +1263,16 @@ export class GameScreen implements ScreenHandle {
           className = 'btn btn-gold dice-primary is-active';
           break;
         case 'choose_dest':
-          label = '行き先をマップでタップ';
-          icon = '👆';
+          if (this.moveSelection) {
+            const selected = this.moveOptionsCache.find((option) => option.nodeId === this.moveSelection);
+            label = selected ? `ここへ移動（${nodeLabel(selected.nodeId)}）` : 'ここへ移動';
+            icon = '📍';
+            disabled = false;
+            className = 'btn btn-gold dice-primary is-active';
+          } else {
+            label = '行き先を選択';
+            icon = '👆';
+          }
           break;
         case 'buy':
           label = '物件を選んでください';
@@ -1325,6 +1442,7 @@ export class GameScreen implements ScreenHandle {
       }
     } else if (this.eventPanel.isOpen) {
       this.eventPanel.hide();
+      this.syncEventComm();
       this.activeEventBgm = null;
     }
 
@@ -1461,7 +1579,8 @@ export class GameScreen implements ScreenHandle {
       return;
     }
     if (state.phase.t === 'choose_dest') {
-      this.app.toasts.show('マップの光っているマスか、行き先チップをタップしてください', 'info');
+      if (this.moveSelection) this.confirmMoveOption(this.moveSelection);
+      else this.app.toasts.show('マップの候補か行き先チップを1回タップして選んでください', 'info');
     }
   }
 
@@ -1513,7 +1632,7 @@ export class GameScreen implements ScreenHandle {
         : h('span', { text: '？' }),
     );
     this.playerPlateName.textContent = displayPlayerName(player);
-    this.playerPlateSub.textContent = player.id === actor ? '手番プレイヤー' : 'あなた';
+    this.playerPlateSub.textContent = '所持金';
     this.playerPlate.setAttribute('aria-label', `${displayPlayerName(player)} の詳細`);
     this.setCounter(this.playerPlateCash, `plate:${player.id}:cash`, player.cash, formatOku);
   }
@@ -1535,14 +1654,78 @@ export class GameScreen implements ScreenHandle {
     const map = this.map;
     if (!map) return;
     const extra = extraMapView(map);
-    if (extra?.setView) extra.setView(this.viewRealm);
-    else if (this.viewRealm === 'world') void map.fitWorld(420);
+    extra?.setView?.(this.viewRealm);
+    if (this.viewRealm === 'world') void map.fitWorld(420);
     else {
       const first = GAME_DATA.board.nodes.find((node) => node.realm === this.viewRealm);
       if (first) void map.focusNode(first.id, { zoom: 0.9, ms: 420 });
     }
     map.setReducedMotion(motionReduced());
     this.updateBgm();
+  }
+
+  private readonly onMapInteract = (): void => {
+    const state = this.state;
+    const actor = state ? actorOf(state) : null;
+    const node = actor !== null ? state?.players[actor]?.nodeId : undefined;
+    if (!node || this.viewRealm !== 'world') return;
+    this.recenterButton.hidden = this.map?.isNodeVisible(node) === true;
+  };
+
+  private readonly onWindowResize = (): void => {
+    this.map?.resize();
+    this.syncEventComm();
+    this.updateMapSafeArea();
+  };
+
+  private syncEventComm(): void {
+    const narrow = window.matchMedia('(max-width: 899px)').matches;
+    if (this.eventPanel.isOpen && narrow) {
+      if (this.commDock.parentElement !== this.eventPanel.commHost) this.eventPanel.commHost.append(this.commDock);
+    } else if (this.commDock.parentElement !== this.hudIcons) {
+      this.hudIcons.append(this.commDock);
+    }
+  }
+
+  private recenterOnActor(): void {
+    const state = this.state;
+    const actor = state ? actorOf(state) : null;
+    if (!state || actor === null) return;
+    const player = state.players[actor];
+    const node = player ? nodesById.get(player.nodeId) : undefined;
+    if (!node) return;
+    this.manualView = false;
+    this.viewRealm = realmOfNode(node.id);
+    this.map?.setView?.(this.viewRealm);
+    this.map?.follow(actor);
+    void this.map?.focusNode(node.id, { zoom: realmOfNode(node.id) === 'world' ? 0.92 : 0.9, ms: 420 });
+    this.recenterButton.hidden = true;
+    this.renderHud();
+  }
+
+  private updateMapSafeArea(): void {
+    const map = this.map;
+    if (!map) return;
+    const root = this.el.getBoundingClientRect();
+    const topbar = this.topbar.getBoundingClientRect();
+    const ranking = this.rankingHost.getBoundingClientRect();
+    const bottom = this.bottomBar.getBoundingClientRect();
+    const money = this.moneyHost.getBoundingClientRect();
+    const event = this.eventPanel.el.getBoundingClientRect();
+    const narrow = window.matchMedia('(max-width: 899px)').matches;
+    let top = Math.max(0, topbar.bottom - root.top + 6);
+    let left = 0;
+    let right = 0;
+    let bottomInset = Math.max(0, root.bottom - bottom.top + 6);
+    if (narrow) {
+      if (this.rankingHost.offsetParent !== null) top = Math.max(top, ranking.bottom - root.top + 6);
+      if (!this.moneyHost.hidden) bottomInset = Math.max(bottomInset, root.bottom - money.top + 6);
+    } else {
+      left = Math.max(0, ranking.right - root.left + 8);
+      if (this.eventPanel.isOpen) right = Math.max(0, root.right - event.left + 8);
+    }
+    if (this.eventPanel.isOpen && narrow) top = Math.max(top, event.top - root.top + 6);
+    map.setSafeArea({ top, right, bottom: bottomInset, left });
   }
 
   private updateDestArrow(state: PublicState, actor: number | null, nodeId: string): void {
@@ -1642,7 +1825,22 @@ export class GameScreen implements ScreenHandle {
     body.append(grid);
     body.append(
       h('button', {
-        class: 'btn btn-gold map-view-return',
+        class: 'btn btn-gold map-view-overview',
+        text: '🌍 地上を全体表示',
+        attrs: { type: 'button' },
+        on: {
+          click: () => {
+            handle?.close();
+            this.manualView = true;
+            this.viewRealm = 'world';
+            this.applyMapView();
+            this.focusWorld();
+            this.renderHud();
+          },
+        },
+      }),
+      h('button', {
+        class: 'btn btn-ghost map-view-return',
         text: '🎯 手番プレイヤーを追う',
         attrs: { type: 'button' },
         on: {
@@ -1690,25 +1888,25 @@ export class GameScreen implements ScreenHandle {
             },
           },
         },
-        h('span', { class: 'game-menu-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
+        h('span', { class: 'game-menu-icon' }, uiIcon(icon, icon)),
         h('span', { text: label }),
         h('span', { class: 'game-menu-arrow', text: '▶', attrs: { 'aria-hidden': 'true' } }),
       );
     const body = h(
       'div',
       { class: 'game-menu' },
-      item('🏠', '持ち物（所有物件）', () => this.openOwned()),
-      item('📊', '情報（業種・ニュース・ログ）', () => this.openInfo()),
-      item('🌍', '地上マップを全体表示', () => {
+      item('property', '持ち物（所有物件）', () => this.openOwned()),
+      item('chart', '情報（業種・ニュース・ログ）', () => this.openInfo()),
+      item('globe', '地上マップを全体表示', () => {
         this.manualView = true;
         this.viewRealm = 'world';
         this.applyMapView();
         this.renderHud();
         this.focusWorld();
       }),
-      item('⚙️', '設定', () => this.app.openSettings()),
-      item('📖', '遊び方', () => this.app.openHelp()),
-      item('🎵', 'クレジット', () => this.app.openCredits()),
+      item('gear', '設定', () => this.app.openSettings()),
+      item('help', '遊び方', () => this.app.openHelp()),
+      item('trophy', 'クレジット', () => this.app.openCredits()),
     );
     handle = this.app.modal.open(body, { title: '📜 その他', subtitle: '持ち物・情報・設定' });
   }
@@ -1839,9 +2037,14 @@ export class GameScreen implements ScreenHandle {
     let stopped = false;
     let cursor = 0;
     const names = [...candidates.map((candidate) => candidate), city];
+    const stampFor = (candidate: typeof city): string =>
+      candidate.tier === 1 ? 'metropolis' : candidate.tier === 2 && candidate.port ? 'port_town' : 'town';
     const paint = (candidate: typeof city): void => {
       this.rouletteName.textContent = candidate.nameJa;
       this.rouletteCountry.textContent = `${candidate.countryJa} ・ ${candidate.nameEn}`;
+      this.rouletteBadge.textContent = countryFlag(candidate.country);
+      this.rouletteBadge.className = `roulette-city-badge tier-${Math.min(3, Math.max(1, candidate.tier))}`;
+      this.rouletteBadge.dataset.stamp = stampFor(candidate);
     };
     paint(names[0]);
     const interval = window.setInterval(() => {
@@ -2061,7 +2264,7 @@ export class GameScreen implements ScreenHandle {
             },
           },
         },
-        h('span', { class: 'game-menu-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
+        h('span', { class: 'game-menu-icon' }, uiIcon(icon, icon)),
         h('span', { text: label }),
         h('span', { class: 'game-menu-arrow', text: '▶', attrs: { 'aria-hidden': 'true' } }),
       );
@@ -2070,13 +2273,13 @@ export class GameScreen implements ScreenHandle {
         class: 'game-menu-room',
         text: `モード: ${this.session.mode === 'local' ? 'ローカル' : 'オンライン'} ・ ルーム ${this.session.roomId}`,
       }),
-      item('⚙️', '設定', () => this.app.openSettings()),
-      item('📖', '遊び方', () => this.app.openHelp()),
-      item('🎵', 'クレジット', () => this.app.openCredits()),
-      item('🏠', this.session.mode === 'online' ? '退出してタイトルへ' : 'タイトルへ', () => this.confirmLeave(), true),
+      item('gear', '設定', () => this.app.openSettings()),
+      item('help', '遊び方', () => this.app.openHelp()),
+      item('trophy', 'クレジット', () => this.app.openCredits()),
+      item('menu', this.session.mode === 'online' ? '退出してタイトルへ' : 'タイトルへ', () => this.confirmLeave(), true),
     );
     if (state?.phase.t === 'game_over') {
-      body.append(item('🏆', '結果画面を表示', () => this.showResult(state)));
+      body.append(item('trophy', '結果画面を表示', () => this.showResult(state)));
     }
     handle = this.app.modal.open(body, { title: '☰ メニュー', subtitle: 'ゲームを止めずに設定を変えられます' });
   }
@@ -2123,6 +2326,7 @@ export class GameScreen implements ScreenHandle {
     const currentPlayer = state.players.find((player) => player.id === state.current);
     const playerName = displayPlayerName(currentPlayer);
     this.eventPanel.show(event, state, playerName);
+    requestAnimationFrame(() => this.updateMapSafeArea());
     this.eventPanel.setState(state, this.interactiveNow());
     this.activeEventBgm = bgmForEvent(event);
     this.setBgm(this.activeEventBgm);
@@ -2133,6 +2337,8 @@ export class GameScreen implements ScreenHandle {
     if (this.resultScreen) return;
     this.timer.set({ deadline: null, totalSeconds: 0, isMine: false });
     this.eventPanel.hide();
+    this.syncEventComm();
+    requestAnimationFrame(() => this.updateMapSafeArea());
     this.citySheet?.close();
     this.citySheet = null;
     this.citySheetCityId = null;
@@ -2292,6 +2498,7 @@ export class GameScreen implements ScreenHandle {
       }
       case 'event_close': {
         this.eventPanel.hide();
+        this.syncEventComm();
         this.activeEventBgm = null;
         this.updateBgm();
         await control.wait(FX_MS.event_close);
@@ -2570,7 +2777,8 @@ export class GameScreen implements ScreenHandle {
     this.stopStepsCounter();
     let remaining = total;
     this.stepsCounter.hidden = false;
-    this.stepsCounter.innerHTML = `<span class="steps-label">あと</span><strong class="steps-value">${remaining}</strong><span class="steps-unit">マス</span>`;
+    this.el.classList.add('is-moving');
+    this.stepsCounter.innerHTML = `<span class="steps-label">移動 あと</span><strong class="steps-value">${remaining}</strong><span class="steps-unit">マス</span>`;
     const tick = (): void => {
       remaining = Math.max(0, remaining - 1);
       const value = this.stepsCounter.querySelector('.steps-value');
@@ -2588,6 +2796,7 @@ export class GameScreen implements ScreenHandle {
     window.clearInterval(this.stepsTimer);
     this.stepsTimer = 0;
     this.stepsCounter.hidden = true;
+    this.el.classList.remove('is-moving');
   }
 
   private showHandoff(playerId: number): void {

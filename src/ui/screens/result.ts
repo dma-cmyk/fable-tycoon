@@ -143,22 +143,22 @@ export class ResultScreen {
         ),
         h('section', { class: 'result-panel panel' }, h('h2', { class: 'section-title', text: '最終順位' }), podium),
         h('section', { class: 'result-panel panel' }, chart),
-        h(
-          'div',
-          { class: 'result-actions' },
-          rematchButton,
-          titleButton,
-          h('p', {
-            class: 'result-note',
-            text:
-              options.mode === 'online'
-                ? 'おつかれさまでした。別のルームを作るか、招待URLで友だちを誘えます。'
-                : '同じ設定でもう一度遊べます。キャラクターを変えるならタイトルへ。',
-          }),
-        ),
         h('p', {
           class: 'result-disclaimer',
           text: 'この物語はフィクションです。実在の人物・団体・国家を名指しで評価するものではありません。',
+        }),
+      ),
+      h(
+        'div',
+        { class: 'result-actions', attrs: { role: 'navigation', 'aria-label': '結果の操作' } },
+        rematchButton,
+        titleButton,
+        h('p', {
+          class: 'result-note',
+          text:
+            options.mode === 'online'
+              ? 'おつかれさまでした。別のルームを作るか、招待URLで友だちを誘えます。'
+              : '同じ設定でもう一度遊べます。キャラクターを変えるならタイトルへ。',
         }),
       ),
     );
