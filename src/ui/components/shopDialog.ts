@@ -1,7 +1,7 @@
 import type { PublicState } from '../../core/engine';
 import { yearScale } from '../../core/economy';
 import type {CardDef} from '../../core/types';
-import { h, type ModalHandle, type ModalHost } from '../dom';
+import { h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
 import {
   assetUrl,
   cardsById,
@@ -206,15 +206,20 @@ function cardVehicleBadge(card: CardDef, size = 40): HTMLElement {
   return h(
     'span',
     { class: 'shop-card-vehicle', attrs: { style: `--vsize:${size}px` } },
-    vehicle ? vehicleBadge(vehicle, size) : h('span', { class: 'shop-card-icon', text: kindEmoji(card) }),
+    vehicle ? vehicleBadge(vehicle, size) : cardKindIcon(card),
   );
 }
 
-function kindEmoji(card: CardDef): string {
-  if (card.kind === 'move') return '🚄';
-  if (card.kind === 'money') return '💴';
-  if (card.kind === 'attack') return '⚔️';
-  if (card.kind === 'defense') return '🛡️';
-  return '✨';
+const CARD_KIND_ICON: Record<CardDef['kind'], [string, string]> = {
+  move: ['flag', '🚩'],
+  money: ['moneybag', '💰'],
+  attack: ['treasure', '⚔️'],
+  defense: ['property', '🛡️'],
+  special: ['keyart', '✨'],
+};
+
+function cardKindIcon(card: CardDef): HTMLElement {
+  const [name, fallback] = CARD_KIND_ICON[card.kind] ?? ['cards', '🃏'];
+  return h('span', { class: 'shop-card-icon' }, uiIcon(name, fallback, 'shop-card-icon-mark'));
 }
 

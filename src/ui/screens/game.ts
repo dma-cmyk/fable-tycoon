@@ -3,12 +3,11 @@ import { destination as destinationNarration } from '../../audio/narration';
 import {  actorOf, annualIncome, distance, netWorth, type PublicState } from '../../core/engine';
 import { REALMS } from '../../core/realm';
 import { wrapDx } from '../../core/geo';
-import { purchasePrice } from '../../core/economy';
 import type {Action, Fx, MoveOption, RealmId, SpeakerRef} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
-import { MapView } from '../../render/map';
+import { MapView, moveKindChip } from '../../render/map';
 import { loadMapAssets, type AssetProgress } from '../../render/assets';
 import {
   assetUrl,
@@ -41,7 +40,7 @@ import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
 import { TurnTimer } from '../components/turnTimer';
 import { EventPanel } from '../components/eventPanel';
-import { CitySheetHandle, openCitySheet } from '../components/citySheet';
+import { CitySheetHandle, openCitySheet, planBulkPurchase } from '../components/citySheet';
 import { openCardsDialog } from '../components/cardsDialog';
 import { openOwnedDialog } from '../components/ownedDialog';
 import { openPropertyCatalog } from '../components/propertyCatalog';
@@ -131,6 +130,7 @@ export class GameScreen implements ScreenHandle {
   private yearEnd: YearEndHandle | null = null;
   private shop: ShopHandle | null = null;
   private bulkBuyCityId: string | null = null;
+  private bulkBuyQueue: string[] = [];
   private cityPick: { cardId: string; options: Set<string> } | null = null;
   private viewRealm: MapViewId = 'world';
   private manualView = false;
@@ -442,10 +442,10 @@ export class GameScreen implements ScreenHandle {
       'div',
       { class: 'hud-icons' },
       cardButton,
-      iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon' }),
-      iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon' }),
-      iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon' }),
-      iconButton('menu', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
+      iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon hud-secondary' }),
+      iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon hud-secondary' }),
+      iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary' }),
+      iconButton('treasure', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
       this.commDock,
     );
     this.hudIcons = iconRow;
@@ -467,6 +467,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.bubble(playerId, line.text, 4200);
         this.addLog(`💬 ${this.playerName(playerId)}: ${line.text}`);
       },
+      onOpenChange: () => this.updateMapSafeArea(),
       class: 'game-chat-panel',
     });
 
@@ -490,6 +491,7 @@ export class GameScreen implements ScreenHandle {
         const targetSeat = targetPlayerId !== null ? this.seatOfPlayer(targetPlayerId) : null;
         this.session.send({ t: 'emote', emoteId, ...(targetSeat !== null ? { target: targetSeat } : {}) });
       },
+      onOpenChange: () => this.updateMapSafeArea(),
     });
 
     this.eventPanel = new EventPanel({
@@ -1141,7 +1143,6 @@ export class GameScreen implements ScreenHandle {
       this.map?.setMoveOptions(options, {
         numbers: options.map((_, index) => index + 1),
         onSelect: (nodeId) => this.selectMoveOption(nodeId, true),
-        onConfirm: (nodeId) => this.confirmMoveOption(nodeId),
       });
     }
     this.moveOptionsHost.hidden = false;
@@ -1161,7 +1162,11 @@ export class GameScreen implements ScreenHandle {
           on: { click: () => this.selectMoveOption(option.nodeId) },
         },
         h('span', { class: 'move-chip-num', text: String(index + 1) }),
-        h('span', { class: 'move-chip-icon', text: squareIcon(option.nodeId), attrs: { 'aria-hidden': 'true' } }),
+        h(
+          'span',
+          { class: 'move-chip-kind', attrs: { style: `--kind-color:${moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').color}`, title: moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').label, 'aria-hidden': 'true' } },
+          moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue').symbol,
+        ),
         h(
           'span',
           { class: 'move-chip-main' },
@@ -1206,7 +1211,13 @@ export class GameScreen implements ScreenHandle {
     this.updateMoveSelectionUi();
   }
 
-  private selectMoveOption(nodeId: string, fromMap = false): void {
+  private selectMoveOption(nodeId: string | null, fromMap = false): void {
+    if (nodeId === null) {
+      this.moveSelection = null;
+      this.updateMoveSelectionUi();
+      if (this.state) this.updatePrimary(this.state, actorOf(this.state));
+      return;
+    }
     if (!this.moveOptionsCache.some((option) => option.nodeId === nodeId)) return;
     this.moveSelection = nodeId;
     if (!fromMap) this.map?.selectMoveOption(nodeId);
@@ -1352,12 +1363,20 @@ export class GameScreen implements ScreenHandle {
           canAct,
           ownerWillAct: this.myPlayerIds().includes(state.current),
           onBuy: (propertyId) => this.sendAction({ t: 'buy', propertyId }),
-          onBuyAll: () => {
+          onBuyAll: (propertyIds) => {
             this.bulkBuyCityId = cityId;
+            const current = this.state;
+            const actor = current?.players[current.current];
+            const currentCity = citiesById.get(cityId);
+            const fallback = current && actor && currentCity ? planBulkPurchase(currentCity, current, actor.cash) : null;
+            this.bulkBuyQueue = propertyIds.length > 0
+              ? [...propertyIds]
+              : fallback?.items.map((entry) => entry.property.id) ?? [];
             this.advanceBulkBuy();
           },
           onEndBuy: () => {
             this.bulkBuyCityId = null;
+            this.bulkBuyQueue = [];
             this.citySheet?.close();
             this.citySheet = null;
             this.citySheetCityId = null;
@@ -1375,6 +1394,7 @@ export class GameScreen implements ScreenHandle {
       }
     } else if (this.citySheet) {
       this.bulkBuyCityId = null;
+      this.bulkBuyQueue = [];
       if (this.citySheetBuyMode) {
         this.citySheet.close();
         this.citySheet = null;
@@ -1532,19 +1552,25 @@ export class GameScreen implements ScreenHandle {
     const player = state.players[state.current];
     if (!city || !player) {
       this.bulkBuyCityId = null;
+      this.bulkBuyQueue = [];
       return;
     }
-    const next = city.properties
-      .filter((property) => state.owner[property.id] === undefined)
-      .map((property) => ({ property, price: Math.round(purchasePrice(GAME_DATA, state, state.current, property.id)) }))
-      .filter((entry) => entry.price <= player.cash)
-      .sort((a, b) => a.price - b.price)[0];
-    if (!next) {
+    let propertyId: string | undefined;
+    while (this.bulkBuyQueue.length > 0) {
+      const candidate = this.bulkBuyQueue.shift();
+      if (!candidate) break;
+      const property = city.properties.find((entry) => entry.id === candidate);
+      if (!property || state.owner[candidate] !== undefined) continue;
+      propertyId = candidate;
+      break;
+    }
+    if (!propertyId) {
       this.bulkBuyCityId = null;
-      this.app.toasts.show('買える物件をまとめて購入しました', 'good');
+      this.bulkBuyQueue = [];
+      this.app.toasts.show('まとめて購入できる物件を買い切りました', 'good');
       return;
     }
-    this.sendAction({ t: 'buy', propertyId: next.property.id });
+    this.sendAction({ t: 'buy', propertyId });
   }
 
   private armPendingTimer(): void {
@@ -1726,6 +1752,29 @@ export class GameScreen implements ScreenHandle {
     }
     if (this.eventPanel.isOpen && narrow) top = Math.max(top, event.top - root.top + 6);
     map.setSafeArea({ top, right, bottom: bottomInset, left });
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const obstacles: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const addObstacle = (el: HTMLElement | null | undefined, visible = true): void => {
+      if (!el || !visible || el.hidden) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+      obstacles.push({
+        x: rect.left - canvasRect.left,
+        y: rect.top - canvasRect.top,
+        w: rect.width,
+        h: rect.height,
+      });
+    };
+    addObstacle(this.topbar);
+    addObstacle(this.rankingHost);
+    addObstacle(this.portraitHost);
+    addObstacle(this.moneyHost, !this.moneyHost.hidden);
+    addObstacle(this.bottomBar);
+    addObstacle(this.eventPanel.el, this.eventPanel.isOpen);
+    addObstacle(this.chat.panel, this.chat.isOpen);
+    addObstacle(this.emotes.panel, this.emotes.isOpen);
+    addObstacle(this.recenterButton, !this.recenterButton.hidden);
+    map.setLabelObstacles(obstacles);
   }
 
   private updateDestArrow(state: PublicState, actor: number | null, nodeId: string): void {
@@ -2075,7 +2124,7 @@ export class GameScreen implements ScreenHandle {
     control.onSkip(() => finish(true));
     this.rouletteTimer = window.setTimeout(() => finish(false), 1400);
     await promise;
-    await control.wait(480);
+    await control.wait(700);
     this.rouletteOverlay.hidden = true;
     this.rouletteOverlay.classList.remove('is-result');
     this.rouletteFinish = null;
@@ -2273,6 +2322,9 @@ export class GameScreen implements ScreenHandle {
         class: 'game-menu-room',
         text: `モード: ${this.session.mode === 'local' ? 'ローカル' : 'オンライン'} ・ ルーム ${this.session.roomId}`,
       }),
+      item('property', '物件情報', () => this.openCatalog()),
+      item('flag', '目的地', () => this.openDestination()),
+      item('globe', '全体地図', () => this.openMapViewDialog()),
       item('gear', '設定', () => this.app.openSettings()),
       item('help', '遊び方', () => this.app.openHelp()),
       item('trophy', 'クレジット', () => this.app.openCredits()),
@@ -3072,17 +3124,6 @@ function boardTrack(year: number): BgmName {
   return 'board_c';
 }
 
-function squareIcon(nodeId: string): string {
-  const node = nodesById.get(nodeId);
-  if (!node) return '•';
-  if (node.kind === 'city') return '🏙️';
-  if (node.kind === 'blue') return '💎';
-  if (node.kind === 'red') return '🔥';
-  if (node.kind === 'yellow') return '🃏';
-  if (node.kind === 'shop') return '🛒';
-  if (node.kind === 'warp') return '🌪️';
-  return '📰';
-}
 
 function portalNodeFor(realm: RealmId | 'world'): string | undefined {
   if (realm === 'world') return undefined;

@@ -56,7 +56,7 @@ export class OnlineEntryScreen implements ScreenHandle {
         inputmode: 'text',
         autocapitalize: 'characters',
         spellcheck: 'false',
-        placeholder: 'ABC123-K7Q9',
+        placeholder: 'ABC234-K7Q9',
         'aria-label': 'あいことば（6文字＋4文字）',
         autocomplete: 'off',
         value: options.initialRoom ?? '',
@@ -245,7 +245,7 @@ export class OnlineEntryScreen implements ScreenHandle {
     if (this.busy) return;
     const roomId = normalizeCode(this.roomInput.value);
     if (!ROOM_CODE.test(roomId)) {
-      this.feedback.textContent = 'あいことばは 6文字＋4文字のコードです（例: ABC123-K7Q9。I・L・O・0・1 は使いません）。';
+      this.feedback.textContent = 'あいことばは 6文字＋4文字のコードです（例: ABC234-K7Q9。I・L・O・0 は使いません）。';
       return;
     }
     this.setBusy(true, 'ルームを探しています…');

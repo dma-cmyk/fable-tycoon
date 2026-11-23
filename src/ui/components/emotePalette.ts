@@ -19,6 +19,7 @@ export interface EmotePaletteOptions {
   isMuted: (seat: number) => boolean;
   onSend: (emoteId: string, target: number | null) => void;
   playerCount: () => number;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const TABS: { category: EmoteCategory; label: string; icon: string }[] = [
@@ -99,6 +100,7 @@ export class EmotePalette {
   openPalette(): void {
     this.open = true;
     this.panel.classList.add('is-open');
+    this.options.onOpenChange?.(true);
     this.renderGrid();
     this.fab.setAttribute('aria-label', 'エモートをとじる');
     this.tick();
@@ -107,6 +109,7 @@ export class EmotePalette {
   close(): void {
     this.open = false;
     this.panel.classList.remove('is-open');
+    this.options.onOpenChange?.(false);
     this.fab.setAttribute('aria-label', 'エモートをひらく');
     this.targetHost.hidden = true;
     this.gridHost.hidden = false;

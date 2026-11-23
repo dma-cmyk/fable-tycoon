@@ -96,7 +96,11 @@ export class TitleScreen implements ScreenHandle {
       text: 'はじめてのタップで音声が有効になります ・ 世界は横につながっています',
     });
 
-    this.el.append(keyart, shade, clouds, parade, mobileSky, mobileLogo, logo, primary, secondary, footnote);
+    const desktopLogo = h('img', {
+      class: 'title-logo-desktop',
+      attrs: { src: assetUrl('assets/ui/logo.webp'), alt: '', draggable: 'false' },
+    });
+    this.el.append(keyart, shade, clouds, parade, mobileSky, mobileLogo, desktopLogo, logo, primary, secondary, footnote);
 
     const startBgm = () => {
       Audio.bgm('title');

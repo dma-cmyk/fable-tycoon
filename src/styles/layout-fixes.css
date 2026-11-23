@@ -1667,3 +1667,402 @@
     flex-wrap: nowrap;
   }
 }
+
+
+/* Title: one generated logo asset on both PC and phone; parade clear of the controls. */
+.title-logo-desktop {
+  display: block;
+  position: absolute;
+  z-index: 7;
+  top: clamp(10px, 2.4vh, 34px);
+  left: clamp(14px, 3.4vw, 58px);
+  width: clamp(380px, 45vw, 720px);
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.4));
+}
+
+.title-logo-desktop + .title-logo {
+  display: none !important;
+}
+
+@media (max-width: 899px) {
+  .title-logo-desktop {
+    display: none;
+  }
+
+  .title-logo-mobile {
+    width: 92vw;
+    top: calc(0px + var(--safe-top));
+  }
+
+  .title-parade {
+    height: 78px;
+    bottom: calc(172px + var(--safe-bottom));
+    opacity: 0.9;
+  }
+
+  .parade-char {
+    width: calc(var(--size, 60px) * 0.78);
+    height: calc(var(--size, 60px) * 0.78);
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .title-logo-desktop {
+    width: clamp(260px, 32vw, 420px);
+  }
+
+  .title-parade {
+    height: 72px;
+    bottom: 96px;
+  }
+}
+
+/* Icon frames: card type + industry art share one 24–28px frame. */
+.card-item-icon,
+.shop-card-icon-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(120, 95, 50, 0.25);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.card-item-icon img,
+.shop-card-icon-mark img,
+.property-industry-chip img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+}
+
+.property-industry-chip {
+  width: 34px;
+  height: 34px;
+  padding: 1px;
+  gap: 0;
+}
+
+.property-industry-chip-label {
+  display: none;
+}
+
+/* Secondary buttons: navy, 1px white-22 border, shallow shadow. */
+.btn-ghost,
+.btn-red,
+.hud-secondary,
+.chat-close,
+.emote-close,
+.modal-close,
+.icon-btn,
+.top-action {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #162b52;
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.3);
+}
+
+.btn-red {
+  background: #6e1b28;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.btn-ghost {
+  color: #e6efff;
+}
+
+.btn-gold.city-buy-all,
+.city-buy-all {
+  background: #6e1b28;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.3);
+}
+
+.rank-row:hover,
+.lobby-seat:hover,
+.shop-card:hover {
+  border-color: rgba(255, 210, 63, 0.6);
+}
+
+/* Shop uses the same navy chrome instead of the separate gold boutique. */
+.shop-card {
+  box-shadow: 0 2px 8px rgba(7, 18, 37, 0.16);
+}
+
+.shop-card .btn-gold {
+  box-shadow: 0 2px 0 #a45d00;
+}
+
+/* Landscape density: 12px labels, 13px turn/destination, 14px money. */
+@media (max-height: 520px) and (min-width: 700px) {
+  .hud-icon .icon-btn-label,
+  .hud-icons .hud-comm-button .comm-fab-label,
+  .top-actions .icon-btn-label {
+    font-size: 12px;
+  }
+
+  .game-year-chip,
+  .status-chip,
+  .dest-chip {
+    font-size: 13px !important;
+  }
+
+  .dest-distance {
+    font-size: 12px !important;
+  }
+
+  .player-plate-sub {
+    display: inline !important;
+    font-size: 10px;
+  }
+
+  .player-plate-cash {
+    font-size: 15px !important;
+  }
+
+  .money-label {
+    font-size: 11px !important;
+  }
+
+  .money-value,
+  .money-cell-net .money-value {
+    font-size: 14px !important;
+  }
+}
+
+/* Narrow landscape: collapse property/destination/map into その他 to keep money + destination readable. */
+@media (max-height: 520px) and (min-width: 700px) and (max-width: 900px) {
+  .hud-secondary {
+    display: none;
+  }
+
+  .hud-icons {
+    gap: 2px;
+  }
+}
+
+
+/* PC event: title stays visible, art retains height, choices scroll with the intro. */
+@media (min-width: 900px) {
+  .event-open .money-panel,
+  .event-open .game-minimap {
+    display: none;
+  }
+
+  .event-panel {
+    top: calc(84px + var(--safe-top));
+    bottom: calc(78px + var(--safe-bottom));
+    width: min(470px, 38vw);
+  }
+
+  .event-footnote {
+    display: none;
+  }
+
+  .event-hero {
+    height: 116px;
+    min-height: 96px;
+  }
+
+  .event-speaker {
+    margin: 6px 10px;
+    padding: 7px 9px;
+  }
+
+  .event-meta {
+    margin: 4px 10px 0;
+  }
+
+  .event-meta-toggle {
+    min-height: 36px;
+    padding: 3px 10px;
+    font-size: 10.5px;
+  }
+
+  .event-choice-area {
+    margin: 6px 10px 8px;
+    padding-top: 6px;
+  }
+
+  .event-choice {
+    min-height: 52px;
+    padding: 6px 9px;
+  }
+
+  .event-choice-label {
+    font-size: 14px;
+  }
+
+  .event-choice-detail {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .event-panel-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .event-hero {
+    flex: 0 0 auto;
+    height: 128px;
+    min-height: 96px;
+  }
+
+  .event-hero.no-image {
+    height: 84px;
+    min-height: 84px;
+  }
+
+  .event-title {
+    font-size: 19px;
+    line-height: 1.2;
+    bottom: 9px;
+  }
+
+  .event-choice-area {
+    position: static;
+    flex: 0 0 auto;
+    margin: 8px 10px 4px;
+    padding: 8px 2px 2px;
+    border-top: 1px solid var(--panel-line);
+    background: transparent;
+  }
+
+  .event-choice {
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .event-choice-label {
+    font-size: 15px;
+  }
+
+  .event-choice-detail {
+    font-size: 13px;
+    line-height: 1.45;
+    gap: 2px;
+  }
+
+  .event-footnote {
+    font-size: 9.5px;
+  }
+}
+
+/* Masks the canvas press highlight on secondary controls; only gold carries depth. */
+.hud-icon.icon-btn:active:not(:disabled),
+.top-action.icon-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.btn:not(.btn-gold):not(.btn-red) {
+  background: #12284f;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.28);
+  color: #eef5ff;
+}
+
+.btn-gold {
+  border-width: 2.5px;
+}
+
+/* Option list kind chip uses the exact same color/symbol as MapView pins. */
+.move-chip-kind {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1.5px solid #fff;
+  background: var(--kind-color, #2f6fa8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.move-chip.is-selected .move-chip-kind {
+  border-color: #6a4800;
+}
+
+/* Event: the choice area now lives inside the panel scroll. */
+.event-panel-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.event-choice-area {
+  position: static;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 899px) {
+  .event-panel {
+    overflow: hidden;
+    touch-action: auto;
+  }
+
+  .event-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .event-choice-area {
+    margin: 8px 0 0;
+    padding: 9px 12px calc(12px + var(--safe-bottom));
+  }
+
+  .event-choice-risk-title {
+    color: #8f1f1a;
+    font-weight: 800;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .money-head {
+    display: flex;
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+  }
+
+  .money-head .avatar {
+    --avatar-size: 24px !important;
+    border-width: 1.5px;
+  }
+
+  .money-head-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .money-name {
+    font-size: 11px;
+  }
+
+  .money-role {
+    display: none;
+  }
+
+  .money-panel {
+    width: 268px;
+  }
+}
+
+.game-chips .steps-counter[hidden] {
+  display: none !important;
+}

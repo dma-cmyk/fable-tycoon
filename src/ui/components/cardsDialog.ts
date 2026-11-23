@@ -1,6 +1,6 @@
 import type { PublicState } from '../../core/engine';
 import type {} from '../../core/types';
-import { h, type ModalHandle, type ModalHost } from '../dom';
+import { h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
 import { cardsById } from '../format';
 import { cardVehicle, vehicleBadge } from '../vehicles';
 
@@ -72,7 +72,7 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
             { class: 'card-item-top' },
             cardVehicle(def.id)
               ? vehicleBadge(cardVehicle(def.id)!, 30)
-              : h('span', { class: 'card-item-icon', text: KIND_ICON[def.kind], attrs: { 'aria-hidden': 'true' } }),
+              : uiIcon(CARD_KIND_ART[def.kind][0], CARD_KIND_ART[def.kind][1], 'card-item-icon'),
             h('span', { class: 'card-item-name', text: def.name }),
             count > 1 ? h('span', { class: 'badge', text: `×${count}` }) : null,
             h('span', { class: 'badge badge-kind', text: KIND_LABEL[def.kind] }),
@@ -112,10 +112,10 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
   });
 }
 
-const KIND_ICON = {
-  move: '🚄',
-  money: '💴',
-  attack: '⚔️',
-  defense: '🛡️',
-  special: '✨',
-} as const;
+const CARD_KIND_ART: Record<keyof typeof KIND_LABEL, [string, string]> = {
+  move: ['flag', '🚩'],
+  money: ['moneybag', '💰'],
+  attack: ['treasure', '⚔️'],
+  defense: ['property', '🛡️'],
+  special: ['keyart', '✨'],
+};

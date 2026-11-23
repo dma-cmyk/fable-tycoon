@@ -27,7 +27,7 @@ export interface CitySheetOptions {
   /** This client owns the actor, even if fx are still playing; forces a locked purchase sheet. */
   ownerWillAct?: boolean;
   onBuy: (propertyId: string) => void;
-  onBuyAll?: () => void;
+  onBuyAll?: (propertyIds: string[]) => void;
   onEndBuy: () => void;
   onClose?: () => void;
 }
@@ -35,6 +35,44 @@ export interface CitySheetOptions {
 export interface CitySheetHandle {
   update(state: PublicState, canAct: boolean): void;
   close(): void;
+}
+
+export interface BulkPurchasePlan {
+  items: { property: Property; price: number }[];
+  total: number;
+  vacantCount: number;
+  allTotal: number;
+  shortfall: number;
+}
+
+/** Cheapest-first purchases that fit the actor's cash, shared by label and action. */
+export function planBulkPurchase(city: CityLike, state: PublicState, cash: number): BulkPurchasePlan {
+  const priced = city.properties
+    .filter((property) => state.owner[property.id] === undefined)
+    .map((property) => ({
+      property,
+      price: Math.round(purchasePrice(GAME_DATA, state, state.current, property.id)),
+    }))
+    .sort((a, b) => a.price - b.price);
+  const allTotal = priced.reduce((sum, entry) => sum + entry.price, 0);
+  let remaining = Math.max(0, cash);
+  const items: { property: Property; price: number }[] = [];
+  for (const entry of priced) {
+    if (entry.price > remaining) continue;
+    items.push(entry);
+    remaining -= entry.price;
+  }
+  return {
+    items,
+    total: items.reduce((sum, entry) => sum + entry.price, 0),
+    vacantCount: priced.length,
+    allTotal,
+    shortfall: Math.max(0, allTotal - cash),
+  };
+}
+
+interface CityLike {
+  properties: Property[];
 }
 
 export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
@@ -262,15 +300,10 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       if (!city) return;
       footer.replaceChildren();
       if (options.buyMode) {
-        const vacant = city.properties.filter((property) => state.owner[property.id] === undefined);
-        const priced = vacant.map((property) => ({
-          property,
-          price: Math.round(purchasePrice(GAME_DATA, state, state.current, property.id)),
-        }));
-        const affordable = priced.filter((entry) => entry.price <= actorCash);
-        const bulkTotal = affordable.reduce((sum, entry) => sum + entry.price, 0);
-        const allTotal = priced.reduce((sum, entry) => sum + entry.price, 0);
-        const shortfall = Math.max(0, allTotal - actorCash);
+        const plan = planBulkPurchase(city, state, actorCash);
+        const vacantCount = plan.vacantCount;
+        const allTotal = plan.allTotal;
+        const shortfall = plan.shortfall;
         footer.append(
           h(
             'div',
@@ -278,24 +311,26 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
             h('span', { class: 'muted', text: '所持金' }),
             h('strong', { class: actorCash < 0 ? 'money-negative' : '', text: formatOku(actorCash) }),
             !canAct ? h('span', { class: 'badge', text: '他のプレイヤーの手番' }) : null,
-            canAct && vacant.length > 0
+            canAct && vacantCount > 0
               ? h('span', {
                   class: 'city-bulk-summary',
-                  text: `空き${vacant.length}件 合計 ${formatOku(allTotal)}${shortfall > 0 ? ` ・ 不足 ${formatOku(shortfall)}` : ''}`,
+                  text: shortfall > 0
+            ? `全${vacantCount}件 ${formatOku(allTotal)} ・ 不足 ${formatOku(shortfall)}`
+            : `全${vacantCount}件 ${formatOku(allTotal)}`,
                 })
               : null,
           ),
         );
         if (canAct) {
-          if (affordable.length > 1 && options.onBuyAll) {
+          if (plan.items.length > 1 && options.onBuyAll) {
             const buyAll = h('button', {
               class: 'btn btn-red city-buy-all',
-              text: `🛒 まとめて買う（${affordable.length}件・${formatOku(bulkTotal)}）`,
+              text: `🛒 まとめて買う（${plan.items.length}件・${formatOku(plan.total)}）`,
               attrs: { type: 'button' },
               on: {
                 click: (event) => {
                   (event.currentTarget as HTMLButtonElement).disabled = true;
-                  options.onBuyAll?.();
+                  options.onBuyAll?.(plan.items.map((entry) => entry.property.id));
                 },
               },
             });

@@ -17,6 +17,7 @@ export interface ChatPanelOptions {
   isMuted: (seat: number) => boolean;
   showChat: () => boolean;
   onIncoming?: (line: ChatLine) => void;
+  onOpenChange?: (open: boolean) => void;
   class?: string;
 }
 
@@ -186,6 +187,7 @@ export class ChatPanel {
   openPanel(): void {
     this.open = true;
     this.panel.classList.add('is-open');
+    this.options.onOpenChange?.(true);
     this.fab.setAttribute('aria-label', 'チャットをとじる');
     this.unread = 0;
     this.updateUnread();
@@ -203,6 +205,7 @@ export class ChatPanel {
     this.panel.style.removeProperty('--kb-inset');
     this.open = false;
     this.panel.classList.remove('is-open');
+    this.options.onOpenChange?.(false);
     this.fab.setAttribute('aria-label', 'チャットをひらく');
     this.input.blur();
   }
