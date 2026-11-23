@@ -12,7 +12,6 @@ import {
   currentPrice,
   findProperty,
   incomeMultiplier,
-  monopolises,
   netWorth,
   ownCount,
   ownedProperties,
@@ -49,7 +48,7 @@ export function cpuDecide(data: GameData, state: GameState): Action {
     case 'turn_start':
       return chooseCard(data, state, player) ?? { t: 'roll' };
     case 'choose_dest':
-      return { t: 'move', nodeId: chooseMove(data, state, player, state.phase.options) };
+      return { t: 'move', nodeId: chooseMove(data, state, state.phase.options) };
     case 'buy':
       return chooseBuy(data, state, player) ?? { t: 'end_buy' };
     case 'shop':
@@ -136,15 +135,14 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
   if (hand.has('piper_pass') && state.piper.holder === player.id && others.length > 0) {
     return { t: 'use_card', cardId: 'piper_pass' };
   }
-
   if (level >= 3) {
     const takeoverOptions = cpuTakeoverOptions(data, state, player);
-    if (hand.has('takeover') && takeoverOptions.length > 0) {
+    const completesMonopoly = takeoverOptions.some((option) => {
+      const ref = findProperty(data, option.slice(2));
+      return ref !== null && ownCount(data, state, player.id, ref.cityId) === ref.city.properties.length - 1;
+    });
+    if (hand.has('takeover') && completesMonopoly) {
       return { t: 'use_card', cardId: 'takeover' };
-    }
-    const richestOther = others.slice().sort((a, b) => netWorth(data, state, b.id) - netWorth(data, state, a.id))[0];
-    if (hand.has('stop') && richestOther && netWorth(data, state, richestOther.id) > netWorth(data, state, player.id)) {
-      return { t: 'use_card', cardId: 'stop' };
     }
   }
 
@@ -190,11 +188,9 @@ function cpuTakeoverOptions(data: GameData, state: GameState, player: PlayerStat
 function chooseMove(
   data: GameData,
   state: GameState,
-  player: PlayerState,
   options: MoveOption[],
 ): string {
   const destNode = nodeForCity(data, state.destination);
-  const graph = getGraph(data);
   interface Scored {
     option: MoveOption;
     score: number;
@@ -202,19 +198,6 @@ function chooseMove(
   const scored: Scored[] = options.map((option) => {
     let score = destNode ? effectiveDistance(data, option.nodeId, destNode) : 0;
     if (!Number.isFinite(score)) score = 9999;
-    if (player.cpuLevel >= 3) {
-      if (state.piper.holder === player.id) {
-        const passesOther = option.path.some((nodeId) =>
-          state.players.some((p) => p.id !== player.id && p.nodeId === nodeId),
-        );
-        if (passesOther) score -= 4;
-      }
-      const finalNode = graph.nodes.get(option.nodeId);
-      if (finalNode?.kind === 'city' && finalNode.cityId) {
-        const owned = ownCount(data, state, player.id, finalNode.cityId);
-        if (owned > 0 && !monopolises(data, state, player.id, finalNode.cityId)) score -= 3;
-      }
-    }
     return { option, score };
   });
   scored.sort((a, b) => {
@@ -244,8 +227,9 @@ function chooseBuy(data: GameData, state: GameState, player: PlayerState): Actio
   }
 
   const currentOwned = ownCount(data, state, player.id, city.id);
-  const completing = player.cpuLevel >= 3 && currentOwned > 0;
-  const reserve = completing ? player.cash * 0.1 : player.cash * 0.3;
+  const completingMonopoly =
+    player.cpuLevel >= 3 && currentOwned === city.properties.length - 1;
+  const reserve = completingMonopoly ? player.cash * 0.15 : player.cash * 0.3;
   const remainingSettlements = Math.max(1, state.config.years - state.year + 1);
   const sorted = available.slice().sort((a, b) => {
     const score = (p: typeof a): number => {
@@ -469,7 +453,9 @@ function propertyScore(data: GameData, state: GameState, playerId: number, prope
   if (!ref) return -Infinity;
   const cost = Math.max(1, currentPrice(data, state, propertyId) * 1.5);
   let score = (ref.property.yieldPct * ref.property.price) / cost;
-  if (playerId >= 0 && ownCount(data, state, playerId, ref.cityId) > 0) score += 3;
+  const owned = ownCount(data, state, playerId, ref.cityId);
+  if (owned > 0) score += 3;
+  if (owned === ref.city.properties.length - 1) score += 1000;
   return score;
 }
 

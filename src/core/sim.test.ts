@@ -121,11 +121,11 @@ realDescribe('real-data balance (FABLE_SIM=1)', () => {
       );
 
       expect(all).toHaveLength(SEEDS);
-      expect(goalsPerGame).toBeGreaterThan(0);
+      expect(goalsPerGame).toBeGreaterThanOrEqual(5);
+      expect(goalsPerGame).toBeLessThanOrEqual(8);
+      expect(byLevel(3)).toBeGreaterThanOrEqual(byLevel(2));
+      expect(byLevel(2)).toBeGreaterThanOrEqual(byLevel(1));
       expect(Number.isFinite(assignmentDistance)).toBe(true);
-      if (goalsPerGame < 5 || goalsPerGame > 8) {
-        console.log(`WARN: goals/game ${goalsPerGame} is outside the 5–8 target.`);
-      }
     },
     600_000,
   );

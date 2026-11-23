@@ -60,13 +60,13 @@ function moveOption(state: GameState, fromNodeId: string, path: string[], destin
 }
 
 describe('destination range', () => {
-  it('uses world cities in the 20–65 band (fixture widens to 20+)', () => {
+  it('uses world cities in the 18–50 band', () => {
     for (let seed = 1; seed <= 20; seed += 1) {
       const state = createGame(data, config([1, 1], 3, seed)).state;
       const city = data.cities.find((c) => c.id === state.destination);
       expect(city?.realm).toBeUndefined();
-      expect(state.destinationStartDistance ?? 0).toBeGreaterThanOrEqual(20);
-      expect(state.destinationStartDistance ?? 0).toBeLessThanOrEqual(65);
+      expect(state.destinationStartDistance ?? 0).toBeGreaterThanOrEqual(18);
+      expect(state.destinationStartDistance ?? 0).toBeLessThanOrEqual(50);
     }
   });
 
