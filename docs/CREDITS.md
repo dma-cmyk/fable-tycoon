@@ -87,3 +87,25 @@ BGM は Kevin MacLeod (incompetech.com) の楽曲を Creative Commons: By Attrib
   ダウンロード日: 2026-11-23
 
 ライセンス確認: https://incompetech.com/music/royalty-free/licenses/ および https://incompetech.com/music/royalty-free/faq.html （2026-11-23 取得）。
+
+## 地図データ
+
+ワールドマップの地形・水系・国境・ラベルは以下のパブリックドメイン / オープンライセンスのデータを加工して生成しています（`tools/build-map-art.py`）。
+
+- **Natural Earth II shaded relief** `NE2_50M_SR_W`（地形テクスチャの原画）
+  出典: https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-2/
+  ダウンロード: https://naciscdn.org/naturalearth/50m/raster/NE2_50M_SR_W.zip
+  ライセンス: Public Domain（Natural Earth）
+  取得日: 2026-11-23
+- **Natural Earth Vector** 50m: `ne_50m_rivers_lake_centerlines`, `ne_50m_lakes`, `ne_50m_land`, `ne_50m_admin_0_countries` / 10m: `ne_10m_lakes`
+  出典: https://github.com/nvkelso/natural-earth-vector
+  ライセンス: Public Domain（Natural Earth）
+  取得日: 2026-11-23
+- **world-atlas** `countries-50m`（国境の共有辺メッシュ。TopoJSON 版 Natural Earth）
+  出典: https://github.com/topojson/world-atlas
+  ライセンス: ISC
+  取得日: 2026-11-23
+
+加工内容: Miller 図法 + ゲーム用デフォルメワープへの再投影、地形のイラスト化（パレット量子化・起伏・手描き風ノイズ）、河川・湖・国境の簡略化と継ぎ目分割、日本語ラベルの配置。生成物は `public/assets/map/` と `src/data/warp.json`。詳細は `docs/MAP-ART.md`。
+
+Natural Earth は「public domain」ですが、出典表示を推奨しています。本プロジェクトではこの節をもって出典表示とします。
