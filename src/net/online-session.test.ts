@@ -6,13 +6,19 @@ import { Aedes } from 'aedes';
 import type { Action, GameState } from '../core/types';
 import { actorOf, cpuDecide } from '../core/engine';
 import { GAME_DATA } from '../data/index';
-import type { ServerMsg } from './protocol';
+import { MqttTransport } from './p2p/transport';
+import { generateIdentity } from './p2p/identity';
+import { PROTOCOL_VERSION } from './protocol';
+import type { PublicState, ServerMsg } from './protocol';
 import type { Session } from './session-types';
 import {
+  checkpointHostForTests,
   configureNetworkForTests,
+  isNewerStateOrder,
   createOnlineRoom,
   joinOnlineRoom,
   killSessionForTests,
+  resumeHostForTests,
   roomExists,
   transportInfo,
 } from './online-session';
@@ -31,12 +37,12 @@ interface Waiter {
 class Peer {
   readonly session: Session;
   readonly label: string;
-  state: GameState | null = null;
+  state: PublicState | null = null;
   seq = 0;
   seat: number | null = null;
   lastSentSeq = -1;
   history: ServerMsg[] = [];
-  onState: ((state: GameState, seq: number) => void) | null = null;
+  onState: ((state: PublicState, seq: number) => void) | null = null;
   private waiters: Waiter[] = [];
   private readonly autoPlay: boolean;
 
@@ -97,7 +103,7 @@ class Peer {
         const actor = actorOf(msg.state);
         if (actor === this.seat && this.lastSentSeq !== msg.seq) {
           this.lastSentSeq = msg.seq;
-          const action: Action = cpuDecide(GAME_DATA, msg.state);
+          const action: Action = cpuDecide(GAME_DATA, msg.state as GameState);
           this.session.send({ t: 'action', seq: msg.seq, action });
         }
       }
@@ -190,7 +196,7 @@ describe('online P2P over an in-process MQTT broker', () => {
     const host = new Peer(hostSession, 'host', true);
     active.push(host);
     expect(hostSession.mode).toBe('online');
-    expect(hostSession.roomId).toMatch(/^[A-Z0-9]{6}$/);
+    expect(hostSession.roomId).toMatch(/^[A-Z0-9]{6}-[A-Z0-9]{4}$/);
     expect(await roomExists(hostSession.roomId)).toBe(true);
 
     const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0, 30_000, 'host seat welcome');
@@ -209,19 +215,46 @@ describe('online P2P over an in-process MQTT broker', () => {
     ]);
     await takeSeats(host, [guest1, guest2, guest3], 1);
 
+    // A signed hello whose reconnect token does not match the signing key must not get a welcome.
+    const rogue = new MqttTransport('rogue-key', {
+      identity: await generateIdentity(),
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    let rogueWelcomed = false;
+    rogue.onMessage((_from, message) => {
+      if ('t' in message && message.t === 'welcome') {
+        rogueWelcomed = true;
+      }
+    });
+    await rogue.connect(hostSession.roomId);
+    await rogue.send('test-host', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: hostSession.roomId,
+      name: 'rogue',
+      token: 'not-the-public-key',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(rogueWelcomed).toBe(false);
+    await rogue.close();
+
     hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
     const snapshots = [guest1, guest2, guest3].map((peer) =>
-      peer.waitFor((msg) => msg.t === 'snapshot', 30_000, 'start snapshot'),
+      peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 30_000, 'start state'),
     );
     hostSession.send({ t: 'start' });
     await Promise.all(snapshots);
 
     const killGuestGate = deferred();
     const killHostGate = deferred();
-    const settled = Promise.withResolvers<GameState>();
+    const settled = Promise.withResolvers<PublicState>();
     let finished = false;
     let guest2Rejoined = false;
     let hostKilled = false;
+    let hostCheckpoint: ReturnType<typeof checkpointHostForTests> = null;
     const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 60_000);
 
     function observe(peer: Peer): void {
@@ -246,7 +279,7 @@ describe('online P2P over an in-process MQTT broker', () => {
       active.push(guest2);
       observe(guest2);
       await guest2.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 2, 30_000, 'rejoin welcome');
-      await guest2.waitFor((msg) => msg.t === 'snapshot', 30_000, 'rejoin snapshot');
+      await guest2.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 30_000, 'rejoin snapshot');
       guest2Rejoined = true;
     })();
 
@@ -254,13 +287,38 @@ describe('online P2P over an in-process MQTT broker', () => {
       await rejoin;
       await killHostGate.promise;
       if (finished) return;
+      hostCheckpoint = checkpointHostForTests(host.session);
       host.stop();
       hostKilled = true;
     })();
 
-    const finalState = await settled.promise;
     await killHost;
     await rejoin;
+
+    // Let the guests elect the next host before the old host comes back.
+    await guest1.waitFor(
+      (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
+      15_000,
+      'new host elected',
+    );
+
+    // A returning old host must see the newer generation and step down to guest instead of
+    // forking a second authoritative room.
+    let returned: Peer | null = null;
+    if (hostCheckpoint) {
+      const returnedSession = resumeHostForTests(hostCheckpoint);
+      returned = new Peer(returnedSession, 'returned-host', true);
+      active.push(returned);
+      await returned.waitFor(
+        (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
+        20_000,
+        'returned host sees generation 2',
+      );
+      expect(checkpointHostForTests(returnedSession)).toBeNull();
+    }
+
+    const finalState = await settled.promise;
+    expect(hostCheckpoint).not.toBeNull();
 
     const remaining = [guest1, guest2, guest3];
     const finalSeen = remaining.map((peer) =>
@@ -282,6 +340,13 @@ describe('online P2P over an in-process MQTT broker', () => {
     expect(states[0]).toBe(states[1]);
     expect(states[0]).toBe(states[2]);
 
+    for (const peer of remaining) {
+      const seqs = peer.history
+        .filter((msg): msg is Extract<ServerMsg, { t: 'update' }> => msg.t === 'update')
+        .map((msg) => msg.seq);
+      for (let i = 1; i < seqs.length; i += 1) expect(seqs[i]).toBeGreaterThan(seqs[i - 1]);
+    }
+
     const rankings = remaining.map((peer) => {
       const state = peer.state;
       return state && state.phase.t === 'game_over' ? state.phase.ranking.join(',') : '';
@@ -299,6 +364,14 @@ describe('online P2P over an in-process MQTT broker', () => {
     const elapsed = Date.now() - startedAt;
     console.log(`[p2p-e2e] 1-year 3-guest game (host migrated) in ${elapsed}ms, final seq ${guest1.seq}`);
   }, 90_000);
+
+  it('orders host state by generation then seq', () => {
+    expect(isNewerStateOrder(1, 5, 1, 5)).toBe(false);
+    expect(isNewerStateOrder(1, 5, 1, 4)).toBe(false);
+    expect(isNewerStateOrder(1, 5, 1, 6)).toBe(true);
+    expect(isNewerStateOrder(1, 999, 2, 1)).toBe(true);
+    expect(isNewerStateOrder(2, 1, 1, 999)).toBe(false);
+  });
 
   it.skipIf(!PUBLIC)('smoke: public brokers accept an encrypted room', async () => {
     configureNetworkForTests({});

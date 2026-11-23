@@ -7,7 +7,7 @@
 import type { PlayerSetup } from '../core/types';
 import { GAME_DATA } from '../data/index';
 import type { ChatLine, ClientMsg, LobbyView, ServerMsg } from './protocol';
-import { PROTOCOL_VERSION } from './protocol';
+import { ALLOWED_YEARS, PROTOCOL_VERSION } from './protocol';
 import type { ConnectionState, Session } from './session-types';
 import { CPU_MOVE_DELAY_MS, RoomController } from './room';
 import type { RoomDeps, TimerHandle } from './room';
@@ -148,7 +148,7 @@ export class LocalSession implements Session {
     if (!setup.players.some((player) => !player.isCpu)) {
       throw new Error('人間のプレイヤーが 1 人以上必要です');
     }
-    if (!Number.isInteger(setup.years) || setup.years < 1 || setup.years > 10) {
+    if (!ALLOWED_YEARS.includes(setup.years as (typeof ALLOWED_YEARS)[number])) {
       throw new Error('年数が不正です');
     }
     if (new Set(setup.players.map((player) => player.characterId)).size !== setup.players.length) {
@@ -219,7 +219,7 @@ export class LocalSession implements Session {
 
     controller.message(hostConn, {
       t: 'settings',
-      settings: { years: setup.years, turnSeconds: 0, visibility: 'private' },
+      settings: { years: setup.years as (typeof ALLOWED_YEARS)[number], turnSeconds: 0, visibility: 'private' },
     });
     controller.message(hostConn, { t: 'start' });
     return session;
@@ -279,6 +279,14 @@ export class LocalSession implements Session {
 
   mySeats(): number[] {
     return [...this.humanSeatList];
+  }
+
+  seatToPlayer(seat: number): number | null {
+    return this.controller.seatToPlayer(seat);
+  }
+
+  playerToSeat(playerId: number): number | null {
+    return this.controller.playerToSeat(playerId);
   }
 
   lobby(): LobbyView | null {

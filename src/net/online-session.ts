@@ -5,7 +5,7 @@
 // keeps a public snapshot; if the host disappears for 10 seconds the lowest-index connected human
 // seat adopts the room and continues with a fresh crypto-random rng seed.
 
-import type { Action, GameData, GameState } from '../core/types';
+import type { Action, GameData } from '../core/types';
 import type { RoomDeps } from './room';
 import { RoomController } from './room';
 import type { RoomPublicSnapshot } from './room';
@@ -13,6 +13,7 @@ import type {
   ChatLine,
   ClientMsg,
   LobbyView,
+  PublicState,
   Report,
   ServerMsg,
 } from './protocol';
@@ -20,9 +21,12 @@ import { COMM, PROTOCOL_VERSION } from './protocol';
 import type { ConnectionState, Session } from './session-types';
 import { GAME_DATA } from '../data/index';
 import { MqttTransport, DEFAULT_BROKERS, isP2PControl } from './p2p/transport';
+import { loadIdentity, generateIdentity } from './p2p/identity';
+import type { ClientIdentity } from './p2p/identity';
 import type { P2PControl, P2PMessage, TransportStatus } from './p2p/transport';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const REPORTS_KEY = 'fable.reports';
 const CLIENT_KEY = 'fable.client';
 const GUEST_SAVE_KEY = 'fable.online.guest';
 const HOST_SAVE_KEY = 'fable.online.host';
@@ -125,10 +129,12 @@ function clientIdFor(name: string): string {
 }
 
 function generateRoomId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
   let id = '';
   for (let i = 0; i < 6; i += 1) id += ROOM_ALPHABET[bytes[i] % ROOM_ALPHABET.length];
-  return id;
+  let secret = '';
+  for (let i = 6; i < 10; i += 1) secret += ROOM_ALPHABET[bytes[i] % ROOM_ALPHABET.length];
+  return `${id}-${secret}`;
 }
 
 function normalizeRoomId(raw: string): string {
@@ -136,7 +142,7 @@ function normalizeRoomId(raw: string): string {
 }
 
 function isValidRoomId(roomId: string): boolean {
-  return /^[A-Z0-9]{6}$/.test(roomId);
+  return /^(?:[A-Z0-9]{6}|[A-Z0-9]{6}-[A-Z0-9]{4})$/.test(roomId);
 }
 
 // ---------------------------------------------------------------- type guards
@@ -161,6 +167,22 @@ function isClientMsg(value: P2PMessage): value is ClientMsg {
     default:
       return false;
   }
+}
+
+export function isNewerStateOrder(
+  currentGeneration: number,
+  currentSeq: number,
+  incomingGeneration: number,
+  incomingSeq: number,
+): boolean {
+  if (incomingGeneration < currentGeneration) return false;
+  if (incomingGeneration > currentGeneration) return true;
+  return incomingSeq > currentSeq;
+}
+
+function genOf(message: ServerMsg): number | undefined {
+  if ('gen' in message && typeof message.gen === 'number') return message.gen;
+  return undefined;
 }
 
 function isServerMsg(value: P2PMessage): value is ServerMsg {
@@ -188,6 +210,7 @@ interface HostSave {
   roomId: string;
   name: string;
   snapshot: string;
+  generation: number;
   savedAt: number;
 }
 
@@ -196,12 +219,19 @@ interface GuestSave {
   name: string;
 }
 
+export interface HostCheckpoint {
+  roomId: string;
+  name: string;
+  snapshot: string;
+  generation: number;
+}
+
 interface Shadow {
   lobby: LobbyView | null;
-  state: GameState | null;
+  state: PublicState | null;
   seq: number;
   chat: ChatLine[];
-  seatTokens: Record<string, string>;
+  seatKeys: Record<string, string>;
   hostSeat: number | null;
   lastFx: RoomPublicSnapshot['lastFx'];
   deadline: number | null;
@@ -213,7 +243,7 @@ function emptyShadow(): Shadow {
     state: null,
     seq: 0,
     chat: [],
-    seatTokens: {},
+    seatKeys: {},
     hostSeat: null,
     lastFx: [],
     deadline: null,
@@ -231,6 +261,7 @@ function parseHostSave(raw: string | null): HostSave | null {
     roomId: parsed.roomId,
     name: parsed.name,
     snapshot: parsed.snapshot,
+    generation: 'generation' in parsed && typeof parsed.generation === 'number' ? parsed.generation : 1,
     savedAt: 'savedAt' in parsed && typeof parsed.savedAt === 'number' ? parsed.savedAt : 0,
   };
 }
@@ -260,7 +291,12 @@ export class OnlineSession implements Session {
   private loopbackId = 'loopback';
 
   private connectionState: ConnectionState = 'connecting';
+  private identity: ClientIdentity | null = null;
   private seat: number | null = null;
+  private generation = 0;
+  private hostKeyFingerprint: string | null = null;
+  private hostBroker: string | null = null;
+  private peerKeys = new Map<string, string>();
   private hostPeerId: string | null = null;
   private hostSeat: number | null = null;
   private lastHostHeartbeatAt = 0;
@@ -274,6 +310,9 @@ export class OnlineSession implements Session {
   private heartbeatTimer: unknown = null;
   private watchdogTimer: unknown = null;
   private saveTimer: unknown = null;
+  private welcomeTimer: unknown = null;
+  private brokerAttempt = 0;
+  private timersStarted = false;
   private closed = false;
   private crashed = false;
   private promoting = false;
@@ -308,10 +347,26 @@ export class OnlineSession implements Session {
 
   static resumeHost(save: HostSave): OnlineSession {
     const session = new OnlineSession(save.roomId, save.name, 'host');
-    void session.beginHost(save.snapshot).catch(() => {
+    void session.beginHost(save.snapshot, save.generation).catch(() => {
       session.fail();
     });
     return session;
+  }
+
+  static resumeFromCheckpoint(checkpoint: HostCheckpoint): OnlineSession {
+    const session = new OnlineSession(checkpoint.roomId, checkpoint.name, 'host');
+    void session.beginHost(checkpoint.snapshot, checkpoint.generation).catch(() => session.fail());
+    return session;
+  }
+
+  hostCheckpoint(): HostCheckpoint | null {
+    if (this.role !== 'host' || !this.controller) return null;
+    return {
+      roomId: this.roomId,
+      name: this.name,
+      snapshot: this.controller.serialize(),
+      generation: this.generation,
+    };
   }
 
   static guest(roomId: string, name: string): OnlineSession {
@@ -325,6 +380,27 @@ export class OnlineSession implements Session {
 
   mySeats(): number[] {
     return this.seat === null ? [] : [this.seat];
+  }
+
+  seatToPlayer(seat: number): number | null {
+    if (this.role === 'host' && this.controller) return this.controller.seatToPlayer(seat);
+    const seats = this.occupiedSeats();
+    const index = seats.indexOf(seat);
+    return index < 0 ? null : index;
+  }
+
+  playerToSeat(playerId: number): number | null {
+    if (this.role === 'host' && this.controller) return this.controller.playerToSeat(playerId);
+    return this.occupiedSeats()[playerId] ?? null;
+  }
+
+  private occupiedSeats(): number[] {
+    const lobby = this.lastLobby ?? this.lastWelcome?.lobby;
+    if (!lobby) return [];
+    return lobby.seats
+      .filter((seat) => seat.kind !== 'open')
+      .map((seat) => seat.index)
+      .sort((a, b) => a - b);
   }
 
   lobby(): LobbyView | null {
@@ -431,9 +507,18 @@ export class OnlineSession implements Session {
 
   // ---------------------------------------------------------------- host startup
 
-  private async beginHost(saved?: string): Promise<void> {
+  private async beginHost(saved?: string, generation = 1): Promise<void> {
     this.role = 'host';
+    try {
+      this.identity = await loadIdentity(this.clientId);
+    } catch (error) {
+      this.log('P-256 identity setup failed', error);
+      this.setState('closed');
+      return;
+    }
+    this.generation = generation;
     this.hostPeerId = this.clientId;
+    this.hostKeyFingerprint = this.identity.fingerprint;
     const deps = this.hostDeps();
     try {
       this.controller = saved
@@ -450,13 +535,16 @@ export class OnlineSession implements Session {
       v: PROTOCOL_VERSION,
       roomId: this.roomId,
       name: this.name,
-      token: this.clientId,
+      token: this.identity.fingerprint,
+      pub: JSON.stringify(this.identity.publicJwk),
     });
     this.hostSeat = this.controller.publicSnapshot().hostSeat;
 
     const transport = this.createTransport();
     this.transport = transport;
-    transport.onMessage((from, message) => this.onTransportMessage(from, message));
+    transport.onMessage((from, message, fingerprint) =>
+      this.onTransportMessage(from, message, fingerprint),
+    );
     transport.onStatus((status) => this.onTransportStatus(status));
     await transport.connect(this.roomId);
     this.setState('open');
@@ -474,21 +562,24 @@ export class OnlineSession implements Session {
       randomInt: (n) => (n <= 0 ? 0 : crypto.getRandomValues(new Uint32Array(1))[0] % n),
       data,
       send: (connId, msg) => {
+        const stamped = this.stampHostMessage(msg);
         if (connId === this.loopbackId) {
-          this.onServerMsg(msg);
+          this.onServerMsg(stamped);
           return;
         }
-        void this.transport?.send(connId, msg);
-        this.afterHostMessage(msg);
+        void this.transport?.send(connId, stamped);
+        this.afterHostMessage(stamped);
       },
       broadcast: (msg) => {
-        this.onServerMsg(msg);
-        void this.transport?.broadcast(msg);
+        const stamped = this.stampHostMessage(msg);
+        this.onServerMsg(stamped);
+        void this.transport?.broadcast(stamped);
       },
       log: (message, detail) => this.log(message, detail),
       report: (report) => {
         this.reports.push(report);
         if (this.reports.length > 100) this.reports.shift();
+        storageSet('local', REPORTS_KEY, JSON.stringify(this.reports));
       },
       ...(networkConfig.graceMs !== undefined ? { graceMs: networkConfig.graceMs } : {}),
       ...(networkConfig.replaceMs !== undefined ? { replaceMs: networkConfig.replaceMs } : {}),
@@ -502,23 +593,77 @@ export class OnlineSession implements Session {
 
   private async beginGuest(): Promise<void> {
     this.role = 'guest';
-    this.setState('connecting');
-    const transport = this.createTransport();
-    this.transport = transport;
-    transport.onMessage((from, message) => this.onTransportMessage(from, message));
-    transport.onStatus((status) => this.onTransportStatus(status));
     try {
-      await transport.connect(this.roomId);
-      this.startTimers();
+      this.identity = await loadIdentity(this.clientId);
     } catch (error) {
-      this.log('guest broker connection failed', error);
-      this.setState('reconnecting');
+      this.log('P-256 identity setup failed', error);
+      this.setState('closed');
+      return;
+    }
+    this.generation = 0;
+    this.setState('connecting');
+    await this.connectGuestTransport();
+  }
+
+  /** Try the announced host broker first, then rotate on failed discovery (public brokers differ). */
+  private async connectGuestTransport(): Promise<void> {
+    while (!this.closed && !this.crashed) {
+      const transport = this.createTransport();
+      this.transport = transport;
+      transport.onMessage((from, message, fingerprint) =>
+        this.onTransportMessage(from, message, fingerprint),
+      );
+      transport.onStatus((status) => this.onTransportStatus(status));
+      try {
+        await transport.connect(this.roomId);
+        if (!this.timersStarted) {
+          this.timersStarted = true;
+          this.startTimers();
+        }
+        this.startWelcomeWatchdog();
+        return;
+      } catch (error) {
+        this.log(`guest broker connection failed (attempt ${this.brokerAttempt + 1})`, error);
+        this.brokerAttempt += 1;
+        await transport.close();
+        this.setState('reconnecting');
+        await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+      }
     }
   }
 
+  private startWelcomeWatchdog(): void {
+    this.clearWelcomeWatchdog();
+    this.welcomeTimer = setTimeout(() => {
+      this.welcomeTimer = null;
+      if (this.closed || this.crashed || this.connectionState === 'open') return;
+      this.log('no host welcome on this broker; trying the next broker');
+      this.brokerAttempt += 1;
+      const old = this.transport;
+      this.transport = null;
+      if (old) void old.close();
+      void this.connectGuestTransport();
+    }, 5_000);
+  }
+
+  private clearWelcomeWatchdog(): void {
+    if (this.welcomeTimer === null) return;
+    clearTimeout(this.welcomeTimer as number);
+    this.welcomeTimer = null;
+  }
+
   private createTransport(): MqttTransport {
+    if (!this.identity) throw new Error('identity not initialised');
+    const base = networkConfig.brokers ?? DEFAULT_BROKERS;
+    const rotated = base.length > 0
+      ? base.map((_, index) => base[(index + this.brokerAttempt) % base.length])
+      : base;
+    const brokers = this.hostBroker
+      ? [this.hostBroker, ...rotated.filter((broker) => broker !== this.hostBroker)]
+      : rotated;
     const transport = new MqttTransport(this.clientId, {
-      brokers: networkConfig.brokers ?? DEFAULT_BROKERS,
+      identity: this.identity,
+      brokers,
       disableWebRtc: networkConfig.disableWebRtc,
       connectTimeoutMs: networkConfig.connectTimeoutMs,
       log: (message, detail) => this.log(message, detail),
@@ -529,15 +674,33 @@ export class OnlineSession implements Session {
 
   // ---------------------------------------------------------------- transport inbound
 
-  private onTransportMessage(from: string, message: P2PMessage): void {
+  private onTransportMessage(from: string, message: P2PMessage, fingerprint: string): void {
     if (this.crashed || this.closed) return;
     this.peerSeen.set(from, Date.now());
+    const knownKey = this.peerKeys.get(from);
+    if (knownKey !== undefined && knownKey !== fingerprint) return;
+    if (knownKey === undefined) this.peerKeys.set(from, fingerprint);
     if (isP2PControl(message)) {
-      this.handleControl(from, message);
+      this.handleControl(from, message, fingerprint);
       return;
     }
     if (this.role === 'host') {
       if (!this.controller || !isClientMsg(message)) return;
+      const pinned = this.peerKeys.get(from);
+      if (pinned !== undefined && pinned !== fingerprint) {
+        this.log(`drop ClientMsg from ${from}: signing key does not match pinned key`);
+        return;
+      }
+      if (message.t === 'hello') {
+        if (message.token && message.token !== fingerprint) {
+          this.log(`drop hello from ${from}: token is not the public-key fingerprint`);
+          return;
+        }
+        this.peerKeys.set(from, fingerprint);
+      } else if (pinned === undefined) {
+        this.log(`drop ClientMsg from ${from}: hello (public key) missing`);
+        return;
+      }
       this.guestSeen.set(from, Date.now());
       this.controller.connect(from);
       this.controller.message(from, message);
@@ -545,19 +708,48 @@ export class OnlineSession implements Session {
       return;
     }
     if (!isServerMsg(message)) return;
-    if (this.hostPeerId && from !== this.hostPeerId) return;
-    if (!this.hostPeerId) this.hostPeerId = from;
+    if (!this.acceptHostSender(from, fingerprint)) return;
     if (message.t === 'welcome') {
-      this.hostPeerId = from;
       this.lastHostHeartbeatAt = Date.now();
+      this.brokerAttempt = 0;
+      this.clearWelcomeWatchdog();
       this.setState('open');
       this.flushQueue();
     }
+    if (!this.acceptServerMessage(message)) return;
     this.onServerMsg(message);
     if (message.t === 'welcome' || message.t === 'snapshot') this.broadcastPresence();
   }
 
-  private handleControl(from: string, control: P2PControl): void {
+  private acceptHostSender(from: string, fingerprint: string): boolean {
+    if (this.hostPeerId && this.hostPeerId !== from) return false;
+    if (this.hostKeyFingerprint && this.hostKeyFingerprint !== fingerprint) {
+      this.log(`drop host message from ${from}: signing key changed without a generation bump`);
+      return false;
+    }
+    if (!this.hostPeerId) this.hostPeerId = from;
+    if (!this.hostKeyFingerprint) this.hostKeyFingerprint = fingerprint;
+    return true;
+  }
+
+  /** Drop stale/duplicate host state before it reaches subscribers (generation, seq ordering). */
+  private acceptServerMessage(message: ServerMsg): boolean {
+    const gen = genOf(message) ?? this.generation;
+    if (this.generation > 0 && gen < this.generation) {
+      this.log(`drop ${message.t}: old generation ${gen} < ${this.generation}`);
+      return false;
+    }
+    if (gen > this.generation) this.generation = gen;
+    if (message.t === 'snapshot' || message.t === 'update') {
+      if (isNewerStateOrder(this.generation, this.shadow.seq, gen, message.seq)) return true;
+      const fill = message.t === 'snapshot' && !this.shadow.state && message.seq === this.shadow.seq;
+      if (!fill) this.log(`drop ${message.t}: stale/duplicate seq ${message.seq} (have ${this.shadow.seq})`);
+      return fill;
+    }
+    return true;
+  }
+
+  private handleControl(from: string, control: P2PControl, fingerprint: string): void {
     switch (control.k) {
       case 'probe':
         if (this.role === 'host') {
@@ -565,17 +757,20 @@ export class OnlineSession implements Session {
         }
         return;
       case 'presence':
+        if (this.role === 'host' && this.peerKeys.get(from) !== fingerprint) return;
         this.peerSeen.set(control.peerId, Date.now());
         if (this.role === 'host') this.guestSeen.set(from, Date.now());
         return;
       case 'hb':
-        if (this.role !== 'guest') return;
-        this.handleHostHeartbeat(control);
+      case 'host': {
+        if (this.role === 'host') {
+          if (control.gen > this.generation) this.stepDownToGuest(control, fingerprint);
+          return;
+        }
+        if (control.k === 'hb') this.handleHostHeartbeat(control, fingerprint);
+        else this.switchHost(control, fingerprint);
         return;
-      case 'host':
-        if (this.role !== 'guest') return;
-        this.switchHost(control);
-        return;
+      }
       case 'bye':
         if (this.role === 'host') {
           this.guestSeen.delete(from);
@@ -589,37 +784,123 @@ export class OnlineSession implements Session {
       case 'probeAck':
         return;
       case 'resync':
-        if (this.role === 'host') this.controller?.resync(from);
+        if (this.role === 'host' && this.peerKeys.get(from) === fingerprint) {
+          this.controller?.resync(from);
+        }
         return;
       default:
         return;
     }
   }
 
-  private handleHostHeartbeat(control: Extract<P2PControl, { k: 'hb' }>): void {
+  private trustedSeatKey(seat: number): string | null {
+    const fromController =
+      this.role === 'host' && this.controller
+        ? this.controller.publicSnapshot().seatKeys[String(seat)]
+        : undefined;
+    if (fromController) return fromController;
+    return this.shadow.seatKeys[String(seat)] ?? null;
+  }
+
+  private handleHostHeartbeat(control: Extract<P2PControl, { k: 'hb' }>, fingerprint: string): void {
     if (control.hostPeerId === this.clientId) return;
-    const now = Date.now();
-    const knownHost = this.hostPeerId !== null;
-    const stale = now - this.lastHostHeartbeatAt > (networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS);
-    if (knownHost && this.hostPeerId !== control.hostPeerId && !stale) return; // ignore a returning old host
-    if (!knownHost || this.hostPeerId !== control.hostPeerId) {
+    if (control.hostSeat === null) return;
+    const expected = this.trustedSeatKey(control.hostSeat);
+    const trusted = expected === null || expected === fingerprint;
+    if (!trusted) {
+      this.log(`drop heartbeat from ${control.hostPeerId}: host seat key mismatch`);
+      return;
+    }
+    if (control.gen < this.generation) {
+      this.log(`drop heartbeat from ${control.hostPeerId}: old generation ${control.gen}`);
+      return;
+    }
+    const switching = this.hostPeerId !== control.hostPeerId;
+    if (switching && control.gen === this.generation) {
+      this.log(`drop heartbeat from ${control.hostPeerId}: same generation, different host`);
+      return;
+    }
+    if (switching) {
       this.hostPeerId = control.hostPeerId;
+      this.hostKeyFingerprint = fingerprint;
+      this.generation = control.gen;
       this.setState('reconnecting');
       this.sendHello();
+    } else if (this.hostKeyFingerprint === null) {
+      this.hostKeyFingerprint = fingerprint;
     }
-    this.lastHostHeartbeatAt = now;
+    this.lastHostHeartbeatAt = Date.now();
     this.hostSeat = control.hostSeat;
     this.shadow.hostSeat = control.hostSeat;
-    this.shadow.seatTokens = { ...control.seatTokens };
+    this.shadow.seatKeys = { ...control.seatKeys };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
-    const ownSeat = Object.keys(control.seatTokens).find(
-      (seatIndex) => control.seatTokens[seatIndex] === this.clientId,
+    if (control.broker) this.hostBroker = control.broker;
+    const ownSeat = Object.keys(control.seatKeys).find(
+      (seatIndex) => control.seatKeys[seatIndex] === this.identity?.fingerprint,
     );
     if (ownSeat !== undefined) this.seat = Number(ownSeat);
     if (this.pendingAction && control.seq > this.pendingAction.seq) this.pendingAction = null;
     if (!this.lastWelcome || this.connectionState !== 'open') this.sendHello();
     this.maybeResync(control.hostPeerId, control.seq);
+  }
+
+  private switchHost(control: Extract<P2PControl, { k: 'host' }>, fingerprint: string): void {
+    if (control.hostPeerId === this.clientId) return;
+    if (control.hostSeat === null || control.gen < this.generation) return;
+    const expected = this.trustedSeatKey(control.hostSeat);
+    if (expected !== null && expected !== fingerprint) {
+      this.log(`drop host announcement from ${control.hostPeerId}: seat key mismatch`);
+      return;
+    }
+    if (control.hostPeerId === this.hostPeerId && control.gen === this.generation) {
+      this.lastHostHeartbeatAt = Date.now();
+      return;
+    }
+    this.hostPeerId = control.hostPeerId;
+    this.hostSeat = control.hostSeat;
+    this.hostKeyFingerprint = fingerprint;
+    this.generation = control.gen;
+    this.lastHostHeartbeatAt = Date.now();
+    this.shadow.hostSeat = control.hostSeat;
+    this.shadow.seatKeys = { ...control.seatKeys };
+    this.lastLobby = control.lobby;
+    this.shadow.lobby = control.lobby;
+    if (control.broker) this.hostBroker = control.broker;
+    this.setState('reconnecting');
+    this.sendHello();
+    setTimeout(() => this.maybeResync(control.hostPeerId, control.seq), 100);
+  }
+
+  private stepDownToGuest(control: Extract<P2PControl, { k: 'hb' | 'host' }>, fingerprint: string): void {
+    if (control.hostSeat === null) return;
+    const expected = this.trustedSeatKey(control.hostSeat);
+    if (expected !== null && expected !== fingerprint) return;
+    this.controller?.dispose();
+    this.controller = null;
+    this.role = 'guest';
+    this.hostPeerId = control.hostPeerId;
+    this.hostKeyFingerprint = fingerprint;
+    this.generation = control.gen;
+    this.hostSeat = control.hostSeat;
+    this.shadow.seatKeys = { ...control.seatKeys };
+    this.lastLobby = control.lobby;
+    this.shadow.lobby = control.lobby;
+    storageRemove('session', HOST_SAVE_KEY);
+    this.setState('reconnecting');
+    this.sendHello();
+  }
+
+  private stampHostMessage(message: ServerMsg): ServerMsg {
+    if (
+      message.t === 'welcome' ||
+      message.t === 'lobby' ||
+      message.t === 'snapshot' ||
+      message.t === 'update'
+    ) {
+      return { ...message, gen: this.generation };
+    }
+    return message;
   }
 
   private maybeResync(hostPeerId: string, hostSeq: number): void {
@@ -630,24 +911,6 @@ export class OnlineSession implements Session {
     if (now - this.lastResyncAt < 1_000) return;
     this.lastResyncAt = now;
     void this.transport.send(hostPeerId, { k: 'resync' });
-  }
-
-  private switchHost(control: Extract<P2PControl, { k: 'host' }>): void {
-    if (control.hostPeerId === this.clientId) return;
-    const changed = this.hostPeerId !== control.hostPeerId;
-    this.hostPeerId = control.hostPeerId;
-    this.hostSeat = control.hostSeat;
-    this.lastHostHeartbeatAt = Date.now();
-    this.shadow.hostSeat = control.hostSeat;
-    this.shadow.seatTokens = { ...control.seatTokens };
-    this.lastLobby = control.lobby;
-    this.shadow.lobby = control.lobby;
-    if (changed) {
-      this.setState('reconnecting');
-      this.sendHello();
-      // If the new host is already ahead, ask for a snapshot once the hello is processed.
-      setTimeout(() => this.maybeResync(control.hostPeerId, control.seq), 100);
-    }
   }
 
   private onTransportStatus(status: TransportStatus): void {
@@ -677,7 +940,8 @@ export class OnlineSession implements Session {
       v: PROTOCOL_VERSION,
       roomId: this.roomId,
       name: this.name,
-      token: this.clientId,
+      token: this.identity?.fingerprint ?? this.clientId,
+      pub: this.identity ? JSON.stringify(this.identity.publicJwk) : undefined,
     };
     if (this.hostPeerId) void this.transport.send(this.hostPeerId, hello);
     else void this.transport.broadcast(hello);
@@ -699,9 +963,11 @@ export class OnlineSession implements Session {
       hostPeerId: this.clientId,
       seat: this.seat,
       hostSeat: snapshot.hostSeat,
-      seatTokens: snapshot.seatTokens,
+      seatKeys: snapshot.seatKeys,
       lobby: snapshot.lobby,
       seq: snapshot.seq,
+      gen: this.generation,
+      broker: this.transport.broker(),
       at: Date.now(),
     };
     void this.transport.broadcast(heartbeat);
@@ -725,9 +991,11 @@ export class OnlineSession implements Session {
       hostPeerId: this.clientId,
       seat: this.seat,
       hostSeat: snapshot.hostSeat,
-      seatTokens: snapshot.seatTokens,
+      seatKeys: snapshot.seatKeys,
       lobby: snapshot.lobby,
       seq: snapshot.seq,
+      gen: this.generation,
+      broker: this.transport.broker(),
       at: Date.now(),
     });
   }
@@ -764,6 +1032,7 @@ export class OnlineSession implements Session {
     clearHandle(this.heartbeatTimer);
     clearHandle(this.watchdogTimer);
     clearHandle(this.saveTimer);
+    this.clearWelcomeWatchdog();
     this.heartbeatTimer = null;
     this.watchdogTimer = null;
     this.saveTimer = null;
@@ -823,13 +1092,16 @@ export class OnlineSession implements Session {
     if (this.seat === null || !this.shadow.lobby) return false;
     const peerSilence = networkConfig.peerSilenceMs ?? DEFAULT_PEER_SILENCE_MS;
     const alive = new Set<string>();
+    if (this.identity) alive.add(this.identity.fingerprint);
     for (const [peerId, seen] of this.peerSeen) {
-      if (peerId === this.clientId || now - seen <= peerSilence) alive.add(peerId);
+      if (now - seen > peerSilence) continue;
+      const fingerprint = this.peerKeys.get(peerId);
+      if (fingerprint) alive.add(fingerprint);
     }
     const candidates = this.shadow.lobby.seats
       .filter((seat) => seat.kind === 'human')
       .filter((seat) => {
-        const token = this.shadow.seatTokens[String(seat.index)];
+        const token = this.shadow.seatKeys[String(seat.index)];
         return !!token && alive.has(token);
       })
       .map((seat) => seat.index)
@@ -848,14 +1120,16 @@ export class OnlineSession implements Session {
         seq: this.shadow.seq,
         chat: this.shadow.chat,
         hostSeat: this.seat,
-        seatTokens: this.shadow.seatTokens,
+        seatKeys: this.shadow.seatKeys,
         lastFx: this.shadow.lastFx,
         deadline: this.shadow.deadline,
       };
       const deps = this.hostDeps();
       this.controller = RoomController.adopt(snapshot, deps);
       this.role = 'host';
+      this.generation = Math.max(1, this.generation) + 1;
       this.hostPeerId = this.clientId;
+      this.hostKeyFingerprint = this.identity?.fingerprint ?? null;
       this.hostSeat = this.seat;
       for (const peerId of this.peerSeen.keys()) {
         if (peerId !== this.clientId) this.guestSeen.set(peerId, Date.now());
@@ -866,7 +1140,8 @@ export class OnlineSession implements Session {
         v: PROTOCOL_VERSION,
         roomId: this.roomId,
         name: this.name,
-        token: this.clientId,
+        token: this.identity?.fingerprint ?? this.clientId,
+        pub: this.identity ? JSON.stringify(this.identity.publicJwk) : undefined,
       });
       this.setState('open');
       this.announceHost();
@@ -894,6 +1169,8 @@ export class OnlineSession implements Session {
   }
 
   private record(message: ServerMsg): void {
+    const gen = genOf(message);
+    if (gen !== undefined && gen > this.generation) this.generation = gen;
     switch (message.t) {
       case 'welcome':
         this.lastWelcome = message;
@@ -997,6 +1274,7 @@ export class OnlineSession implements Session {
         roomId: this.roomId,
         name: this.name,
         snapshot: this.controller.serialize(),
+        generation: this.generation,
         savedAt: Date.now(),
       };
       storageSet('session', HOST_SAVE_KEY, JSON.stringify(save));
@@ -1025,7 +1303,7 @@ export async function createOnlineRoom(name: string): Promise<Session> {
 
 export function joinOnlineRoom(roomId: string, name: string): Session {
   const normalized = normalizeRoomId(roomId);
-  if (!isValidRoomId(normalized)) throw new Error('ルーム ID は 6 文字の英数字です');
+  if (!isValidRoomId(normalized)) throw new Error('ルーム ID は 6 文字＋4 文字の合言葉です');
   return OnlineSession.guest(normalized, name);
 }
 
@@ -1033,7 +1311,9 @@ export async function roomExists(roomId: string): Promise<boolean> {
   const normalized = normalizeRoomId(roomId);
   if (!isValidRoomId(normalized)) return false;
   const peerId = `probe_${randomToken(10)}`;
+  const identity = await generateIdentity();
   const transport = new MqttTransport(peerId, {
+    identity,
     brokers: networkConfig.brokers ?? DEFAULT_BROKERS,
     disableWebRtc: true,
     connectTimeoutMs: networkConfig.connectTimeoutMs,
@@ -1082,7 +1362,21 @@ export function resumeOnline(): Session | null {
   return null;
 }
 
+/** Test hook: current full host state for a migration/old-host-return scenario. */
+export function checkpointHostForTests(session: Session): HostCheckpoint | null {
+  return session instanceof OnlineSession ? session.hostCheckpoint() : null;
+}
+
+export function resumeHostForTests(checkpoint: HostCheckpoint): Session {
+  return OnlineSession.resumeFromCheckpoint(checkpoint);
+}
+
 /** Test hook used by the in-process broker e2e: kill a session's transport without a leave. */
 export function killSessionForTests(session: Session): void {
   if (session instanceof OnlineSession) session.killForTests();
+}
+
+/** Reports persisted by the host device (settings screen export). */
+export function exportReports(): string {
+  return storageGet('local', REPORTS_KEY) ?? '[]';
 }

@@ -20,9 +20,12 @@ import {
   netWorth,
   sanitizeState,
   step,
+  withSeed,
+  ALLOWED_YEARS,
 } from '../core/engine';
 import { COMM, MAX_SEATS, PROTOCOL_VERSION } from './protocol';
 import type {
+  AllowedYears,
   ChatLine,
   ClientMsg,
   EmoteEvent,
@@ -36,7 +39,7 @@ import type {
   ServerMsg,
 } from './protocol';
 import { FX_MS } from './session-types';
-import { sanitizeChat } from './filter';
+import { normalizeForMatch, sanitizeChat } from './filter';
 
 export type TimerHandle = unknown;
 
@@ -149,8 +152,7 @@ interface Seat {
   chatBucket: TokenBucket;
   emoteBucket: TokenBucket;
   lastEmoteAt: Record<string, number>;
-  lastChatText: string | null;
-  lastChatAt: number;
+  recentChat: { text: string; at: number }[];
   flagged: boolean;
 }
 
@@ -198,7 +200,7 @@ interface RestoreOptions {
 /**
  * Everything a guest needs to take over as host after a host crash (DESIGN online §4).
  * The state is sanitized (rng = 0); adopt() injects a fresh crypto-random rng.
- * `seatTokens` maps seat index -> persistent client id so reconnect identities survive migration.
+ * `seatKeys` maps seat index -> public-key fingerprint so reconnect identities survive migration.
  */
 export interface RoomPublicSnapshot {
   roomId: string;
@@ -207,13 +209,14 @@ export interface RoomPublicSnapshot {
   seq: number;
   chat: ChatLine[];
   hostSeat: number | null;
-  seatTokens: Record<string, string>;
+  /** seat index -> public-key fingerprint (never a secret). */
+  seatKeys: Record<string, string>;
   lastFx: Fx[];
   deadline: number | null;
 }
 
 const DEFAULT_SETTINGS: RoomSettings = { years: 3, turnSeconds: 30, visibility: 'private' };
-const VALID_YEARS = new Set([1, 3, 5, 10]);
+const VALID_YEARS: ReadonlySet<number> = new Set(ALLOWED_YEARS);
 const VALID_TURN_SECONDS = new Set([0, 20, 30, 60]);
 const REASONS = new Set<Report['reason']>(['spam', 'abuse', 'cheat', 'other']);
 const TOKEN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -343,9 +346,9 @@ export class RoomController {
 
   /** Sanitized snapshot safe to replicate to every guest / use for host migration. */
   publicSnapshot(): RoomPublicSnapshot {
-    const seatTokens: Record<string, string> = {};
+    const seatKeys: Record<string, string> = {};
     for (const seat of this.seats) {
-      if (seat.kind === 'human' && seat.token) seatTokens[String(seat.index)] = seat.token;
+      if (seat.kind === 'human' && seat.token) seatKeys[String(seat.index)] = seat.token;
     }
     return {
       roomId: this.roomId,
@@ -354,10 +357,34 @@ export class RoomController {
       seq: this.seq,
       chat: this.chatHistory(),
       hostSeat: this.hostSeat,
-      seatTokens,
+      seatKeys,
       lastFx: this.lastFx,
       deadline: this.deadline,
     };
+  }
+
+  /** Verified connection -> seat mapping (host authentication uses this on every action). */
+  seatToPlayer(seat: number): number | null {
+    const playerId = this.playerIdBySeat[seat];
+    return playerId === undefined ? null : playerId;
+  }
+
+  playerToSeat(playerId: number): number | null {
+    const seat = this.seatByPlayerId[playerId];
+    return seat === undefined ? null : seat;
+  }
+
+  seatForConn(connId: string): number | null {
+    const conn = this.connections.get(connId);
+    if (!conn || conn.seat === null) return null;
+    const seat = this.seats[conn.seat];
+    if (!seat || seat.kind !== 'human' || seat.connId !== connId) return null;
+    return seat.index;
+  }
+
+  seatKey(seatIndex: number): string | null {
+    const seat = this.seats[seatIndex];
+    return seat && seat.kind === 'human' ? seat.token : null;
   }
 
   /** Seat/connection pairs (LocalSession uses this to route hot-seat messages). */
@@ -569,7 +596,10 @@ export class RoomController {
     this.sendWelcome(conn);
     this.broadcastLobby();
     if (this.status === 'playing' || this.status === 'finished') {
-      if (this.actorSeat() === seat.index) this.armTurn(this.lastFx);
+      if (this.actorSeat() === seat.index) {
+        this.clearTask('cpu');
+        if (this.deadline !== null) this.setTask('turn', this.deadline);
+      }
     }
   }
 
@@ -764,7 +794,7 @@ export class RoomController {
         this.sendError(conn.id, 'bad_request', '年数は 1/3/5/10 年から選んでください');
         return;
       }
-      next.years = msg.settings.years;
+      next.years = msg.settings.years as AllowedYears;
     }
     if (msg.settings.turnSeconds !== undefined) {
       if (!VALID_TURN_SECONDS.has(msg.settings.turnSeconds)) {
@@ -871,6 +901,18 @@ export class RoomController {
       lobby: this.lobbyView(),
     };
     this.deps.broadcast(snapshot);
+    // The initial createGame fx (destination announcement, first monthly event) needs an update
+    // after the snapshot. Bump seq so the same state is adopted once with animation; reconnecting
+    // clients only receive the current snapshot.
+    this.seq += 1;
+    this.deps.broadcast({
+      t: 'update',
+      seq: this.seq,
+      by: 0,
+      fx: this.lastFx,
+      state: sanitizeState(this.state as GameState),
+      deadline: this.deadline,
+    });
     this.system('ゲーム開始！ 世界を巡って一番儲けた者の勝ちです。');
   }
 
@@ -914,13 +956,11 @@ export class RoomController {
       seat.autoplay = resumed;
       if (error instanceof EngineError) {
         this.sendError(conn.id, 'illegal', error.message);
-        // Re-arm: the failed action did not change the state.
-        this.armTurn(this.lastFx);
       } else {
         this.log('step failed', error);
         this.sendError(conn.id, 'illegal', 'その行動は実行できません');
-        this.armTurn(this.lastFx);
       }
+      // Rejected actions never change state, so the existing deadline/timer stays untouched.
     }
   }
 
@@ -940,15 +980,17 @@ export class RoomController {
       this.sendError(conn.id, 'bad_request', '空のメッセージは送れません');
       return;
     }
-    if (seat.lastChatText === text && now - seat.lastChatAt < COMM.duplicateWindowMs) {
-      return; // silently drop the duplicate
+    const normalized = normalizeForMatch(text);
+    seat.recentChat = seat.recentChat.filter((entry) => now - entry.at < COMM.duplicateWindowMs);
+    if (seat.recentChat.some((entry) => entry.text === normalized)) {
+      return; // silently drop a normalized duplicate from the last 10 seconds
     }
     if (!takeToken(seat.chatBucket, COMM.chatBurst, COMM.chatMinIntervalMs, now)) {
       this.sendError(conn.id, 'rate_limited', 'チャットが速すぎます。少し待ってください');
       return;
     }
-    seat.lastChatText = text;
-    seat.lastChatAt = now;
+    seat.recentChat.push({ text: normalized, at: now });
+    if (seat.recentChat.length > 20) seat.recentChat.shift();
     const line: ChatLine = { id: this.nextChatId++, seat: seat.index, text, at: now };
     this.chat.push(line);
     if (this.chat.length > COMM.historySize) this.chat.splice(0, this.chat.length - COMM.historySize);
@@ -1367,8 +1409,7 @@ export class RoomController {
       chatBucket: initialBucket(now, COMM.chatBurst),
       emoteBucket: initialBucket(now, COMM.emoteBurst),
       lastEmoteAt: {},
-      lastChatText: null,
-      lastChatAt: 0,
+      recentChat: [],
       flagged: false,
     };
   }
@@ -1386,7 +1427,7 @@ export class RoomController {
     seat.chatBucket = initialBucket(now, COMM.chatBurst);
     seat.emoteBucket = initialBucket(now, COMM.emoteBurst);
     seat.lastEmoteAt = {};
-    seat.lastChatText = null;
+    seat.recentChat = [];
     seat.flagged = false;
     this.reporters.delete(seat.index);
     this.clearTask(`grace:${seat.index}`);
@@ -1414,7 +1455,7 @@ export class RoomController {
   private seatOfConn(conn: Conn): Seat | null {
     if (conn.seat === null) return null;
     const seat = this.seats[conn.seat];
-    if (!seat || seat.kind !== 'human') return null;
+    if (!seat || seat.kind !== 'human' || seat.connId !== conn.id) return null;
     return seat;
   }
 
@@ -1673,7 +1714,7 @@ export class RoomController {
       seat.cpuLevel = info.cpuLevel;
       seat.flagged = info.flagged ?? false;
       seat.token =
-        info.kind === 'human' ? (snapshot.seatTokens?.[String(info.index)] ?? null) : null;
+        info.kind === 'human' ? (snapshot.seatKeys?.[String(info.index)] ?? null) : null;
       seat.connId = null;
       seat.disconnectedAt =
         info.kind === 'human' && room.status !== 'lobby' ? now : null;
@@ -1685,10 +1726,7 @@ export class RoomController {
     }
 
     if (snapshot.state) {
-      const state = structuredClone(snapshot.state);
-      state.rng = deps.randomInt(0x7fffffff) || 1;
-      state.config = { ...state.config, seed: state.rng };
-      room.state = state;
+      room.state = withSeed({ ...snapshot.state, rng: 0 }, deps.randomInt(0x7fffffff) || 1);
     }
 
     room.playerIdBySeat = [];

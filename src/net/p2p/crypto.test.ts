@@ -24,6 +24,8 @@ describe('encrypted relay payloads', () => {
     expect(await roomHash('abc234')).toBe(hash);
     expect(await roomHash('ABC235')).not.toBe(hash);
     expect(hash).not.toContain('ABC234');
+    expect(await roomHash('ABC234-K7Q9')).not.toBe(await roomHash('ABC234-K7Q8'));
+    expect(await roomHash('ABC234-K7Q9')).not.toBe(await roomHash('ABC234'));
   });
 
   it('round-trips small payloads and hides plaintext', async () => {
@@ -37,7 +39,7 @@ describe('encrypted relay payloads', () => {
     await expect(decryptPayload(otherKey, encrypted.body, encrypted.z)).rejects.toBeTruthy();
   });
 
-  it('compresses and round-trips a snapshot-sized payload', async () => {
+  it('round-trips a snapshot-sized payload', async () => {
     const key = await deriveRoomKey('BIG001');
     const state = {
       kind: 'snapshot',
@@ -50,7 +52,6 @@ describe('encrypted relay payloads', () => {
       note: 'あ'.repeat(20_000),
     };
     const encrypted = await encryptPayload(key, state);
-    expect(encrypted.z).toBe(true);
     await expect(decryptPayload(key, encrypted.body, encrypted.z)).resolves.toEqual(state);
   });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Action, Fx, GameState } from '../core/types';
-import { actorOf, cpuDecide, sanitizeState } from '../core/engine';
+import { actorOf, cpuDecide } from '../core/engine';
 import { GAME_DATA } from '../data/index';
-import type { ChatLine, Report, ServerMsg } from './protocol';
+import type { AllowedYears, ChatLine, PublicState, Report, ServerMsg } from './protocol';
 import { COMM, PROTOCOL_VERSION } from './protocol';
 import { fxDuration, RoomController, sumFxDuration } from './room';
 import type { RoomDeps } from './room';
@@ -142,7 +142,7 @@ function join(harness: Harness, conn: string, seat: number, characterId: string,
 
 interface Started {
   snapshot: Extract<ServerMsg, { t: 'snapshot' }>;
-  state: GameState;
+  state: PublicState;
   seq: number;
   tokenA: string;
   tokenB: string;
@@ -150,14 +150,14 @@ interface Started {
 
 function startTwoHumans(
   harness: Harness,
-  options: { years?: number; turnSeconds?: number; characters?: [string, string] } = {},
+  options: { years?: AllowedYears; turnSeconds?: number; characters?: [string, string] } = {},
 ): Started {
   const tokenA = join(harness, 'a', 0, options.characters?.[0] ?? 'momotaro', 'あリス');
   const tokenB = join(harness, 'b', 1, options.characters?.[1] ?? 'alice', 'ぼリス');
   harness.room.message('a', {
     t: 'settings',
     settings: {
-      years: options.years ?? 1,
+      years: (options.years ?? 1) as AllowedYears,
       turnSeconds: options.turnSeconds ?? 0,
     },
   });
@@ -168,10 +168,11 @@ function startTwoHumans(
       `game did not start: ${JSON.stringify(harness.sent.slice(-8).map((entry) => entry.msg))}`,
     );
   }
+  const initial = latest(harness.broadcasts, 'update');
   return {
     snapshot,
-    state: snapshot.state,
-    seq: snapshot.seq,
+    state: initial?.state ?? snapshot.state,
+    seq: initial?.seq ?? snapshot.seq,
     tokenA,
     tokenB,
   };
@@ -186,18 +187,18 @@ function act(harness: Harness, conn: string, seq: number, action: Action): Extra
 
 function drive(
   harness: Harness,
-  state: GameState,
+  state: PublicState,
   seq: number,
   connForSeat: (seat: number) => string,
   limit = 50_000,
-): { state: GameState; seq: number; steps: number } {
+): { state: PublicState; seq: number; steps: number } {
   let current = state;
   let currentSeq = seq;
   let steps = 0;
   while (current.phase.t !== 'game_over') {
     const actor = actorOf(current);
     if (actor === null) throw new Error('actor missing');
-    const action = cpuDecide(GAME_DATA, current);
+    const action = cpuDecide(GAME_DATA, current as GameState);
     const update = act(harness, connForSeat(actor), currentSeq, action);
     current = update.state;
     currentSeq = update.seq;
@@ -243,7 +244,9 @@ describe('RoomController lobby', () => {
     ]);
     expect(snapshot?.seq).toBe(1);
     expect(snapshot?.lobby.status).toBe('playing');
-    expect(snapshot?.state.rng).toBe(0);
+    const initialFx = latest(harness.broadcasts, 'update');
+    expect(initialFx?.seq).toBe(2);
+    expect(initialFx?.fx.length).toBeGreaterThan(0);
   });
 
   it('enforces host-only settings and start conditions', () => {
@@ -256,8 +259,10 @@ describe('RoomController lobby', () => {
     expect(errorsOf(harness, 'b')).toContain('not_host');
     harness.room.message('b', { t: 'start' });
     expect(errorsOf(harness, 'b')).toContain('not_host');
-    harness.room.message('a', { t: 'settings', settings: { years: 2 } });
+    harness.room.message('a', { t: 'settings', settings: { years: 2 as AllowedYears } });
     expect(errorsOf(harness, 'a')).toContain('bad_request');
+    harness.room.message('a', { t: 'settings', settings: { years: 20 } });
+    expect(latest(harness.broadcasts, 'lobby')?.lobby.settings.years).toBe(20);
     expect(harness.broadcasts.some((msg) => msg.t === 'snapshot')).toBe(false);
   });
 
@@ -294,7 +299,7 @@ describe('RoomController actions', () => {
     const harness = makeHarness();
     const started = startTwoHumans(harness, { turnSeconds: 20 });
     expect(started.snapshot.deadline).not.toBeNull();
-    const before = started.snapshot.seq;
+    const before = started.seq;
     harness.clock.advance((started.snapshot.deadline as number) - harness.clock.now());
     const update = latest(harness.broadcasts, 'update');
     expect(update?.seq).toBe(before + 1);
@@ -314,10 +319,11 @@ describe('RoomController reconnect and replacement', () => {
     const disconnectedAt = harness.clock.now();
     harness.room.disconnect('a');
     expect(harness.broadcasts.some((msg) => msg.t === 'system' && msg.text.includes('切断'))).toBe(true);
+    const beforeGrace = latest(harness.broadcasts, 'update')?.seq;
     harness.clock.advance(14_000);
-    expect(latest(harness.broadcasts, 'update')).toBeUndefined();
+    expect(latest(harness.broadcasts, 'update')?.seq).toBe(beforeGrace);
     harness.clock.advance(1_500);
-    expect(latest(harness.broadcasts, 'update')).toBeDefined();
+    expect(latest(harness.broadcasts, 'update')?.seq).toBeGreaterThan(beforeGrace ?? 0);
     expect(latest(harness.broadcasts, 'lobby')?.lobby.seats[0].autoplay).toBe(true);
 
     harness.clock.advance(disconnectedAt + 120_000 - harness.clock.now());
@@ -346,6 +352,23 @@ describe('RoomController reconnect and replacement', () => {
 
     const action = act(harness, 'a2', snapshot?.seq ?? 0, { t: 'roll' });
     expect(action.by).toBe(0);
+  });
+
+  it('binds a seat to the newest connection and rejects the old socket', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness);
+    harness.room.connect('a2');
+    harness.room.message('a2', {
+      t: 'hello',
+      v: 1,
+      roomId: 'ROOM01',
+      name: 'A',
+      token: started.tokenA,
+    });
+    harness.room.message('a', { t: 'action', seq: started.seq, action: { t: 'roll' } });
+    expect(errorsOf(harness, 'a')).toContain('not_your_turn');
+    const update = act(harness, 'a2', started.seq, { t: 'roll' });
+    expect(update.by).toBe(0);
   });
 
   it('immediately converts a leaving human seat to CPU while keeping assets', () => {
@@ -403,6 +426,23 @@ describe('RoomController communication', () => {
     expect(filtered?.text).toContain('[URL]');
     expect(filtered?.text).not.toContain('死ね');
     expect(filtered?.text).toContain('＊');
+
+    const before = harness.broadcasts.filter((msg) => msg.t === 'chat').length;
+    harness.clock.advance(2_000);
+    harness.room.message('a', { t: 'chat', text: 'ＡＢＣ１２３' });
+    expect(harness.broadcasts.filter((msg) => msg.t === 'chat').length).toBe(before + 1);
+    harness.clock.advance(2_000);
+    harness.room.message('a', { t: 'chat', text: 'a b c 1 2 3' });
+    expect(harness.broadcasts.filter((msg) => msg.t === 'chat').length).toBe(before + 1);
+    harness.clock.advance(2_000);
+    harness.room.message('a', {
+      t: 'chat',
+      text: 'ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ 死ね',
+    });
+    const normalized = latest(harness.broadcasts, 'chat')?.line.text ?? '';
+    expect(normalized).toContain('[URL]');
+    expect(normalized).not.toContain('死ね');
+    expect(normalized).toContain('＊');
   });
 
   it('enforces per-emote cooldown, unique ownership and target validation', () => {
@@ -436,7 +476,7 @@ describe('RoomController communication', () => {
     const harness = makeHarness();
     join(harness, 'a', 0, 'momotaro');
     join(harness, 'b', 1, 'alice');
-    join(harness, 'c', 2, 'sinbad');
+    const tokenC = join(harness, 'c', 2, 'sinbad');
     harness.clock.advance(5_000);
     harness.room.message('c', { t: 'chat', text: '通報テスト' });
     harness.room.message('a', { t: 'report', seat: 2, reason: 'spam' });
@@ -448,6 +488,17 @@ describe('RoomController communication', () => {
     expect(harness.broadcasts.some((msg) => msg.t === 'flag' && msg.seat === 2)).toBe(true);
     expect(latest(harness.broadcasts, 'lobby')?.lobby.seats[2].flagged).toBe(true);
     expect(harness.reports.length).toBe(2);
+
+    harness.room.disconnect('c');
+    harness.room.connect('c2');
+    harness.room.message('c2', {
+      t: 'hello',
+      v: 1,
+      roomId: 'ROOM01',
+      name: 'C',
+      token: tokenC,
+    });
+    expect(sentOf(harness, 'c2', 'welcome')?.lobby.seats[2].flagged).toBe(true);
   });
 });
 
@@ -476,7 +527,7 @@ describe('RoomController full game', () => {
     for (let i = 0; i < 24; i += 1) {
       const actor = actorOf(state);
       if (actor === null || state.phase.t === 'game_over') break;
-      const update = act(harnessA, actor === 0 ? 'a' : 'b', seq, cpuDecide(GAME_DATA, state));
+      const update = act(harnessA, actor === 0 ? 'a' : 'b', seq, cpuDecide(GAME_DATA, state as GameState));
       state = update.state;
       seq = update.seq;
     }
@@ -506,7 +557,7 @@ describe('RoomController full game', () => {
       broadcast: (msg) => harnessB.broadcasts.push(msg),
     };
     harnessB.room = RoomController.restore(json, harnessB.deps, { connections: true });
-    expect(harnessB.room.publicState()).toEqual(sanitizeState(state));
+    expect(harnessB.room.publicState()).toEqual(state);
 
     const finishA = drive(harnessA, state, seq, (seat) => (seat === 0 ? 'a' : 'b'));
     const finishB = drive(harnessB, state, seq, (seat) => (seat === 0 ? 'a' : 'b'));
@@ -523,12 +574,13 @@ describe('RoomController full game', () => {
     const snapshot = latest(harness.broadcasts, 'snapshot');
     if (!snapshot) throw new Error('missing snapshot');
 
-    let state = snapshot.state;
-    let seq = snapshot.seq;
-    let handover = latest(harness.broadcasts, 'update');
+    const initial = latest(harness.broadcasts, 'update');
+    let state = initial?.state ?? snapshot.state;
+    let seq = initial?.seq ?? snapshot.seq;
+    let handover = initial;
     for (let i = 0; i < 100; i += 1) {
       if (actorOf(state) === 1) break;
-      handover = act(harness, 'a', seq, cpuDecide(GAME_DATA, state));
+      handover = act(harness, 'a', seq, cpuDecide(GAME_DATA, state as GameState));
       state = handover.state;
       seq = handover.seq;
     }
@@ -544,10 +596,10 @@ describe('RoomController full game', () => {
 it('adopts a public snapshot, reseeds rng and marks the old host disconnected', () => {
     const harness = makeHarness();
     const started = startTwoHumans(harness);
-    expect(started.snapshot.state.rng).toBe(0);
+    expect('rng' in started.snapshot.state).toBe(false);
     const pub = harness.room.publicSnapshot();
-    expect(pub.seatTokens['0']).toBeTruthy();
-    expect(pub.seatTokens['1']).toBeTruthy();
+    expect(pub.seatKeys['0']).toBeTruthy();
+    expect(pub.seatKeys['1']).toBeTruthy();
 
     const adoptedHarness = makeHarness();
     const adopted = RoomController.adopt({ ...pub, hostSeat: 1 }, adoptedHarness.deps);
@@ -557,7 +609,7 @@ it('adopts a public snapshot, reseeds rng and marks the old host disconnected', 
     expect(adopted.lobbyView().seats[0].connected).toBe(false);
     expect(adopted.lobbyView().seats[1].isHost).toBe(true);
 
-    const token = pub.seatTokens['1'];
+    const token = pub.seatKeys['1'];
     adopted.connect('g1');
     adopted.message('g1', {
       t: 'hello',
@@ -568,6 +620,54 @@ it('adopts a public snapshot, reseeds rng and marks the old host disconnected', 
     });
     expect(sentOf(adoptedHarness, 'g1', 'welcome')?.seat).toBe(1);
     expect(latest(adoptedHarness.broadcasts, 'lobby')?.lobby.seats[1].connected).toBe(true);
+  });
+});
+
+describe('RoomController timing, mapping and normalization', () => {
+  it('does not extend the deadline when an action is rejected', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { turnSeconds: 20 });
+    const deadline = started.snapshot.deadline;
+    if (deadline === null) throw new Error('expected deadline');
+    harness.room.message('a', {
+      t: 'action',
+      seq: started.seq,
+      action: { t: 'end_buy' },
+    });
+    expect(errorsOf(harness, 'a')).toContain('illegal');
+    harness.clock.advance(deadline - harness.clock.now());
+    expect(latest(harness.broadcasts, 'update')?.seq ?? 0).toBeGreaterThan(started.seq);
+  });
+
+  it('restores the existing deadline on reconnect instead of starting a new turn', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { turnSeconds: 20 });
+    const deadline = started.snapshot.deadline;
+    if (deadline === null) throw new Error('expected deadline');
+    harness.room.disconnect('a');
+    harness.clock.advance(5_000);
+    harness.room.connect('a2');
+    harness.room.message('a2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'A',
+      token: started.tokenA,
+    });
+    expect(sentOf(harness, 'a2', 'snapshot')?.deadline).toBe(deadline);
+  });
+
+  it('maps gapped lobby seats densely to player ids', () => {
+    const harness = makeHarness();
+    join(harness, 'a', 0, 'momotaro');
+    join(harness, 'b', 2, 'alice');
+    harness.room.message('a', { t: 'start' });
+    expect(harness.room.seatToPlayer(0)).toBe(0);
+    expect(harness.room.seatToPlayer(2)).toBe(1);
+    expect(harness.room.seatToPlayer(1)).toBeNull();
+    expect(harness.room.playerToSeat(0)).toBe(0);
+    expect(harness.room.playerToSeat(1)).toBe(2);
+    expect(harness.room.playerToSeat(2)).toBeNull();
   });
 });
 

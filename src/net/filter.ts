@@ -56,9 +56,18 @@ export function stripControlChars(input: string): string {
   return input.replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, '');
 }
 
-/** Mask URLs and NG words. Returns already-trimmed text. */
+/** NFKC + lowercase + whitespace removal, used for duplicate and moderation matching. */
+export function normalizeForMatch(input: string): string {
+  return stripControlChars(input)
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+/** Mask URLs and NG words. Returns already-trimmed NFKC text. */
 export function filterText(input: string): string {
-  let text = stripControlChars(input).replace(/\s+/g, ' ').trim();
+  let text = stripControlChars(input).normalize('NFKC').replace(/\s+/g, ' ').trim();
   text = text.replace(URL_RE, '[URL]');
   for (const { re, word } of NG_PATTERNS) {
     text = text.replace(re, () => maskWord(word));

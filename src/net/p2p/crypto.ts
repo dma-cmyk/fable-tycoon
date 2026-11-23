@@ -6,7 +6,6 @@
 
 const SALT_TEXT = 'fable-tycoon-v1';
 const PBKDF2_ITERATIONS = 100_000;
-const COMPRESS_THRESHOLD = 2_048;
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
 
@@ -31,7 +30,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function base64ToBytes(value: string): Uint8Array {
+export function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value);
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
@@ -76,16 +75,6 @@ export function deriveRoomKey(roomId: string): Promise<CryptoKey> {
   return promise;
 }
 
-async function gzip(bytes: Uint8Array): Promise<FreshBytes | null> {
-  if (typeof CompressionStream !== 'function') return null;
-  try {
-    const stream = new Blob([copyBytes(bytes)]).stream().pipeThrough(new CompressionStream('gzip'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
 async function gunzip(bytes: Uint8Array): Promise<FreshBytes> {
   const stream = new Blob([copyBytes(bytes)]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -100,15 +89,10 @@ export interface EncryptedPayload {
 
 export async function encryptPayload(key: CryptoKey, payload: unknown): Promise<EncryptedPayload> {
   const encoded = new TextEncoder().encode(JSON.stringify(payload));
-  let plain: FreshBytes = copyBytes(encoded);
-  let compressed = false;
-  if (encoded.length >= COMPRESS_THRESHOLD) {
-    const packed = await gzip(encoded);
-    if (packed && packed.length < encoded.length) {
-      plain = packed;
-      compressed = true;
-    }
-  }
+  // Compression is intentionally not used: WebKit builds vary in DecompressionStream support,
+  // and large snapshots are safely chunked instead (the z flag remains readable for old peers).
+  const plain: FreshBytes = copyBytes(encoded);
+  const compressed = false;
   const iv = copyBytes(crypto.getRandomValues(new Uint8Array(12)));
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain),

@@ -4,6 +4,7 @@ import type { Server as NetServer } from 'node:net';
 import { Aedes } from 'aedes';
 import type { P2PMessage } from './transport';
 import { MqttTransport } from './transport';
+import { generateIdentity } from './identity';
 
 function randomHex(byteLength: number): string {
   let text = '';
@@ -35,6 +36,7 @@ describe('MqttTransport chunking and encryption', () => {
 
   it('sends a >60KB uncompressible message and a targeted reply', async () => {
     const options = {
+      identity: await generateIdentity(),
       brokers: [url],
       disableWebRtc: true,
       connectTimeoutMs: 2_000,

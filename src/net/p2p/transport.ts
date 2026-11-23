@@ -9,6 +9,8 @@ import mqtt from 'mqtt';
 import type { MqttClient } from 'mqtt';
 import type { ClientMsg, LobbyView, ServerMsg } from '../protocol';
 import { decryptPayload, deriveRoomKey, encryptPayload, roomHash } from './crypto';
+import { publicKeyFingerprint, signData, verifyData } from './identity';
+import type { ClientIdentity } from './identity';
 
 export const DEFAULT_BROKERS = [
   'wss://broker.emqx.io:8084/mqtt',
@@ -17,7 +19,7 @@ export const DEFAULT_BROKERS = [
 ] as const;
 
 const TOPIC_PREFIX = 'fable-tycoon-v1';
-const MAX_PAYLOAD_CHARS = 60_000;
+const MAX_PAYLOAD_CHARS = 56_000;
 const CHUNK_CHARS = 48_000;
 const DEDUP_LIMIT = 256;
 const PART_TIMEOUT_MS = 15_000;
@@ -39,9 +41,11 @@ export type P2PControl =
       hostPeerId: string;
       seat: number | null;
       hostSeat: number | null;
-      seatTokens: Record<string, string>;
+      seatKeys: Record<string, string>;
       lobby: LobbyView;
       seq: number;
+      gen: number;
+      broker: string | null;
       at: number;
     }
   | {
@@ -49,9 +53,11 @@ export type P2PControl =
       hostPeerId: string;
       seat: number | null;
       hostSeat: number | null;
-      seatTokens: Record<string, string>;
+      seatKeys: Record<string, string>;
       lobby: LobbyView;
       seq: number;
+      gen: number;
+      broker: string | null;
       at: number;
     }
   | { k: 'presence'; peerId: string; seat: number | null; at: number }
@@ -73,6 +79,10 @@ interface WireEnvelope {
   z?: boolean;
   p?: number;
   n?: number;
+  /** Base64 ECDSA-P256 signature over `${f}\n${id}\n${z?1:0}\n${body}`. */
+  sig?: string;
+  /** Sender public JWK. The receiver pins fingerprints per seat/host. */
+  pk?: JsonWebKey;
 }
 
 type RtcSignal =
@@ -100,6 +110,8 @@ interface InboundParts {
 }
 
 export interface MqttTransportOptions {
+  /** Required: every relayed payload is signed with this P-256 identity. */
+  identity: ClientIdentity;
   brokers?: readonly string[];
   /** Node tests set this: RTCPeerConnection does not exist in Node anyway, but explicit is clearer. */
   disableWebRtc?: boolean;
@@ -112,7 +124,7 @@ export interface P2PTransport {
   connect(roomId: string): Promise<void>;
   send(peerId: string, message: P2PMessage): Promise<void>;
   broadcast(message: P2PMessage): Promise<void>;
-  onMessage(listener: (from: string, message: P2PMessage) => void): () => void;
+  onMessage(listener: (from: string, message: P2PMessage, fingerprint: string) => void): () => void;
   onStatus(listener: (status: TransportStatus) => void): () => void;
   status(): TransportStatus;
   broker(): string | null;
@@ -168,7 +180,9 @@ export class MqttTransport implements P2PTransport {
   private key: CryptoKey | null = null;
   private connectionStatus: TransportStatus = 'connecting';
   private statusListeners = new Set<(status: TransportStatus) => void>();
-  private messageListeners = new Set<(from: string, message: P2PMessage) => void>();
+  private messageListeners = new Set<
+    (from: string, message: P2PMessage, fingerprint: string) => void
+  >();
   private peers = new Map<string, PeerState>();
   private parts = new Map<string, InboundParts>();
   private seenIds = new Set<string>();
@@ -176,9 +190,10 @@ export class MqttTransport implements P2PTransport {
   private counter = 0;
   private outbox: Promise<void> = Promise.resolve();
   private inbound: Promise<void> = Promise.resolve();
+  private offlineQueue: { topic: string; chunks: WireEnvelope[] }[] = [];
   private closed = false;
 
-  constructor(peerId: string, options: MqttTransportOptions = {}) {
+  constructor(peerId: string, options: MqttTransportOptions) {
     this.peerId = peerId;
     this.options = options;
     this.log = options.log ?? (() => {});
@@ -211,7 +226,7 @@ export class MqttTransport implements P2PTransport {
     };
   }
 
-  onMessage(listener: (from: string, message: P2PMessage) => void): () => void {
+  onMessage(listener: (from: string, message: P2PMessage, fingerprint: string) => void): () => void {
     this.messageListeners.add(listener);
     return () => {
       this.messageListeners.delete(listener);
@@ -239,6 +254,7 @@ export class MqttTransport implements P2PTransport {
         this.attachClient(client);
         await this.subscribe(client);
         this.setStatus('open');
+        this.flushOfflineQueue();
         this.log(`connected to ${broker} as ${this.peerId}`);
         return;
       } catch (error) {
@@ -300,7 +316,10 @@ export class MqttTransport implements P2PTransport {
     });
     client.on('connect', () => {
       if (this.closed) return;
-      void this.subscribe(client).then(() => this.setStatus('open'));
+      void this.subscribe(client).then(() => {
+        this.setStatus('open');
+        this.flushOfflineQueue();
+      });
     });
     client.on('error', (error: Error) => this.log('mqtt error', error));
   }
@@ -329,19 +348,28 @@ export class MqttTransport implements P2PTransport {
     this.maybeOffer(peerId);
     return this.enqueue(async () => {
       const chunks = await this.encode({ k: 'app', msg: message });
+      // Always keep one relay copy: a DataChannel can be "open" on the sender while the other side
+      // has not flushed its open event yet (observed in WebKit). Envelope-id dedup makes the
+      // duplicate harmless, and when MQTT is down the copy is queued for flush.
+      this.publishChunks(this.topicFor(peerId), chunks);
       const peer = this.peers.get(peerId);
       if (peer?.dcOpen && peer.dc && peer.dc.readyState === 'open') {
         this.sendChunks(peerId, chunks, peer.dc);
-        return;
       }
-      this.publishChunks(this.topicFor(peerId), chunks);
     });
   }
 
   broadcast(message: P2PMessage): Promise<void> {
     return this.enqueue(async () => {
       const chunks = await this.encode({ k: 'app', msg: message });
+      // One relay copy reaches every room member (including peers not yet upgraded/known); the
+      // direct copies below cut latency for DataChannel peers. Envelope ids dedup the duplicates.
       this.publishChunks(this.roomTopic, chunks);
+      for (const [peerId, peer] of this.peers) {
+        if (peer.dcOpen && peer.dc && peer.dc.readyState === 'open') {
+          this.sendChunks(peerId, chunks, peer.dc);
+        }
+      }
     });
   }
 
@@ -362,19 +390,26 @@ export class MqttTransport implements P2PTransport {
     const encrypted = await encryptPayload(this.key, payload);
     this.counter += 1;
     const id = `${this.peerId.slice(0, 8)}-${Date.now().toString(36)}-${this.counter}`;
+    const signed = `${this.peerId}\n${id}\n${encrypted.z ? '1' : '0'}\n${encrypted.body}`;
+    const sig = await signData(this.options.identity, signed);
+    const base = {
+      f: this.peerId,
+      id,
+      ...(encrypted.z ? { z: true } : {}),
+      sig,
+      pk: this.options.identity.publicJwk,
+    };
     if (encrypted.body.length <= MAX_PAYLOAD_CHARS) {
-      return [{ f: this.peerId, id, body: encrypted.body, ...(encrypted.z ? { z: true } : {}) }];
+      return [{ ...base, body: encrypted.body }];
     }
     const chunks: WireEnvelope[] = [];
     const total = Math.ceil(encrypted.body.length / CHUNK_CHARS);
     for (let i = 0; i < total; i += 1) {
       chunks.push({
-        f: this.peerId,
-        id,
+        ...base,
         body: encrypted.body.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS),
         p: i,
         n: total,
-        ...(encrypted.z ? { z: true } : {}),
       });
     }
     return chunks;
@@ -382,9 +417,25 @@ export class MqttTransport implements P2PTransport {
 
   private publishChunks(topic: string, chunks: WireEnvelope[]): void {
     const client = this.client;
-    if (!client || !client.connected) return;
+    if (!client || !client.connected) {
+      this.offlineQueue.push({ topic, chunks });
+      if (this.offlineQueue.length > 500) this.offlineQueue.shift();
+      return;
+    }
     for (const chunk of chunks) {
       client.publish(topic, JSON.stringify(chunk), { qos: 1 });
+    }
+  }
+
+  private flushOfflineQueue(): void {
+    const client = this.client;
+    if (!client || !client.connected || this.offlineQueue.length === 0) return;
+    const queued = this.offlineQueue;
+    this.offlineQueue = [];
+    for (const entry of queued) {
+      for (const chunk of entry.chunks) {
+        client.publish(entry.topic, JSON.stringify(chunk), { qos: 1 });
+      }
     }
   }
 
@@ -435,15 +486,36 @@ export class MqttTransport implements P2PTransport {
         if (part === undefined) return;
         body.push(part);
       }
-      void this.queueDispatch(envelope.f, envelope.id, body.join(''), entry.z);
+      void this.queueDispatch(
+        envelope.f,
+        envelope.id,
+        body.join(''),
+        entry.z,
+        envelope.sig,
+        envelope.pk,
+      );
       return;
     }
-    void this.queueDispatch(envelope.f, envelope.id, envelope.body, envelope.z === true);
+    void this.queueDispatch(
+      envelope.f,
+      envelope.id,
+      envelope.body,
+      envelope.z === true,
+      envelope.sig,
+      envelope.pk,
+    );
   }
 
-  private queueDispatch(from: string, id: string, body: string, compressed: boolean): Promise<void> {
+  private queueDispatch(
+    from: string,
+    id: string,
+    body: string,
+    compressed: boolean,
+    signature: string | undefined,
+    publicJwk: JsonWebKey | undefined,
+  ): Promise<void> {
     const next = this.inbound
-      .then(() => this.decodeAndDispatch(from, id, body, compressed))
+      .then(() => this.decodeAndDispatch(from, id, body, compressed, signature, publicJwk))
       .catch((error) => this.log('inbound message failed', error));
     this.inbound = next;
     return next;
@@ -454,7 +526,19 @@ export class MqttTransport implements P2PTransport {
     id: string,
     body: string,
     compressed: boolean,
+    signature: string | undefined,
+    publicJwk: JsonWebKey | undefined,
   ): Promise<void> {
+    if (!signature || !publicJwk) {
+      this.log(`drop ${from}/${id}: unsigned envelope`);
+      return;
+    }
+    const signed = `${from}\n${id}\n${compressed ? '1' : '0'}\n${body}`;
+    if (!(await verifyData(publicJwk, signature, signed))) {
+      this.log(`drop ${from}/${id}: invalid ECDSA signature`);
+      return;
+    }
+    const fingerprint = await publicKeyFingerprint(publicJwk);
     if (this.seenIds.has(id)) return;
     this.remember(id);
     if (!this.key) return;
@@ -462,7 +546,7 @@ export class MqttTransport implements P2PTransport {
     try {
       decoded = await decryptPayload(this.key, body, compressed);
     } catch (error) {
-      this.log('could not decrypt envelope', error);
+      this.log(`drop ${from}/${id}: decrypt/decompress failed`, error);
       return;
     }
     if (!isWirePayload(decoded)) return;
@@ -473,7 +557,7 @@ export class MqttTransport implements P2PTransport {
     if (!isP2PMessage(decoded.msg)) return;
     this.touch(from);
     this.maybeOffer(from);
-    for (const listener of this.messageListeners) listener(from, decoded.msg);
+    for (const listener of this.messageListeners) listener(from, decoded.msg, fingerprint);
   }
 
   private remember(id: string): void {
