@@ -316,6 +316,21 @@ export class ModalHost {
   closeAll(): void {
     for (let i = this.stack.length - 1; i >= 0; i--) this.stack[i].close();
   }
+
+  /** Close every modal except the given panel, then move it to the top of the stack. */
+  closeOthers(root: HTMLElement): void {
+    const keep = this.stack.find((entry) => entry.backdrop === root);
+    if (!keep) return;
+    for (const entry of [...this.stack]) {
+      if (entry !== keep) entry.close();
+    }
+    const index = this.stack.indexOf(keep);
+    if (index >= 0) {
+      this.stack.splice(index, 1);
+      this.stack.push(keep);
+      this.el.append(keep.backdrop);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- toasts

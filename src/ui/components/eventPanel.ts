@@ -32,6 +32,7 @@ export class EventPanel {
   private readonly metaToggle: HTMLButtonElement;
   private readonly seasonBadge: HTMLElement;
   private event: GameEventDef | null = null;
+  get eventId(): string | null { return this.event?.id ?? null; }
   private state: PublicState | null = null;
   private canAct = false;
   private chosen = false;

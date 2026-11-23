@@ -653,7 +653,7 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.portraitVariantTimer);
     window.clearTimeout(this.turnBannerTimer);
     window.clearTimeout(this.monthFlipTimer);
-    window.clearTimeout(this.stepsTimer);
+    if (this.stepsTimer) cancelAnimationFrame(this.stepsTimer);
     window.clearTimeout(this.rouletteTimer);
     this.clearCityPick();
     window.clearInterval(this.rouletteInterval);
@@ -826,6 +826,7 @@ export class GameScreen implements ScreenHandle {
     this.loading.hidden = true;
     this.map?.setState(state);
     this.map?.setMonth(state.month);
+    this.enforcePhaseDialogs(state);
     this.renderHud();
     this.updateAutoDialogs();
     this.updateBgm();
@@ -1337,12 +1338,69 @@ export class GameScreen implements ScreenHandle {
     });
   }
 
+  private closeCitySheet(): void {
+    this.citySheet?.close();
+    this.citySheet = null;
+    this.citySheetCityId = null;
+    this.citySheetBuyMode = false;
+    this.bulkBuyCityId = null;
+    this.bulkBuyQueue = [];
+  }
+
+  private closeTransientDialog(): void {
+    this.transient?.handle.close();
+    this.transient = null;
+    this.clearCityPick();
+  }
+
+  /** Phase gate runs on every adopted state, even while fx are queued/busy. */
+  private enforcePhaseDialogs(state: PublicState): void {
+    const phase = state.phase;
+    const actor = actorOf(state);
+    const actorIsMine = actor !== null && this.myPlayerIds().includes(actor);
+    const terminal = phase.t === 'year_end' || phase.t === 'game_over' || this.resultScreen !== null;
+
+    if (this.citySheet) {
+      if (terminal || (this.citySheetBuyMode && (phase.t !== 'buy' || phase.cityId !== this.citySheetCityId || !actorIsMine))) {
+        this.closeCitySheet();
+      }
+    }
+    if (this.shop && (terminal || phase.t !== 'shop' || !actorIsMine)) {
+      this.shop.close();
+      this.shop = null;
+    }
+    if (this.transient) {
+      const expected: TransientKind | null = phase.t === 'card_target' ? 'target' : phase.t === 'discard' ? 'discard' : phase.t === 'sell' ? 'sell' : null;
+      if (terminal || !actorIsMine || expected !== this.transient.kind) this.closeTransientDialog();
+    }
+    if (this.eventPanel.isOpen) {
+      if (terminal || !state.activeEventId || (this.eventPanel.eventId !== null && this.eventPanel.eventId !== state.activeEventId)) {
+        this.eventPanel.hide();
+        this.syncEventComm();
+      }
+    }
+    if (this.yearEnd) {
+      if (phase.t !== 'year_end' || this.resultScreen) {
+        this.yearEnd.close();
+        this.yearEnd = null;
+      } else {
+        this.app.modal.closeOthers(this.yearEnd.root);
+      }
+    }
+  }
+
   private updateAutoDialogs(): void {
     const state = this.state;
     if (!state || this.fxBusy) return;
     const canAct = this.interactiveNow();
 
     if (state.phase.t === 'buy') {
+      const actor = actorOf(state);
+      const actorIsMine = actor !== null && this.myPlayerIds().includes(actor);
+      if (!actorIsMine) {
+        if (this.citySheetBuyMode) this.closeCitySheet();
+        return;
+      }
       const cityId = state.phase.cityId;
       if (!citiesById.has(cityId)) {
         if (canAct && !this.actionPending) {
@@ -1408,6 +1466,12 @@ export class GameScreen implements ScreenHandle {
     this.updateTransientDialog(state, canAct);
 
     if (state.phase.t === 'shop') {
+      const actor = actorOf(state);
+      if (actor === null || !this.myPlayerIds().includes(actor)) {
+        this.shop?.close();
+        this.shop = null;
+        return;
+      }
       if (!this.shop) {
         this.shop = openShopDialog({
           modal: this.app.modal,
@@ -1446,6 +1510,7 @@ export class GameScreen implements ScreenHandle {
       } else {
         this.yearEnd.update(state, canAct);
       }
+      this.app.modal.closeOthers(this.yearEnd.root);
     } else if (this.yearEnd) {
       this.yearEnd.close();
       this.yearEnd = null;
@@ -2398,6 +2463,9 @@ export class GameScreen implements ScreenHandle {
     this.transient = null;
     this.yearEnd?.close();
     this.yearEnd = null;
+    this.shop?.close();
+    this.shop = null;
+    this.app.modal.closeAll();
     this.resultScreen = new ResultScreen({
       state,
       mode: this.session.mode,
@@ -2451,8 +2519,9 @@ export class GameScreen implements ScreenHandle {
       }
       case 'move': {
         Audio.sfx('step');
-        this.startStepsCounter(fx.path.length, FX_MS.moveStep / control.speed);
-        await this.map?.animateMove(fx.playerId, fx.path, FX_MS.moveStep / control.speed, { dice: fx.dice ?? 1 });
+        const move = this.map?.animateMove(fx.playerId, fx.path, FX_MS.moveStep / control.speed, { dice: fx.dice ?? 1 });
+        this.startStepsCounter();
+        await move;
         this.stopStepsCounter();
         return;
       }
@@ -2825,27 +2894,28 @@ export class GameScreen implements ScreenHandle {
     }, 1300);
   }
 
-  private startStepsCounter(total: number, stepMs: number): void {
+  private startStepsCounter(): void {
     this.stopStepsCounter();
-    let remaining = total;
     this.stepsCounter.hidden = false;
     this.el.classList.add('is-moving');
-    this.stepsCounter.innerHTML = `<span class="steps-label">移動 あと</span><strong class="steps-value">${remaining}</strong><span class="steps-unit">マス</span>`;
-    const tick = (): void => {
-      remaining = Math.max(0, remaining - 1);
-      const value = this.stepsCounter.querySelector('.steps-value');
-      if (value) {
-        value.textContent = String(remaining);
-        value.classList.add('is-pop');
-        window.setTimeout(() => value.classList.remove('is-pop'), 180);
-      }
-      if (remaining <= 0) this.stopStepsCounter();
+    const render = (remaining: number): void => {
+      this.stepsCounter.innerHTML = `<span class="steps-label">移動 あと</span><strong class="steps-value">${remaining}</strong><span class="steps-unit">マス</span>`;
     };
-    this.stepsTimer = window.setInterval(tick, Math.max(90, stepMs));
+    render(this.map?.getMoveProgress()?.remaining ?? 0);
+    const tick = (): void => {
+      const progress = this.map?.getMoveProgress();
+      if (!progress) {
+        this.stepsTimer = 0;
+        return;
+      }
+      render(progress.remaining);
+      this.stepsTimer = requestAnimationFrame(tick);
+    };
+    this.stepsTimer = requestAnimationFrame(tick);
   }
 
   private stopStepsCounter(): void {
-    window.clearInterval(this.stepsTimer);
+    if (this.stepsTimer) cancelAnimationFrame(this.stepsTimer);
     this.stepsTimer = 0;
     this.stepsCounter.hidden = true;
     this.el.classList.remove('is-moving');
@@ -2865,7 +2935,7 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.portraitVariantTimer);
     window.clearTimeout(this.turnBannerTimer);
     window.clearTimeout(this.monthFlipTimer);
-    window.clearTimeout(this.stepsTimer);
+    if (this.stepsTimer) cancelAnimationFrame(this.stepsTimer);
     window.clearTimeout(this.rouletteTimer);
     this.clearCityPick();
     window.clearInterval(this.rouletteInterval);

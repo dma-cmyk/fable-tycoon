@@ -14,6 +14,7 @@ export interface YearEndOptions {
 }
 
 export interface YearEndHandle {
+  readonly root: HTMLElement;
   update(state: PublicState, canAct: boolean): void;
   close(): void;
 }
@@ -164,6 +165,9 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
   });
 
   return {
+    get root() {
+      return modalHandle?.root ?? document.createElement('div');
+    },
     update(nextState: PublicState, nextCanAct: boolean) {
       state = nextState;
       canAct = nextCanAct;
