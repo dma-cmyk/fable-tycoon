@@ -22,20 +22,21 @@ npm run dev        # Vite 開発サーバー
 
 | ファイル | 内容 | 生成 |
 |---|---|---|
-| `src/data/cities.json` | 150都市と物件 | 手書き |
+| `src/data/cities.json` | 300都市と物件 | 手書き |
 | `src/data/board.json` | 盤面ノード・辺 | `npm run board` |
 | `public/assets/map/land.json` | 投影済み陸地ポリゴン | `npm run board` |
 | `src/data/characters.json` | 48キャラクター | 手書き |
 | `src/data/npcs.json` | NPC 8人 + narrator | 手書き |
 | `src/data/events.json` | ニュース・歴史・寓話イベント | 手書き |
-| `src/data/cards.json` | カード13種の文言・重み | 手書き |
+| `src/data/realms.json` | 天国・地獄・宇宙の各8駅と物件 | 手書き |
+| `src/data/cards.json` | カード14種の文言・重み・price | 手書き |
 
 ---
 
 ## 1. 都市を追加する
 
-`src/data/cities.json` は `City[]`。**必ず150件**。追加するなら、同じ数を保つため既存の1件を置き換えるか、
-DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一意。
+`src/data/cities.json` は `City[]`。**必ず300件**。追加するなら、同じ数を保つため既存の1件を置き換えるか、
+DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一意。異世界の駅は `realms.json` に分ける。
 
 ```json
 {
@@ -62,7 +63,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 - `region`: `east_asia` `southeast_asia` `south_asia` `middle_east` `europe`
   `russia_central_asia` `africa` `north_america` `central_america` `south_america` `oceania`
-- `tier`: 1=世界都市（約25）、2=主要都市、3=地方都市。tier 1 は物件価格帯を高めにする。
+- `tier`: 1=世界都市（約35）、2=主要都市、3=地方都市。tier 1 は物件価格帯を高めにする。
 - `lat` / `lon`: 実座標。小数2桁まで。`lat` は -56〜80（地図の表示範囲）。
 - `port`: 海運の辺を作れる港町か。`airport`: ペガサス便の目的地になれるか。
 - `blurb`: 日本語1文。改行なし。表向きかわいく、裏に風刺。
@@ -81,7 +82,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ### ランドマーク
 
-`landmark` は次の24種のみ。各1回だけ、指定都市に置く。
+`landmark` は次の36種のみ。各1回だけ、指定都市に置く。
 
 | id | 都市 |
 |---|---|
@@ -109,12 +110,24 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 | `gyeongbokgung` | seoul |
 | `petra` | amman |
 | `kilimanjaro` | nairobi または arusha |
+| `neuschwanstein` | munich |
+| `mt_fuji` | shizuoka |
+| `niagara` | niagara-falls または buffalo |
+| `iguazu` | foz-do-iguacu |
+| `victoria_falls` | livingstone |
+| `ha_long_bay` | hanoi または ha-long |
+| `cappadocia` | kayseri |
+| `prague_castle` | prague |
+| `hermitage` | st-petersburg |
+| `gateway_arch` | st-louis |
+| `baobab` | antananarivo |
+| `terracotta` | xian |
 
 ### 都市追加の手順
 
-1. `cities.json` を編集（150件・id・物件id・landmark を確認）。
+1. `cities.json` を編集（300件・id・物件id・landmark を確認）。
 2. `npm run board`。
-   - 出力の `total nodes` が **900以上**、`components: 1`、`sea squares on land: 0`、
+   - world nodes は **2600〜3200** を目標にする（60/75–90 の spacing 制約で下振れする場合は validator が warning を出す）。`components: 1`、`sea squares on land: 0`、
      `rail squares on water: 0` を確認。
    - 新しい都市が孤立していないか、`components` とログを見る。
 3. `npm run validate`。エラー0を確認。
@@ -128,7 +141,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ## 2. 盤面生成のルール（`tools/build-board.mjs`）
 
-- 投影は `src/core/geo.ts` の Miller 図法のコピー。**数式を変えるときは両方同時に**変える。
+- 投影は `src/core/geo.ts` と `tools/lib/project.mjs`（Miller + `warp.json` の密度均等化変形）を使う。**数式・warp を変えるときは両方同時に**変える。
 - 都市を Delaunay 三角形分割し、日付変更線をまたぐ辺のために ±MAP_W のコピーを入れる。
 - 各辺を 0.5° 間隔でサンプリングし、次で分類する:
   - **rail**: ほぼ陸。短い川・海峡は1サンプルまで。`london-paris`（英仏トンネル）、
@@ -138,13 +151,30 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 - グラフが分断されたら、港同士の海路や陸路で最短の有効な辺を追加する。
 - 主要回廊（日本—韓国、英—仏、大西洋2〜3、太平洋2、インド洋1〜2、オセアニア—東南アジア1〜2）は
   保護され、混雑する海路は予算とハブ次数で間引く。
-- 各辺に中間マスを `clamp(round(length / 35) - 1, 1, 7)` 個置く（密度調整のため35）。
+- 各辺に中間マスを `clamp(round(length / 75) - 1, 1, 9)` 個置く。ノード間は最低60 map units、駅はできるだけ110以上離す。
+  都市が近すぎる場合は辺を1マスの中継にまとめ、マスの重なりを避ける。
+- 中間マスの6種は 36:17:15:14:4:2 の比（city を除いた6種で正規化し、青40.9% / 赤19.3% / 黄17.0% / news15.9% / shop4.5% / warp2.3% 目安、±3%）。
+  shop は都市に隣接するマスを優先し1辺1個まで。warp は都市に隣接させず、地図上に分散させる。news は隣接させない。
   種類は blue 42% / red 22% / yellow 18% / news 18% 目安。news は隣接させない。
 - 海の辺の中間マスは必ず水上。陸の辺の中間マスは陸上に寄せる。
+- 異世界（天国・地獄・宇宙）は `realms.json` の8駅から、背景画像の名所に合わせた2〜3重ループ＋分岐＋行き止まり＋近道で約45〜55ノードの小盤面を作る。portal は heaven 1（門の近く）、hell 1（上中央の蜘蛛の糸）、space 2。node.realm を付け、world とは辺でつながない。
 - 出力: `src/data/board.json`（`Board`）と `public/assets/map/land.json`
   （`{ w, h, polygons }`、各 ring は `[x0,y0,x1,y1,...]` の平坦配列、0.5単位に丸め、600KB未満）。
 
 ---
+
+## 2.5 異世界マップ（天国・地獄・宇宙）
+
+`src/data/realms.json` は `City` 形の駅を realm ごとに8件持つ。`lat`/`lon` は0、`landmark` なし、`realm` は `heaven` / `hell` / `space`、物件は2〜4件。
+
+`npm run board` は `realms.json` の駅を `board.json` に `c:<cityId>` で追加し、背景画像の名所に合わせた次の小盤面を作る。
+
+- 外周ループ（8駅）＋内側ループ（4駅を共有）＋3本の行き止まり分岐＋近道ブリッジ。
+- 1 realm あたり 45〜55 ノード。マスの id は `r:<realm>:<n>`、駅は `c:<cityId>`。
+- portal: heaven 1（門の近く）、hell 1（上中央の蜘蛛の糸、入口から遠い）、space 2。
+- 背景は `public/assets/realms/<realm>.webp`（2400×1350）。座標は中央80%に収める。
+- world とは辺で接続しない。`GameData.cities` へは `src/data/index.ts` が連結する（Main 管理）。
+- 変更後は `npm run board` → `npm run validate`。プレビューで駅が背景の建物に重なっていないか確認。
 
 ## 3. キャラクターを追加する
 
@@ -246,7 +276,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 - `lines` は必須。`choices` があれば選択後に `reply`、無ければ `effects` を即適用。
 - 話者は `narrator` / `npc:<id>` / `char:<id>` のみ。**`self` はイベントで禁止**
   （手番キャラの反応は `Fx say` + `lineKey` で行う）。
-- `char:`・`npc:` は実在する id のみ。`card` 効果の card id も実在する13種のみ。
+- `char:`・`npc:` は実在する id のみ。`card` 効果の card id も実在する14種のみ。
 - `weight` > 0、`minYear` は1〜10、`once` は boolean。
 
 ### Effect の op
@@ -273,9 +303,9 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 
 ## 6. カード
 
-`cards.json` は `CardDef[]`。id は DESIGN §2.5 の13種のみ:
+`cards.json` は `CardDef[]`。id は DESIGN §2.5 の14種のみ:
 
-`express2` `express3` `pegasus` `carpet` `tariff` `subsidy` `bailout` `stop`
+`express2` `express3` `pegasus` `carpet` `rocket` `tariff` `subsidy` `bailout` `stop`
 `takeover` `piper_pass` `golden_egg` `insider` `shield`
 
 ```json
@@ -284,6 +314,7 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 ```
 
 - `kind`: `move` `money` `attack` `defense` `special`
+- `price`: 正の数（億円）。カード売り場の価格。
 - `needsTarget`: `player` / `city` / `airport`（任意）
 - 新しい id を足してもエンジンは動かない。**カード追加はエンジン実装とセット**。
 - 文言・重み・対象だけを変えるなら `cards.json` のみでよい。
@@ -313,15 +344,17 @@ npm run validate
 - ファイルが無い → **warning**。
 - 内容が不正 → **error**。1件でもあれば exit 1。
 - 主なチェック:
-  - cities: 150件、id一意、物件idの接頭辞と連番、landmarkの許可リストと都市、地域の網羅、
-    Africa 12以上 / 南米10以上 / オセアニア5以上、座標2桁、業種・価格・利回り。
-  - board: ノードid一意、cityIdが cities に存在、全都市にノード、座標範囲と0.1丸め、
-    辺の両端存在、重複辺なし、連結、news隣接なし、900ノード以上。
+  - cities: 300件、id一意、物件idの接頭辞と連番、landmarkの許可リストと都市、地域の網羅、
+    Africa 30前後 / 南米18前後 / オセアニア10前後、座標2桁、業種・価格・利回り。
+  - realms: 各realm 8駅、id一意、物件2〜4、lat/lon=0、landmarkなし。
+  - board: ノードid一意、cityIdが cities∪realms に存在、全都市にノード、座標範囲（world 8192×3817 / realm 2400×1350）と0.1丸め、
+    辺の両端存在、重複辺なし、world と各 realm がそれぞれ連結、news隣接なし、world ノード数（2600〜3200 目標は warning）、square mix は6種比の正規化 ±3%。
   - characters: 48 id、12 LineKey、voice、perk、role、spriteパス。
   - npcs: 許可id、voice。
-  - events: kind/fact/sources、speaker（self禁止）、char/npc参照、Effectのopとフィールド、
-    card参照、industry、choices/effects。
-  - cards: 13 id、kind、weight。
+  - events: kind/fact/sources、speaker（self禁止）、char/npc参照、Effectのopとフィールド（realm 含む）、
+    card参照、industry、choices/effects、realms/months/monthly。
+  - cards: 14 id、kind、weight、price。
+  - emotes: id、category、anim、targeted、cooldown、lines/hitLines の参照。
   - land.json: 形式、偶数長リング、閉路、seamジャンプなし、600KB未満。
 - 他担当のアセット未生成などは warning で通る。エラーは自分のファイルなら直す。
 
@@ -342,7 +375,7 @@ npm run validate
 
 1. 正本（types.ts / geo.ts / DESIGN.md / protocol.ts）を勝手に変えていない。
 2. id は一意、物件idは `<cityId>-<n>`、landmark は表の都市のみ。
-3. `npm run board` が成功し、`total nodes >= 900`、`components: 1`、
+3. `npm run board` が成功し、world nodes が目標範囲（または spacing 制約の warning を理解）、`components: 1`、
    `sea squares on land: 0`、`rail squares on water: 0`。
 4. `npm run validate` が exit 0（warning は内容を確認）。
 5. 海路が大陸を横切っていない、鉄路が外洋を横切っていない（プレビュー目視）。

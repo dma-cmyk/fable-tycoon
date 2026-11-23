@@ -9,11 +9,12 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MAP_W, MAP_H } from './lib/project.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_DIR = join(ROOT, 'src/data');
-const MAP_W = 4096;
-const MAP_H = 1909;
+const REALM_W = 2400;
+const REALM_H = 1350;
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UNDERSCORE_ID = /^[a-z][a-z0-9_]*$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -45,11 +46,13 @@ const LINE_KEYS = [
 ];
 const WHO = ['self', 'all', 'others', 'richest', 'poorest', 'random_other'];
 const CARD_KINDS = ['move', 'money', 'attack', 'defense', 'special'];
-const SQUARE_KINDS = ['blue', 'red', 'yellow', 'news'];
+const SQUARE_KINDS = ['blue', 'red', 'yellow', 'news', 'shop', 'warp', 'portal'];
+const REALM_IDS = ['heaven', 'hell', 'space'];
+const REALM_OR_WORLD = [...REALM_IDS, 'world'];
 const EDGE_MODES = ['rail', 'sea'];
 const EFFECT_OPS = [
   'cash', 'cash_pct', 'per_property', 'industry_mod', 'price_mod', 'sell',
-  'card', 'move', 'skip', 'piper', 'gamble',
+  'card', 'move', 'skip', 'piper', 'gamble', 'realm',
 ];
 
 const LANDMARK_CITY = {
@@ -77,6 +80,18 @@ const LANDMARK_CITY = {
   gyeongbokgung: ['seoul'],
   petra: ['amman'],
   kilimanjaro: ['nairobi', 'arusha'],
+  neuschwanstein: ['munich'],
+  mt_fuji: ['shizuoka'],
+  niagara: ['niagara-falls', 'buffalo'],
+  iguazu: ['foz-do-iguacu'],
+  victoria_falls: ['livingstone'],
+  ha_long_bay: ['hanoi', 'ha-long'],
+  cappadocia: ['kayseri'],
+  prague_castle: ['prague'],
+  hermitage: ['st-petersburg'],
+  gateway_arch: ['st-louis'],
+  baobab: ['antananarivo'],
+  terracotta: ['xian'],
 };
 
 // ---------------------------------------------------------------- DESIGN.md
@@ -111,11 +126,11 @@ function designNpcIds() {
 const DESIGN_NPC_IDS = designNpcIds();
 
 if (DESIGN_CHAR_IDS.size !== 48) err('docs/DESIGN.md', `parsed ${DESIGN_CHAR_IDS.size} character ids (expected 48)`);
-if (DESIGN_CARD_IDS.size !== 13) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS.size} card ids (expected 13)`);
+if (DESIGN_CARD_IDS.size !== 14) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS.size} card ids (expected 14)`);
 if (DESIGN_NPC_IDS.size !== 8) err('docs/DESIGN.md', `parsed ${DESIGN_NPC_IDS.size} NPC ids (expected 8)`);
 
 // ---------------------------------------------------------------- load JSON
-const KNOWN = ['cities.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json', 'emotes.json'];
+const KNOWN = ['cities.json', 'realms.json', 'warp.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json', 'emotes.json'];
 const data = {};
 let jsonFiles = [];
 try {
@@ -148,7 +163,7 @@ if (data['cities.json'] !== undefined) {
   if (!Array.isArray(data['cities.json'])) {
     err('cities.json', 'must be an array of City');
   } else {
-    if (cities.length !== 150) err('cities.json', `expected exactly 150 cities, got ${cities.length}`);
+    if (cities.length !== 300) err('cities.json', `expected exactly 300 cities, got ${cities.length}`);
     const seenIds = new Set();
     const seenPropertyIds = new Set();
     const seenLandmarks = new Map();
@@ -239,15 +254,81 @@ if (data['cities.json'] !== undefined) {
     for (const region of REGIONS) {
       if (!regionCounts[region]) err('cities.json', `region "${region}" is not represented`);
     }
-    if ((regionCounts.africa || 0) < 12) err('cities.json', `Africa needs at least 12 cities, got ${regionCounts.africa || 0}`);
-    if ((regionCounts.south_america || 0) < 10) err('cities.json', `South America needs at least 10 cities, got ${regionCounts.south_america || 0}`);
-    if ((regionCounts.oceania || 0) < 5) err('cities.json', `Oceania needs at least 5 cities, got ${regionCounts.oceania || 0}`);
+    if ((regionCounts.africa || 0) < 30) warn('cities.json', `Africa should have ~30 cities, got ${regionCounts.africa || 0}`);
+    if ((regionCounts.south_america || 0) < 18) warn('cities.json', `South America should have ~18 cities, got ${regionCounts.south_america || 0}`);
+    if ((regionCounts.oceania || 0) < 10) warn('cities.json', `Oceania should have ~10 cities, got ${regionCounts.oceania || 0}`);
+    if ((regionCounts.europe || 0) < 58) warn('cities.json', `Europe should have ~60 cities, got ${regionCounts.europe || 0}`);
+    if ((regionCounts.north_america || 0) < 32) warn('cities.json', `USA/Canada should have ~35 cities, got ${regionCounts.north_america || 0}`);
+    if ((regionCounts.southeast_asia || 0) < 18) warn('cities.json', `SE Asia should have ~20 cities, got ${regionCounts.southeast_asia || 0}`);
     const japan = cities.filter((c) => c.country === 'JP').length;
-    if (japan < 10 || japan > 14) warn('cities.json', `Japan should have ~12 cities, got ${japan}`);
-    if (tier1 < 22 || tier1 > 30) warn('cities.json', `tier 1 should be ~25 cities, got ${tier1}`);
+    if (japan < 20 || japan > 30) warn('cities.json', `Japan should have ~25 cities, got ${japan}`);
+    const india = cities.filter((c) => c.country === 'IN').length;
+    if (india < 10 || india > 14) warn('cities.json', `India should have ~12 cities, got ${india}`);
+    const china = cities.filter((c) => c.country === 'CN').length;
+    if (china < 18 || china > 26) warn('cities.json', `China should have ~20 cities, got ${china}`);
+    if (tier1 < 30 || tier1 > 40) warn('cities.json', `tier 1 should be ~35 cities, got ${tier1}`);
     for (const landmark of Object.keys(LANDMARK_CITY)) {
       if (!seenLandmarks.has(landmark)) warn('cities.json', `landmark "${landmark}" is not used`);
     }
+  }
+}
+
+// ---------------------------------------------------------------- warp.json
+if (data['warp.json'] !== undefined) {
+  const w = data['warp.json'];
+  if (!isObj(w) || w.w !== MAP_W || w.h !== MAP_H) err('warp.json', `expected w=${MAP_W}, h=${MAP_H}`);
+  if (!isInt(w.cols) || !isInt(w.rows) || w.cols < 2 || w.rows < 2) err('warp.json', 'cols/rows must be integers >= 2');
+  const n = w.cols * w.rows;
+  for (const key of ['dx', 'dy']) {
+    if (!Array.isArray(w[key]) || w[key].length !== n) err('warp.json', `${key} must have ${n} entries`);
+    else if (w[key].some((v) => !isNum(v))) err('warp.json', `${key} must contain finite numbers`);
+  }
+}
+
+// ---------------------------------------------------------------- realms.json
+const realmCities = [];
+if (data['realms.json'] !== undefined) {
+  if (!Array.isArray(data['realms.json'])) {
+    err('realms.json', 'must be an array of realm City objects');
+  } else {
+    const perRealm = {};
+    for (const [i, c] of data['realms.json'].entries()) {
+      const p = `realms[${i}]`;
+      if (!isObj(c)) { err(p, 'must be an object'); continue; }
+      if (!isStr(c.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (!KEBAB.test(c.id)) err(`${p}.id`, `must be kebab-case ascii, got "${c.id}"`);
+        if (cityIds.has(c.id)) err(`${p}.id`, `duplicate city id "${c.id}" (already in cities.json)`);
+        cityIds.add(c.id);
+        realmCities.push(c);
+      }
+      if (!oneOf(c.realm, REALM_IDS)) err(`${p}.realm`, `invalid realm "${c.realm}"`);
+      else perRealm[c.realm] = (perRealm[c.realm] || 0) + 1;
+      for (const key of ['nameJa', 'nameEn', 'countryJa', 'blurb']) {
+        if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
+      }
+      if (isStr(c.blurb) && c.blurb.includes('\n')) err(`${p}.blurb`, 'must be one line');
+      if (!isStr(c.country) || !/^[A-Z]{2}$/.test(c.country)) err(`${p}.country`, 'must be 2 uppercase letters');
+      if (!oneOf(c.region, REGIONS)) err(`${p}.region`, `invalid region "${c.region}"`);
+      if (![1, 2, 3].includes(c.tier)) err(`${p}.tier`, 'must be 1, 2 or 3');
+      if (c.lat !== 0 || c.lon !== 0) err(p, 'realm stations must have lat=0, lon=0');
+      if (c.landmark !== undefined) err(`${p}.landmark`, 'realm stations cannot have landmarks');
+      if (c.port === true || c.airport === true) warn(p, 'realm stations normally have port=false, airport=false');
+      if (!Array.isArray(c.properties) || c.properties.length < 2 || c.properties.length > 4) {
+        err(`${p}.properties`, `must have 2..4 properties, got ${Array.isArray(c.properties) ? c.properties.length : 'none'}`);
+      } else {
+        for (const [pi, pr] of c.properties.entries()) {
+          const pp = `${p}.properties[${pi}]`;
+          if (!isObj(pr)) { err(pp, 'must be an object'); continue; }
+          if (!isStr(pr.id) || pr.id !== `${c.id}-${pi + 1}`) err(`${pp}.id`, `must be "${c.id}-${pi + 1}"`);
+          if (!isStr(pr.name)) err(`${pp}.name`, 'must be a non-empty string');
+          if (!oneOf(pr.industry, INDUSTRIES)) err(`${pp}.industry`, `invalid industry "${pr.industry}"`);
+          if (!isNum(pr.price) || pr.price <= 0) err(`${pp}.price`, 'must be a positive number');
+          if (!isNum(pr.yieldPct) || pr.yieldPct <= 0 || pr.yieldPct > 100) err(`${pp}.yieldPct`, 'must be in (0, 100]');
+        }
+      }
+    }
+    for (const realm of REALM_IDS) if ((perRealm[realm] || 0) !== 8) err('realms.json', `${realm} must have exactly 8 stations, got ${perRealm[realm] || 0}`);
   }
 }
 
@@ -270,8 +351,11 @@ if (data['board.json'] !== undefined) {
       if (nodeIds.has(n.id)) err(`${p}.id`, `duplicate node id "${n.id}"`);
       nodeIds.add(n.id);
       nodeById.set(n.id, n);
-      if (!isNum(n.x) || n.x < 0 || n.x > MAP_W) err(`${p}.x`, 'must be in [0, 4096]');
-      if (!isNum(n.y) || n.y < 0 || n.y > MAP_H) err(`${p}.y`, 'must be in [0, 1909]');
+      if (n.realm !== undefined && !oneOf(n.realm, REALM_IDS)) err(`${p}.realm`, `invalid realm "${n.realm}"`);
+      const coordW = n.realm ? REALM_W : MAP_W;
+      const coordH = n.realm ? REALM_H : MAP_H;
+      if (!isNum(n.x) || n.x < 0 || n.x > coordW) err(`${p}.x`, `must be in [0, ${coordW}]`);
+      if (!isNum(n.y) || n.y < 0 || n.y > coordH) err(`${p}.y`, `must be in [0, ${coordH}]`);
       if (isNum(n.x) && Math.abs(n.x * 10 - Math.round(n.x * 10)) > 1e-6) err(`${p}.x`, 'must be rounded to 0.1');
       if (isNum(n.y) && Math.abs(n.y * 10 - Math.round(n.y * 10)) > 1e-6) err(`${p}.y`, 'must be rounded to 0.1');
       if (n.kind === 'city') {
@@ -284,7 +368,11 @@ if (data['board.json'] !== undefined) {
         }
       } else if (oneOf(n.kind, SQUARE_KINDS)) {
         if (n.cityId !== undefined) err(`${p}.cityId`, 'square nodes must not have cityId');
-        if (!/^s:\d+$/.test(n.id)) err(`${p}.id`, 'square node id must be "s:<n>"');
+        if (n.realm) {
+          if (!new RegExp(`^r:${n.realm}:\\d+$`).test(n.id)) err(`${p}.id`, `realm square id must be "r:${n.realm}:<n>"`);
+        } else if (!/^s:\d+$/.test(n.id)) {
+          err(`${p}.id`, 'square node id must be "s:<n>"');
+        }
         squareNodes.push(n);
       } else {
         err(`${p}.kind`, `invalid node kind "${n.kind}"`);
@@ -299,7 +387,23 @@ if (data['board.json'] !== undefined) {
         if (!cityIds.has(id)) err('board.json', `board has node for unknown city "${id}"`);
       }
     }
-    if (b.nodes.length < 900) err('board.json', `expected >= 900 nodes, got ${b.nodes.length}`);
+    const worldNodes = b.nodes.filter((n) => n.realm === undefined);
+    const worldNodeCount = worldNodes.length;
+    if (worldNodeCount < 1200) err('board.json', `too few world nodes: ${worldNodeCount}`);
+    else if (worldNodeCount < 2600 || worldNodeCount > 3200) {
+      warn('board.json', `world nodes ${worldNodeCount} outside the 2600-3200 target (spacing-constrained)`);
+    }
+    const mixCounts = { blue: 0, red: 0, yellow: 0, news: 0, shop: 0, warp: 0 };
+    for (const n of worldNodes) if (n.kind in mixCounts) mixCounts[n.kind]++;
+    const mixDenom = Object.values(mixCounts).reduce((a, b) => a + b, 0);
+    // 36/17/15/14/4/2 sums to 88; compare the six non-city kinds after normalising.
+    const mixTargets = { blue: 36 / 0.88, red: 17 / 0.88, yellow: 15 / 0.88, news: 14 / 0.88, shop: 4 / 0.88, warp: 2 / 0.88 };
+    for (const [kind, targetPct] of Object.entries(mixTargets)) {
+      const actualPct = mixDenom ? (100 * mixCounts[kind]) / mixDenom : 0;
+      if (Math.abs(actualPct - targetPct) > 3) {
+        err('board.json', `square mix ${kind}: ${actualPct.toFixed(1)}% (normalised target ${targetPct.toFixed(1)}% ±3)`);
+      }
+    }
 
     const adj = new Map();
     for (const id of nodeIds) adj.set(id, []);
@@ -312,6 +416,8 @@ if (data['board.json'] !== undefined) {
       if (e.a === e.b) err(p, 'self-loop edge');
       if (!oneOf(e.mode, EDGE_MODES)) err(`${p}.mode`, `invalid mode "${e.mode}"`);
       if (nodeById.has(e.a) && nodeById.has(e.b)) {
+        const na = nodeById.get(e.a), nb = nodeById.get(e.b);
+        if ((na.realm ?? null) !== (nb.realm ?? null)) err(p, 'edge must not cross realm boundaries');
         const key = [e.a, e.b].sort().join('|');
         if (edgeKeys.has(key)) err(p, `duplicate edge ${e.a} <-> ${e.b}`);
         edgeKeys.add(key);
@@ -328,19 +434,34 @@ if (data['board.json'] !== undefined) {
       const na = nodeById.get(e.a), nb = nodeById.get(e.b);
       if (na?.kind === 'news' && nb?.kind === 'news') err('board.json', `two news squares are adjacent (${e.a} - ${e.b})`);
     }
-    // Connectivity.
+    // Connectivity is per map: the world has no edges to the realms.
     if (nodeById.size) {
-      const start = b.nodes.find((n) => nodeById.has(n.id))?.id;
-      const seen = new Set([start]);
-      const queue = [start];
-      for (let q = 0; q < queue.length; q++) {
-        for (const nxt of adj.get(queue[q])) {
-          if (!seen.has(nxt)) { seen.add(nxt); queue.push(nxt); }
+      const groups = new Map();
+      for (const n of b.nodes) {
+        const key = n.realm ?? 'world';
+        if (!groups.has(key)) groups.set(key, new Set());
+        groups.get(key).add(n.id);
+      }
+      for (const [key, ids] of groups) {
+        const start = [...ids][0];
+        const seen = new Set([start]);
+        const queue = [start];
+        for (let q = 0; q < queue.length; q++) {
+          for (const nxt of adj.get(queue[q])) {
+            if (ids.has(nxt) && !seen.has(nxt)) { seen.add(nxt); queue.push(nxt); }
+          }
+        }
+        if (seen.size !== ids.size) {
+          err('board.json', `${key} map is disconnected: ${ids.size - seen.size} of ${ids.size} nodes unreachable`);
         }
       }
-      if (seen.size !== nodeById.size) {
-        err('board.json', `graph is disconnected: ${nodeById.size - seen.size} of ${nodeById.size} nodes unreachable`);
-      }
+    }
+    const portalTargets = { heaven: 1, hell: 1, space: 2 };
+    for (const realm of REALM_IDS) {
+      const stations = b.nodes.filter((n) => n.realm === realm && n.kind === 'city').length;
+      const portals = b.nodes.filter((n) => n.realm === realm && n.kind === 'portal').length;
+      if (stations !== 8) err('board.json', `${realm} must have 8 station nodes, got ${stations}`);
+      if (portals !== portalTargets[realm]) err('board.json', `${realm} must have ${portalTargets[realm]} portal(s), got ${portals}`);
     }
   }
 }
@@ -351,7 +472,7 @@ if (!existsSync(LAND_PATH)) {
   warn('public/assets/map/land.json', 'missing (run npm run board)');
 } else {
   const size = statSync(LAND_PATH).size;
-  if (size > 600 * 1024) err('public/assets/map/land.json', `${(size / 1024).toFixed(1)} KB exceeds 600 KB`);
+  if (size > 900 * 1024) err('public/assets/map/land.json', `${(size / 1024).toFixed(1)} KB exceeds 900 KB`);
   try {
     const land = JSON.parse(readFileSync(LAND_PATH, 'utf8'));
     if (!isObj(land) || land.w !== MAP_W || land.h !== MAP_H) err('public/assets/map/land.json', `expected w=${MAP_W}, h=${MAP_H}`);
@@ -476,11 +597,12 @@ if (data['cards.json'] !== undefined) {
       for (const key of ['name', 'desc']) if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
       if (!oneOf(c.kind, CARD_KINDS)) err(`${p}.kind`, `invalid card kind "${c.kind}"`);
       if (!isNum(c.weight) || c.weight <= 0) err(`${p}.weight`, 'must be a positive number');
+      if (!isNum(c.price) || c.price <= 0) err(`${p}.price`, 'must be a positive number');
       if (c.needsTarget !== undefined && !['player', 'city', 'airport'].includes(c.needsTarget)) {
         err(`${p}.needsTarget`, 'must be player, city or airport');
       }
     });
-    if (cards.length !== 13) err('cards.json', `expected 13 cards, got ${cards.length}`);
+    if (cards.length !== 14) err('cards.json', `expected 14 cards, got ${cards.length}`);
     for (const id of DESIGN_CARD_IDS) if (!ids.has(id)) err('cards.json', `missing card id "${id}" from DESIGN.md §2.5`);
     for (const id of ids) if (!DESIGN_CARD_IDS.has(id)) err('cards.json', `unknown card id "${id}"`);
     cardIds = ids;
@@ -554,6 +676,19 @@ if (data['events.json'] !== undefined) {
         err(`${p}.minYear`, 'must be an integer 1..10');
       }
       if (ev.once !== undefined && typeof ev.once !== 'boolean') err(`${p}.once`, 'must be boolean');
+      if (ev.monthly !== undefined && typeof ev.monthly !== 'boolean') err(`${p}.monthly`, 'must be boolean');
+      if (ev.realms !== undefined) {
+        if (!Array.isArray(ev.realms) || ev.realms.length === 0) err(`${p}.realms`, 'must be a non-empty array when present');
+        else for (const [ri, r] of ev.realms.entries()) {
+          if (!oneOf(r, REALM_OR_WORLD)) err(`${p}.realms[${ri}]`, `invalid realm "${r}"`);
+        }
+      }
+      if (ev.months !== undefined) {
+        if (!Array.isArray(ev.months) || ev.months.length === 0) err(`${p}.months`, 'must be a non-empty array when present');
+        else for (const [mi, m] of ev.months.entries()) {
+          if (!isInt(m) || m < 1 || m > 12) err(`${p}.months[${mi}]`, 'must be an integer 1..12');
+        }
+      }
       if (ev.image !== undefined && !isStr(ev.image)) err(`${p}.image`, 'must be a public-relative path');
 
       if (ev.kind === 'news' || ev.kind === 'history') {
@@ -696,6 +831,10 @@ function validateEffect(ef, p, depth = 0) {
       break;
     case 'piper':
       if (!oneOf(ef.to, WHO)) err(`${p}.to`, `invalid who "${ef.to}"`);
+      break;
+    case 'realm':
+      who(`${p}.who`);
+      if (!oneOf(ef.realm, REALM_OR_WORLD)) err(`${p}.realm`, `invalid realm "${ef.realm}"`);
       break;
     case 'gamble':
       if (!isNum(ef.chance) || ef.chance < 0 || ef.chance > 1) err(`${p}.chance`, 'must be in [0, 1]');

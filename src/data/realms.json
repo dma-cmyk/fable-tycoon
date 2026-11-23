@@ -1,0 +1,746 @@
+[
+  {
+    "id": "heaven-gate",
+    "nameJa": "天国の門",
+    "nameEn": "Heaven Gate",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "入場料と身分証明書を確認する、雲の上の改札。",
+    "properties": [
+      {
+        "id": "heaven-gate-1",
+        "name": "雲の免税店",
+        "industry": "tourism",
+        "price": 180,
+        "yieldPct": 14
+      },
+      {
+        "id": "heaven-gate-2",
+        "name": "善行ポイント精算所",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "heaven-cloud-mansion",
+    "nameJa": "雲上豪邸",
+    "nameEn": "Cloud Mansion",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "天下り先の雲上オフィス。窓の下には地上の貧困が見える。",
+    "properties": [
+      {
+        "id": "heaven-cloud-mansion-1",
+        "name": "天下り先の雲上オフィス",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 8
+      },
+      {
+        "id": "heaven-cloud-mansion-2",
+        "name": "高級雲ポスト",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "heaven-angel-fund",
+    "nameJa": "エンジェル投資ファンド",
+    "nameEn": "Angel Investment Fund",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "天使が羽根を担保にスタートアップへ投資する。",
+    "properties": [
+      {
+        "id": "heaven-angel-fund-1",
+        "name": "エンジェル投資ファンド",
+        "industry": "finance",
+        "price": 1200,
+        "yieldPct": 6
+      },
+      {
+        "id": "heaven-angel-fund-2",
+        "name": "天国のスタートアップ",
+        "industry": "tech",
+        "price": 700,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "heaven-halo-bank",
+    "nameJa": "天使の輪銀行",
+    "nameEn": "Halo Bank",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "奇跡を証券化し、善行を金利に換算する銀行。",
+    "properties": [
+      {
+        "id": "heaven-halo-bank-1",
+        "name": "奇跡の証券化",
+        "industry": "finance",
+        "price": 1000,
+        "yieldPct": 4
+      },
+      {
+        "id": "heaven-halo-bank-2",
+        "name": "天使の輪ローン",
+        "industry": "finance",
+        "price": 800,
+        "yieldPct": 5
+      }
+    ]
+  },
+  {
+    "id": "heaven-pearl-hotel",
+    "nameJa": "真珠の門ホテル",
+    "nameEn": "Pearl Gate Hotel",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "聖人認定ラウンジ付き。予約は善行ポイントで。",
+    "properties": [
+      {
+        "id": "heaven-pearl-hotel-1",
+        "name": "雲海スイート",
+        "industry": "tourism",
+        "price": 300,
+        "yieldPct": 12
+      },
+      {
+        "id": "heaven-pearl-hotel-2",
+        "name": "聖人認定ラウンジ",
+        "industry": "media",
+        "price": 150,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "hell-gate",
+    "nameJa": "地獄の門",
+    "nameEn": "Hell Gate",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "三途の川の渡し舟は片道切符。帰りは別料金。",
+    "properties": [
+      {
+        "id": "hell-gate-1",
+        "name": "三途の川渡し船",
+        "industry": "shipping",
+        "price": 30,
+        "yieldPct": 18
+      },
+      {
+        "id": "hell-gate-2",
+        "name": "入口の番人チケット",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "hell-cauldron-onsen",
+    "nameJa": "釜ゆで温泉リゾート",
+    "nameEn": "Cauldron Hot Spring Resort",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "釜ゆで温泉と灼熱の湯けむりサウナ。火傷は自己責任。",
+    "properties": [
+      {
+        "id": "hell-cauldron-onsen-1",
+        "name": "釜ゆで温泉リゾート",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 22
+      },
+      {
+        "id": "hell-cauldron-onsen-2",
+        "name": "灼熱の湯けむりサウナ",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "hell-needle-ski",
+    "nameJa": "針の山スキー場",
+    "nameEn": "Needle Mountain Ski Resort",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "針の山を滑るスキー場。リフトは罪人を運ぶ。",
+    "properties": [
+      {
+        "id": "hell-needle-ski-1",
+        "name": "針の山リフト",
+        "industry": "tourism",
+        "price": 50,
+        "yieldPct": 24
+      },
+      {
+        "id": "hell-needle-ski-2",
+        "name": "血の池スキー学校",
+        "industry": "media",
+        "price": 60,
+        "yieldPct": 20
+      }
+    ]
+  },
+  {
+    "id": "hell-enma-tax-office",
+    "nameJa": "閻魔税務署",
+    "nameEn": "Enma Tax Office",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "生前の申告漏れを追徴。行列ラーメンだけが救い。",
+    "properties": [
+      {
+        "id": "hell-enma-tax-office-1",
+        "name": "閻魔税務署前の行列ラーメン",
+        "industry": "food",
+        "price": 15,
+        "yieldPct": 70
+      },
+      {
+        "id": "hell-enma-tax-office-2",
+        "name": "追徴課税窓口",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "hell-spider-thread",
+    "nameJa": "蜘蛛の糸",
+    "nameEn": "Spider's Thread",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "出口は遠い。蜘蛛の糸一本に希望を託してぶら下がる。",
+    "properties": [
+      {
+        "id": "hell-spider-thread-1",
+        "name": "蜘蛛の糸ロープウェイ",
+        "industry": "tourism",
+        "price": 35,
+        "yieldPct": 25
+      },
+      {
+        "id": "hell-spider-thread-2",
+        "name": "地獄の底の質屋",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "space-gate",
+    "nameJa": "宇宙港",
+    "nameEn": "Space Port",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "軌道エレベーターの乗り場。荷物より燃料が高い。",
+    "properties": [
+      {
+        "id": "space-gate-1",
+        "name": "軌道エレベーター乗り場",
+        "industry": "shipping",
+        "price": 180,
+        "yieldPct": 12
+      },
+      {
+        "id": "space-gate-2",
+        "name": "無重力免税店",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "space-moon-hotel",
+    "nameJa": "月面ホテル",
+    "nameEn": "Lunar Hotel",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "月面の静けさを高級料金で販売する。",
+    "properties": [
+      {
+        "id": "space-moon-hotel-1",
+        "name": "月面ホテル",
+        "industry": "tourism",
+        "price": 300,
+        "yieldPct": 15
+      },
+      {
+        "id": "space-moon-hotel-2",
+        "name": "地球眺望課金",
+        "industry": "media",
+        "price": 200,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "space-mars-lots",
+    "nameJa": "火星の分譲地",
+    "nameEn": "Mars Lots",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "現地見学不可。赤い砂と夢だけが現物。",
+    "properties": [
+      {
+        "id": "space-mars-lots-1",
+        "name": "火星の分譲地（現地見学不可）",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 8
+      },
+      {
+        "id": "space-mars-lots-2",
+        "name": "テラフォーミング債",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "space-asteroid-mine",
+    "nameJa": "小惑星レアメタル採掘",
+    "nameEn": "Asteroid Rare Metal Mine",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "小惑星を掘ってレアメタルを積む。宇宙ゴミも商品。",
+    "properties": [
+      {
+        "id": "space-asteroid-mine-1",
+        "name": "小惑星レアメタル採掘",
+        "industry": "energy",
+        "price": 900,
+        "yieldPct": 9
+      },
+      {
+        "id": "space-asteroid-mine-2",
+        "name": "宇宙ゴミ回収",
+        "industry": "industry",
+        "price": 300,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "space-orbit-data",
+    "nameJa": "軌道データセンター",
+    "nameEn": "Orbital Data Center",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "真空の冷気でサーバーを冷やし、遅延を星に売る。",
+    "properties": [
+      {
+        "id": "space-orbit-data-1",
+        "name": "軌道データセンター",
+        "industry": "tech",
+        "price": 800,
+        "yieldPct": 8
+      },
+      {
+        "id": "space-orbit-data-2",
+        "name": "宇宙広告塔",
+        "industry": "media",
+        "price": 250,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "heaven-golden-gate",
+    "nameJa": "黄金の門",
+    "nameEn": "Golden Gate",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "金の門は入場料を取る。くぐるだけで資産査定。",
+    "properties": [
+      {
+        "id": "heaven-golden-gate-1",
+        "name": "黄金の門の入場券",
+        "industry": "tourism",
+        "price": 180,
+        "yieldPct": 14
+      },
+      {
+        "id": "heaven-golden-gate-2",
+        "name": "黄金の柵リース",
+        "industry": "finance",
+        "price": 600,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "heaven-rainbow-bridge",
+    "nameJa": "虹の橋",
+    "nameEn": "Rainbow Bridge",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "七色の橋を渡ると有料道路並みの請求書が届く。",
+    "properties": [
+      {
+        "id": "heaven-rainbow-bridge-1",
+        "name": "虹の橋通行料",
+        "industry": "shipping",
+        "price": 120,
+        "yieldPct": 12
+      },
+      {
+        "id": "heaven-rainbow-bridge-2",
+        "name": "虹色クラウドファンディング",
+        "industry": "finance",
+        "price": 300,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "heaven-fountain-plaza",
+    "nameJa": "泉の広場",
+    "nameEn": "Fountain Plaza",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "europe",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "heaven",
+    "blurb": "願いの泉は投げ銭制。硬貨の跳ね返りで儲ける。",
+    "properties": [
+      {
+        "id": "heaven-fountain-plaza-1",
+        "name": "願いの泉投げ銭",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      },
+      {
+        "id": "heaven-fountain-plaza-2",
+        "name": "聖水ペットボトル",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "hell-lava-bridge",
+    "nameJa": "溶岩橋",
+    "nameEn": "Lava Bridge",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "溶岩の上に架かる橋。渡るたびに通行料と焦げ跡が増える。",
+    "properties": [
+      {
+        "id": "hell-lava-bridge-1",
+        "name": "溶岩橋通行料",
+        "industry": "shipping",
+        "price": 40,
+        "yieldPct": 20
+      },
+      {
+        "id": "hell-lava-bridge-2",
+        "name": "焼け焦げ保険",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "hell-needle-peak",
+    "nameJa": "針の山頂上",
+    "nameEn": "Needle Peak",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "針の山の頂上。眺めは最高、足元は最悪。",
+    "properties": [
+      {
+        "id": "hell-needle-peak-1",
+        "name": "針の山頂上展望台",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 24
+      },
+      {
+        "id": "hell-needle-peak-2",
+        "name": "痛み止めドリンク",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 68
+      }
+    ]
+  },
+  {
+    "id": "hell-cauldron-station",
+    "nameJa": "釜ゆで駅",
+    "nameEn": "Cauldron Station",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "africa",
+    "lat": 0,
+    "lon": 0,
+    "tier": 3,
+    "port": false,
+    "airport": false,
+    "realm": "hell",
+    "blurb": "釜ゆで温泉の最寄り駅。駅弁は熱々の石焼き。",
+    "properties": [
+      {
+        "id": "hell-cauldron-station-1",
+        "name": "釜ゆで駅弁",
+        "industry": "food",
+        "price": 16,
+        "yieldPct": 72
+      },
+      {
+        "id": "hell-cauldron-station-2",
+        "name": "地獄鉄道運賃",
+        "industry": "shipping",
+        "price": 35,
+        "yieldPct": 22
+      }
+    ]
+  },
+  {
+    "id": "space-moon-base",
+    "nameJa": "月面基地",
+    "nameEn": "Moon Base",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "月面基地の居住区。酸素と家賃は別請求。",
+    "properties": [
+      {
+        "id": "space-moon-base-1",
+        "name": "月面基地の居住区",
+        "industry": "tech",
+        "price": 400,
+        "yieldPct": 9
+      },
+      {
+        "id": "space-moon-base-2",
+        "name": "酸素課金",
+        "industry": "energy",
+        "price": 300,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "space-asteroid-belt",
+    "nameJa": "小惑星ベルト",
+    "nameEn": "Asteroid Belt",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "小惑星を掘る権利を売る。掘らずに儲かる。",
+    "properties": [
+      {
+        "id": "space-asteroid-belt-1",
+        "name": "小惑星ベルトの採掘権",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 9
+      },
+      {
+        "id": "space-asteroid-belt-2",
+        "name": "宇宙塵フィルター",
+        "industry": "industry",
+        "price": 250,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "space-launch-pad",
+    "nameJa": "発射台",
+    "nameEn": "Launch Pad",
+    "country": "XX",
+    "countryJa": "異世界",
+    "region": "north_america",
+    "lat": 0,
+    "lon": 0,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "realm": "space",
+    "blurb": "打ち上げの優先搭乗と保険。ロケットが落ちても保険は残る。",
+    "properties": [
+      {
+        "id": "space-launch-pad-1",
+        "name": "発射台の優先搭乗",
+        "industry": "shipping",
+        "price": 220,
+        "yieldPct": 12
+      },
+      {
+        "id": "space-launch-pad-2",
+        "name": "打ち上げ保険",
+        "industry": "finance",
+        "price": 600,
+        "yieldPct": 7
+      }
+    ]
+  }
+]

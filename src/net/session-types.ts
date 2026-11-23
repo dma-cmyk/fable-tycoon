@@ -13,6 +13,10 @@ export interface Session {
   /** Latest lobby view received (null before welcome). */
   lobby(): LobbyView | null;
   connection(): ConnectionState;
+  /** Lobby seat index -> GameState player id (null if the seat is not in the game). Seats with gaps map densely. */
+  seatToPlayer(seat: number): number | null;
+  /** GameState player id -> lobby seat index. */
+  playerToSeat(playerId: number): number | null;
   send(msg: ClientMsg): void;
   /** Receives every ServerMsg in order. Returns unsubscribe. */
   subscribe(listener: (msg: ServerMsg) => void): () => void;
