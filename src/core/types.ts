@@ -182,6 +182,8 @@ export interface GameEventDef {
   title: string; // 例: "AIバブル再来!?"
   kind: 'news' | 'history' | 'fable'; // fable = 完全創作
   image?: string; // public-relative illustration path
+  /** BGM id while this event is shown (src/audio/audio.ts BgmName). Omitted = default by kind. */
+  bgm?: string;
   /** 事実の要約（風刺を含めない）。kind が news/history のとき必須。 */
   fact?: string;
   sources?: Source[];

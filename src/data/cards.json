@@ -1,0 +1,97 @@
+[
+  {
+    "id": "express2",
+    "name": "急行ゴブリン便",
+    "desc": "サイコロを2個振り、出目の合計だけ進む。急いで損をしに行く。",
+    "kind": "move",
+    "weight": 12
+  },
+  {
+    "id": "express3",
+    "name": "特急ドラゴン便",
+    "desc": "サイコロを3個振り、出目の合計だけ進む。スピードは正義、方向は無視。",
+    "kind": "move",
+    "weight": 5
+  },
+  {
+    "id": "pegasus",
+    "name": "ペガサス便",
+    "desc": "空港都市を1つ選んでワープする。搭乗手数料は知らん。",
+    "kind": "move",
+    "weight": 6,
+    "needsTarget": "airport"
+  },
+  {
+    "id": "carpet",
+    "name": "魔法のじゅうたん",
+    "desc": "目的地から5〜10歩の都市へワープする。絨毯の燃費は不明。",
+    "kind": "move",
+    "weight": 7
+  },
+  {
+    "id": "tariff",
+    "name": "関税カード",
+    "desc": "他の全員から所持金の5%を徴収する。世界の警察気取り。",
+    "kind": "attack",
+    "weight": 7
+  },
+  {
+    "id": "subsidy",
+    "name": "謎の補助金",
+    "desc": "+40億円 × 年数倍率を即時獲得。財源は謎。",
+    "kind": "money",
+    "weight": 10
+  },
+  {
+    "id": "bailout",
+    "name": "大きすぎて潰せませんカード",
+    "desc": "自分の借金を他の全員が等分で肩代わりする。大きすぎて潰せない。",
+    "kind": "special",
+    "weight": 3
+  },
+  {
+    "id": "stop",
+    "name": "牛歩法案",
+    "desc": "選んだ相手を1回休みにする。審議は永遠に。",
+    "kind": "attack",
+    "weight": 8,
+    "needsTarget": "player"
+  },
+  {
+    "id": "takeover",
+    "name": "敵対的買収",
+    "desc": "選んだ相手の物件1つを現在価格の1.5倍で強制購入する。",
+    "kind": "attack",
+    "weight": 4,
+    "needsTarget": "player"
+  },
+  {
+    "id": "piper_pass",
+    "name": "笛の押し付け",
+    "desc": "自分の取り立て屋を選んだ相手に押し付ける。災い転じて他人の災い。",
+    "kind": "special",
+    "weight": 6,
+    "needsTarget": "player"
+  },
+  {
+    "id": "golden_egg",
+    "name": "金の卵",
+    "desc": "現在の年の物件収益の30%を即時受け取る。卵は一つだけ。",
+    "kind": "money",
+    "weight": 8
+  },
+  {
+    "id": "insider",
+    "name": "噂話カード",
+    "desc": "次の目的地を再抽選し、自分に近い都市（20歩以上は維持）にする。",
+    "kind": "special",
+    "weight": 7
+  },
+  {
+    "id": "shield",
+    "name": "弁護士軍団",
+    "desc": "所持中、次の赤マス・取り立て被害・攻撃カードを1回無効にする（自動消費）。",
+    "kind": "defense",
+    "weight": 6
+  }
+]

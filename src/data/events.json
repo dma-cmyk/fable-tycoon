@@ -1,0 +1,4051 @@
+[
+  {
+    "id": "ai-bubble-again",
+    "title": "AIバブル再来!?",
+    "kind": "news",
+    "fact": "2025年以降、AI関連株の急騰で市場全体の時価総額が大きく膨らみ、投資家の間でバブル懸念が強まった。2025年10月には半導体大手の時価総額が5兆ドルを突破し、AI向けの設備投資と資金調達はさらに拡大した。",
+    "sources": [
+      {
+        "title": "AI bubble - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/AI_bubble",
+        "date": "2026"
+      },
+      {
+        "title": "AP News: 2025年の市場、関税とAIバブル懸念",
+        "url": "https://apnews.com/article/wall-street-stocks-bonds-crypto-tariffs-ai-539ae5ec338d19f52116e97d38300c28",
+        "date": "2025-12-23"
+      }
+    ],
+    "satireNote": "AIブームそのものは実在するが、ゲーム内の収益倍率・崩壊確率・強制売却は創作。実在の企業や人物を貶める意図はない。",
+    "weight": 7,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "世界の市場が、AIの夢でふくらんでいます。夢の請求書はまだ届いていません。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "今回は本物です。前回が本物じゃなかったとは一言も言っていません。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "バブルではありません。まだ名前のついていない好況です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "さあ、乗るか、降りるか。どちらにしても手数料は取られます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "乗る！",
+        "detail": "IT・AIの収益×3（3年）。35%でバブル崩壊し、IT収益×0.3（2年）＋IT物件1件を30%安値で売却。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 3,
+            "years": 3,
+            "label": "AIバブル"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.65,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 20
+              }
+            ],
+            "lose": [
+              {
+                "op": "industry_mod",
+                "industry": "tech",
+                "mult": 0.3,
+                "years": 2,
+                "label": "AIバブル崩壊"
+              },
+              {
+                "op": "sell",
+                "who": "self",
+                "industry": "tech",
+                "count": 1,
+                "priceMult": 0.7
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "ほら、上がった。上がっている間は、誰もが天才です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "様子を見る",
+        "detail": "何も買わない。代わりに噂話カードを1枚もらう。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "賢明です。何もしない投資家は、手数料を払わないだけ偉い。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "バブルは危険！売却する",
+        "detail": "IT物件を1件（持っていれば）、現在価格×1.5で売却し、さらに現金10億を得る。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "tech",
+            "count": 1,
+            "priceMult": 1.5
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "売るんですか？ まだ夢の二階建てが残っていますよ。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "ever-given-stuck",
+    "title": "運河に巨大な栓",
+    "kind": "news",
+    "fact": "2021年3月23日から29日まで、全長約400メートルのコンテナ船エバー・ギブン号がスエズ運河で座礁し、運河が6日間閉鎖された。世界貿易の約12%が通る航路が止まり、1日あたり約96億ドル相当の貨物に影響が出たと推定された。",
+    "sources": [
+      {
+        "title": "2021 Suez Canal obstruction - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2021_Suez_Canal_obstruction",
+        "date": "2021-03-29"
+      }
+    ],
+    "satireNote": "座礁と経済的影響は実在。ゲーム内の救出投資・株価の乱高下・収益倍率は創作。",
+    "weight": 6,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "運河に、世界一高価な栓が刺さりました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "速報です。船が横向きです。世界の物流も横向きです。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "船は沈まない。ただ、動かない。それが一番怖い。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "掘る人、引っ張る人、値段を上げる人。経済は今日も分業です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "救出に投資",
+        "detail": "現金20億を払い、海運・物流の収益×1.6（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.6,
+            "years": 2,
+            "label": "運河の詰まり"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "掘れば掘るほど、運賃が上がる。世の中うまくできています。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "株で遊ぶ",
+        "detail": "50%で+15億、50%で-15億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 15
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -15
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "市場は船より早く動きました。方向は分かりませんが。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "迂回ルートで儲ける",
+        "detail": "海運収益×1.3（1年）＋現金10億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.3,
+            "years": 1,
+            "label": "迂回特需"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "喜望峰を回りましょう。遠いですが、座礁はしていません。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "meme-stock-squeeze",
+    "title": "掲示板の逆襲",
+    "kind": "news",
+    "fact": "2021年1月、米国のゲーム販売店の株式をめぐり、個人投資家の買いが空売り筋の買い戻しを誘発する踏み上げが起きた。空売り比率は浮動株の約140%に達し、株価は一時、月初の約30倍まで上昇。一部の証券会社が買い注文を制限し、空売り筋は巨額の損失を出した。",
+    "sources": [
+      {
+        "title": "2021年の株式空売り踏み上げ - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/GameStop_short_squeeze",
+        "date": "2021-01-28"
+      }
+    ],
+    "satireNote": "踏み上げは実在。ゲーム内の金額・確率・「最も裕福な人から5%徴収」は創作で、実在企業・人物への攻撃ではない。",
+    "weight": 6,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "個人投資家が集まると、時々、市場が壊れます。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "掲示板の住人が、ウォール街の空売りを踏み上げました。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "オオカミが逃げていく。珍しいこともあるものです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "祭りは楽しい。ただし、最後に掃除する人は決まっていません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "便乗する",
+        "detail": "50%で+40億、50%で-30億。勝った場合、最も裕福な人は所持金-5%。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              },
+              {
+                "op": "cash_pct",
+                "who": "richest",
+                "pct": -5
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:red_hood",
+            "text": "オオカミの懐から、少しだけ取り返しました。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "空売りする",
+        "detail": "30%で+60億、70%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "空売りは、無限の損失と有限の昼寝でできています。"
+          }
+        ],
+        "cpuWeight": 0.7
+      },
+      {
+        "label": "静観する",
+        "detail": "何もしない。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "賢明な判断です。祭りに参加しない人も、屋台の片付けはします。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "crypto-exchange-collapse",
+    "title": "暗号資産の玉手箱",
+    "kind": "news",
+    "fact": "2022年11月、大手暗号資産取引所が経営破綻した。顧客資産の流用などにより約80億ドルの穴が開き、100万人超の利用者に影響が及んだと報じられた。",
+    "sources": [
+      {
+        "title": "暗号資産取引所の破綻（2022年） - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Bankruptcy_of_FTX",
+        "date": "2022-11-11"
+      }
+    ],
+    "satireNote": "取引所破綻は実在。固有名を伏せ、ゲーム内の確率・金額・空売り効果は創作。",
+    "weight": 5,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "npc:tech_kid",
+        "text": "預けておけば増える時代です。増えるかどうかは別ですが。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "大手取引所が、顧客の資産ごと消えました。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "私は昔から言っています。魔法の金庫は、魔法で消えると。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "玉手箱を開けたら、中身は借用書でした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "早めに引き出す",
+        "detail": "60%で+25億、40%で所持金-15%。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.6,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 25
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "self",
+                "pct": -15
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "引き出しに成功した人を、我々は「早すぎた天才」と呼びます。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "全部預ける",
+        "detail": "25%で+80億、75%で所持金-25%。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.25,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 80
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "self",
+                "pct": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "分散投資とは、複数の場所で同時に失う技術です。"
+          }
+        ],
+        "cpuWeight": 0.7
+      },
+      {
+        "label": "空売りで一稼ぎ",
+        "detail": "金融収益×1.4（2年）＋現金10億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 2,
+            "label": "暗号資産の空売り"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "破綻で儲ける人がいる。市場とは、そういう場所です。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "bank-run-2023",
+    "title": "行列のできる銀行",
+    "kind": "news",
+    "fact": "2023年3月10日、米国の地方銀行が取り付け騒ぎで破綻した。顧客は1日で約420億ドルを引き出し、同行は米史上3位の銀行破綻となった。預金の約9割が保険対象外だった。",
+    "sources": [
+      {
+        "title": "米地方銀行の取り付け騒ぎ（2023年） - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Collapse_of_Silicon_Valley_Bank",
+        "date": "2023-03-10"
+      }
+    ],
+    "satireNote": "破綻と取り付けは実在。ゲーム内の預金者行動・救済の効果・カードは誇張した創作。",
+    "weight": 5,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "皆さん、落ち着いてください。行列は銀行の前だけです。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "銀行の前に行列ができています。ATMの前にも、弁護士の前にも。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "預金は安全です。ただし、今日は引き出せません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "全額おろす",
+        "detail": "所持金+10%。ただし金融収益×0.7（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.7,
+            "years": 2,
+            "label": "取り付け騒ぎ"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "引き出せただけ儲けものです。私の銀行は明日、絵になります。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "助けに行く",
+        "detail": "現金30億を出資。金融収益×1.4（2年）＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 2,
+            "label": "銀行救済"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "あなたは恩人です。恩人の預金は、二番目に返します。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "大きすぎて潰せません",
+        "detail": "「大きすぎて潰せませんカード」を1枚獲得。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "bailout",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "そのカードがあれば、あなたも国家安全保障です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "tariff-war",
+    "title": "関税おじさんの逆襲",
+    "kind": "news",
+    "fact": "米中は2018年から関税の応酬を続け、2025年には米国が60以上の国・地域に大規模な追加関税を発動した。輸入品の価格上昇や供給網の組み替えが起き、世界貿易の先行き不透明感が強まった。",
+    "sources": [
+      {
+        "title": "China–United States trade war - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/China%E2%80%93United_States_trade_war",
+        "date": "2025"
+      },
+      {
+        "title": "AP News: 2025年の追加関税の経過",
+        "url": "https://apnews.com/article/trump-tariffs-timeline-economy-2b10860dfdb2a5d9c3c4527136314992",
+        "date": "2025-12-26"
+      }
+    ],
+    "satireNote": "関税政策は実在。「関税おじさん」は特定の個人ではなく、関税を振りかざす役割の戯画。ゲーム内の効果は単純化した創作。",
+    "weight": 6,
+    "lines": [
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "関税は愛です。相手の財布を思うほど、高くします。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "輸入品が値上がりしています。国内産業は元気になりました。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "輸出の計算が合いません。鏡の向こうでは合うのでしょうか。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "誰かが払う。誰が払うかは、だいたい最後に分かります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "関税を払う",
+        "detail": "現金-20億。製造業の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 2,
+            "label": "国内製造業の保護"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tariff_bulldog",
+            "text": "痛みは成長。請求書は別便でお送りします。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "関税カードを配る",
+        "detail": "関税カード1枚＋製造業収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "tariff",
+            "count": 1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.2,
+            "years": 2,
+            "label": "関税の連鎖"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tariff_bulldog",
+            "text": "配るのは得意です。返してもらうのは、もっと得意です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "別ルートを開拓",
+        "detail": "現金-15億。最寄りの港へ移動し、海運収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.4,
+            "years": 2,
+            "label": "新航路"
+          },
+          {
+            "op": "move",
+            "who": "self",
+            "to": "nearest_port"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "地図を書き換えれば、関税も書き換えられる気がします。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "inflation-surge",
+    "title": "値札が毎朝変わる",
+    "kind": "news",
+    "fact": "2021年半ばから2022年半ばにかけ、世界各地で数十年ぶりの高いインフレが進んだ。供給網の混乱、大規模な財政・金融支援、エネルギー価格の上昇などが要因とされ、中央銀行は利上げに転じた。",
+    "sources": [
+      {
+        "title": "2021–2023 inflation surge - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2021%E2%80%932023_inflation_surge",
+        "date": "2022"
+      }
+    ],
+    "satireNote": "インフレは実在。ゲーム内の「最も裕福な人が5%失う」は、世論の富裕層批判を誇張した創作。",
+    "weight": 6,
+    "lines": [
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "物価が上がっています。給料も上がっています。足りませんが。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "パンを買いに行ったら、パン屋が投資銀行になっていました。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "インフレとは、お金が軽くなること。私の体重は関係ありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "現金で持つ",
+        "detail": "所持金-15%（現金の価値が目減りする）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": -15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "現金は安全です。安全に価値が減るだけです。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "モノに変える",
+        "detail": "食品物件1件につき+10億。食品収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "food",
+            "perProperty": 10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 2,
+            "label": "インフレ特需"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:granny",
+            "text": "パンは買えませんが、パン屋は買えました。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "値上げに便乗",
+        "detail": "食品物件の価格+20%（恒久）。食品収益×1.3（2年）。最も裕福な人は所持金-5%。",
+        "effects": [
+          {
+            "op": "price_mod",
+            "industry": "food",
+            "mult": 1.2
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 2,
+            "label": "値上げ"
+          },
+          {
+            "op": "cash_pct",
+            "who": "richest",
+            "pct": -5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "庶民の怒りは、だいたい一番見える人に向かいます。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "shrinkflation",
+    "title": "小さくなった幸せ",
+    "kind": "news",
+    "fact": "シュリンクフレーションは、価格を据え置いたまま内容量や品質を減らす手法で、2022年以降のインフレ局面で広く使われた。包装の空隙を増やす、原材料を安価なものに変えるなどの例がある。",
+    "sources": [
+      {
+        "title": "Shrinkflation - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Shrinkflation",
+        "date": "2023"
+      }
+    ],
+    "satireNote": "手法は実在。ゲーム内の売上・評判・確率は創作で、特定の企業を指すものではない。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "char:ant",
+        "text": "袋は同じ大きさ。中身は前より少ない。これが経済学です。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "え、減ってる？ 俺は昨日からずっと食べてるけど。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "消費者は気づかない。企業は気づかないふりをする。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "量を減らす",
+        "detail": "食品収益×1.4（2年）＋現金15億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.4,
+            "years": 2,
+            "label": "シュリンクフレーション"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "倹約とは、他人に気づかれずに削ることです。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "正直に値上げ",
+        "detail": "食品収益×1.15（3年）＋謎の補助金カード。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.15,
+            "years": 3,
+            "label": "正直な値上げ"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "subsidy",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:grasshopper",
+            "text": "正直に値上げ？ そんな芸風、久しぶりに聞きました。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "消費者をだます",
+        "detail": "50%で+25億。50%で-20億＋食品物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 25
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              },
+              {
+                "op": "price_mod",
+                "industry": "food",
+                "mult": 0.9
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "バレたときの謝罪会見は、だいたい商品より小さかったです。"
+          }
+        ],
+        "cpuWeight": 0.7
+      }
+    ]
+  },
+  {
+    "id": "chip-shortage",
+    "title": "半導体が足りない",
+    "kind": "news",
+    "fact": "2020年から2023年にかけて、半導体の世界的な供給不足が起きた。自動車、家電、ゲーム機など169以上の産業に影響し、価格上昇や納期の長期化、転売が広がった。",
+    "sources": [
+      {
+        "title": "2020–2023 global chip shortage - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2020%E2%80%932023_global_chip_shortage",
+        "date": "2021"
+      }
+    ],
+    "satireNote": "半導体不足は実在。ゲーム内の工場建設・転売・没収の効果は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "npc:tech_kid",
+        "text": "半導体が足りません。なので、半導体の会社を買いましょう。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "車が作れません。ゲーム機も作れません。経済は元気です。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "納期は来月です。鼻が伸びる前に、もう一度言います。来月です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "工場を建てる",
+        "detail": "現金-40億。IT収益×1.8（3年）＋製造業収益×1.3（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -40
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.8,
+            "years": 3,
+            "label": "半導体工場"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 3,
+            "label": "部品不足の緩和"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "工場は三年でできます。本当です。鼻はまだ伸びていません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "転売する",
+        "detail": "60%で+30億、40%で-25億（在庫没収）。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.6,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "転売は供給を増やしませんが、俺の現金は増やします。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "待つ",
+        "detail": "1回休み。待つ間に現金10億を節約。",
+        "effects": [
+          {
+            "op": "skip",
+            "who": "self",
+            "turns": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "待っている間に、競合は工場を建てました。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "egg-price-spike",
+    "title": "卵が金より高い",
+    "kind": "news",
+    "fact": "2022年、米国で鳥インフルエンザの流行により採卵鶏が大量に失われ、卵の生産が落ちた。卵の消費者物価は2022年11月に前年同月比49.1%上昇し、食料品の中で最大の値上がりとなった。",
+    "sources": [
+      {
+        "title": "Avian influenza outbreaks reduced egg production, driving prices to record highs in 2022 - USDA ERS",
+        "url": "https://ers.usda.gov/data-products/charts-of-note/105576",
+        "date": "2023-01-11"
+      },
+      {
+        "title": "Here's why egg prices surged in 2022 - CNBC",
+        "url": "https://www.cnbc.com/2022/12/29/why-egg-prices-have-been-rising.html",
+        "date": "2022-12-29"
+      }
+    ],
+    "satireNote": "卵価格の高騰は実在。「鶏を買う」「代替タンパク質」の効果は創作で、特定の生産者を非難するものではない。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "char:golden_goose",
+        "text": "卵が高いのは嬉しいですが、私の卵は金なので関係ありません。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "卵一個で、昔の鶏一羽が買えます。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "鳥インフルエンザで供給が減り、卵の値段が記録を更新しました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "鶏を買う",
+        "detail": "現金-20億。農林水産収益×1.6（2年）＋農林物件1件につき+8億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.6,
+            "years": 2,
+            "label": "卵バブル"
+          },
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "agri",
+            "perProperty": 8
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:golden_goose",
+            "text": "同業者が増えるのは複雑ですが、卵価格は嬉しいです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "卵を売り抜ける",
+        "detail": "即時+25億。ただし農林水産収益×0.8（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 0.8,
+            "years": 1,
+            "label": "卵の買い占め規制"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:granny",
+            "text": "卵を売り抜けた人は、オムレツも売り抜けるのでしょうね。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "代替タンパク質",
+        "detail": "食品収益×1.3（2年）＋金の卵カード。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 2,
+            "label": "代替タンパク質"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "卵の代わりに、金の卵カードが配られています。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "negative-rates-end",
+    "title": "金利がしゃべり出した",
+    "kind": "news",
+    "fact": "2024年3月19日、日本銀行は8年間続いたマイナス金利政策を終了し、17年ぶりの利上げに踏み切った。短期金利の誘導目標はマイナス0.1%から0〜0.1%程度に変更された。",
+    "sources": [
+      {
+        "title": "Japan: BOJ hikes interest rates for the first time in 17 years - AP News",
+        "url": "https://apnews.com/article/japan-economy-interest-rate-boj-b650a9b8a517bcf3a31c32ffdcf651c9",
+        "date": "2024-03-19"
+      }
+    ],
+    "satireNote": "政策変更は実在。「金利がしゃべる」という設定と、ゲーム内の貯金・借金の効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "金利が帰ってきました。長い休暇でしたね。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "日銀がマイナス金利を終了。市場は金利の声を聞き始めました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "タダで借りられた時代が終わり、請求書がしゃべり始めました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "貯金する",
+        "detail": "所持金+8%＋金融収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 8
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.2,
+            "years": 2,
+            "label": "金利のある世界"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "預金が増える。素晴らしい。金利は私が決めますが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "借金する",
+        "detail": "50%で+40億、50%で-30億（利払い）。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "借りてください。金利は友達です。友達は請求します。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "金融株を買う",
+        "detail": "現金-20億。金融収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.5,
+            "years": 2,
+            "label": "利上げ相場"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "銀行が儲かっています。融資を受けた人は、あまり笑っていません。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "metaverse-collapse",
+    "title": "バーチャル土地の大暴落",
+    "kind": "news",
+    "fact": "メタバースは2020年代初頭に企業投資と注目を集めたが、利用者の定着は期待に追いつかず、2022年から2023年にかけて関連事業の縮小や評価額の下落が相次いだ。仮想空間の土地取引も急増後に冷え込んだ。",
+    "sources": [
+      {
+        "title": "Metaverse - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Metaverse",
+        "date": "2023"
+      }
+    ],
+    "satireNote": "メタバース熱と冷え込みは実在。ゲーム内の確率・金額・「現実の土地」効果は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "npc:tech_kid",
+        "text": "バーチャル土地は有限です。だから高いのです。たぶん。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "鏡の国の土地は、鏡代だけで買えました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "仮想空間の地価が暴落。現実の家賃は下がりません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "バーチャル土地を買う",
+        "detail": "30%で+50億、70%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "土地は残りました。住む人はいませんが。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "現実の土地を買う",
+        "detail": "現金-15億。観光収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 2,
+            "label": "現実回帰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "現実の土地には、現実の税金がついてきます。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "撤退する",
+        "detail": "メディア物件1件（持っていれば）を価格×1.2で売却＋現金5億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "media",
+            "count": 1,
+            "priceMult": 1.2
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "撤退は戦略です。負けとは、だいたい似ていますが。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "rare-earth-controls",
+    "title": "レアアースの首輪",
+    "kind": "news",
+    "fact": "中国は2025年、レアアース5元素を新たに輸出管理の対象に加え、規制対象を12元素に広げた。中国は2024年に世界の分離・精製の約91%を担っており、供給網の集中リスクが改めて問題となった。",
+    "sources": [
+      {
+        "title": "Rare-earth industry in China - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Rare-earth_industry_in_China",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "輸出管理は実在。「首輪」という表現と、ゲーム内の備蓄・価格転嫁の効果は風刺的な創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "レアアースは、首輪です。相手の首に、そっとつけます。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "磁石が売れないなら、巨人ごと買い取ればいい。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "希少金属の輸出が制限され、製造業が悲鳴を上げています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "備蓄する",
+        "detail": "現金-30億。エネルギー収益×1.6（2年）＋エネルギー物件1件につき+12億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.6,
+            "years": 2,
+            "label": "レアアース備蓄"
+          },
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "energy",
+            "perProperty": 12
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:giant",
+            "text": "倉庫に山積みです。価値が上がるまで、食べません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "リサイクル技術",
+        "detail": "現金-20億。IT収益×1.4（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.4,
+            "years": 3,
+            "label": "都市鉱山"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "ゴミ箱は、まだ掘られていない鉱山です。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "価格を転嫁する",
+        "detail": "エネルギー物件の価格+20%（恒久）＋現金10億。",
+        "effects": [
+          {
+            "op": "price_mod",
+            "industry": "energy",
+            "mult": 1.2
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tariff_bulldog",
+            "text": "コストは下流へ。下流はもっと下流へ。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "rate-hike-bear",
+    "title": "利上げの冷水",
+    "kind": "news",
+    "fact": "2022年1月から10月にかけて、世界の主要株価指数が広く下落した。インフレ抑制のための急激な利上げと、1994年以来となる債券市場の大打撃が重なり、景気後退への懸念が強まった。",
+    "sources": [
+      {
+        "title": "2022 stock market decline - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2022_stock_market_decline",
+        "date": "2022"
+      }
+    ],
+    "satireNote": "株安は実在。ゲーム内の確率・金額・「借金整理で弁護士カード」は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "利上げは冷水です。頭が冷えて、財布が凍ります。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "株も債券も下がっています。現金だけが、寂しく残っています。"
+      },
+      {
+        "speaker": "char:cheshire",
+        "text": "私の笑顔だけが、去年の高値をつけています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "現金に逃げる",
+        "detail": "所持金+5%。ただし金融収益×0.8（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 5
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.8,
+            "years": 2,
+            "label": "利上げ不況"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "現金は偉大です。インフレ以外の何者にも負けません。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "買い増す",
+        "detail": "45%で+50億、55%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cheshire",
+            "text": "底値で買う。底がまだ下にあるとしても。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "借金を返す",
+        "detail": "現金-30億。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "借金を返す顧客は、次の借金の優良顧客です。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "tulip-mania",
+    "title": "チューリップ、球根、破滅",
+    "kind": "history",
+    "fact": "17世紀のオランダで、チューリップの球根価格が1634年から急騰し、1637年2月に暴落した。記録に残る最初の投機的バブルとされる。",
+    "sources": [
+      {
+        "title": "Tulip mania - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Tulip_mania",
+        "date": "1637"
+      }
+    ],
+    "satireNote": "球根バブルは実在。ゲーム内の金額・確率・花屋の収益効果は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "char:white_rabbit",
+        "text": "遅刻です、遅刻です。球根が家より高い時代に遅刻です。"
+      },
+      {
+        "speaker": "char:mad_hatter",
+        "text": "お茶会のテーブルより、球根の値段のほうが高い。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "花は咲く。値段は散る。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "球根を買う",
+        "detail": "40%で+50億、60%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mad_hatter",
+            "text": "球根は残りました。庭はありませんが。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "花屋になる",
+        "detail": "農林水産収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.4,
+            "years": 2,
+            "label": "チューリップ栽培"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:white_rabbit",
+            "text": "花を売るのは堅実です。球根を売るのは、もっと堅実です。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "早めに売る",
+        "detail": "現金+20億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "早く売った人を、後から天才と呼びます。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "south-sea-bubble",
+    "title": "南海の泡、王室の夢",
+    "kind": "history",
+    "fact": "南海会社は1711年に英国で設立され、国債の整理と南米貿易の独占を担った。株価は1720年に急騰した後、暴落し、多くの投資家が破産した。議会調査で不正や贈賄も明らかになった。",
+    "sources": [
+      {
+        "title": "South Sea Company - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/South_Sea_Company",
+        "date": "1720"
+      }
+    ],
+    "satireNote": "南海泡沫事件は実在。ゲーム内の金額・確率・「最も裕福な人から5%」は創作。王室・政治家の戯画は制度的風刺で、個人攻撃ではない。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "国債を株に変えれば、借金は夢になります。"
+      },
+      {
+        "speaker": "char:heart_queen",
+        "text": "泡が膨らむなら、首をはねる前に買いなさい。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "南の海に貿易はなかった。あっても、泡だけだった。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "株を買う",
+        "detail": "35%で+60億、65%で-40億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -40
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:heart_queen",
+            "text": "泡を買った者には、泡の首をはねる権利をあげます。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "国債で守る",
+        "detail": "所持金+5%。金融収益×0.8（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 5
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.8,
+            "years": 2,
+            "label": "国債の安全"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "国債は安全です。国が潰れたら、一緒に潰れますが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "空売りする",
+        "detail": "50%で+45億＋最も裕福な人-5%、50%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 45
+              },
+              {
+                "op": "cash_pct",
+                "who": "richest",
+                "pct": -5
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "空売りは、王室の夢を先に売る技術です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "mississippi-bubble",
+    "title": "紙幣でルイジアナを買う",
+    "kind": "history",
+    "fact": "スコットランド出身の金融家ジョン・ローは1717年にミシシッピ会社を設立し、フランスの植民地貿易と国家財政を担わせた。紙幣と株の価格は1719年から1720年に急騰したが、1720年後半に暴落し、会社は1721年に政府管理下に入った。",
+    "sources": [
+      {
+        "title": "John Law's Company (Mississippi Company) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Mississippi_Company",
+        "date": "1720"
+      }
+    ],
+    "satireNote": "ミシシッピ泡沫は実在。ゲーム内の確率・金額・「新大陸投資」の効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "紙幣を刷って土地を買う。経済学の花火です。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "長靴より、紙幣のほうが軽い。軽すぎて、飛んでいきました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "ルイジアナは遠い。紙幣の価値も、もっと遠い。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "紙幣を信じる",
+        "detail": "50%で+40億、50%で所持金-20%。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "self",
+                "pct": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "紙幣は軽い。財布も軽くなりました。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "金に替える",
+        "detail": "弁護士軍団カード＋現金10億。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "金は光ります。紙幣は、政策で光ります。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "新大陸に投資",
+        "detail": "現金-25億。観光収益×1.4（3年）＋農林水産収益×1.3（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.4,
+            "years": 3,
+            "label": "ルイジアナ開発"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.3,
+            "years": 3,
+            "label": "新大陸の農園"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "沼地を買いました。将来はリゾートです。たぶん。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "gold-rush-shovels",
+    "title": "金鉱掘りにスコップを売れ",
+    "kind": "history",
+    "fact": "1848年1月、カリフォルニアのサッターズミルで金が発見され、約30万人が流入した。金を掘り当てた者は一部に限られ、道具・食料・宿を売った商人の多くが安定して利益を得た。",
+    "sources": [
+      {
+        "title": "California gold rush - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/California_gold_rush",
+        "date": "1848"
+      }
+    ],
+    "satireNote": "ゴールドラッシュは実在。「スコップ売り」の収益効果と確率は創作。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "char:jack",
+        "text": "豆の木を登ったら、金鉱がありました。豆は売り切れです。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "金を掘るより、掘る人に水を売る。これが黄金律です。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "金鉱の匂いがする。俺の昼飯の匂いもする。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "金を掘る",
+        "detail": "25%で+70億、75%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.25,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 70
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:jack",
+            "text": "掘りました。出たのは、砂と請求書でした。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "スコップを売る",
+        "detail": "現金+35億。製造業収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 35
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 2,
+            "label": "掘削用具"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "金鉱で一番儲かるのは、金鉱を売る人です。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "宿を開く",
+        "detail": "現金-20億。観光収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.5,
+            "years": 2,
+            "label": "金鉱町の宿"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:giant",
+            "text": "ベッドは一つ。客は三百人。商売とはそういうものです。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "weimar-hyperinflation",
+    "title": "紙くずで壁を貼る",
+    "kind": "history",
+    "fact": "第一次世界大戦後のドイツでは、賠償金支払いと紙幣増発によりハイパーインフレが進んだ。1923年11月には1米ドルが約4兆2100億マルクになり、紙幣は壁紙や燃料として使われた。",
+    "sources": [
+      {
+        "title": "Hyperinflation in the Weimar Republic - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Hyperinflation_in_the_Weimar_Republic",
+        "date": "1923"
+      }
+    ],
+    "satireNote": "ハイパーインフレは実在。ゲーム内の「給料をすぐ使う」「紙幣を刷る」の効果と確率は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:granny",
+        "text": "紙幣で壁を貼りました。暖かいのは、気のせいです。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "物価は毎日上がります。給料は毎月、思い出になります。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "紙くずと現金の違いは、今日の朝食を買えるかどうかです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "すぐ給料を使う",
+        "detail": "所持金-25%。食品収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 2,
+            "label": "実物資産"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:granny",
+            "text": "パンを買いました。明日のパンも、今日のうちに。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "外貨で貯める",
+        "detail": "所持金-10%＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "外貨は裏切りません。為替は裏切りますが。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "紙幣を刷る",
+        "detail": "30%で+60億、70%で-40億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -40
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "刷った紙幣で、刷る機械を買いました。"
+          }
+        ],
+        "cpuWeight": 0.7
+      }
+    ]
+  },
+  {
+    "id": "crash-1929",
+    "title": "黒い木曜日、まだ大丈夫",
+    "kind": "history",
+    "fact": "1929年10月24日と29日、ニューヨーク証券取引所で株価が急落した。10月29日には約1640万株が取引され、世界恐慌につながる長い下落の始まりとなった。",
+    "sources": [
+      {
+        "title": "Wall Street crash of 1929 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Wall_Street_crash_of_1929",
+        "date": "1929-10-29"
+      }
+    ],
+    "satireNote": "株価暴落は実在。ゲーム内の確率・金額・底値買いの効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "一時的な調整です。調整が十年続くこともありますが。"
+      },
+      {
+        "speaker": "char:mad_hatter",
+        "text": "お茶の時間です。株価は、もうお茶をこぼしました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "ニューヨーク株が暴落。世界はこれから、長い坂を下ります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "底値で買う",
+        "detail": "25%で+70億、75%で-45億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.25,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 70
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -45
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "底値は後から分かります。今は、まだ途中です。"
+          }
+        ],
+        "cpuWeight": 0.7
+      },
+      {
+        "label": "現金で待つ",
+        "detail": "所持金+5%。金融収益×0.7（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 5
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.7,
+            "years": 2,
+            "label": "大恐慌"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mad_hatter",
+            "text": "待つのは得意です。お茶が冷めるのも、待てます。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "全部売却",
+        "detail": "物件2件（持っている分）を価格×0.8で売却＋現金10億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "any",
+            "count": 2,
+            "priceMult": 0.8
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "売った物件は、買った人には思い出になりました。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "black-monday-1987",
+    "title": "月曜日が黒すぎる",
+    "kind": "history",
+    "fact": "1987年10月19日、世界の株式市場が同時に急落した。米国のダウ平均は1日で約22.6%下落し、世界の損失は約1兆7100億ドルと推定された。",
+    "sources": [
+      {
+        "title": "Black Monday (1987) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Black_Monday_(1987)",
+        "date": "1987-10-19"
+      }
+    ],
+    "satireNote": "ブラックマンデーは実在。ゲーム内の確率・金額・「何もしないでカード獲得」は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "月曜日です。市場が、月曜日を嫌っています。"
+      },
+      {
+        "speaker": "char:cheshire",
+        "text": "笑顔は残ります。株は消えました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "世界同時株安。時差のない不幸です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "パニック売り",
+        "detail": "物件1件（持っていれば）を価格×0.7で売却＋現金5億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "any",
+            "count": 1,
+            "priceMult": 0.7
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cheshire",
+            "text": "売るのも勇気です。買う人がいるなら、ですが。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "押し目買い",
+        "detail": "45%で+50億、55%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "押し目を買った人は、翌日も押し目を買いました。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "何もしない",
+        "detail": "弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cheshire",
+            "text": "動かないのが一番です。私は元々、半分しかいません。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "japan-bubble-burst",
+    "title": "バブルよ、永遠に",
+    "kind": "history",
+    "fact": "日本では1986年から1991年にかけて株価と地価が大きく膨張し、日経平均は1989年12月末に最高値をつけた。1990年代初頭にバブルが崩壊し、金融機関の不良債権と「失われた十年」が続いた。",
+    "sources": [
+      {
+        "title": "Japanese asset price bubble - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Japanese_asset_price_bubble",
+        "date": "1989"
+      }
+    ],
+    "satireNote": "日本のバブルと崩壊は実在。ゲーム内の投資判断・確率・収益倍率は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:kintaro",
+        "text": "金の斧も銀の斧も、今なら土地に変わります。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "地価は上がり続けます。私の信念が担保です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "バブルは膨らむ。そして、永遠に膨らんだことはありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "不動産を買う",
+        "detail": "現金-30億。製造業収益×1.5（2年）。45%で+40億、55%で製造業物件の価格-15%（恒久）＋収益×0.7（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.5,
+            "years": 2,
+            "label": "不動産バブル"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "industry",
+                "mult": 0.85
+              },
+              {
+                "op": "industry_mod",
+                "industry": "industry",
+                "mult": 0.7,
+                "years": 2,
+                "label": "バブル崩壊"
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:kintaro",
+            "text": "土地は裏切りません。値段は裏切りますが。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "海外資産を買う",
+        "detail": "現金-20億。観光収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 2,
+            "label": "海外旅行ブーム"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "海外の不動産は、為替もついてきます。お得です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "現金で逃げる",
+        "detail": "物件1件（持っていれば）を価格×1.2で売却＋現金10億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "any",
+            "count": 1,
+            "priceMult": 1.2
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "高値で売った人は、次のバブルまで待ちます。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "dotcom-bubble",
+    "title": "ドットコム、点が取れない",
+    "kind": "history",
+    "fact": "1995年から2000年3月にかけてナスダック総合指数は約600%上昇し、その後2002年10月までにピークから約78%下落した。インターネット企業の倒産が相次ぎ、ドットコム・バブルが崩壊した。",
+    "sources": [
+      {
+        "title": "Dot-com bubble - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Dot-com_bubble",
+        "date": "2000-03-10"
+      }
+    ],
+    "satireNote": "ドットコム・バブルは実在。ゲーム内の確率・金額・空売り効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:tech_kid",
+        "text": "売上ゼロ、利益ゼロ、将来性は無限です。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "インターネット企業の株価が急騰。ドットコムなら何でも買われています。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "黒字になると言いました。鼻は、まだ伸びていません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "新規上場に乗る",
+        "detail": "30%で+60億、70%で-40億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -40
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "上場初日に売る。これが唯一の黒字化計画です。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "古い産業を買う",
+        "detail": "現金-20億。製造業収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 2,
+            "label": "旧経済の再評価"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "古い産業は、ドットコムより長生きしました。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "空売りする",
+        "detail": "50%で+45億、50%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 45
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "空売りは嘘をついていません。市場が嘘をついただけです。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "too-big-to-fail",
+    "title": "大きすぎて潰せない",
+    "kind": "history",
+    "fact": "2008年9月、米国の投資銀行リーマン・ブラザーズが破綻し、世界的な金融危機が激化した。各国政府は大手金融機関に公的資金を投入し、「大きすぎて潰せない」問題が議論された。",
+    "sources": [
+      {
+        "title": "2007–2008 financial crisis - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2007%E2%80%932008_financial_crisis",
+        "date": "2008-09-15"
+      },
+      {
+        "title": "Too big to fail - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Too_big_to_fail",
+        "date": "2008"
+      }
+    ],
+    "satireNote": "金融危機と公的資金投入は実在。「大きすぎて潰せませんカード」とゲーム内の金額は風刺的な創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "私は大きすぎて潰せません。あなたは、ちょうどいい大きさです。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "大手銀行が破綻。政府は「救済しない」と発表しました。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "救済しないと言ってからが、本当の救済です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "救済する",
+        "detail": "現金-40億。金融収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -40
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 2,
+            "label": "政府の救済"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "ありがとうございます。ボーナスは、来年も出します。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "救済される",
+        "detail": "大きすぎて潰せませんカード＋現金30億。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "bailout",
+            "count": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "あなたも十分大きい。仲間に入りましょう。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "現金で待つ",
+        "detail": "現金+20億。金融収益×0.7（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.7,
+            "years": 2,
+            "label": "信用収縮"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "冬に備えるのは、アリの仕事です。銀行は、別です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "dutch-east-india-company",
+    "title": "世界初の株式会社、配当は香辛料",
+    "kind": "history",
+    "fact": "オランダ東インド会社は1602年に設立され、アジア貿易の21年間の独占権を得た。市民が出資し、株式が取引された世界最初期の株式会社とされ、アムステルダム証券取引所の起源となった。",
+    "sources": [
+      {
+        "title": "Dutch East India Company - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Dutch_East_India_Company",
+        "date": "1602-03-20"
+      }
+    ],
+    "satireNote": "VOCの設立と株式取引は実在。ゲーム内の配当・確率・「金の卵カード」は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:sinbad",
+        "text": "船に乗るなら、株主になりましょう。沈むのは船だけです。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "世界初の株式会社です。世界初の株主総会も、きっと長い。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "配当は香辛料。現金がないときは、胡椒で払います。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "株を買う",
+        "detail": "現金-30億。金融収益×1.5（3年）＋金の卵カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.5,
+            "years": 3,
+            "label": "世界初の株式会社"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "株主になりました。船が沈んだら、株主総会を開きます。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "香辛料を買う",
+        "detail": "食品物件の価格+15%（恒久）＋現金15億。",
+        "effects": [
+          {
+            "op": "price_mod",
+            "industry": "food",
+            "mult": 1.15
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "胡椒は腐りません。紙幣より信用できます。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "冒険に投資",
+        "detail": "50%で+50億、50%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "冒険は儲かります。帰れた場合に限りますが。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "bitcoin-pizza",
+    "title": "1万BTCのピザ",
+    "kind": "history",
+    "fact": "2010年5月22日、ある開発者が1万ビットコインと引き換えにピザ2枚を注文し、これがビットコインによる初の商業取引とされる。当時の1万BTCの価値は約41ドルだった。",
+    "sources": [
+      {
+        "title": "First commercial Bitcoin transaction - Guinness World Records",
+        "url": "https://www.guinnessworldrecords.com/world-records/696240-first-commercial-bitcoin-transaction",
+        "date": "2010-05-22"
+      }
+    ],
+    "satireNote": "ピザ取引は実在。ゲーム内の確率・金額・「金の卵カード」は創作で、後の値上がりを誇張している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "npc:tech_kid",
+        "text": "ピザ2枚で1万BTC。今なら、ピザ屋が上場しています。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "後悔はしていません。ピザは美味しかったと、鼻が伸びました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "最初の商業取引は、最初の後悔でもありました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "BTCでピザを買う",
+        "detail": "現金-5億。金の卵カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -5
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "ピザは美味しかった。それだけは、本当です。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "BTCを保管する",
+        "detail": "15%で+80億、85%で-10億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.15,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 80
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -10
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "保管は無料です。ただし、パスワードを忘れると全部消えます。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "ピザ屋を開く",
+        "detail": "現金-15億。食品収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 2,
+            "label": "ピザ需要"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "ピザ屋は、ビットコインを受け付けなくなりました。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "price-revolution",
+    "title": "銀が世界を値上げした",
+    "kind": "history",
+    "fact": "16世紀後半、スペインが南北アメリカから大量の銀をヨーロッパに持ち込んだことで、西欧の物価が約150年間で平均約6倍になった。これは「価格革命」と呼ばれ、年間約1.2%の複利に相当する。",
+    "sources": [
+      {
+        "title": "Price revolution - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Price_revolution",
+        "date": "1550"
+      }
+    ],
+    "satireNote": "価格革命は実在。ゲーム内の「銀をためる」「値上げに抗議」の効果は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:sinbad",
+        "text": "銀が届くたび、パンの値段が高くなる。航海の副作用です。"
+      },
+      {
+        "speaker": "char:ali_baba",
+        "text": "開けゴマ。開いたのは、銀山の入り口でした。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "銀が増えれば、物が高くなる。金に触れた私のせいではありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "銀をためる",
+        "detail": "現金+20億。食品物件の価格+15%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "price_mod",
+            "industry": "food",
+            "mult": 1.15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "銀は輝きます。パンは輝きませんが、高くなります。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "土地を買う",
+        "detail": "現金-25億。農林水産収益×1.4（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.4,
+            "years": 3,
+            "label": "土地ブーム"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ali_baba",
+            "text": "土地は裏切りません。税吏は別ですが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "値上げに抗議",
+        "detail": "関税カード＋農林水産収益×0.9（1年）。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "tariff",
+            "count": 1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 0.9,
+            "years": 1,
+            "label": "価格統制"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "抗議の声は届きました。値段も届いています。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "zimbabwe-hyperinflation",
+    "title": "100兆ドル札でバスに乗る",
+    "kind": "history",
+    "fact": "ジンバブエでは2007年から2009年にかけてハイパーインフレが進み、2008年11月の月間インフレ率は約7906億%と推定された。100兆ドル札でもバスの運賃を払えず、最終的に自国通貨は廃止された。",
+    "sources": [
+      {
+        "title": "Hyperinflation in Zimbabwe - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Hyperinflation_in_Zimbabwe",
+        "date": "2008"
+      }
+    ],
+    "satireNote": "ジンバブエのハイパーインフレは実在。ゲーム内の確率・金額・外貨効果は創作。",
+    "weight": 3,
+    "minYear": 2,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "100兆ドルです。バスには乗れませんが、数字は立派です。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "貯金は大事です。通貨が生きているうちは。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "紙幣の桁が増えるほど、買えるものが減っていきます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "外貨に替える",
+        "detail": "所持金-15%＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": -15
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "外貨は安全です。両替手数料は、別の通貨でいただきます。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "紙幣を刷る",
+        "detail": "25%で+70億、75%で-50億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.25,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 70
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -50
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "刷った紙幣で、インクを買いました。"
+          }
+        ],
+        "cpuWeight": 0.7
+      },
+      {
+        "label": "モノを買う",
+        "detail": "所持金-20%。食品収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 2,
+            "label": "実物資産"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "小麦を買いました。通貨より重いですが、安心です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "naked-emperor-ai",
+    "title": "裸の王様の最新投資術",
+    "kind": "fable",
+    "satireNote": "完全創作。AI投資を「見えない服」に重ねた寓話で、実在の人物・企業とは関係ない。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:naked_emperor",
+        "text": "このスーツ、AIで生成されています。見える人にしか見えません。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "見えます。見えることにしました。請求書も見えます。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "服がないのに、株だけ着ている人がいます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "AIスーツを買う",
+        "detail": "現金-25億。IT収益×1.8（2年）。40%で+30億、60%でメディア物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.8,
+            "years": 2,
+            "label": "見えるスーツ"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "media",
+                "mult": 0.9
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:naked_emperor",
+            "text": "見えますか？ 見えないなら、あなたの想像力の問題です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "何も見えないと言う",
+        "detail": "現金+10億。弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "正直者は得をします。少なくとも、騙されはしません。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "仕立て屋を訴える",
+        "detail": "現金+25億。メディア物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "price_mod",
+            "industry": "media",
+            "mult": 0.9
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "訴訟は最高のプロダクトです。在庫がいりません。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "golden-goose-ipo",
+    "title": "金の卵のガチョウ上場",
+    "kind": "fable",
+    "satireNote": "完全創作。金の卵を産むガチョウを新規上場企業に見立てた寓話。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:golden_goose",
+        "text": "卵を産みます。金です。成長率は、卵の数に比例します。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "上場しましょう。ガチョウは資産、卵は将来のキャッシュフローです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "卵を産むガチョウを、卵の数で評価する。経済の基本です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "上場する",
+        "detail": "即時+50億。50%で+20億、50%で所持金-15%。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 50
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 20
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "self",
+                "pct": -15
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "上場初日は上がります。二日目は、皆さんの判断です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "卵を温める",
+        "detail": "金の卵カード＋農林水産収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.3,
+            "years": 2,
+            "label": "金の卵"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:golden_goose",
+            "text": "温めると、次の四半期も卵が出ます。たぶん。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "串焼きにする",
+        "detail": "現金+20億。農林水産収益×0.8（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 0.8,
+            "years": 2,
+            "label": "ガチョウの丸焼き"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "短期的には美味しい。長期的には、卵がない。"
+          }
+        ],
+        "cpuWeight": 0.7
+      }
+    ]
+  },
+  {
+    "id": "hamelin-temp-agency",
+    "title": "ハーメルン式人材派遣",
+    "kind": "fable",
+    "satireNote": "完全創作。ハーメルンの笛吹きを人材派遣ビジネスに見立て、労働条件の曖昧さを風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "npc:piper1",
+        "text": "笛の音に従って、どうぞこちらへ。労働条件は書面にありません。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "派遣は便利です。責任の所在も、派遣されます。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "働くのは嫌いですが、笛の音は嫌いじゃありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "派遣する",
+        "detail": "現金+25億。他の全員に取り立て屋が憑く。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "piper",
+            "to": "others"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:piper1",
+            "text": "人材は流れます。請求書も流れます。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "笛を吹かれる",
+        "detail": "1回休み＋現金10億。",
+        "effects": [
+          {
+            "op": "skip",
+            "who": "self",
+            "turns": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:grasshopper",
+            "text": "休みは嬉しい。給料は出ませんが、笛は鳴ります。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "正規雇用する",
+        "detail": "現金-20億。製造業収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 2,
+            "label": "まともな雇用"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "福利厚生は大事です。特に、首にならない福利厚生が。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "wolf-boy-forecast",
+    "title": "オオカミ少年の決算予想",
+    "kind": "fable",
+    "satireNote": "完全創作。オオカミ少年を、外れても謝らない決算予想屋に見立てた寓話。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:wolf",
+        "text": "今回は本当です。前回も言いましたが、今回はもっと本当です。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "オオカミの予想は、牙だらけでした。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "決算予想が外れました。予想屋は、新しい予想を出しました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "予想を信じる",
+        "detail": "35%で+50億、65%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wolf",
+            "text": "外れたのは市場のせいです。俺の牙は、まだ本物です。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "予想を疑う",
+        "detail": "噂話カード＋現金5億。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:red_hood",
+            "text": "疑うのは無料です。疑いすぎると、美味しい話も逃しますが。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "自分で予想する",
+        "detail": "50%で+30億、50%で-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "自分で予想すると、外れても文句を言う相手がいます。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "ant-grasshopper-pension",
+    "title": "アリとキリギリスの年金問題",
+    "kind": "fable",
+    "satireNote": "完全創作。アリとキリギリスの寓話を年金・再分配の議論に重ねている。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:ant",
+        "text": "夏の間に貯金しました。冬の前に、制度が変わりました。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "働かない代わりに、年金をもらう。これも分業です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "貯めた者と貯めなかった者が、同じ卓を囲んでいます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "貯金を続ける",
+        "detail": "所持金+5%＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "self",
+            "pct": 5
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "貯金は裏切りません。制度は、少し裏切りますが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "分け与える",
+        "detail": "現金-15億。最も貧しい人は所持金+10%。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "cash_pct",
+            "who": "poorest",
+            "pct": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:grasshopper",
+            "text": "ありがとう。来年も、よろしくお願いします。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "制度を変える",
+        "detail": "現金+15億。最も裕福な人は所持金-10%。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "cash_pct",
+            "who": "richest",
+            "pct": -10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "再分配です。私の財布から、私の別の財布へ。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "cinderella-resale",
+    "title": "シンデレラの靴、転売禁止",
+    "kind": "fable",
+    "satireNote": "完全創作。ガラスの靴の限定品転売を、需要と供給の風刺として描いている。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:cinderella",
+        "text": "靴は片方だけ。残りは転売しました。"
+      },
+      {
+        "speaker": "char:stepsister",
+        "text": "この靴、サイズは合いませんが値段は合います。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "魔法は真夜中に解けます。転売価格は朝まで残ります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "転売する",
+        "detail": "現金+35億。メディア物件の価格+20%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 35
+          },
+          {
+            "op": "price_mod",
+            "industry": "media",
+            "mult": 1.2
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:stepsister",
+            "text": "限定品は、履くものではなく、売るものです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "限定品を買う",
+        "detail": "現金-20億。メディア収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.5,
+            "years": 2,
+            "label": "限定品バブル"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cinderella",
+            "text": "魔法の品は、魔法の値段で売れます。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "履いて帰る",
+        "detail": "目的地の近くへワープ＋現金5億。",
+        "effects": [
+          {
+            "op": "move",
+            "who": "self",
+            "to": "destination_near"
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "魔法の靴は、目的地の近くまでしか運びません。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "three-pigs-housing",
+    "title": "三匹の子ブタ、不動産バブル",
+    "kind": "fable",
+    "satireNote": "完全創作。三匹の子ブタの家づくりを、住宅バブルと建材投機に見立てている。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:wolf",
+        "text": "ワラの家は吹き飛びます。レンガの家は、ローンの分だけ残ります。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "住宅ローンは安全です。家が建つ限り。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "三匹のうち、二人は投資家になりました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "レンガの家を買う",
+        "detail": "現金-30億。製造業収益×1.5（2年）＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.5,
+            "years": 2,
+            "label": "堅牢な家"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wolf",
+            "text": "レンガは硬い。ローンはもっと硬い。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "ワラの家に投資",
+        "detail": "現金-10億。30%で+60億、70%で-30億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "ワラでも、証券化すれば立派な資産です。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "狼に売る",
+        "detail": "現金+40億。製造業物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "price_mod",
+            "industry": "industry",
+            "mult": 0.9
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wolf",
+            "text": "家を買いました。次の獲物は、内装業者です。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "momotaro-resource-deal",
+    "title": "桃太郎、鬼ヶ島の資源利権",
+    "kind": "fable",
+    "satireNote": "完全創作。桃太郎の鬼退治を、資源利権交渉と再分配の寓話にしている。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:momotaro",
+        "text": "鬼も株主も、話せばわかる。たぶん。"
+      },
+      {
+        "speaker": "char:aka_oni",
+        "text": "俺たちの島の資源を勝手に掘るな。契約書は読めないが。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "きびだんごは、交渉のテーブルにも置かれました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "鬼と交渉",
+        "detail": "現金+30億。エネルギー収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.4,
+            "years": 2,
+            "label": "鬼ヶ島の資源"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:aka_oni",
+            "text": "契約は結びました。次は、契約の契約を結びましょう。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "武力で奪う",
+        "detail": "60%で+50億、40%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.6,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:momotaro",
+            "text": "勝てば利権、負ければ訴訟。どちらも戦いです。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "きびだんごで分配",
+        "detail": "現金-15億。最も貧しい人は所持金+15%。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "cash_pct",
+            "who": "poorest",
+            "pct": 15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:aka_oni",
+            "text": "きびだんごは美味い。だが、利権の味には負ける。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  }
+]
