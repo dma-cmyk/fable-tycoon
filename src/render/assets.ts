@@ -61,6 +61,7 @@ export async function loadMapAssets(
   const joy = new Map<string, HTMLImageElement>();
   const sad = new Map<string, HTMLImageElement>();
   const realms = new Map<RealmId, HTMLImageElement>();
+  const stamps = new Map<string, HTMLImageElement>();
 
   interface Job {
     label: string;
@@ -80,6 +81,17 @@ export async function loadMapAssets(
       label: `realms/${id}`,
       url: assetUrl(REALMS[id].background.replace(/^assets\//, '')),
       put: (img) => realms.set(id, img),
+    });
+  }
+  const stampNames = [
+    'mountains', 'snow_mountain', 'volcano', 'conifer_forest', 'forest', 'palms', 'desert',
+    'fields', 'town', 'metropolis', 'port_town', 'station', 'iceberg', 'ranch', 'oil_rig', 'factory',
+  ];
+  for (const name of stampNames) {
+    jobs.push({
+      label: `stamps/${name}`,
+      url: assetUrl(`stamps/${name}.webp`),
+      put: (img) => stamps.set(name, img),
     });
   }
   for (const kind of VEHICLE_KINDS) {
@@ -144,7 +156,8 @@ export async function loadMapAssets(
       ...joy.values(),
       ...sad.values(),
       ...realms.values(),
+      ...stamps.values(),
     ].map((img) => img.decode().catch(() => undefined)),
   );
-  return { land, chars, landmarks, npcs, vehicles, joy, sad, realms };
+  return { land, chars, landmarks, npcs, vehicles, joy, sad, realms, stamps };
 }

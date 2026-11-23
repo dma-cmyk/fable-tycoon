@@ -10,7 +10,8 @@ import type { EmoteAnim, EmoteDef, GameState, MoveOption, PlayerSetup } from '..
 import { GAME_DATA as data } from '../data/index';
 import { loadMapAssets } from './assets';
 import { MapView } from './map';
-import type { FrameStats } from './map';
+import type { FrameStats, CelebrateKind, Mood, WarpVia } from './map';
+import type { RealmId } from '../core/types';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('map') as HTMLCanvasElement | null;
@@ -40,9 +41,16 @@ interface DemoApi {
   playAnim(anim: EmoteAnim, target?: number): Promise<void>;
   bubble(text?: string, playerId?: number): void;
   floatText(text?: string, color?: string): void;
-  animateMoveTo(cityId: string): Promise<void>;
+  animateMoveTo(cityId: string, dice?: number): Promise<void>;
   showMoveOptions(): void;
   measurePan(ms?: number): Promise<FrameStats>;
+  celebrate(kind: CelebrateKind): void;
+  shake(intensity?: number): void;
+  setMonth(month: number): void;
+  setView(realm: RealmId | 'world'): void;
+  setMood(mood: Mood, playerId?: number): void;
+  setReducedMotion(on: boolean): void;
+  warpTo(via: WarpVia): Promise<void>;
   lastStats: FrameStats | null;
 }
 
@@ -240,7 +248,7 @@ async function main(): Promise<void> {
     return map.playEmote(0, def, target);
   };
 
-  const animateMoveTo = async (cityId: string): Promise<void> => {
+  const animateMoveTo = async (cityId: string, dice = 1): Promise<void> => {
     const player = state.players[0];
     const nodeId = `c:${cityId}`;
     if (!player) return;
@@ -250,7 +258,7 @@ async function main(): Promise<void> {
       return;
     }
     setStatus(`${nodeLabel(nodeId)} まで ${path.length} 歩を移動中…`);
-    await map.animateMove(0, path, 180);
+    await map.animateMove(0, path, 180, { dice });
     player.prevNodeId = player.nodeId;
     player.nodeId = nodeId;
     setStatus(`${nodeLabel(nodeId)} に到着（${path.length} 歩）`);
@@ -336,6 +344,27 @@ async function main(): Promise<void> {
     animateMoveTo,
     showMoveOptions,
     measurePan,
+    celebrate: (kind) => {
+      const nodeId = state.players[state.current]?.nodeId;
+      if (nodeId) map.celebrate(nodeId, kind);
+    },
+    shake: (intensity = 0.8) => map.shake(intensity),
+    setMonth: (month) => {
+      map.setMonth(month);
+      setStatus(`季節: ${month}月`);
+    },
+    setView: (realm) => {
+      map.setView(realm);
+      setStatus(`ビュー: ${realm}`);
+    },
+    setMood: (mood, playerId = 0) => map.setMood(playerId, mood, 5000),
+    setReducedMotion: (on) => map.setReducedMotion(on),
+    warpTo: async (via) => {
+      const target = via === 'plane' || via === 'rocket' || via === 'carpet' ? 'c:paris' : 'c:tokyo';
+      await map.warp(0, target, via);
+      const p = state.players[0];
+      if (p) p.nodeId = target;
+    },
     lastStats: null,
   };
   api = createdApi;
@@ -360,6 +389,32 @@ async function main(): Promise<void> {
   bind('btn-measure', () => {
     void measurePan(3000);
   });
+  bind('btn-dice1', () => { void animateMoveTo('seoul', 1); });
+  bind('btn-dice2', () => { void animateMoveTo('seoul', 2); });
+  bind('btn-dice3', () => { void animateMoveTo('seoul', 3); });
+  bind('btn-sea', () => { void animateMoveTo('sydney', 1); });
+  bind('btn-plane', () => { void map.warp(0, 'c:paris', 'plane'); });
+  bind('btn-rocket', () => { void map.warp(0, 'c:paris', 'rocket'); });
+  bind('btn-carpet', () => { void map.warp(0, 'c:paris', 'carpet'); });
+  bind('btn-tornado', () => { void map.warp(0, 'c:paris', 'tornado'); });
+  bind('btn-mood-joy', () => map.setMood(0, 'joy', 5000));
+  bind('btn-mood-sad', () => map.setMood(0, 'sad', 5000));
+  bind('btn-mood-clear', () => map.setMood(0, null));
+  bind('btn-buy', () => map.celebrate(0, 'buy'));
+  bind('btn-monopoly', () => map.celebrate(0, 'monopoly'));
+  bind('btn-goal', () => map.celebrate(0, 'goal'));
+  bind('btn-bad', () => map.celebrate(0, 'bad'));
+  bind('btn-shake', () => map.shake(1));
+  bind('btn-month4', () => map.setMonth(4));
+  bind('btn-month8', () => map.setMonth(8));
+  bind('btn-month11', () => map.setMonth(11));
+  bind('btn-month1', () => map.setMonth(1));
+  bind('btn-view-world', () => map.setView('world'));
+  bind('btn-view-heaven', () => map.setView('heaven'));
+  bind('btn-view-hell', () => map.setView('hell'));
+  bind('btn-view-space', () => map.setView('space'));
+  bind('btn-reduced', () => map.setReducedMotion(true));
+  bind('btn-reduced-off', () => map.setReducedMotion(false));
   bind('btn-emote-all', () => {
     const anims: EmoteAnim[] = [
       'jump', 'angry', 'cry', 'laugh', 'dance', 'taunt', 'dogeza',

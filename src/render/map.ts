@@ -4,7 +4,7 @@
 // stores its centre in map units and its zoom in CSS px per map unit. Horizontal wrap is
 // handled by always projecting through wrapDx(), so no drawing code needs seam special cases.
 
-import { MAP_H, MAP_W, wrapDx, wrapX } from '../core/geo';
+import { CENTRAL_MERIDIAN, LAT_BOTTOM, LAT_TOP, MAP_H, MAP_W, wrapDx, wrapX } from '../core/geo';
 import { REALMS, REALM_H, REALM_W } from '../core/realm';
 import type {
   BoardNode,
@@ -54,6 +54,8 @@ export interface MapAssets {
   sad?: Map<string, HTMLImageElement>;
   /** Realm background images (heaven/hell/space). */
   realms?: Map<RealmId, HTMLImageElement>;
+  /** Terrain and town stamps. */
+  stamps?: Map<string, HTMLImageElement>;
 }
 
 export interface FrameStats {
@@ -247,6 +249,8 @@ export class MapView {
   private readonly worldNodes: BoardNode[] = [];
   private readonly realmNodes = new Map<RealmId, BoardNode[]>();
   private readonly realmEdges = new Map<RealmId, DrawEdge[]>();
+  private readonly terrain: Array<{ x: number; y: number; kind: string; size: number }> = [];
+  private readonly avoidGrid = new RectGrid<true>(64);
   private readonly cityNodeId = new Map<string, string>();
   private readonly characterById = new Map<string, Character>();
   private readonly edges: DrawEdge[] = [];
@@ -388,6 +392,7 @@ export class MapView {
       if (node.kind === 'warp') this.warpNodes.push(node);
     }
     this.ambient = new AmbientWorld(data, assets.vehicles);
+    this.buildTerrain();
 
     canvas.style.touchAction = 'none';
     canvas.style.display = 'block';
@@ -399,6 +404,85 @@ export class MapView {
     this.resize();
     this.attachInput();
     this.requestRender();
+  }
+
+  private buildTerrain(): void {
+    for (const node of this.worldNodes) {
+      this.avoidGrid.add({ x: node.x - 15, y: node.y - 15, w: 30, h: 30 }, true);
+    }
+    for (const e of this.edges) {
+      const len = Math.hypot(e.dx, e.dy);
+      const steps = Math.max(1, Math.ceil(len / 55));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        this.avoidGrid.add({ x: e.ax + e.dx * t - 13, y: e.ay + e.dy * t - 13, w: 26, h: 26 }, true);
+      }
+    }
+    const step = MAP_W / 70;
+    let n = 0;
+    for (let gy = step; gy < MAP_H - step; gy += step) {
+      for (let gx = step; gx < MAP_W - step; gx += step) {
+        n += 1;
+        const x = gx + (hashString(`t${n}`) % 1000) / 1000 * step * 0.9 - step * 0.45;
+        const y = gy + (hashString(`u${n}`) % 1000) / 1000 * step * 0.9 - step * 0.45;
+        const lon = ((x / MAP_W) * 360 - 180 + CENTRAL_MERIDIAN + 540) % 360 - 180;
+        const lat = LAT_TOP + (y / MAP_H) * (LAT_BOTTOM - LAT_TOP);
+        const kind = classifyTerrain(lat, lon, n);
+        if (!kind) continue;
+        if (!this.landLayer.isLand(((x % MAP_W) + MAP_W) % MAP_W, y)) continue;
+        if (this.avoidGrid.queryRect({ x: x - 38, y: y - 38, w: 76, h: 76 }).length) continue;
+        const size = terrainSize(kind) * (MAP_W / 8192);
+        this.terrain.push({ x, y, kind, size });
+      }
+    }
+  }
+
+  private drawTerrain(ctx: CanvasRenderingContext2D, layer: LayerTransform, detail: number): void {
+    if (detail < 1) return;
+    const { toCanvas, scale, dpr } = layer;
+    const cam = this.camera;
+    const centerX = layer.ox + layer.wWorld / 2;
+    const wPx = layer.wWorld * scale;
+    const hPx = layer.hWorld * scale;
+    for (const t of this.terrain) {
+      const wx = centerX + wrapDx(centerX, t.x);
+      const [px, py] = toCanvas(wx, t.y);
+      const sz = t.size * scale;
+      if (px < -sz || px > wPx + sz || py < -sz || py > hPx + sz) continue;
+      const img = this.assets.stamps?.get(t.kind);
+      const aspect = img && img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1.25;
+      const w = sz * aspect;
+      const h = sz;
+      ctx.globalAlpha = 0.93;
+      if (img) ctx.drawImage(img, px - w / 2, py - h * 0.7, w, h);
+      else drawStampFallback(ctx, t.kind, px, py, sz);
+      ctx.globalAlpha = 1;
+    }
+    void cam;
+    void dpr;
+  }
+
+  private drawCityClusters(ctx: CanvasRenderingContext2D, layer: LayerTransform, detail: number): void {
+    if (detail < 1) return;
+    const { toCanvas, scale } = layer;
+    const centerX = layer.ox + layer.wWorld / 2;
+    const wPx = layer.wWorld * scale;
+    const hPx = layer.hWorld * scale;
+    const radiusPx = this.cityRadius() * layer.dpr;
+    for (const entry of this.cityEntries) {
+      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.port ? 'port_town' : 'town';
+      const img = this.assets.stamps?.get(kind);
+      const worldSize = (kind === 'metropolis' ? 58 : kind === 'port_town' ? 42 : 32) * (MAP_W / 8192);
+      const sz = worldSize * scale;
+      const wx = centerX + wrapDx(centerX, entry.node.x);
+      const [px, py] = toCanvas(wx, entry.node.y);
+      if (px < -sz || px > wPx + sz || py < -sz || py > hPx + sz) continue;
+      const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
+      const cx = px + dir * (radiusPx + sz * 0.35);
+      const cy = py - sz * 0.22;
+      if (img) ctx.drawImage(img, cx - sz / 2, cy - sz * 0.62, sz, sz);
+      else drawStampFallback(ctx, kind, cx, cy, sz);
+    }
   }
 
   private realmCamera(realm: RealmId): Camera {
@@ -1319,11 +1403,40 @@ export class MapView {
     }
 
     const radius = this.cityRadius();
-    for (const entry of this.cityEntriesForView()) {
+    const entries = this.cityEntriesForView();
+    const known = new Set(entries.map((e) => e.node.id));
+    for (const entry of entries) {
       const x = cam.screenX(entry.node.x);
       const y = cam.screenY(entry.node.y);
       if (x < -180 || x > cam.vw + 180 || y < -180 || y > cam.vh + 180) continue;
       this.drawCityPedestalAt(ctx, x, y, radius, this.ownership.get(entry.city.id));
+    }
+    // Realm station rows can land before cities.json; keep them visible with a
+    // generic station plate/label until the data catches up.
+    for (const node of this.nodesForView()) {
+      if (node.kind !== 'city' || known.has(node.id)) continue;
+      const x = cam.screenX(node.x);
+      const y = cam.screenY(node.y);
+      if (x < -180 || x > cam.vw + 180 || y < -180 || y > cam.vh + 180) continue;
+      this.drawCityPedestalAt(ctx, x, y, radius, undefined);
+      const label = (node.cityId ?? node.id).replace(/-/g, ' ');
+      ctx.save();
+      ctx.font = `800 ${Math.max(10, 9.5 + cam.zoom * 1.25).toFixed(1)}px ${LABEL_FONT}`;
+      const tw = ctx.measureText(label).width + 13;
+      const bx = x - tw / 2;
+      const by = y - radius - 27;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, tw, 19, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#1a2b4c';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x, by + 10);
+      ctx.restore();
     }
   }
 
@@ -1418,10 +1531,17 @@ export class MapView {
     const wPx = wWorld * scale;
     const hPx = hWorld * scale;
     const margin = 80 * dpr;
+    const detail0 = this.detailLevel();
+    this.drawTerrain(ctx, layer, detail0);
+    this.drawCityClusters(ctx, layer, detail0);
 
     // --- sea routes + rails ---------------------------------------------------
     const railPath = new Path2D();
     const seaPath = new Path2D();
+    const sleeperPath = new Path2D();
+    const chevronPath = new Path2D();
+    const zoomForTrack = this.camera.zoom;
+    const detailForTrack = this.detailLevel();
     for (const e of this.edges) {
       const ax = centerX + wrapDx(centerX, e.ax);
       const bx = ax + e.dx;
@@ -1434,6 +1554,35 @@ export class MapView {
       const path = e.sea ? seaPath : railPath;
       path.moveTo(x1, y1);
       path.lineTo(x2, y2);
+      const lx = x2 - x1;
+      const ly = y2 - y1;
+      const len = Math.hypot(lx, ly);
+      if (len < 4) continue;
+      const ux = lx / len;
+      const uy = ly / len;
+      const nx = -uy;
+      const ny = ux;
+      if (e.sea && zoomForTrack >= 0.5) {
+        const interval = 34 * dpr;
+        for (let d = interval; d < len; d += interval) {
+          const t = d / len;
+          const px = x1 + lx * t;
+          const py = y1 + ly * t;
+          chevronPath.moveTo(px - ux * 3 * dpr + nx * 2 * dpr, py - uy * 3 * dpr + ny * 2 * dpr);
+          chevronPath.lineTo(px + nx * 2 * dpr, py + ny * 2 * dpr);
+          chevronPath.lineTo(px - ux * 3 * dpr - nx * 2 * dpr, py - uy * 3 * dpr - ny * 2 * dpr);
+        }
+      } else if (!e.sea && detailForTrack >= 1 && zoomForTrack >= 0.75) {
+        const interval = 15 * dpr;
+        const half = Math.max(2 * dpr, zoomForTrack * 1.5 * dpr);
+        for (let d = interval * 0.5; d < len; d += interval) {
+          const t = d / len;
+          const px = x1 + lx * t;
+          const py = y1 + ly * t;
+          sleeperPath.moveTo(px - nx * half, py - ny * half);
+          sleeperPath.lineTo(px + nx * half, py + ny * half);
+        }
+      }
     }
     const zoom = this.camera.zoom;
     ctx.save();
@@ -1444,13 +1593,31 @@ export class MapView {
     ctx.setLineDash([Math.max(2, zoom * 2.4) * dpr, Math.max(5, zoom * 5.2) * dpr]);
     ctx.stroke(seaPath);
     ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(232,255,255,0.85)';
+    ctx.lineWidth = Math.max(1, 1.2 * dpr);
+    ctx.stroke(chevronPath);
     const railW = Math.min(7, Math.max(1.8, 1.4 + zoom * 1.7));
-    ctx.strokeStyle = '#7591a8';
-    ctx.lineWidth = (railW + 2.8) * dpr;
-    ctx.stroke(railPath);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = railW * dpr;
-    ctx.stroke(railPath);
+    if (detailForTrack >= 1 && zoom >= 0.75) {
+      ctx.strokeStyle = '#7d8790';
+      ctx.lineWidth = (railW + 7) * dpr;
+      ctx.stroke(railPath);
+      ctx.strokeStyle = '#e9e2cf';
+      ctx.lineWidth = (railW + 4) * dpr;
+      ctx.stroke(railPath);
+      ctx.strokeStyle = '#8b7658';
+      ctx.lineWidth = Math.max(1.1, 1.2 * dpr);
+      ctx.stroke(sleeperPath);
+      ctx.strokeStyle = '#6f7a86';
+      ctx.lineWidth = Math.max(1.2, railW * 0.7 * dpr);
+      ctx.stroke(railPath);
+    } else {
+      ctx.strokeStyle = '#7591a8';
+      ctx.lineWidth = (railW + 2.8) * dpr;
+      ctx.stroke(railPath);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = railW * dpr;
+      ctx.stroke(railPath);
+    }
     ctx.restore();
 
     const detail = this.detailLevel();
@@ -1599,24 +1766,51 @@ export class MapView {
     const h = radius * 1.5;
     const left = x - w / 2;
     const top = y - h * 0.62;
+    let topPlayer = -1;
+    let best = 0;
+    if (owner) {
+      for (let i = 0; i < owner.counts.length; i++) {
+        if (owner.counts[i] > best) { best = owner.counts[i]; topPlayer = i; }
+      }
+    }
+    const plateColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#fbfeff';
     ctx.save();
     ctx.fillStyle = 'rgba(7, 35, 57, 0.36)';
     ctx.beginPath();
     ctx.roundRect(left + 1.5, top + 3, w, h, h * 0.3);
     ctx.fill();
 
+    // roof / station plate
+    ctx.beginPath();
+    ctx.moveTo(left - radius * 0.16, top + 1);
+    ctx.lineTo(left + w * 0.14, top - h * 0.42);
+    ctx.lineTo(left + w * 0.86, top - h * 0.42);
+    ctx.lineTo(left + w + radius * 0.16, top + 1);
+    ctx.closePath();
+    ctx.fillStyle = plateColor;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.4, radius * 0.11);
+    ctx.strokeStyle = '#23385c';
+    ctx.stroke();
+
     ctx.beginPath();
     ctx.roundRect(left, top, w, h, h * 0.3);
-    ctx.fillStyle = '#fbfeff';
+    ctx.fillStyle = plateColor;
     ctx.fill();
     ctx.lineWidth = Math.max(1.5, radius * 0.12);
     ctx.strokeStyle = '#23385c';
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.roundRect(left + 2, top + 2, w - 4, h * 0.3, h * 0.15);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.roundRect(left + w * 0.13, top + h * 0.18, w * 0.74, h * 0.42, h * 0.14);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.fill();
+    ctx.strokeStyle = 'rgba(35,56,92,0.7)';
+    ctx.lineWidth = Math.max(1, radius * 0.05);
+    ctx.stroke();
+    ctx.fillStyle = '#4d5c73';
+    ctx.fillRect(left + w * 0.21, top + h * 0.3, w * 0.22, h * 0.16);
+    ctx.fillRect(left + w * 0.5, top + h * 0.3, w * 0.22, h * 0.16);
 
     if (owner && owner.total > 0) {
       let owned = 0;
@@ -3447,6 +3641,76 @@ export class MapView {
     this.lastPickAt = now;
     this.movePick?.(nodeId);
   }
+}
+
+function classifyTerrain(lat: number, lon: number, n: number): string | null {
+  const r = (hashString(`r${n}`) % 1000) / 1000;
+  if (lat < -60) return r < 0.5 ? 'iceberg' : 'snow_mountain';
+  if (lon > 65 && lon < 102 && lat > 25 && lat < 42) return r < 0.4 ? 'snow_mountain' : 'mountains';
+  if (lon > 4 && lon < 19 && lat > 43 && lat < 49) return r < 0.35 ? 'snow_mountain' : 'mountains';
+  if (lon > -132 && lon < -103 && lat > 35 && lat < 62) return r < 0.3 ? 'snow_mountain' : 'mountains';
+  if (lon > -82 && lon < -63 && lat > -52 && lat < 12) return r < 0.35 ? 'snow_mountain' : 'mountains';
+  if (lat > 62 && lon > -60 && lon < -20) return 'iceberg';
+  if ((lon > -18 && lon < 35 && lat > 12 && lat < 32) ||
+      (lon > 35 && lon < 60 && lat > 12 && lat < 32) ||
+      (lon > 115 && lon < 146 && lat > -33 && lat < -19) ||
+      (lon > 85 && lon < 116 && lat > 38 && lat < 51)) {
+    return r < 0.15 ? 'oil_rig' : 'desert';
+  }
+  if (lon > 35 && lon < 60 && lat > 15 && lat < 36) return r < 0.25 ? 'oil_rig' : 'desert';
+  if (lat > 49) return r < 0.65 ? 'conifer_forest' : 'snow_mountain';
+  if (Math.abs(lat) < 23.5) return r < 0.58 ? 'palms' : 'forest';
+  if (r < 0.3) return 'forest';
+  if (r < 0.55) return 'fields';
+  if (r < 0.68) return 'ranch';
+  if (r < 0.74) return 'factory';
+  if (r < 0.82) return 'mountains';
+  return 'fields';
+}
+
+function terrainSize(kind: string): number {
+  switch (kind) {
+    case 'mountains': return 62;
+    case 'snow_mountain': return 72;
+    case 'volcano': return 58;
+    case 'conifer_forest': return 42;
+    case 'forest': return 36;
+    case 'palms': return 34;
+    case 'desert': return 32;
+    case 'fields': return 40;
+    case 'ranch': return 36;
+    case 'oil_rig': return 32;
+    case 'factory': return 36;
+    case 'iceberg': return 44;
+    default: return 55;
+  }
+}
+
+function drawStampFallback(ctx: CanvasRenderingContext2D, kind: string, x: number, y: number, size: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  if (kind === 'mountains' || kind === 'snow_mountain') {
+    ctx.fillStyle = kind === 'snow_mountain' ? '#f0f5f2' : '#8a7a66';
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.5, 0);
+    ctx.lineTo(-size * 0.1, -size * 0.7);
+    ctx.lineTo(size * 0.12, -size * 0.35);
+    ctx.lineTo(size * 0.3, -size * 0.6);
+    ctx.lineTo(size * 0.52, 0);
+    ctx.closePath();
+    ctx.fill();
+  } else if (kind === 'desert') {
+    ctx.fillStyle = '#e6c56a';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * 0.5, size * 0.24, 0, 0, TAU);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = kind === 'factory' ? '#8d9aa8' : kind === 'oil_rig' ? '#5f6a75' : '#4f9b3b';
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.2, size * 0.28, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function gemColors(kind: SquareKind): { light: string; main: string; dark: string; edge: string } {

@@ -143,6 +143,11 @@ export class LandLayer {
     this.key = '';
   }
 
+  /** True when a world point lies on land (used to place terrain stamps). */
+  isLand(x: number, y: number): boolean {
+    return pointInPolygons(this.boxes, x, y);
+  }
+
   /** Draw the cached land + static board into a DPR-transformed screen context. */
   draw(
     target: CanvasRenderingContext2D,
