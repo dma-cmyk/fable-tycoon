@@ -173,3 +173,5 @@
 - `world-space-lottery` は NASA NTRS の宇宙旅行論文に合わせ、商業化の表現を調整。
 - 台詞（`lines` / `reply`）は変更していない。音声再生成は不要。
 - 検証: `JSON.parse` exit 0、独自イベント検証0エラー、`node tools/validate-data.mjs` exit 0（warning 1件: board.json の world node 間隔が目標範囲外、イベントとは無関係）。
+- 追加レビュー: `meme-stock-squeeze` の空売り比率を SEC 報告の **122.97%（浮動株比、2021年1月）** に修正。空売り筋の買い戻しが寄与した時期を **1月22日〜27日の上昇局面** と明記し、買い戻しは全体の買い量の一部にとどまったという SEC の留保も追記した。
+- 2026-11-24 の最終再実行では `node tools/validate-data.mjs` は exit 0（`validation OK: 9 data file(s), 2 warning(s)`）。warning は board.json の world node 間隔2件で、イベントとは無関係。
