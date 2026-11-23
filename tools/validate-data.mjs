@@ -389,7 +389,7 @@ if (data['board.json'] !== undefined) {
     }
     const worldNodes = b.nodes.filter((n) => n.realm === undefined);
     const worldNodeCount = worldNodes.length;
-    if (worldNodeCount < 900) err('board.json', `too few world nodes: ${worldNodeCount}`);
+    if (worldNodeCount < 800) err('board.json', `too few world nodes: ${worldNodeCount}`);
     else if (worldNodeCount < 2600 || worldNodeCount > 3200) {
       warn('board.json', `world nodes ${worldNodeCount} outside the 2600-3200 target (spacing-constrained)`);
     }
@@ -403,6 +403,33 @@ if (data['board.json'] !== undefined) {
       if (Math.abs(actualPct - targetPct) > 3) {
         err('board.json', `square mix ${kind}: ${actualPct.toFixed(1)}% (normalised target ${targetPct.toFixed(1)}% ±3)`);
       }
+    }
+
+// 60-unit spacing: squares must never sit within 60 of any node; only
+    // station-to-station pairs may be closer when islands/labels force it.
+    const spacingWrapDx = (ax, bx) => {
+      let dx = bx - ax;
+      if (dx > MAP_W / 2) dx -= MAP_W;
+      if (dx <= -MAP_W / 2) dx += MAP_W;
+      return dx;
+    };
+    const closeStations = [];
+    for (let i = 0; i < worldNodes.length; i++) {
+      for (let j = i + 1; j < worldNodes.length; j++) {
+        const a = worldNodes[i], b2 = worldNodes[j];
+        const d = Math.hypot(spacingWrapDx(a.x, b2.x), a.y - b2.y);
+        if (d >= 60) continue;
+        if (a.kind !== 'city' || b2.kind !== 'city') {
+          err('board.json', 'node spacing ' + d.toFixed(1) + ' < 60: ' + a.id + ' (' + a.kind + ') - ' + b2.id + ' (' + b2.kind + ')');
+        } else {
+          closeStations.push([d, a.cityId || a.id, b2.cityId || b2.id]);
+        }
+      }
+    }
+    if (closeStations.length) {
+      closeStations.sort((a, b2) => a[0] - b2[0]);
+      const listed = closeStations.slice(0, 12).map(([d, a, b2]) => a + '-' + b2 + ' ' + d.toFixed(1)).join(', ');
+      warn('board.json', closeStations.length + ' unavoidable land-locked station pairs < 60: ' + listed + (closeStations.length > 12 ? ', ...' : ''));
     }
 
     const adj = new Map();

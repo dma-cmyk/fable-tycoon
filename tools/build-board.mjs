@@ -1186,24 +1186,13 @@ const farEnough = (x, y, minDist = 60, cityMin = minDist) => {
   }
   return true;
 };
-const farEnoughSquares = (x, y, minDist = 60) => {
-  const cx = Math.floor(x / NODE_CELL), cy = Math.floor(y / NODE_CELL);
-  for (let ix = cx - 1; ix <= cx + 1; ix++) {
-    for (let iy = cy - 1; iy <= cy + 1; iy++) {
-      for (const [px, py, kind] of nodeGrid.get(`${ix},${iy}`) || []) {
-        if (kind === 'square' && Math.hypot(wrapDx(x, px), y - py) < minDist) return false;
-      }
-    }
-  }
-  return true;
-};
 for (const n of nodes) addPlaced(n.x, n.y, 'city');
 
 accepted.sort((a, b) => a.len - b.len);
 const edgeSquares = [];
 const records = [];
 for (const [edgeIndex, e] of accepted.entries()) {
-  const count = e.len < 110 ? 1 : clamp(Math.round(e.len / 75) - 1, 1, 9);
+  const count = e.len < 150 ? 0 : clamp(Math.round(e.len / 75) - 1, 1, 9);
   const dx = e.bx - e.ax, dy = e.by - e.ay;
   const minT = Math.min(0.45, 60 / Math.max(e.len, 1));
   const list = [];
@@ -1229,15 +1218,6 @@ for (const [edgeIndex, e] of accepted.entries()) {
       }
       spot = [px, py];
       break;
-    }
-    // Two very close cities get one midpoint square on the straight line, so
-    // the chain stays collinear and cannot create a crossing.
-    if (!spot && count === 1 && e.len < 120) {
-      const x = round1(wrapX(e.ax + dx * 0.5));
-      const y = round1(e.ay + dy * 0.5);
-      if (farEnoughSquares(x, y) && (e.mode === 'sea' ? isWaterArea(x, y) : isLandAt(x, y))) {
-        spot = [x, y];
-      }
     }
     if (!spot) { skippedSquares++; continue; }
     const [x, y] = spot;
