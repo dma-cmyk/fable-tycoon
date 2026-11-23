@@ -7,6 +7,7 @@
 import { MAP_H, MAP_W, project, wrapDx } from '../core/geo';
 import type { Camera } from './camera';
 import type { LandJson } from './map';
+import { detectCanvasBudget, fitCanvasSize, fitRaster, noteCanvasAllocation, releaseCanvas, type CanvasBudget } from './canvasBudget';
 
 interface PolyBox {
   minX: number;
@@ -129,6 +130,7 @@ export class LandLayer {
   private biomeMask: Uint8ClampedArray | null = null;
   private biomeW = 512;
   private biomeH = 238;
+  private budget: CanvasBudget = detectCanvasBudget();
 
   constructor(land: LandJson) {
     this.boxes = land.polygons.map((rings) => {
@@ -156,6 +158,34 @@ export class LandLayer {
   }
 
   invalidate(): void {
+    this.key = '';
+  }
+
+  setBudget(budget: CanvasBudget): void {
+    const same = budget.profile === this.budget.profile
+      && budget.maxDpr === this.budget.maxDpr
+      && budget.maxSide === this.budget.maxSide
+      && budget.maxArea === this.budget.maxArea
+      && budget.webkit === this.budget.webkit;
+    if (same) return;
+    this.budget = budget;
+    this.key = '';
+    // A different device profile means the previous backing stores may be
+    // oversized. Drop them now; the next frame rebuilds within the new budget.
+    if (this.canvas.width || this.canvas.height) releaseCanvas(this.canvas);
+    if (this.fadeCanvas) {
+      releaseCanvas(this.fadeCanvas);
+      this.fadeCanvas = null;
+      this.fadeMeta = null;
+    }
+  }
+
+  /** Release all offscreen canvases. */
+  destroy(): void {
+    releaseCanvas(this.canvas);
+    if (this.fadeCanvas) releaseCanvas(this.fadeCanvas);
+    this.fadeCanvas = null;
+    this.fadeMeta = null;
     this.key = '';
   }
 
@@ -214,12 +244,17 @@ export class LandLayer {
     const bucket = Math.round(Math.log2(cam.zoom) * 10) / 10;
     const bucketZoom = Math.pow(2, bucket);
     const withTrees = cam.zoom >= 0.62;
-    const scale = bucketZoom * dpr;
     const visW = cam.vw / bucketZoom;
     const visH = cam.vh / bucketZoom;
     const wWorld = Math.min(MAP_W, visW * (1 + 2 * CACHE_PAD));
     const hWorld = Math.min(MAP_H, visH * (1 + 2 * CACHE_PAD));
-    const key = `${bucket}:${dpr.toFixed(3)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
+    // Never allocate the full requested raster. On phones/WebKit a 3× DPR
+    // whole-view cache exceeds the backing-store limit; the same viewport
+    // area at a coarser raster scale is visually identical once drawn.
+    const requestedScale = bucketZoom * dpr;
+    const raster = fitRaster(wWorld, hWorld, requestedScale, this.budget);
+    const scale = raster.scale;
+    const key = `${bucket}:${dpr.toFixed(3)}:${scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
 
     const marginX = wWorld >= MAP_W - 0.5 ? Infinity : (wWorld - visW) / 2;
     const marginY = hWorld >= MAP_H - 0.5 ? Infinity : (hWorld - visH) / 2;
@@ -231,7 +266,7 @@ export class LandLayer {
       dy > marginY * 0.8;
 
     if (needs) {
-      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt);
+      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
     }
 
     const screenX = cam.vw / 2 + wrapDx(cam.x, this.ox + this.wWorld / 2) * cam.zoom - (this.wWorld * cam.zoom) / 2;
@@ -271,16 +306,28 @@ export class LandLayer {
     paintStatic?: LayerPainter,
     treeAvoid?: (x: number, y: number) => boolean,
     geoAt?: (x: number, y: number) => { lat: number; lon: number },
+    key = '',
+    requestedScale = scale,
   ): void {
-    const wPx = Math.max(1, Math.ceil(wWorld * scale));
-    const hPx = Math.max(1, Math.ceil(hWorld * scale));
-    this.canvas.width = wPx;
-    this.canvas.height = hPx;
-    this.scale = scale;
+    const fit = fitRaster(wWorld, hWorld, requestedScale, this.budget);
+    const wPx = fit.width;
+    const hPx = fit.height;
+    this.scale = fit.scale;
+    if (this.canvas.width !== wPx || this.canvas.height !== hPx) {
+      // Release the previous backing store first; switching zoom buckets must
+      // not keep two large layers resident on a phone.
+      releaseCanvas(this.canvas);
+      this.canvas.width = wPx;
+      this.canvas.height = hPx;
+    } else {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, wPx, hPx);
+    }
+    noteCanvasAllocation('land', wPx, hPx, Math.ceil(wWorld * requestedScale), Math.ceil(hWorld * requestedScale), this.budget);
     this.wWorld = wWorld;
     this.hWorld = hWorld;
     this.centerX = cam.x;
-    this.key = `${bucket}:${dpr.toFixed(3)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
+    this.key = key || `${bucket}:${dpr.toFixed(3)}:${fit.scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
 
     if (wWorld >= MAP_W - 0.5) {
       this.ox = 0;
@@ -297,10 +344,9 @@ export class LandLayer {
 
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, wPx, hPx);
     const toCanvas = (wx: number, wy: number): [number, number] => [
-      (wx - this.ox) * scale,
-      (wy - this.oy) * scale,
+      (wx - this.ox) * this.scale,
+      (wy - this.oy) * this.scale,
     ];
 
     // Horizontal wrap copies needed to cover this layer's world x range.
@@ -345,7 +391,7 @@ export class LandLayer {
       // A flat offset silhouette is much cheaper than a blurred canvas shadow
       // and reads as a soft coastal drop shadow at every zoom.
       ctx.save();
-      ctx.translate(Math.max(1, 3.2 * scale), Math.max(1, 4.2 * scale));
+      ctx.translate(Math.max(1, 3.2 * this.scale), Math.max(1, 4.2 * this.scale));
       ctx.fillStyle = 'rgba(3, 48, 72, 0.28)';
       ctx.fill(path, 'evenodd');
       ctx.restore();
@@ -359,7 +405,7 @@ export class LandLayer {
         ctx.clip(path, 'evenodd');
         for (let k = kMin; k <= kMax; k++) {
           const shift = k * MAP_W;
-          ctx.drawImage(tex, (shift - this.ox) * scale, -this.oy * scale, MAP_W * scale, MAP_H * scale);
+          ctx.drawImage(tex, (shift - this.ox) * this.scale, -this.oy * this.scale, MAP_W * this.scale, MAP_H * this.scale);
         }
         // Keep the concept-art saturation on top of the pale topographic texture.
         ctx.globalCompositeOperation = 'soft-light';
@@ -373,7 +419,7 @@ export class LandLayer {
 
       ctx.save();
       ctx.strokeStyle = SEASON_LAND[season].outline;
-      ctx.lineWidth = Math.max(2, Math.min(8, 2.1 * scale));
+      ctx.lineWidth = Math.max(2, Math.min(8, 2.1 * this.scale));
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.stroke(path);
@@ -392,7 +438,7 @@ export class LandLayer {
       paintStatic({
         ctx,
         toCanvas,
-        scale,
+        scale: this.scale,
         dpr,
         ox: this.ox,
         oy: this.oy,
@@ -430,13 +476,23 @@ export class LandLayer {
   beginSeasonTransition(now: number): void {
     if (this.canvas.width <= 1 || this.wWorld <= 0) return;
     const c = this.fadeCanvas ?? document.createElement('canvas');
-    c.width = this.canvas.width;
-    c.height = this.canvas.height;
+    const fit = fitCanvasSize(this.canvas.width, this.canvas.height, this.budget);
+    if (c.width !== fit.width || c.height !== fit.height) {
+      releaseCanvas(c);
+      c.width = fit.width;
+      c.height = fit.height;
+    } else {
+      const old = c.getContext('2d');
+      if (!old) return;
+      old.setTransform(1, 0, 0, 1, 0, 0);
+      old.clearRect(0, 0, c.width, c.height);
+    }
+    noteCanvasAllocation('land-fade', c.width, c.height, this.canvas.width, this.canvas.height, this.budget);
     const g = c.getContext('2d');
     if (!g) return;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, c.width, c.height);
-    g.drawImage(this.canvas, 0, 0);
+    g.drawImage(this.canvas, 0, 0, c.width, c.height);
     this.fadeCanvas = c;
     this.fadeMeta = {
       ox: this.ox,
@@ -454,6 +510,8 @@ export class LandLayer {
     if (!meta || !canvas) return;
     const p = (now - this.fadeStart) / 1000;
     if (p >= 1) {
+      releaseCanvas(canvas);
+      this.fadeCanvas = null;
       this.fadeMeta = null;
       return;
     }
@@ -574,21 +632,46 @@ export class OceanBackdrop {
   private bgDpr = 0;
   private readonly tile: HTMLCanvasElement;
   private readonly tileSize = 192;
+  private budget: CanvasBudget = detectCanvasBudget();
 
   constructor() {
     this.tile = makeWaveTile();
+  }
+
+  setBudget(budget: CanvasBudget): void {
+    if (budget.profile === this.budget.profile && budget.maxArea === this.budget.maxArea && budget.maxSide === this.budget.maxSide) return;
+    this.budget = budget;
+    if (this.background) {
+      releaseCanvas(this.background);
+      this.background = null;
+      this.bgW = 0;
+      this.bgH = 0;
+      this.bgDpr = 0;
+    }
+  }
+
+  destroy(): void {
+    if (this.background) releaseCanvas(this.background);
+    this.background = null;
+    releaseCanvas(this.tile);
   }
 
   draw(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number, now = 0): void {
     const w = cam.vw;
     const h = cam.vh;
     const tile = this.tileSize;
-    const cw = Math.ceil((w + tile) * dpr);
-    const ch = Math.ceil(h * dpr);
-    if (!this.background || this.bgW !== w || this.bgH !== h || this.bgDpr !== dpr) {
+    const fit = fitCanvasSize(Math.ceil((w + tile) * dpr), Math.ceil(h * dpr), this.budget);
+    const bgDpr = Math.min(dpr, fit.width / (w + tile), fit.height / h);
+    const cw = Math.max(1, Math.floor((w + tile) * bgDpr));
+    const ch = Math.max(1, Math.floor(h * bgDpr));
+    if (!this.background || this.bgW !== w || this.bgH !== h || this.bgDpr !== bgDpr) {
       const c = this.background ?? document.createElement('canvas');
-      c.width = cw;
-      c.height = ch;
+      if (c.width !== cw || c.height !== ch) {
+        releaseCanvas(c);
+        c.width = cw;
+        c.height = ch;
+      }
+      noteCanvasAllocation('ocean-bg', cw, ch, Math.ceil((w + tile) * dpr), Math.ceil(h * dpr), this.budget);
       const g = c.getContext('2d');
       if (g) {
         const grad = g.createLinearGradient(0, 0, 0, ch);
@@ -598,7 +681,7 @@ export class OceanBackdrop {
         grad.addColorStop(1, '#2289ce');
         g.fillStyle = grad;
         g.fillRect(0, 0, cw, ch);
-        const tilePx = Math.max(2, Math.round(tile * dpr));
+        const tilePx = Math.max(2, Math.round(tile * bgDpr));
         for (let y = 0; y < ch + tilePx; y += tilePx) {
           for (let x = 0; x < cw + tilePx; x += tilePx) {
             g.drawImage(this.tile, 0, 0, tile, tile, x, y, tilePx, tilePx);
@@ -608,11 +691,11 @@ export class OceanBackdrop {
       this.background = c;
       this.bgW = w;
       this.bgH = h;
-      this.bgDpr = dpr;
+      this.bgDpr = bgDpr;
     }
     // One opaque blit: wave marks slide horizontally as the camera pans.
-    const shift = ((((cam.x * cam.zoom * 0.22 + now * 0.006) % tile) + tile) % tile) * dpr;
-    ctx.drawImage(this.background, shift, 0, w * dpr, h * dpr, 0, 0, w, h);
+    const shift = ((((cam.x * cam.zoom * 0.22 + now * 0.006) % tile) + tile) % tile) * bgDpr;
+    ctx.drawImage(this.background, shift, 0, w * bgDpr, h * bgDpr, 0, 0, w, h);
   }
 }
 

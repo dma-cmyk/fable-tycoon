@@ -34,6 +34,16 @@ import type { PublicState } from '../core/engine';
 import { AmbientWorld } from './ambient';
 import { RectGrid } from './grid';
 import { drawVehicle, vehicleMetrics, type VehicleKind } from './vehicles';
+import {
+  detectCanvasBudget,
+  fitBackingStore,
+  fitCanvasSize,
+  getLargestCanvasAllocation,
+  noteCanvasAllocation,
+  releaseCanvas,
+  type CanvasAllocation,
+  type CanvasBudget,
+} from './canvasBudget';
 
 export interface LandJson {
   w: number;
@@ -410,10 +420,12 @@ export class MapView {
   private readonly miniPointer = (e: PointerEvent): void => this.handleMiniTap(e);
   private readonly measureCache = new Map<string, number>();
   private resizeObserver: ResizeObserver;
+  private budget: CanvasBudget;
 
   constructor(canvas: HTMLCanvasElement, data: GameData, assets: MapAssets) {
     this.canvas = canvas;
     this.assets = assets;
+    this.budget = detectCanvasBudget();
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('2D canvas unavailable');
     this.ctx = ctx;
@@ -421,6 +433,7 @@ export class MapView {
     this.ctx.imageSmoothingQuality = 'high';
 
     this.landLayer = new LandLayer(assets.land);
+    this.landLayer.setBudget(this.budget);
     this.landLayer.setTerrain(assets.terrain, assets.terrainLo);
 
     for (const node of data.board.nodes) {
@@ -1083,7 +1096,9 @@ export class MapView {
   setMiniMap(el: HTMLCanvasElement | null): void {
     if (this.miniMapEl) this.miniMapEl.removeEventListener('pointerdown', this.miniPointer);
     this.miniMapEl = el;
+    if (this.miniLand) releaseCanvas(this.miniLand);
     this.miniLand = null;
+    this.miniLandSize = '';
     if (el) el.addEventListener('pointerdown', this.miniPointer);
     this.drawMiniMap();
   }
@@ -1103,24 +1118,36 @@ export class MapView {
   private drawMiniMap(): void {
     const el = this.miniMapEl;
     if (!el) return;
-    const cssW = el.clientWidth || el.width || 180;
-    const cssH = el.clientHeight || el.height || 84;
-    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    if (el.width !== Math.round(cssW * dpr) || el.height !== Math.round(cssH * dpr)) {
-      el.width = Math.round(cssW * dpr);
-      el.height = Math.round(cssH * dpr);
+    // Use CSS layout size, never the backing-store width/height: reading
+    // el.width here would feed the previous allocation back in and grow the
+    // canvas on every hidden/hidden->shown resize.
+    const rect = el.getBoundingClientRect();
+    const cssW = Math.round(rect.width || el.clientWidth);
+    const cssH = Math.round(rect.height || el.clientHeight);
+    if (cssW < 2 || cssH < 2) return;
+    const dpr = Math.min(2, Math.max(1, this.dpr || window.devicePixelRatio || 1));
+    const fit = fitCanvasSize(Math.round(cssW * dpr), Math.round(cssH * dpr), this.budget);
+    const sx = fit.width / cssW;
+    const sy = fit.height / cssH;
+    if (el.width !== fit.width || el.height !== fit.height) {
+      releaseCanvas(el);
+      el.width = fit.width;
+      el.height = fit.height;
     }
+    noteCanvasAllocation('minimap', fit.width, fit.height, Math.round(cssW * dpr), Math.round(cssH * dpr), this.budget);
     const ctx = el.getContext('2d');
     if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(sx, 0, 0, sy, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
-    if (!this.miniLand || this.miniLandSize !== `${cssW}x${cssH}`) {
+    if (!this.miniLand || this.miniLandSize !== `${cssW}x${cssH}:${fit.width}x${fit.height}`) {
       const c = this.miniLand ?? document.createElement('canvas');
-      c.width = Math.round(cssW * dpr);
-      c.height = Math.round(cssH * dpr);
+      if (c.width !== fit.width || c.height !== fit.height) releaseCanvas(c);
+      c.width = fit.width;
+      c.height = fit.height;
+      noteCanvasAllocation('mini-land', fit.width, fit.height, Math.round(cssW * dpr), Math.round(cssH * dpr), this.budget);
       const g = c.getContext('2d');
       if (g) {
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        g.setTransform(sx, 0, 0, sy, 0, 0);
         const grad = g.createLinearGradient(0, 0, 0, cssH);
         grad.addColorStop(0, '#7fdfff');
         grad.addColorStop(1, '#2a9bdb');
@@ -1145,7 +1172,7 @@ export class MapView {
         g.stroke(path);
       }
       this.miniLand = c;
-      this.miniLandSize = `${cssW}x${cssH}`;
+      this.miniLandSize = `${cssW}x${cssH}:${fit.width}x${fit.height}`;
     }
     ctx.drawImage(this.miniLand, 0, 0, cssW, cssH);
     const toX = (x: number): number => (x / MAP_W) * cssW;
@@ -1197,14 +1224,21 @@ export class MapView {
     const rect = this.canvas.getBoundingClientRect();
     const cssW = Math.max(1, rect.width || this.canvas.clientWidth || 640);
     const cssH = Math.max(1, rect.height || this.canvas.clientHeight || 480);
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const rawDpr = Math.max(1, window.devicePixelRatio || 1);
+    this.budget = detectCanvasBudget();
+    const fit = fitBackingStore(cssW, cssH, rawDpr, this.budget);
     this.cssW = cssW;
     this.cssH = cssH;
-    this.dpr = dpr;
-    const pxW = Math.round(cssW * dpr);
-    const pxH = Math.round(cssH * dpr);
-    if (this.canvas.width !== pxW) this.canvas.width = pxW;
-    if (this.canvas.height !== pxH) this.canvas.height = pxH;
+    this.dpr = fit.scale;
+    if (this.canvas.width !== fit.width || this.canvas.height !== fit.height) {
+      // Release the old backing store before allocating the replacement.
+      releaseCanvas(this.canvas);
+    }
+    if (this.canvas.width !== fit.width) this.canvas.width = fit.width;
+    if (this.canvas.height !== fit.height) this.canvas.height = fit.height;
+    noteCanvasAllocation('main', fit.width, fit.height, Math.ceil(cssW * rawDpr), Math.ceil(cssH * rawDpr), this.budget);
+    this.landLayer.setBudget(this.budget);
+    this.ocean.setBudget(this.budget);
     this.worldCamera.setViewport(cssW, cssH);
     for (const cam of this.realmCameras.values()) cam.setViewport(cssW, cssH);
     this.camera.setViewport(cssW, cssH);
@@ -1225,6 +1259,10 @@ export class MapView {
     if (this.ambientTimer !== null) window.clearTimeout(this.ambientTimer);
     this.ambientTimer = null;
     this.detachInput();
+    this.landLayer.destroy();
+    this.ocean.destroy();
+    if (this.miniLand) releaseCanvas(this.miniLand);
+    this.miniLand = null;
     for (const t of this.bubbleTimers.values()) window.clearTimeout(t);
     this.bubbleTimers.clear();
     this.bubbles.clear();
@@ -1278,6 +1316,11 @@ export class MapView {
   resetFrameStats(): void {
     this.frameTimes = [];
     this.lastFrameTime = 0;
+  }
+
+  /** Debug/QA view of the effective DPR and the largest renderer-owned canvas. */
+  getCanvasBudgetInfo(): { dpr: number; budget: CanvasBudget; largest: CanvasAllocation | null } {
+    return { dpr: this.dpr, budget: { ...this.budget }, largest: getLargestCanvasAllocation() };
   }
 
   /** Screen-space position of a board node (useful for HUD badges and tests). */
