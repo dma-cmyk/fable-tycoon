@@ -30,6 +30,8 @@ LANDMARKS = {
                    "sugarloaf", "pyramids", "taj_mahal", "tokyo_tower", "great_wall"],
     "landmarks2": ["angkor_wat", "machu_picchu", "chichen_itza", "table_mountain", "harbour_bridge", "windmill",
                    "osaka_castle", "acropolis", "cn_tower", "gyeongbokgung", "petra", "kilimanjaro"],
+    "landmarks3": ["neuschwanstein", "mt_fuji", "niagara", "iguazu", "victoria_falls", "ha_long_bay",
+                   "cappadocia", "prague_castle", "hermitage", "gateway_arch", "baobab", "terracotta"],
 }
 BG = {k: "green" for k in CHARS} | {"chars6": "magenta"} | {k: "magenta" for k in LANDMARKS}
 EVENTS = {"events1": ["ai", "tulip", "suez", "tariff"], "events2": ["bailout", "goldrush", "emperor", "hyperinflation"]}
@@ -131,6 +133,14 @@ def main() -> None:
     for s, names in CHARS.items():
         if ok(s):
             cut_grid(s, names, 4, 2, OUT / ("npcs" if s == "npcs" else "chars"), 512)
+    for s, names in CHARS.items():
+        if s == "npcs":
+            continue
+        for mood in ("joy", "sad"):
+            sheet = f"{s}_{mood}"
+            BG[sheet] = BG[s]
+            if ok(sheet):
+                cut_grid(sheet, [f"{n}_{mood}" for n in names], 4, 2, OUT / "chars", 512)
     for s, names in LANDMARKS.items():
         if ok(s):
             cut_grid(s, names, 4, 3, OUT / "landmarks", 256)

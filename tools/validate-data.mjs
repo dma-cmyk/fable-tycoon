@@ -115,7 +115,7 @@ if (DESIGN_CARD_IDS.size !== 13) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS
 if (DESIGN_NPC_IDS.size !== 8) err('docs/DESIGN.md', `parsed ${DESIGN_NPC_IDS.size} NPC ids (expected 8)`);
 
 // ---------------------------------------------------------------- load JSON
-const KNOWN = ['cities.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json'];
+const KNOWN = ['cities.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json', 'emotes.json'];
 const data = {};
 let jsonFiles = [];
 try {
@@ -484,6 +484,49 @@ if (data['cards.json'] !== undefined) {
     for (const id of DESIGN_CARD_IDS) if (!ids.has(id)) err('cards.json', `missing card id "${id}" from DESIGN.md §2.5`);
     for (const id of ids) if (!DESIGN_CARD_IDS.has(id)) err('cards.json', `unknown card id "${id}"`);
     cardIds = ids;
+  }
+}
+
+// ---------------------------------------------------------------- emotes
+const EMOTE_ANIMS = ['jump', 'angry', 'cry', 'laugh', 'dance', 'taunt', 'dogeza', 'money_rain', 'flex', 'sleep', 'heart',
+  'throw', 'hit', 'spotlight'];
+const EMOTE_CATS = ['emotion', 'action', 'taunt', 'poke', 'unique'];
+if (data['emotes.json'] !== undefined) {
+  const emotes = data['emotes.json'];
+  if (!Array.isArray(emotes)) {
+    err('emotes.json', 'must be an array of EmoteDef');
+  } else {
+    const ids = new Set();
+    const uniqueOwners = new Map();
+    const checkLines = (obj, p, maxLen) => {
+      if (!isObj(obj) || !isStr(obj.default)) { err(p, 'must be an object with a non-empty "default"'); return; }
+      for (const [k, v] of Object.entries(obj)) {
+        if (k !== 'default' && !charIds.has(k)) err(`${p}.${k}`, `unknown character id "${k}"`);
+        if (!isStr(v)) err(`${p}.${k}`, 'must be a non-empty string');
+        else if (v.length > maxLen) warn(`${p}.${k}`, `line longer than ${maxLen} chars`);
+      }
+    };
+    emotes.forEach((e, i) => {
+      const p = `emotes[${i}]`;
+      if (!isObj(e)) { err(p, 'must be an object'); return; }
+      if (!isStr(e.id) || !UNDERSCORE_ID.test(e.id)) err(`${p}.id`, 'must be a snake_case id');
+      else if (ids.has(e.id)) err(`${p}.id`, `duplicate emote id "${e.id}"`);
+      else ids.add(e.id);
+      if (!oneOf(e.category, EMOTE_CATS)) err(`${p}.category`, `invalid category "${e.category}"`);
+      if (!oneOf(e.anim, EMOTE_ANIMS)) err(`${p}.anim`, `invalid anim "${e.anim}" (add it to MapView.playEmote first)`);
+      for (const key of ['label', 'icon']) if (!isStr(e[key])) err(`${p}.${key}`, 'must be a non-empty string');
+      if (!isNum(e.cooldownMs) || e.cooldownMs < 1000) err(`${p}.cooldownMs`, 'must be >= 1000');
+      if (e.targeted !== (e.anim === 'throw')) err(`${p}.targeted`, 'targeted must be true exactly when anim is "throw"');
+      if (e.targeted && !isStr(e.projectile)) err(`${p}.projectile`, 'targeted emotes need a projectile');
+      if (e.targeted) checkLines(e.hitLines, `${p}.hitLines`, 22);
+      checkLines(e.lines, `${p}.lines`, 28);
+      if (e.category === 'unique') {
+        if (!charIds.has(e.characterId)) err(`${p}.characterId`, `unknown owner "${e.characterId}"`);
+        else if (uniqueOwners.has(e.characterId)) err(`${p}.characterId`, `second unique emote for "${e.characterId}"`);
+        else uniqueOwners.set(e.characterId, e.id);
+      } else if (e.characterId !== undefined) err(`${p}.characterId`, 'only unique emotes have an owner');
+    });
+    for (const id of charIds) if (!uniqueOwners.has(id)) warn('emotes.json', `character "${id}" has no unique emote`);
   }
 }
 
