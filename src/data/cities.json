@@ -1,0 +1,5380 @@
+[
+  {
+    "id": "tokyo",
+    "nameJa": "東京",
+    "nameEn": "Tokyo",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 35.68,
+    "lon": 139.69,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "tokyo_tower",
+    "blurb": "満員電車とAIと玉子焼きで世界の富を吸い上げる、家賃だけが高度成長中の街。",
+    "properties": [
+      {
+        "id": "tokyo-1",
+        "name": "満員電車エクスペリエンス館",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 12
+      },
+      {
+        "id": "tokyo-2",
+        "name": "AI付箋スタートアップ",
+        "industry": "tech",
+        "price": 1200,
+        "yieldPct": 6
+      },
+      {
+        "id": "tokyo-3",
+        "name": "築地のたまご焼き帝国",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 42
+      },
+      {
+        "id": "tokyo-4",
+        "name": "霞が関ホワイトカラー牧場",
+        "industry": "finance",
+        "price": 1800,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "tokyo-5",
+        "name": "タワマン空中農園",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 55
+      },
+      {
+        "id": "tokyo-6",
+        "name": "渋谷スクランブル広告塔",
+        "industry": "media",
+        "price": 280,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "yokohama",
+    "nameJa": "横浜",
+    "nameEn": "Yokohama",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 35.44,
+    "lon": 139.64,
+    "tier": 2,
+    "port": true,
+    "airport": false,
+    "blurb": "港とカップ麺と中華街。横浜市民はその全部を自慢していいと思っている。",
+    "properties": [
+      {
+        "id": "yokohama-1",
+        "name": "カップ麺記念館",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 45
+      },
+      {
+        "id": "yokohama-2",
+        "name": "港の倉庫ホテル",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 12
+      },
+      {
+        "id": "yokohama-3",
+        "name": "中華街フカヒレ銀行",
+        "industry": "finance",
+        "price": 320,
+        "yieldPct": 5
+      }
+    ]
+  },
+  {
+    "id": "osaka",
+    "nameJa": "大阪",
+    "nameEn": "Osaka",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 34.69,
+    "lon": 135.5,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "landmark": "osaka_castle",
+    "blurb": "商売の町。たこ焼きを先物取引した瞬間、大阪経済は世界を抜いた。",
+    "properties": [
+      {
+        "id": "osaka-1",
+        "name": "たこ焼き先物取引所",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 50
+      },
+      {
+        "id": "osaka-2",
+        "name": "通天閣お好み焼きタワー",
+        "industry": "tourism",
+        "price": 140,
+        "yieldPct": 11
+      },
+      {
+        "id": "osaka-3",
+        "name": "商人の威を借る広告会社",
+        "industry": "media",
+        "price": 180,
+        "yieldPct": 15
+      },
+      {
+        "id": "osaka-4",
+        "name": "万博跡地再開発ファンド",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4.5
+      }
+    ]
+  },
+  {
+    "id": "kyoto",
+    "nameJa": "京都",
+    "nameEn": "Kyoto",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 35.01,
+    "lon": 135.77,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "blurb": "寺社仏閣をサブスク化したら、観光客が賽銭より高い月額を払い始めた。",
+    "properties": [
+      {
+        "id": "kyoto-1",
+        "name": "寺社仏閣サブスク",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 13
+      },
+      {
+        "id": "kyoto-2",
+        "name": "抹茶テックラボ",
+        "industry": "tech",
+        "price": 420,
+        "yieldPct": 5
+      },
+      {
+        "id": "kyoto-3",
+        "name": "舞妓さんのAI研修所",
+        "industry": "tech",
+        "price": 350,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "nagoya",
+    "nameJa": "名古屋",
+    "nameEn": "Nagoya",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 35.18,
+    "lon": 136.91,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "自動車と味噌カツとモーニング。喫茶店のコーヒー代より店の土地が高い。",
+    "properties": [
+      {
+        "id": "nagoya-1",
+        "name": "味噌カツ自動車工場",
+        "industry": "industry",
+        "price": 260,
+        "yieldPct": 12
+      },
+      {
+        "id": "nagoya-2",
+        "name": "しゃちほこ物流センター",
+        "industry": "shipping",
+        "price": 220,
+        "yieldPct": 10
+      },
+      {
+        "id": "nagoya-3",
+        "name": "喫茶店モーニング帝国",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 48
+      }
+    ]
+  },
+  {
+    "id": "fukuoka",
+    "nameJa": "福岡",
+    "nameEn": "Fukuoka",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 33.59,
+    "lon": 130.4,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "屋台とスタートアップが同じ路地にひしめき、夢の値段はラーメン一杯。",
+    "properties": [
+      {
+        "id": "fukuoka-1",
+        "name": "屋台投資ファンド",
+        "industry": "finance",
+        "price": 300,
+        "yieldPct": 6
+      },
+      {
+        "id": "fukuoka-2",
+        "name": "博多ラーメン空港",
+        "industry": "food",
+        "price": 20,
+        "yieldPct": 52
+      },
+      {
+        "id": "fukuoka-3",
+        "name": "スタートアップの聖地もどき",
+        "industry": "tech",
+        "price": 380,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "sapporo",
+    "nameJa": "札幌",
+    "nameEn": "Sapporo",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 43.06,
+    "lon": 141.35,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "雪像の広告料で冬を越し、じゃがいもの先物で春を待つ街。",
+    "properties": [
+      {
+        "id": "sapporo-1",
+        "name": "雪まつり巨大氷像広告",
+        "industry": "media",
+        "price": 150,
+        "yieldPct": 14
+      },
+      {
+        "id": "sapporo-2",
+        "name": "味噌ラーメン温暖化対策室",
+        "industry": "food",
+        "price": 19,
+        "yieldPct": 46
+      },
+      {
+        "id": "sapporo-3",
+        "name": "北海道じゃがいも先物",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "sendai",
+    "nameJa": "仙台",
+    "nameEn": "Sendai",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 38.27,
+    "lon": 140.87,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "杜の都をペーパーレス化したら、木が全員リストラされた。",
+    "properties": [
+      {
+        "id": "sendai-1",
+        "name": "牛タン定食ファンド",
+        "industry": "food",
+        "price": 23,
+        "yieldPct": 44
+      },
+      {
+        "id": "sendai-2",
+        "name": "杜の都ペーパーレス庁舎",
+        "industry": "tech",
+        "price": 280,
+        "yieldPct": 6
+      },
+      {
+        "id": "sendai-3",
+        "name": "松島カキ養殖",
+        "industry": "agri",
+        "price": 21,
+        "yieldPct": 58
+      }
+    ]
+  },
+  {
+    "id": "hiroshima",
+    "nameJa": "広島",
+    "nameEn": "Hiroshima",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 34.39,
+    "lon": 132.46,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "お好み焼きと造船と牡蠣。鉄板の上で街の予算が焼けている。",
+    "properties": [
+      {
+        "id": "hiroshima-1",
+        "name": "お好み焼き重工業",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 40
+      },
+      {
+        "id": "hiroshima-2",
+        "name": "瀬戸内レモン農園",
+        "industry": "agri",
+        "price": 18,
+        "yieldPct": 62
+      },
+      {
+        "id": "hiroshima-3",
+        "name": "造船ドック再開発",
+        "industry": "industry",
+        "price": 180,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "naha",
+    "nameJa": "那覇",
+    "nameEn": "Naha",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 26.21,
+    "lon": 127.68,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "基地跡地をリゾートにすれば、すべての傷が観光資源になる。",
+    "properties": [
+      {
+        "id": "naha-1",
+        "name": "琉球ガラス再利用ラボ",
+        "industry": "industry",
+        "price": 60,
+        "yieldPct": 15
+      },
+      {
+        "id": "naha-2",
+        "name": "ゴーヤー保険",
+        "industry": "agri",
+        "price": 14,
+        "yieldPct": 66
+      },
+      {
+        "id": "naha-3",
+        "name": "基地跡地リゾート構想",
+        "industry": "tourism",
+        "price": 240,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "kanazawa",
+    "nameJa": "金沢",
+    "nameEn": "Kanazawa",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 36.56,
+    "lon": 136.66,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "金箔を貼れるものは全部貼る。兼六園の樹木にも予算が貼られている。",
+    "properties": [
+      {
+        "id": "kanazawa-1",
+        "name": "金箔ファンド",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 5
+      },
+      {
+        "id": "kanazawa-2",
+        "name": "兼六園ライトアップ課金",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "kobe",
+    "nameJa": "神戸",
+    "nameEn": "Kobe",
+    "country": "JP",
+    "countryJa": "日本",
+    "region": "east_asia",
+    "lat": 34.69,
+    "lon": 135.2,
+    "tier": 2,
+    "port": true,
+    "airport": false,
+    "blurb": "神戸牛の証明書を発行する会社が、牛よりもうかる港町。",
+    "properties": [
+      {
+        "id": "kobe-1",
+        "name": "神戸牛ブランド保証会社",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 38
+      },
+      {
+        "id": "kobe-2",
+        "name": "港町ジャズ喫茶チェーン",
+        "industry": "food",
+        "price": 16,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "beijing",
+    "nameJa": "北京",
+    "nameEn": "Beijing",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 39.9,
+    "lon": 116.41,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "great_wall",
+    "blurb": "胡同を再開発し、官庁街にコーヒースタンドを建て、長城は月額制になった。",
+    "properties": [
+      {
+        "id": "beijing-1",
+        "name": "胡同再開発ファンド",
+        "industry": "finance",
+        "price": 1400,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "beijing-2",
+        "name": "官庁街コーヒースタンド",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 42
+      },
+      {
+        "id": "beijing-3",
+        "name": "AI検閲マーケット",
+        "industry": "tech",
+        "price": 1600,
+        "yieldPct": 6
+      },
+      {
+        "id": "beijing-4",
+        "name": "万里の長城サブスク",
+        "industry": "tourism",
+        "price": 300,
+        "yieldPct": 9
+      },
+      {
+        "id": "beijing-5",
+        "name": "老舗ダック専門銀行",
+        "industry": "finance",
+        "price": 800,
+        "yieldPct": 4
+      }
+    ]
+  },
+  {
+    "id": "shanghai",
+    "nameJa": "上海",
+    "nameEn": "Shanghai",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 31.23,
+    "lon": 121.47,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "外灘の夜景を課金制にし、金融街のボーナスを資本に変えた街。",
+    "properties": [
+      {
+        "id": "shanghai-1",
+        "name": "外灘ビュー課金塔",
+        "industry": "tourism",
+        "price": 280,
+        "yieldPct": 12
+      },
+      {
+        "id": "shanghai-2",
+        "name": "磁浮列車スピード広告",
+        "industry": "media",
+        "price": 240,
+        "yieldPct": 10
+      },
+      {
+        "id": "shanghai-3",
+        "name": "金融街ボーナス基金",
+        "industry": "finance",
+        "price": 2200,
+        "yieldPct": 3
+      },
+      {
+        "id": "shanghai-4",
+        "name": "小籠包フランチャイズ",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 45
+      }
+    ]
+  },
+  {
+    "id": "guangzhou",
+    "nameJa": "広州",
+    "nameEn": "Guangzhou",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 23.13,
+    "lon": 113.26,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "飲茶は24時間、広交会のブースは転売、珠江デルタの倉庫は世界の半分。",
+    "properties": [
+      {
+        "id": "guangzhou-1",
+        "name": "飲茶24時間工場",
+        "industry": "food",
+        "price": 21,
+        "yieldPct": 47
+      },
+      {
+        "id": "guangzhou-2",
+        "name": "広交会ブース転売",
+        "industry": "media",
+        "price": 160,
+        "yieldPct": 13
+      },
+      {
+        "id": "guangzhou-3",
+        "name": "珠江デルタ倉庫王",
+        "industry": "shipping",
+        "price": 240,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "shenzhen",
+    "nameJa": "深圳",
+    "nameEn": "Shenzhen",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 22.54,
+    "lon": 114.06,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "ドローンと半導体のパーツを組み合わせれば、明日には上場できる。",
+    "properties": [
+      {
+        "id": "shenzhen-1",
+        "name": "ドローン組み立て城",
+        "industry": "tech",
+        "price": 900,
+        "yieldPct": 7
+      },
+      {
+        "id": "shenzhen-2",
+        "name": "華強北パーツ錬金術",
+        "industry": "industry",
+        "price": 280,
+        "yieldPct": 14
+      },
+      {
+        "id": "shenzhen-3",
+        "name": "スタートアップ量産工場",
+        "industry": "tech",
+        "price": 700,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "chengdu",
+    "nameJa": "成都",
+    "nameEn": "Chengdu",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 30.57,
+    "lon": 104.07,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "パンダの広告効果は絶大。火鍋の麻辣で市政府も赤くなった。",
+    "properties": [
+      {
+        "id": "chengdu-1",
+        "name": "パンダ広告代理店",
+        "industry": "media",
+        "price": 190,
+        "yieldPct": 12
+      },
+      {
+        "id": "chengdu-2",
+        "name": "麻辣火鍋チェーン",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 44
+      },
+      {
+        "id": "chengdu-3",
+        "name": "盆地テック農園",
+        "industry": "tech",
+        "price": 320,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "chongqing",
+    "nameJa": "重慶",
+    "nameEn": "Chongqing",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 29.56,
+    "lon": 106.55,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "山の斜面にビルを積み、エスカレーターで通勤する未来都市。",
+    "properties": [
+      {
+        "id": "chongqing-1",
+        "name": "山城エスカレーター公社",
+        "industry": "industry",
+        "price": 210,
+        "yieldPct": 11
+      },
+      {
+        "id": "chongqing-2",
+        "name": "火鍋底料先物",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 49
+      },
+      {
+        "id": "chongqing-3",
+        "name": "長江物流ターミナル",
+        "industry": "shipping",
+        "price": 260,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "xian",
+    "nameJa": "西安",
+    "nameEn": "Xi'an",
+    "country": "CN",
+    "countryJa": "中国",
+    "region": "east_asia",
+    "lat": 34.34,
+    "lon": 108.94,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "兵馬俑のレプリカ工場が本物より働いており、シルクロードはEC化した。",
+    "properties": [
+      {
+        "id": "xian-1",
+        "name": "兵馬俑レプリカ工場",
+        "industry": "industry",
+        "price": 130,
+        "yieldPct": 16
+      },
+      {
+        "id": "xian-2",
+        "name": "肉夾饃チェーン",
+        "industry": "food",
+        "price": 17,
+        "yieldPct": 51
+      },
+      {
+        "id": "xian-3",
+        "name": "シルクロード土産物EC",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "seoul",
+    "nameJa": "ソウル",
+    "nameEn": "Seoul",
+    "country": "KR",
+    "countryJa": "韓国",
+    "region": "east_asia",
+    "lat": 37.57,
+    "lon": 126.98,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "gyeongbokgung",
+    "blurb": "K-POPと再開発とキムチ冷蔵庫。漢江の夜景はサブスクで課金される。",
+    "properties": [
+      {
+        "id": "seoul-1",
+        "name": "江南再開発ファンド",
+        "industry": "finance",
+        "price": 1100,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "seoul-2",
+        "name": "K-POP練習生工場",
+        "industry": "media",
+        "price": 260,
+        "yieldPct": 13
+      },
+      {
+        "id": "seoul-3",
+        "name": "キムチ冷蔵庫テック",
+        "industry": "tech",
+        "price": 600,
+        "yieldPct": 6
+      },
+      {
+        "id": "seoul-4",
+        "name": "漢江夜景課金",
+        "industry": "tourism",
+        "price": 180,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "busan",
+    "nameJa": "釜山",
+    "nameEn": "Busan",
+    "country": "KR",
+    "countryJa": "韓国",
+    "region": "east_asia",
+    "lat": 35.18,
+    "lon": 129.08,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "海雲台のホテルと釜山港のコンテナ。魚市場の魚拓が金融商品になった。",
+    "properties": [
+      {
+        "id": "busan-1",
+        "name": "海雲台ホテル帝国",
+        "industry": "tourism",
+        "price": 220,
+        "yieldPct": 12
+      },
+      {
+        "id": "busan-2",
+        "name": "釜山港コンテナ王",
+        "industry": "shipping",
+        "price": 280,
+        "yieldPct": 10
+      },
+      {
+        "id": "busan-3",
+        "name": "市場の魚拓ファンド",
+        "industry": "finance",
+        "price": 240,
+        "yieldPct": 5.5
+      }
+    ]
+  },
+  {
+    "id": "jeju",
+    "nameJa": "済州",
+    "nameEn": "Jeju",
+    "country": "KR",
+    "countryJa": "韓国",
+    "region": "east_asia",
+    "lat": 33.5,
+    "lon": 126.53,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "みかんと黒豚と免税店。火山島のすべてが土産物化されている。",
+    "properties": [
+      {
+        "id": "jeju-1",
+        "name": "みかん観光農園",
+        "industry": "agri",
+        "price": 22,
+        "yieldPct": 64
+      },
+      {
+        "id": "jeju-2",
+        "name": "済州島免税店",
+        "industry": "tourism",
+        "price": 150,
+        "yieldPct": 14
+      },
+      {
+        "id": "jeju-3",
+        "name": "黒豚焼肉研究所",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 40
+      }
+    ]
+  },
+  {
+    "id": "taipei",
+    "nameJa": "台北",
+    "nameEn": "Taipei",
+    "country": "TW",
+    "countryJa": "台湾",
+    "region": "east_asia",
+    "lat": 25.03,
+    "lon": 121.57,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "夜市の屋台がIPOを目指し、半導体設計者が屋台で昼食をとる街。",
+    "properties": [
+      {
+        "id": "taipei-1",
+        "name": "夜市屋台IPO",
+        "industry": "food",
+        "price": 23,
+        "yieldPct": 46
+      },
+      {
+        "id": "taipei-2",
+        "name": "半導体設計スタジオ",
+        "industry": "tech",
+        "price": 850,
+        "yieldPct": 7
+      },
+      {
+        "id": "taipei-3",
+        "name": "故宮グッズ転売",
+        "industry": "media",
+        "price": 140,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "hong-kong",
+    "nameJa": "香港",
+    "nameEn": "Hong Kong",
+    "country": "HK",
+    "countryJa": "香港",
+    "region": "east_asia",
+    "lat": 22.32,
+    "lon": 114.17,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "ネオン看板を証券化し、超高層ビルの隙間に倉庫を詰め込んだ金融都市。",
+    "properties": [
+      {
+        "id": "hong-kong-1",
+        "name": "ネオン看板リート",
+        "industry": "media",
+        "price": 300,
+        "yieldPct": 10
+      },
+      {
+        "id": "hong-kong-2",
+        "name": "超高層ミニ倉庫",
+        "industry": "shipping",
+        "price": 260,
+        "yieldPct": 8
+      },
+      {
+        "id": "hong-kong-3",
+        "name": "點心チェーン",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 43
+      },
+      {
+        "id": "hong-kong-4",
+        "name": "国際金融センター上層階",
+        "industry": "finance",
+        "price": 2500,
+        "yieldPct": 3
+      }
+    ]
+  },
+  {
+    "id": "ulaanbaatar",
+    "nameJa": "ウランバートル",
+    "nameEn": "Ulaanbaatar",
+    "country": "MN",
+    "countryJa": "モンゴル",
+    "region": "east_asia",
+    "lat": 47.89,
+    "lon": 106.91,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ゲルをコリビングに改装し、石炭を積んだ列車が未来へ向かう。",
+    "properties": [
+      {
+        "id": "ulaanbaatar-1",
+        "name": "ゲル型コリビング",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 13
+      },
+      {
+        "id": "ulaanbaatar-2",
+        "name": "カシミヤ牧場ファンド",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 52
+      },
+      {
+        "id": "ulaanbaatar-3",
+        "name": "石炭輸送鉄道",
+        "industry": "shipping",
+        "price": 180,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "singapore",
+    "nameJa": "シンガポール",
+    "nameEn": "Singapore",
+    "country": "SG",
+    "countryJa": "シンガポール",
+    "region": "southeast_asia",
+    "lat": 1.35,
+    "lon": 103.82,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "罰金と清掃と給油タンカー。世界で最も清潔な投機の場。",
+    "properties": [
+      {
+        "id": "singapore-1",
+        "name": "高級コンドミニアム投機",
+        "industry": "finance",
+        "price": 1500,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "singapore-2",
+        "name": "海南鶏飯フードコート",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 44
+      },
+      {
+        "id": "singapore-3",
+        "name": "港の給油タンカー",
+        "industry": "shipping",
+        "price": 300,
+        "yieldPct": 8
+      },
+      {
+        "id": "singapore-4",
+        "name": "罰金付き清掃テック",
+        "industry": "tech",
+        "price": 500,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "bangkok",
+    "nameJa": "バンコク",
+    "nameEn": "Bangkok",
+    "country": "TH",
+    "countryJa": "タイ",
+    "region": "southeast_asia",
+    "lat": 13.76,
+    "lon": 100.5,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "渋滞を観光資源にし、屋台とコンドミニアムで経済を回す。",
+    "properties": [
+      {
+        "id": "bangkok-1",
+        "name": "渋滞ビジネス",
+        "industry": "shipping",
+        "price": 170,
+        "yieldPct": 14
+      },
+      {
+        "id": "bangkok-2",
+        "name": "屋台グルメ帝国",
+        "industry": "food",
+        "price": 20,
+        "yieldPct": 55
+      },
+      {
+        "id": "bangkok-3",
+        "name": "コンドミニアム・バブル",
+        "industry": "finance",
+        "price": 480,
+        "yieldPct": 6
+      },
+      {
+        "id": "bangkok-4",
+        "name": "寺院観光パス",
+        "industry": "tourism",
+        "price": 210,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "jakarta",
+    "nameJa": "ジャカルタ",
+    "nameEn": "Jakarta",
+    "country": "ID",
+    "countryJa": "インドネシア",
+    "region": "southeast_asia",
+    "lat": -6.21,
+    "lon": 106.85,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "洪水対策の不動産が水没し、屋台コーヒーだけが高台で儲かる。",
+    "properties": [
+      {
+        "id": "jakarta-1",
+        "name": "洪水対策不動産",
+        "industry": "finance",
+        "price": 420,
+        "yieldPct": 5
+      },
+      {
+        "id": "jakarta-2",
+        "name": "屋台コーヒー帝国",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 58
+      },
+      {
+        "id": "jakarta-3",
+        "name": "スラム再開発ファンド",
+        "industry": "finance",
+        "price": 360,
+        "yieldPct": 7
+      },
+      {
+        "id": "jakarta-4",
+        "name": "アブラヤシ農園",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 61
+      }
+    ]
+  },
+  {
+    "id": "manila",
+    "nameJa": "マニラ",
+    "nameEn": "Manila",
+    "country": "PH",
+    "countryJa": "フィリピン",
+    "region": "southeast_asia",
+    "lat": 14.6,
+    "lon": 120.98,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "コールセンターの夜勤が経済を支え、ジプニーがその足を運ぶ。",
+    "properties": [
+      {
+        "id": "manila-1",
+        "name": "コールセンター工場",
+        "industry": "tech",
+        "price": 240,
+        "yieldPct": 9.5
+      },
+      {
+        "id": "manila-2",
+        "name": "ジプニー交通網",
+        "industry": "shipping",
+        "price": 110,
+        "yieldPct": 10
+      },
+      {
+        "id": "manila-3",
+        "name": "マンゴー輸出組合",
+        "industry": "agri",
+        "price": 23,
+        "yieldPct": 57
+      }
+    ]
+  },
+  {
+    "id": "hanoi",
+    "nameJa": "ハノイ",
+    "nameEn": "Hanoi",
+    "country": "VN",
+    "countryJa": "ベトナム",
+    "region": "southeast_asia",
+    "lat": 21.03,
+    "lon": 105.85,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "バイクの駐車場が高層タワーになり、フォー一杯に国家の夢が乗る。",
+    "properties": [
+      {
+        "id": "hanoi-1",
+        "name": "バイク駐車場タワー",
+        "industry": "industry",
+        "price": 90,
+        "yieldPct": 15
+      },
+      {
+        "id": "hanoi-2",
+        "name": "フォー・チェーン",
+        "industry": "food",
+        "price": 16,
+        "yieldPct": 62
+      },
+      {
+        "id": "hanoi-3",
+        "name": "社会主義広告塔",
+        "industry": "media",
+        "price": 120,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "ho-chi-minh",
+    "nameJa": "ホーチミン",
+    "nameEn": "Ho Chi Minh City",
+    "country": "VN",
+    "countryJa": "ベトナム",
+    "region": "southeast_asia",
+    "lat": 10.82,
+    "lon": 106.63,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "バイク配達とコーヒー輸出と高層ビル。社会主義市場経済の見本市。",
+    "properties": [
+      {
+        "id": "ho-chi-minh-1",
+        "name": "バイク配達帝国",
+        "industry": "shipping",
+        "price": 150,
+        "yieldPct": 13
+      },
+      {
+        "id": "ho-chi-minh-2",
+        "name": "コーヒー輸出商社",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 59
+      },
+      {
+        "id": "ho-chi-minh-3",
+        "name": "高層ビル建設ラッシュ",
+        "industry": "industry",
+        "price": 200,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "kuala-lumpur",
+    "nameJa": "クアラルンプール",
+    "nameEn": "Kuala Lumpur",
+    "country": "MY",
+    "countryJa": "マレーシア",
+    "region": "southeast_asia",
+    "lat": 3.14,
+    "lon": 101.69,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ツインタワーの展望台とパーム油先物。ホーカーセンターは24時間稼働。",
+    "properties": [
+      {
+        "id": "kuala-lumpur-1",
+        "name": "ツインタワー展望課金",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 13
+      },
+      {
+        "id": "kuala-lumpur-2",
+        "name": "パーム油先物",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 55
+      },
+      {
+        "id": "kuala-lumpur-3",
+        "name": "ホーカーセンター・チェーン",
+        "industry": "food",
+        "price": 19,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "denpasar",
+    "nameJa": "デンパサール",
+    "nameEn": "Denpasar",
+    "country": "ID",
+    "countryJa": "インドネシア",
+    "region": "southeast_asia",
+    "lat": -8.65,
+    "lon": 115.22,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "ヴィラをサブスク化し、デジタルノマドから滞在税を取る楽園。",
+    "properties": [
+      {
+        "id": "denpasar-1",
+        "name": "ヴィラ・サブスク",
+        "industry": "tourism",
+        "price": 200,
+        "yieldPct": 14
+      },
+      {
+        "id": "denpasar-2",
+        "name": "サーフボードレンタル王",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 18
+      },
+      {
+        "id": "denpasar-3",
+        "name": "デジタルノマド税",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "phnom-penh",
+    "nameJa": "プノンペン",
+    "nameEn": "Phnom Penh",
+    "country": "KH",
+    "countryJa": "カンボジア",
+    "region": "southeast_asia",
+    "lat": 11.56,
+    "lon": 104.92,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "トゥクトゥク配車アプリとコンド開発の夢が、同じ未舗装路を走る。",
+    "properties": [
+      {
+        "id": "phnom-penh-1",
+        "name": "トゥクトゥク配車アプリ",
+        "industry": "tech",
+        "price": 210,
+        "yieldPct": 8
+      },
+      {
+        "id": "phnom-penh-2",
+        "name": "コンド開発の夢",
+        "industry": "industry",
+        "price": 190,
+        "yieldPct": 8
+      },
+      {
+        "id": "phnom-penh-3",
+        "name": "米輸出組合",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 56
+      }
+    ]
+  },
+  {
+    "id": "siem-reap",
+    "nameJa": "シェムリアップ",
+    "nameEn": "Siem Reap",
+    "country": "KH",
+    "countryJa": "カンボジア",
+    "region": "southeast_asia",
+    "lat": 13.36,
+    "lon": 103.86,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "landmark": "angkor_wat",
+    "blurb": "遺跡をライトアップし、レプリカを土産に売る二毛作の観光地。",
+    "properties": [
+      {
+        "id": "siem-reap-1",
+        "name": "遺跡ライトアップ興行",
+        "industry": "tourism",
+        "price": 95,
+        "yieldPct": 16
+      },
+      {
+        "id": "siem-reap-2",
+        "name": "遺跡レプリカ土産",
+        "industry": "industry",
+        "price": 45,
+        "yieldPct": 22
+      }
+    ]
+  },
+  {
+    "id": "yangon",
+    "nameJa": "ヤンゴン",
+    "nameEn": "Yangon",
+    "country": "MM",
+    "countryJa": "ミャンマー",
+    "region": "southeast_asia",
+    "lat": 16.87,
+    "lon": 96.2,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "パゴダに金箔を貼り、両替屋が通貨より先に信頼を失う。",
+    "properties": [
+      {
+        "id": "yangon-1",
+        "name": "パゴダ金箔事業",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 17
+      },
+      {
+        "id": "yangon-2",
+        "name": "通貨両替屋",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 7
+      },
+      {
+        "id": "yangon-3",
+        "name": "米・豆輸出",
+        "industry": "agri",
+        "price": 22,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "vientiane",
+    "nameJa": "ビエンチャン",
+    "nameEn": "Vientiane",
+    "country": "LA",
+    "countryJa": "ラオス",
+    "region": "southeast_asia",
+    "lat": 17.98,
+    "lon": 102.63,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "メコン河のビールと電力輸出。のんびりした社会主義の優等生。",
+    "properties": [
+      {
+        "id": "vientiane-1",
+        "name": "メコン河ビール帝国",
+        "industry": "food",
+        "price": 21,
+        "yieldPct": 48
+      },
+      {
+        "id": "vientiane-2",
+        "name": "電力輸出公社",
+        "industry": "energy",
+        "price": 320,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "bandar-seri-begawan",
+    "nameJa": "バンダルスリブガワン",
+    "nameEn": "Bandar Seri Begawan",
+    "country": "BN",
+    "countryJa": "ブルネイ",
+    "region": "southeast_asia",
+    "lat": 4.9,
+    "lon": 114.94,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "石油王の駐車場と水上集落。国全体がVIPルームのような静けさ。",
+    "properties": [
+      {
+        "id": "bandar-seri-begawan-1",
+        "name": "石油王の駐車場",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 5
+      },
+      {
+        "id": "bandar-seri-begawan-2",
+        "name": "水上集落ホテル",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "cebu",
+    "nameJa": "セブ",
+    "nameEn": "Cebu",
+    "country": "PH",
+    "countryJa": "フィリピン",
+    "region": "southeast_asia",
+    "lat": 10.32,
+    "lon": 123.9,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ダイビングと語学留学。海と英語で外貨を稼ぐ島。",
+    "properties": [
+      {
+        "id": "cebu-1",
+        "name": "ダイビングツアー",
+        "industry": "tourism",
+        "price": 85,
+        "yieldPct": 17
+      },
+      {
+        "id": "cebu-2",
+        "name": "語学学校ビジネス",
+        "industry": "media",
+        "price": 55,
+        "yieldPct": 20
+      }
+    ]
+  },
+  {
+    "id": "delhi",
+    "nameJa": "デリー",
+    "nameEn": "Delhi",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 28.61,
+    "lon": 77.21,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "taj_mahal",
+    "blurb": "汚染マスクとITと屋台。官僚手続きは有料の娯楽になった。",
+    "properties": [
+      {
+        "id": "delhi-1",
+        "name": "汚染マスク・ブランド",
+        "industry": "industry",
+        "price": 120,
+        "yieldPct": 16
+      },
+      {
+        "id": "delhi-2",
+        "name": "ITアウトソース城",
+        "industry": "tech",
+        "price": 380,
+        "yieldPct": 8
+      },
+      {
+        "id": "delhi-3",
+        "name": "屋台ストリートフード",
+        "industry": "food",
+        "price": 15,
+        "yieldPct": 65
+      },
+      {
+        "id": "delhi-4",
+        "name": "官僚手続き代行ファンド",
+        "industry": "finance",
+        "price": 1200,
+        "yieldPct": 4.5
+      }
+    ]
+  },
+  {
+    "id": "mumbai",
+    "nameJa": "ムンバイ",
+    "nameEn": "Mumbai",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 19.08,
+    "lon": 72.88,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "ボリウッドと宝飾品とチャイ。ダーウィーの再開発で夢も高層化。",
+    "properties": [
+      {
+        "id": "mumbai-1",
+        "name": "ボリウッド制作会社",
+        "industry": "media",
+        "price": 240,
+        "yieldPct": 13
+      },
+      {
+        "id": "mumbai-2",
+        "name": "ダーウィー再開発",
+        "industry": "finance",
+        "price": 1200,
+        "yieldPct": 4
+      },
+      {
+        "id": "mumbai-3",
+        "name": "チャイ屋台帝国",
+        "industry": "food",
+        "price": 17,
+        "yieldPct": 60
+      },
+      {
+        "id": "mumbai-4",
+        "name": "宝飾品倉庫",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 3.5
+      }
+    ]
+  },
+  {
+    "id": "bengaluru",
+    "nameJa": "ベンガルール",
+    "nameEn": "Bengaluru",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 12.97,
+    "lon": 77.59,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "コールセンターとカレーとスタートアップ。道路だけが開発途上。",
+    "properties": [
+      {
+        "id": "bengaluru-1",
+        "name": "コールセンターの殿堂",
+        "industry": "tech",
+        "price": 420,
+        "yieldPct": 8
+      },
+      {
+        "id": "bengaluru-2",
+        "name": "カレー・ミールス工場",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 56
+      },
+      {
+        "id": "bengaluru-3",
+        "name": "スタートアップ孵化器",
+        "industry": "tech",
+        "price": 600,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "chennai",
+    "nameJa": "チェンナイ",
+    "nameEn": "Chennai",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 13.08,
+    "lon": 80.27,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "自動車部品と映画と綿花。港から世界へ部品が旅立つ。",
+    "properties": [
+      {
+        "id": "chennai-1",
+        "name": "自動車部品城",
+        "industry": "industry",
+        "price": 230,
+        "yieldPct": 12
+      },
+      {
+        "id": "chennai-2",
+        "name": "南インド映画スタジオ",
+        "industry": "media",
+        "price": 140,
+        "yieldPct": 14
+      },
+      {
+        "id": "chennai-3",
+        "name": "綿花取引所",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 53
+      }
+    ]
+  },
+  {
+    "id": "kolkata",
+    "nameJa": "コルカタ",
+    "nameEn": "Kolkata",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 22.57,
+    "lon": 88.36,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "英領遺産と黄麻工場と書店街。知識と湿気が同居する。",
+    "properties": [
+      {
+        "id": "kolkata-1",
+        "name": "英領遺産ホテル",
+        "industry": "tourism",
+        "price": 130,
+        "yieldPct": 10
+      },
+      {
+        "id": "kolkata-2",
+        "name": "黄麻工場",
+        "industry": "industry",
+        "price": 100,
+        "yieldPct": 13
+      },
+      {
+        "id": "kolkata-3",
+        "name": "書店街の知的道楽",
+        "industry": "media",
+        "price": 45,
+        "yieldPct": 20
+      }
+    ]
+  },
+  {
+    "id": "hyderabad",
+    "nameJa": "ハイデラバード",
+    "nameEn": "Hyderabad",
+    "country": "IN",
+    "countryJa": "インド",
+    "region": "south_asia",
+    "lat": 17.39,
+    "lon": 78.49,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ビリヤニと製薬と真珠。旧市街の路地にIPOの夢が落ちている。",
+    "properties": [
+      {
+        "id": "hyderabad-1",
+        "name": "ビリヤニ・クラウドキッチン",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 52
+      },
+      {
+        "id": "hyderabad-2",
+        "name": "製薬ラボ",
+        "industry": "tech",
+        "price": 340,
+        "yieldPct": 9
+      },
+      {
+        "id": "hyderabad-3",
+        "name": "旧市街の真珠市場",
+        "industry": "finance",
+        "price": 280,
+        "yieldPct": 5.5
+      }
+    ]
+  },
+  {
+    "id": "karachi",
+    "nameJa": "カラチ",
+    "nameEn": "Karachi",
+    "country": "PK",
+    "countryJa": "パキスタン",
+    "region": "south_asia",
+    "lat": 24.86,
+    "lon": 67.01,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "港湾コンテナと綿花とスパイス。港の熱気でカレーが熟成する。",
+    "properties": [
+      {
+        "id": "karachi-1",
+        "name": "港湾コンテナ王",
+        "industry": "shipping",
+        "price": 190,
+        "yieldPct": 10
+      },
+      {
+        "id": "karachi-2",
+        "name": "綿花ファンド",
+        "industry": "agri",
+        "price": 25,
+        "yieldPct": 58
+      },
+      {
+        "id": "karachi-3",
+        "name": "スパイス市場",
+        "industry": "food",
+        "price": 14,
+        "yieldPct": 68
+      }
+    ]
+  },
+  {
+    "id": "dhaka",
+    "nameJa": "ダッカ",
+    "nameEn": "Dhaka",
+    "country": "BD",
+    "countryJa": "バングラデシュ",
+    "region": "south_asia",
+    "lat": 23.81,
+    "lon": 90.41,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "Tシャツ縫製とリキシャと洪水保険。世界の衣料庫は水に強い。",
+    "properties": [
+      {
+        "id": "dhaka-1",
+        "name": "Tシャツ縫製帝国",
+        "industry": "industry",
+        "price": 160,
+        "yieldPct": 15
+      },
+      {
+        "id": "dhaka-2",
+        "name": "リキシャ配車",
+        "industry": "shipping",
+        "price": 70,
+        "yieldPct": 18
+      },
+      {
+        "id": "dhaka-3",
+        "name": "洪水保険",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 6.5
+      }
+    ]
+  },
+  {
+    "id": "colombo",
+    "nameJa": "コロンボ",
+    "nameEn": "Colombo",
+    "country": "LK",
+    "countryJa": "スリランカ",
+    "region": "south_asia",
+    "lat": 6.93,
+    "lon": 79.85,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "セイロンティーと物流ハブ。紅茶の香りに港湾の排気が混ざる。",
+    "properties": [
+      {
+        "id": "colombo-1",
+        "name": "セイロンティー農園",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 62
+      },
+      {
+        "id": "colombo-2",
+        "name": "港の物流ハブ",
+        "industry": "shipping",
+        "price": 140,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "kathmandu",
+    "nameJa": "カトマンズ",
+    "nameEn": "Kathmandu",
+    "country": "NP",
+    "countryJa": "ネパール",
+    "region": "south_asia",
+    "lat": 27.72,
+    "lon": 85.32,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ヒマラヤ登山とマサラティー。標高が高いほど物価も高い。",
+    "properties": [
+      {
+        "id": "kathmandu-1",
+        "name": "ヒマラヤ登山ツアー",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 15
+      },
+      {
+        "id": "kathmandu-2",
+        "name": "マサラ・ティー屋",
+        "industry": "food",
+        "price": 12,
+        "yieldPct": 70
+      }
+    ]
+  },
+  {
+    "id": "dubai",
+    "nameJa": "ドバイ",
+    "nameEn": "Dubai",
+    "country": "AE",
+    "countryJa": "アラブ首長国連邦",
+    "region": "middle_east",
+    "lat": 25.2,
+    "lon": 55.27,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "人工島と金スークと砂漠スキー場。石油より不動産の夢が高い。",
+    "properties": [
+      {
+        "id": "dubai-1",
+        "name": "人工島不動産",
+        "industry": "finance",
+        "price": 2000,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "dubai-2",
+        "name": "金スーク",
+        "industry": "finance",
+        "price": 800,
+        "yieldPct": 4.5
+      },
+      {
+        "id": "dubai-3",
+        "name": "砂漠スキー場",
+        "industry": "tourism",
+        "price": 260,
+        "yieldPct": 12
+      },
+      {
+        "id": "dubai-4",
+        "name": "港湾自由貿易",
+        "industry": "shipping",
+        "price": 300,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "abu-dhabi",
+    "nameJa": "アブダビ",
+    "nameEn": "Abu Dhabi",
+    "country": "AE",
+    "countryJa": "アラブ首長国連邦",
+    "region": "middle_east",
+    "lat": 24.45,
+    "lon": 54.38,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "石油マネー基金がルーヴルを買い、砂漠に芸術の冷房を入れた。",
+    "properties": [
+      {
+        "id": "abu-dhabi-1",
+        "name": "石油マネー基金",
+        "industry": "energy",
+        "price": 2200,
+        "yieldPct": 3
+      },
+      {
+        "id": "abu-dhabi-2",
+        "name": "ルーヴル分館",
+        "industry": "tourism",
+        "price": 180,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "doha",
+    "nameJa": "ドーハ",
+    "nameEn": "Doha",
+    "country": "QA",
+    "countryJa": "カタール",
+    "region": "middle_east",
+    "lat": 25.29,
+    "lon": 51.53,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "天然ガスとスタジアム。ワールドカップの遺産は空調付きで残った。",
+    "properties": [
+      {
+        "id": "doha-1",
+        "name": "天然ガス・トレーディング",
+        "industry": "energy",
+        "price": 1900,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "doha-2",
+        "name": "ワールドカップ遺産スタジアム",
+        "industry": "tourism",
+        "price": 200,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "riyadh",
+    "nameJa": "リヤド",
+    "nameEn": "Riyadh",
+    "country": "SA",
+    "countryJa": "サウジアラビア",
+    "region": "middle_east",
+    "lat": 24.71,
+    "lon": 46.67,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "石油省と巨大モールと砂漠データセンター。石油の上にクラウドが建つ。",
+    "properties": [
+      {
+        "id": "riyadh-1",
+        "name": "石油省ビル",
+        "industry": "energy",
+        "price": 2400,
+        "yieldPct": 3
+      },
+      {
+        "id": "riyadh-2",
+        "name": "巨大モール",
+        "industry": "tourism",
+        "price": 280,
+        "yieldPct": 10
+      },
+      {
+        "id": "riyadh-3",
+        "name": "砂漠データセンター",
+        "industry": "tech",
+        "price": 700,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "jeddah",
+    "nameJa": "ジッダ",
+    "nameEn": "Jeddah",
+    "country": "SA",
+    "countryJa": "サウジアラビア",
+    "region": "middle_east",
+    "lat": 21.49,
+    "lon": 39.19,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "紅海のコンテナ港と巡礼ホテル。聖地の玄関口は会計も聖なる。",
+    "properties": [
+      {
+        "id": "jeddah-1",
+        "name": "紅海コンテナ港",
+        "industry": "shipping",
+        "price": 250,
+        "yieldPct": 9
+      },
+      {
+        "id": "jeddah-2",
+        "name": "巡礼ホテル",
+        "industry": "tourism",
+        "price": 220,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "tehran",
+    "nameJa": "テヘラン",
+    "nameEn": "Tehran",
+    "country": "IR",
+    "countryJa": "イラン",
+    "region": "middle_east",
+    "lat": 35.69,
+    "lon": 51.39,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "絨毯と石油化学と両替商。市場のレートは政府より正確。",
+    "properties": [
+      {
+        "id": "tehran-1",
+        "name": "ペルシャ絨毯ファンド",
+        "industry": "finance",
+        "price": 260,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "tehran-2",
+        "name": "石油化学公社",
+        "industry": "energy",
+        "price": 800,
+        "yieldPct": 5
+      },
+      {
+        "id": "tehran-3",
+        "name": "バザールの両替商",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "istanbul",
+    "nameJa": "イスタンブール",
+    "nameEn": "Istanbul",
+    "country": "TR",
+    "countryJa": "トルコ",
+    "region": "middle_east",
+    "lat": 41.01,
+    "lon": 28.98,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "二つの大陸と一本の橋。通行料を取れば歴史も黒字になる。",
+    "properties": [
+      {
+        "id": "istanbul-1",
+        "name": "ボスポラス橋通行料",
+        "industry": "shipping",
+        "price": 290,
+        "yieldPct": 11
+      },
+      {
+        "id": "istanbul-2",
+        "name": "ハマム・スパ帝国",
+        "industry": "tourism",
+        "price": 230,
+        "yieldPct": 13
+      },
+      {
+        "id": "istanbul-3",
+        "name": "両大陸不動産",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4.5
+      }
+    ]
+  },
+  {
+    "id": "jerusalem",
+    "nameJa": "エルサレム",
+    "nameEn": "Jerusalem",
+    "country": "IL",
+    "countryJa": "イスラエル",
+    "region": "middle_east",
+    "lat": 31.77,
+    "lon": 35.22,
+    "tier": 2,
+    "port": false,
+    "airport": false,
+    "blurb": "旧市街の巡礼ツアーとスタートアップ。祈りもピッチも同じ丘で。",
+    "properties": [
+      {
+        "id": "jerusalem-1",
+        "name": "旧市街巡礼ツアー",
+        "industry": "tourism",
+        "price": 170,
+        "yieldPct": 11
+      },
+      {
+        "id": "jerusalem-2",
+        "name": "スタートアップ・ネーション",
+        "industry": "tech",
+        "price": 450,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "amman",
+    "nameJa": "アンマン",
+    "nameEn": "Amman",
+    "country": "JO",
+    "countryJa": "ヨルダン",
+    "region": "middle_east",
+    "lat": 31.95,
+    "lon": 35.93,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "landmark": "petra",
+    "blurb": "ペトラの入場券と死海泥。古代遺跡が現代のGDPを支える。",
+    "properties": [
+      {
+        "id": "amman-1",
+        "name": "ペトラ遺跡チケット",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 14
+      },
+      {
+        "id": "amman-2",
+        "name": "死海泥コスメ",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 46
+      }
+    ]
+  },
+  {
+    "id": "beirut",
+    "nameJa": "ベイルート",
+    "nameEn": "Beirut",
+    "country": "LB",
+    "countryJa": "レバノン",
+    "region": "middle_east",
+    "lat": 33.89,
+    "lon": 35.5,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "再建マンションと地中海料理。復興のたびに景観が新しくなる。",
+    "properties": [
+      {
+        "id": "beirut-1",
+        "name": "再建マンション・ファンド",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "beirut-2",
+        "name": "地中海料理店",
+        "industry": "food",
+        "price": 20,
+        "yieldPct": 49
+      }
+    ]
+  },
+  {
+    "id": "london",
+    "nameJa": "ロンドン",
+    "nameEn": "London",
+    "country": "GB",
+    "countryJa": "イギリス",
+    "region": "europe",
+    "lat": 51.51,
+    "lon": -0.13,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "big_ben",
+    "blurb": "シティの金融街と遅延する地下鉄。王室グッズだけが時間通りに売れる。",
+    "properties": [
+      {
+        "id": "london-1",
+        "name": "シティ金融街",
+        "industry": "finance",
+        "price": 2800,
+        "yieldPct": 3
+      },
+      {
+        "id": "london-2",
+        "name": "地下鉄遅延保険",
+        "industry": "finance",
+        "price": 600,
+        "yieldPct": 5
+      },
+      {
+        "id": "london-3",
+        "name": "パブ・チェーン",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 40
+      },
+      {
+        "id": "london-4",
+        "name": "高級不動産",
+        "industry": "finance",
+        "price": 1800,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "london-5",
+        "name": "王室グッズ",
+        "industry": "media",
+        "price": 240,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "paris",
+    "nameJa": "パリ",
+    "nameEn": "Paris",
+    "country": "FR",
+    "countryJa": "フランス",
+    "region": "europe",
+    "lat": 48.86,
+    "lon": 2.35,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "eiffel",
+    "blurb": "高級ブランドと観光カフェとエッフェル塔のライトショー。恋も課金制。",
+    "properties": [
+      {
+        "id": "paris-1",
+        "name": "高級ブランド帝国",
+        "industry": "finance",
+        "price": 1800,
+        "yieldPct": 3.2
+      },
+      {
+        "id": "paris-2",
+        "name": "観光地カフェ",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 42
+      },
+      {
+        "id": "paris-3",
+        "name": "エッフェル塔ライトショー",
+        "industry": "tourism",
+        "price": 280,
+        "yieldPct": 11
+      },
+      {
+        "id": "paris-4",
+        "name": "香水ラボ",
+        "industry": "industry",
+        "price": 260,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "berlin",
+    "nameJa": "ベルリン",
+    "nameEn": "Berlin",
+    "country": "DE",
+    "countryJa": "ドイツ",
+    "region": "europe",
+    "lat": 52.52,
+    "lon": 13.4,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "brandenburg",
+    "blurb": "スタートアップとクラブと安アパート。自由の値段は年々上がる。",
+    "properties": [
+      {
+        "id": "berlin-1",
+        "name": "スタートアップ共用部屋",
+        "industry": "tech",
+        "price": 550,
+        "yieldPct": 7
+      },
+      {
+        "id": "berlin-2",
+        "name": "クラブ文化遺産",
+        "industry": "media",
+        "price": 200,
+        "yieldPct": 15
+      },
+      {
+        "id": "berlin-3",
+        "name": "安アパート投機",
+        "industry": "finance",
+        "price": 700,
+        "yieldPct": 5
+      }
+    ]
+  },
+  {
+    "id": "rome",
+    "nameJa": "ローマ",
+    "nameEn": "Rome",
+    "country": "IT",
+    "countryJa": "イタリア",
+    "region": "europe",
+    "lat": 41.9,
+    "lon": 12.5,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "colosseum",
+    "blurb": "遺跡の修復費を観光収入で払い、余った分でジェラートを食べる。",
+    "properties": [
+      {
+        "id": "rome-1",
+        "name": "遺跡修復ファンド",
+        "industry": "finance",
+        "price": 800,
+        "yieldPct": 4
+      },
+      {
+        "id": "rome-2",
+        "name": "ジェラート帝国",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 45
+      },
+      {
+        "id": "rome-3",
+        "name": "バチカン土産",
+        "industry": "media",
+        "price": 130,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "madrid",
+    "nameJa": "マドリード",
+    "nameEn": "Madrid",
+    "country": "ES",
+    "countryJa": "スペイン",
+    "region": "europe",
+    "lat": 40.42,
+    "lon": -3.7,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "サッカークラブ債とハム熟成庫。昼寝の間に経済が回っている。",
+    "properties": [
+      {
+        "id": "madrid-1",
+        "name": "サッカークラブ債",
+        "industry": "media",
+        "price": 280,
+        "yieldPct": 8
+      },
+      {
+        "id": "madrid-2",
+        "name": "ハム熟成倉庫",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 41
+      },
+      {
+        "id": "madrid-3",
+        "name": "観光アパート規制逃れ",
+        "industry": "finance",
+        "price": 480,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "barcelona",
+    "nameJa": "バルセロナ",
+    "nameEn": "Barcelona",
+    "country": "ES",
+    "countryJa": "スペイン",
+    "region": "europe",
+    "lat": 41.39,
+    "lon": 2.17,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "ガウディの未完物件とビーチクラブ。完成しないから価値が上がる。",
+    "properties": [
+      {
+        "id": "barcelona-1",
+        "name": "ガウディ未完物件",
+        "industry": "tourism",
+        "price": 220,
+        "yieldPct": 10
+      },
+      {
+        "id": "barcelona-2",
+        "name": "ビーチ・クラブ",
+        "industry": "tourism",
+        "price": 150,
+        "yieldPct": 14
+      },
+      {
+        "id": "barcelona-3",
+        "name": "カヴァ酒蔵",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 43
+      }
+    ]
+  },
+  {
+    "id": "amsterdam",
+    "nameJa": "アムステルダム",
+    "nameEn": "Amsterdam",
+    "country": "NL",
+    "countryJa": "オランダ",
+    "region": "europe",
+    "lat": 52.37,
+    "lon": 4.9,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "landmark": "windmill",
+    "blurb": "運河のボート倉庫とチューリップ球根先物。自転車だけが渋滞知らず。",
+    "properties": [
+      {
+        "id": "amsterdam-1",
+        "name": "運河ボート倉庫",
+        "industry": "shipping",
+        "price": 180,
+        "yieldPct": 10
+      },
+      {
+        "id": "amsterdam-2",
+        "name": "チューリップ球根先物",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 56
+      },
+      {
+        "id": "amsterdam-3",
+        "name": "自転車駐輪タワー",
+        "industry": "industry",
+        "price": 140,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "brussels",
+    "nameJa": "ブリュッセル",
+    "nameEn": "Brussels",
+    "country": "BE",
+    "countryJa": "ベルギー",
+    "region": "europe",
+    "lat": 50.85,
+    "lon": 4.35,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "EU官僚のホテルとチョコレートのロビー。規制の香りは甘い。",
+    "properties": [
+      {
+        "id": "brussels-1",
+        "name": "EU官僚ホテル",
+        "industry": "finance",
+        "price": 320,
+        "yieldPct": 7
+      },
+      {
+        "id": "brussels-2",
+        "name": "チョコレート・ロビー",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 44
+      }
+    ]
+  },
+  {
+    "id": "vienna",
+    "nameJa": "ウィーン",
+    "nameEn": "Vienna",
+    "country": "AT",
+    "countryJa": "オーストリア",
+    "region": "europe",
+    "lat": 48.21,
+    "lon": 16.37,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "宮殿オーケストラとカフェサロン。音楽で家賃の高さを正当化する。",
+    "properties": [
+      {
+        "id": "vienna-1",
+        "name": "宮殿オーケストラ",
+        "industry": "media",
+        "price": 210,
+        "yieldPct": 9
+      },
+      {
+        "id": "vienna-2",
+        "name": "カフェ・サロン",
+        "industry": "food",
+        "price": 23,
+        "yieldPct": 42
+      }
+    ]
+  },
+  {
+    "id": "prague",
+    "nameJa": "プラハ",
+    "nameEn": "Prague",
+    "country": "CZ",
+    "countryJa": "チェコ",
+    "region": "europe",
+    "lat": 50.08,
+    "lon": 14.44,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "中世の夜景とビール醸造所。観光客が石畳を磨いてくれる。",
+    "properties": [
+      {
+        "id": "prague-1",
+        "name": "中世夜景観光",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 13
+      },
+      {
+        "id": "prague-2",
+        "name": "ビール醸造所",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 47
+      }
+    ]
+  },
+  {
+    "id": "warsaw",
+    "nameJa": "ワルシャワ",
+    "nameEn": "Warsaw",
+    "country": "PL",
+    "countryJa": "ポーランド",
+    "region": "europe",
+    "lat": 52.23,
+    "lon": 21.01,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "再建旧市街のホテルとプログラマー派遣。歴史をITで圧縮する。",
+    "properties": [
+      {
+        "id": "warsaw-1",
+        "name": "再建旧市街ホテル",
+        "industry": "tourism",
+        "price": 140,
+        "yieldPct": 11
+      },
+      {
+        "id": "warsaw-2",
+        "name": "プログラマー派遣",
+        "industry": "tech",
+        "price": 260,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "budapest",
+    "nameJa": "ブダペスト",
+    "nameEn": "Budapest",
+    "country": "HU",
+    "countryJa": "ハンガリー",
+    "region": "europe",
+    "lat": 47.5,
+    "lon": 19.04,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "温泉ホテルとパプリカ輸出。国会議事堂の前で湯に浸かる。",
+    "properties": [
+      {
+        "id": "budapest-1",
+        "name": "温泉ホテル",
+        "industry": "tourism",
+        "price": 190,
+        "yieldPct": 12
+      },
+      {
+        "id": "budapest-2",
+        "name": "パプリカ輸出",
+        "industry": "agri",
+        "price": 21,
+        "yieldPct": 54
+      }
+    ]
+  },
+  {
+    "id": "athens",
+    "nameJa": "アテネ",
+    "nameEn": "Athens",
+    "country": "GR",
+    "countryJa": "ギリシャ",
+    "region": "europe",
+    "lat": 37.98,
+    "lon": 23.73,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "landmark": "acropolis",
+    "blurb": "アクロポリスの入場券と海運王のオフィス。遺跡の柱は経費で立っている。",
+    "properties": [
+      {
+        "id": "athens-1",
+        "name": "アクロポリス入場券",
+        "industry": "tourism",
+        "price": 230,
+        "yieldPct": 10
+      },
+      {
+        "id": "athens-2",
+        "name": "オリーブ農園",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 57
+      },
+      {
+        "id": "athens-3",
+        "name": "海運王のオフィス",
+        "industry": "shipping",
+        "price": 210,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "lisbon",
+    "nameJa": "リスボン",
+    "nameEn": "Lisbon",
+    "country": "PT",
+    "countryJa": "ポルトガル",
+    "region": "europe",
+    "lat": 38.72,
+    "lon": -9.14,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "トゥクトゥクとコルクとデジタルノマド。坂道が有料化されつつある。",
+    "properties": [
+      {
+        "id": "lisbon-1",
+        "name": "トゥクトゥク観光",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 15
+      },
+      {
+        "id": "lisbon-2",
+        "name": "コルク輸出",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 53
+      },
+      {
+        "id": "lisbon-3",
+        "name": "デジタルノマド宿",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "le-havre",
+    "nameJa": "ル・アーヴル",
+    "nameEn": "Le Havre",
+    "country": "FR",
+    "countryJa": "フランス",
+    "region": "europe",
+    "lat": 49.49,
+    "lon": 0.11,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "コンテナ港と印象派の美術館。積み荷の絵はモネ、利益は船会社のもの。",
+    "properties": [
+      {
+        "id": "le-havre-1",
+        "name": "コンテナ港ターミナル",
+        "industry": "shipping",
+        "price": 180,
+        "yieldPct": 9
+      },
+      {
+        "id": "le-havre-2",
+        "name": "印象派美術館",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 15
+      },
+      {
+        "id": "le-havre-3",
+        "name": "ノルマンディー牡蠣養殖",
+        "industry": "agri",
+        "price": 22,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "copenhagen",
+    "nameJa": "コペンハーゲン",
+    "nameEn": "Copenhagen",
+    "country": "DK",
+    "countryJa": "デンマーク",
+    "region": "europe",
+    "lat": 55.68,
+    "lon": 12.57,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "風力発電と自転車とデンマーク菓子。幸福度が輸出商品になった。",
+    "properties": [
+      {
+        "id": "copenhagen-1",
+        "name": "風力発電ファンド",
+        "industry": "energy",
+        "price": 480,
+        "yieldPct": 6
+      },
+      {
+        "id": "copenhagen-2",
+        "name": "自転車インフラ",
+        "industry": "industry",
+        "price": 160,
+        "yieldPct": 11
+      },
+      {
+        "id": "copenhagen-3",
+        "name": "デンマーク菓子",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 45
+      }
+    ]
+  },
+  {
+    "id": "stockholm",
+    "nameJa": "ストックホルム",
+    "nameEn": "Stockholm",
+    "country": "SE",
+    "countryJa": "スウェーデン",
+    "region": "europe",
+    "lat": 59.33,
+    "lon": 18.07,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "メタル音楽とフィンテック。静かな湖の下でユニコーンが鳴いている。",
+    "properties": [
+      {
+        "id": "stockholm-1",
+        "name": "メタル音楽スタジオ",
+        "industry": "media",
+        "price": 90,
+        "yieldPct": 16
+      },
+      {
+        "id": "stockholm-2",
+        "name": "フィンテック・ユニコーン",
+        "industry": "tech",
+        "price": 640,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "oslo",
+    "nameJa": "オスロ",
+    "nameEn": "Oslo",
+    "country": "NO",
+    "countryJa": "ノルウェー",
+    "region": "europe",
+    "lat": 59.91,
+    "lon": 10.75,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "北海油田サービスとサーモン養殖。フィヨルドは天然の冷蔵庫。",
+    "properties": [
+      {
+        "id": "oslo-1",
+        "name": "北海油田サービス",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "oslo-2",
+        "name": "サーモン養殖",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 58
+      }
+    ]
+  },
+  {
+    "id": "helsinki",
+    "nameJa": "ヘルシンキ",
+    "nameEn": "Helsinki",
+    "country": "FI",
+    "countryJa": "フィンランド",
+    "region": "europe",
+    "lat": 60.17,
+    "lon": 24.94,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "サウナ・サブスクと森林資源。沈黙も有料コンテンツになりつつある。",
+    "properties": [
+      {
+        "id": "helsinki-1",
+        "name": "サウナ・サブスク",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 13
+      },
+      {
+        "id": "helsinki-2",
+        "name": "森林資源ファンド",
+        "industry": "industry",
+        "price": 230,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "reykjavik",
+    "nameJa": "レイキャビク",
+    "nameEn": "Reykjavik",
+    "country": "IS",
+    "countryJa": "アイスランド",
+    "region": "europe",
+    "lat": 64.15,
+    "lon": -21.94,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "地熱発電とオーロラ。火山の怒りを電力に変換する島。",
+    "properties": [
+      {
+        "id": "reykjavik-1",
+        "name": "地熱発電",
+        "industry": "energy",
+        "price": 520,
+        "yieldPct": 5
+      },
+      {
+        "id": "reykjavik-2",
+        "name": "オーロラ観光",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "zurich",
+    "nameJa": "チューリッヒ",
+    "nameEn": "Zurich",
+    "country": "CH",
+    "countryJa": "スイス",
+    "region": "europe",
+    "lat": 47.37,
+    "lon": 8.54,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "秘密口座カフェと高級時計。時計の針だけが裏表がない。",
+    "properties": [
+      {
+        "id": "zurich-1",
+        "name": "秘密口座カフェ",
+        "industry": "finance",
+        "price": 1600,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "zurich-2",
+        "name": "高級時計工房",
+        "industry": "industry",
+        "price": 280,
+        "yieldPct": 12
+      },
+      {
+        "id": "zurich-3",
+        "name": "チーズ先物",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 39
+      }
+    ]
+  },
+  {
+    "id": "milan",
+    "nameJa": "ミラノ",
+    "nameEn": "Milan",
+    "country": "IT",
+    "countryJa": "イタリア",
+    "region": "europe",
+    "lat": 45.46,
+    "lon": 9.19,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ファッション週間とリゾット銀行。見た目が信用格付けになる。",
+    "properties": [
+      {
+        "id": "milan-1",
+        "name": "ファッション週間",
+        "industry": "media",
+        "price": 240,
+        "yieldPct": 13
+      },
+      {
+        "id": "milan-2",
+        "name": "リゾット銀行",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 43
+      }
+    ]
+  },
+  {
+    "id": "venice",
+    "nameJa": "ヴェネツィア",
+    "nameEn": "Venice",
+    "country": "IT",
+    "countryJa": "イタリア",
+    "region": "europe",
+    "lat": 45.44,
+    "lon": 12.32,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "ゴンドラ組合と高潮保険。水の都は水災リスクで儲かっている。",
+    "properties": [
+      {
+        "id": "venice-1",
+        "name": "ゴンドラ組合",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 12
+      },
+      {
+        "id": "venice-2",
+        "name": "高潮保険",
+        "industry": "finance",
+        "price": 210,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "munich",
+    "nameJa": "ミュンヘン",
+    "nameEn": "Munich",
+    "country": "DE",
+    "countryJa": "ドイツ",
+    "region": "europe",
+    "lat": 48.14,
+    "lon": 11.58,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ビール醸造帝国と自動車試作場。渋滞もビール休憩所になる。",
+    "properties": [
+      {
+        "id": "munich-1",
+        "name": "ビール醸造帝国",
+        "industry": "food",
+        "price": 29,
+        "yieldPct": 41
+      },
+      {
+        "id": "munich-2",
+        "name": "自動車試作場",
+        "industry": "industry",
+        "price": 300,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "frankfurt",
+    "nameJa": "フランクフルト",
+    "nameEn": "Frankfurt",
+    "country": "DE",
+    "countryJa": "ドイツ",
+    "region": "europe",
+    "lat": 50.11,
+    "lon": 8.68,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ECB周辺ホテルとソーセージ屋台。金融の塔の下はソーセージの煙。",
+    "properties": [
+      {
+        "id": "frankfurt-1",
+        "name": "ECB周辺ホテル",
+        "industry": "finance",
+        "price": 1200,
+        "yieldPct": 4
+      },
+      {
+        "id": "frankfurt-2",
+        "name": "ソーセージ屋台",
+        "industry": "food",
+        "price": 19,
+        "yieldPct": 48
+      },
+      {
+        "id": "frankfurt-3",
+        "name": "空港倉庫",
+        "industry": "shipping",
+        "price": 260,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "edinburgh",
+    "nameJa": "エディンバラ",
+    "nameEn": "Edinburgh",
+    "country": "GB",
+    "countryJa": "イギリス",
+    "region": "europe",
+    "lat": 55.95,
+    "lon": -3.19,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "古城ホテルとウイスキー熟成庫。幽霊ツアーも今年は増収。",
+    "properties": [
+      {
+        "id": "edinburgh-1",
+        "name": "古城ホテル",
+        "industry": "tourism",
+        "price": 150,
+        "yieldPct": 12
+      },
+      {
+        "id": "edinburgh-2",
+        "name": "ウイスキー熟成庫",
+        "industry": "food",
+        "price": 29,
+        "yieldPct": 46
+      }
+    ]
+  },
+  {
+    "id": "kyiv",
+    "nameJa": "キーウ",
+    "nameEn": "Kyiv",
+    "country": "UA",
+    "countryJa": "ウクライナ",
+    "region": "europe",
+    "lat": 50.45,
+    "lon": 30.52,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "小麦輸出公社とITアウトソース。黒土とコードが同じ国から出荷される。",
+    "properties": [
+      {
+        "id": "kyiv-1",
+        "name": "小麦輸出公社",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 64
+      },
+      {
+        "id": "kyiv-2",
+        "name": "ITアウトソース",
+        "industry": "tech",
+        "price": 200,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "belgrade",
+    "nameJa": "ベオグラード",
+    "nameEn": "Belgrade",
+    "country": "RS",
+    "countryJa": "セルビア",
+    "region": "europe",
+    "lat": 44.79,
+    "lon": 20.45,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "川沿いクラブ街とラキヤ蒸留所。夜の経済が朝まで動く。",
+    "properties": [
+      {
+        "id": "belgrade-1",
+        "name": "川沿いクラブ街",
+        "industry": "media",
+        "price": 70,
+        "yieldPct": 17
+      },
+      {
+        "id": "belgrade-2",
+        "name": "ラキヤ蒸留所",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "moscow",
+    "nameJa": "モスクワ",
+    "nameEn": "Moscow",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 55.76,
+    "lon": 37.62,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "kremlin",
+    "blurb": "赤の広場の広告枠と国営石油。地下鉄は宮殿、地上は値札。",
+    "properties": [
+      {
+        "id": "moscow-1",
+        "name": "赤の広場広告枠",
+        "industry": "media",
+        "price": 280,
+        "yieldPct": 10
+      },
+      {
+        "id": "moscow-2",
+        "name": "石油ガス国営公社",
+        "industry": "energy",
+        "price": 2500,
+        "yieldPct": 3.5
+      },
+      {
+        "id": "moscow-3",
+        "name": "地下鉄宮殿",
+        "industry": "shipping",
+        "price": 240,
+        "yieldPct": 8
+      },
+      {
+        "id": "moscow-4",
+        "name": "高級スーパー",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 41
+      }
+    ]
+  },
+  {
+    "id": "st-petersburg",
+    "nameJa": "サンクトペテルブルク",
+    "nameEn": "Saint Petersburg",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 59.93,
+    "lon": 30.36,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "エルミタージュとバレエと運河クルーズ。芸術が暖房費を稼ぐ。",
+    "properties": [
+      {
+        "id": "st-petersburg-1",
+        "name": "エルミタージュ分館",
+        "industry": "media",
+        "price": 170,
+        "yieldPct": 9
+      },
+      {
+        "id": "st-petersburg-2",
+        "name": "バレエ団",
+        "industry": "media",
+        "price": 110,
+        "yieldPct": 13
+      },
+      {
+        "id": "st-petersburg-3",
+        "name": "運河クルーズ",
+        "industry": "shipping",
+        "price": 90,
+        "yieldPct": 14
+      }
+    ]
+  },
+  {
+    "id": "novosibirsk",
+    "nameJa": "ノヴォシビルスク",
+    "nameEn": "Novosibirsk",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 55.03,
+    "lon": 82.92,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "シベリア鉄道の倉庫と寒さ自慢のデータセンター。冷却費はゼロ。",
+    "properties": [
+      {
+        "id": "novosibirsk-1",
+        "name": "シベリア鉄道倉庫",
+        "industry": "shipping",
+        "price": 160,
+        "yieldPct": 8
+      },
+      {
+        "id": "novosibirsk-2",
+        "name": "寒さ自慢データセンター",
+        "industry": "tech",
+        "price": 280,
+        "yieldPct": 6.5
+      }
+    ]
+  },
+  {
+    "id": "vladivostok",
+    "nameJa": "ウラジオストク",
+    "nameEn": "Vladivostok",
+    "country": "RU",
+    "countryJa": "ロシア",
+    "region": "russia_central_asia",
+    "lat": 43.12,
+    "lon": 131.89,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "太平洋艦隊観光と中古車輸入。軍港が観光資源に転身中。",
+    "properties": [
+      {
+        "id": "vladivostok-1",
+        "name": "太平洋艦隊観光",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 14
+      },
+      {
+        "id": "vladivostok-2",
+        "name": "中古車輸入",
+        "industry": "shipping",
+        "price": 140,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "almaty",
+    "nameJa": "アルマトイ",
+    "nameEn": "Almaty",
+    "country": "KZ",
+    "countryJa": "カザフスタン",
+    "region": "russia_central_asia",
+    "lat": 43.24,
+    "lon": 76.95,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ウラン鉱山とリンゴ園。核燃料と果物が同じ市場に並ぶ。",
+    "properties": [
+      {
+        "id": "almaty-1",
+        "name": "ウラン鉱山ファンド",
+        "industry": "energy",
+        "price": 620,
+        "yieldPct": 5
+      },
+      {
+        "id": "almaty-2",
+        "name": "リンゴ園",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 55
+      }
+    ]
+  },
+  {
+    "id": "astana",
+    "nameJa": "アスタナ",
+    "nameEn": "Astana",
+    "country": "KZ",
+    "countryJa": "カザフスタン",
+    "region": "russia_central_asia",
+    "lat": 51.17,
+    "lon": 71.45,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "未来都市建設債と草原穀物公社。草原にガラスの夢が立つ。",
+    "properties": [
+      {
+        "id": "astana-1",
+        "name": "未来都市建設債",
+        "industry": "finance",
+        "price": 320,
+        "yieldPct": 6
+      },
+      {
+        "id": "astana-2",
+        "name": "草原穀物公社",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "tashkent",
+    "nameJa": "タシケント",
+    "nameEn": "Tashkent",
+    "country": "UZ",
+    "countryJa": "ウズベキスタン",
+    "region": "russia_central_asia",
+    "lat": 41.3,
+    "lon": 69.24,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "綿花帝国と装飾地下鉄。綿の白さが経済の色。",
+    "properties": [
+      {
+        "id": "tashkent-1",
+        "name": "綿花帝国",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 61
+      },
+      {
+        "id": "tashkent-2",
+        "name": "地下鉄装飾",
+        "industry": "industry",
+        "price": 90,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "samarkand",
+    "nameJa": "サマルカンド",
+    "nameEn": "Samarkand",
+    "country": "UZ",
+    "countryJa": "ウズベキスタン",
+    "region": "russia_central_asia",
+    "lat": 39.65,
+    "lon": 66.96,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "シルクロード観光と青いタイル。歴史の青が土産物になる。",
+    "properties": [
+      {
+        "id": "samarkand-1",
+        "name": "シルクロード観光",
+        "industry": "tourism",
+        "price": 85,
+        "yieldPct": 15
+      },
+      {
+        "id": "samarkand-2",
+        "name": "青いタイル工房",
+        "industry": "industry",
+        "price": 55,
+        "yieldPct": 19
+      }
+    ]
+  },
+  {
+    "id": "baku",
+    "nameJa": "バクー",
+    "nameEn": "Baku",
+    "country": "AZ",
+    "countryJa": "アゼルバイジャン",
+    "region": "russia_central_asia",
+    "lat": 40.41,
+    "lon": 49.87,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "油田の油井と絨毯市場。風の都は石油の匂いがする。",
+    "properties": [
+      {
+        "id": "baku-1",
+        "name": "油田の油井",
+        "industry": "energy",
+        "price": 740,
+        "yieldPct": 5
+      },
+      {
+        "id": "baku-2",
+        "name": "絨毯市場",
+        "industry": "media",
+        "price": 70,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "tbilisi",
+    "nameJa": "トビリシ",
+    "nameEn": "Tbilisi",
+    "country": "GE",
+    "countryJa": "ジョージア",
+    "region": "russia_central_asia",
+    "lat": 41.72,
+    "lon": 44.79,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "温泉街ホテルとワイン醸造。8,000年の醸造史を観光化。",
+    "properties": [
+      {
+        "id": "tbilisi-1",
+        "name": "温泉街ホテル",
+        "industry": "tourism",
+        "price": 75,
+        "yieldPct": 15
+      },
+      {
+        "id": "tbilisi-2",
+        "name": "ワイン醸造",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 48
+      }
+    ]
+  },
+  {
+    "id": "yerevan",
+    "nameJa": "エレバン",
+    "nameEn": "Yerevan",
+    "country": "AM",
+    "countryJa": "アルメニア",
+    "region": "russia_central_asia",
+    "lat": 40.18,
+    "lon": 44.51,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ブランデー蒸留所とITアウトソース。石の街からコードが出荷される。",
+    "properties": [
+      {
+        "id": "yerevan-1",
+        "name": "ブランデー蒸留所",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 46
+      },
+      {
+        "id": "yerevan-2",
+        "name": "ITアウトソース",
+        "industry": "tech",
+        "price": 210,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "cairo",
+    "nameJa": "カイロ",
+    "nameEn": "Cairo",
+    "country": "EG",
+    "countryJa": "エジプト",
+    "region": "africa",
+    "lat": 30.04,
+    "lon": 31.24,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "pyramids",
+    "blurb": "ピラミッドとナイル川と運河通行料。古代の王も現代の会計も石でできている。",
+    "properties": [
+      {
+        "id": "cairo-1",
+        "name": "ピラミッド観光",
+        "industry": "tourism",
+        "price": 250,
+        "yieldPct": 10
+      },
+      {
+        "id": "cairo-2",
+        "name": "ナイル川クルーズ",
+        "industry": "shipping",
+        "price": 140,
+        "yieldPct": 11
+      },
+      {
+        "id": "cairo-3",
+        "name": "綿花取引",
+        "industry": "agri",
+        "price": 25,
+        "yieldPct": 57
+      },
+      {
+        "id": "cairo-4",
+        "name": "運河通行料徴収窓口",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4.5
+      }
+    ]
+  },
+  {
+    "id": "casablanca",
+    "nameJa": "カサブランカ",
+    "nameEn": "Casablanca",
+    "country": "MA",
+    "countryJa": "モロッコ",
+    "region": "africa",
+    "lat": 33.57,
+    "lon": -7.59,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "港湾物流とリン酸塩と映画スタジオ。雨の夜の別れも撮影対象。",
+    "properties": [
+      {
+        "id": "casablanca-1",
+        "name": "港湾物流",
+        "industry": "shipping",
+        "price": 210,
+        "yieldPct": 9
+      },
+      {
+        "id": "casablanca-2",
+        "name": "リン酸塩鉱山",
+        "industry": "energy",
+        "price": 480,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "casablanca-3",
+        "name": "映画スタジオ",
+        "industry": "media",
+        "price": 120,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "marrakech",
+    "nameJa": "マラケシュ",
+    "nameEn": "Marrakech",
+    "country": "MA",
+    "countryJa": "モロッコ",
+    "region": "africa",
+    "lat": 31.63,
+    "lon": -8.01,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "スークの迷宮とリヤド宿。迷子になるほど土産を買う。",
+    "properties": [
+      {
+        "id": "marrakech-1",
+        "name": "スーク迷宮ツアー",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 15
+      },
+      {
+        "id": "marrakech-2",
+        "name": "リヤド宿",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "dakar",
+    "nameJa": "ダカール",
+    "nameEn": "Dakar",
+    "country": "SN",
+    "countryJa": "セネガル",
+    "region": "africa",
+    "lat": 14.72,
+    "lon": -17.47,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "漁港とフェスティバル。大西洋の波が音楽と魚を運ぶ。",
+    "properties": [
+      {
+        "id": "dakar-1",
+        "name": "漁港",
+        "industry": "agri",
+        "price": 22,
+        "yieldPct": 59
+      },
+      {
+        "id": "dakar-2",
+        "name": "フェスティバル会場",
+        "industry": "media",
+        "price": 55,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "accra",
+    "nameJa": "アクラ",
+    "nameEn": "Accra",
+    "country": "GH",
+    "countryJa": "ガーナ",
+    "region": "africa",
+    "lat": 5.6,
+    "lon": -0.19,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "カカオ輸出と携帯マネー。チョコより通話料の方が高い。",
+    "properties": [
+      {
+        "id": "accra-1",
+        "name": "カカオ輸出",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 63
+      },
+      {
+        "id": "accra-2",
+        "name": "携帯マネー",
+        "industry": "tech",
+        "price": 230,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "lagos",
+    "nameJa": "ラゴス",
+    "nameEn": "Lagos",
+    "country": "NG",
+    "countryJa": "ナイジェリア",
+    "region": "africa",
+    "lat": 6.52,
+    "lon": 3.38,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "Nollywoodと石油と屋台。渋滞の中で映画と経済が同時に回る。",
+    "properties": [
+      {
+        "id": "lagos-1",
+        "name": "Nollywood撮影所",
+        "industry": "media",
+        "price": 180,
+        "yieldPct": 15
+      },
+      {
+        "id": "lagos-2",
+        "name": "石油ターミナル",
+        "industry": "energy",
+        "price": 800,
+        "yieldPct": 5
+      },
+      {
+        "id": "lagos-3",
+        "name": "屋台フード帝国",
+        "industry": "food",
+        "price": 17,
+        "yieldPct": 64
+      },
+      {
+        "id": "lagos-4",
+        "name": "携帯通信塔",
+        "industry": "tech",
+        "price": 280,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "nairobi",
+    "nameJa": "ナイロビ",
+    "nameEn": "Nairobi",
+    "country": "KE",
+    "countryJa": "ケニア",
+    "region": "africa",
+    "lat": -1.29,
+    "lon": 36.82,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "landmark": "kilimanjaro",
+    "blurb": "サファリとモバイル決済と花卉。キリマンジャロは隣国の看板。",
+    "properties": [
+      {
+        "id": "nairobi-1",
+        "name": "サファリ・ツアー",
+        "industry": "tourism",
+        "price": 200,
+        "yieldPct": 13
+      },
+      {
+        "id": "nairobi-2",
+        "name": "モバイル決済",
+        "industry": "tech",
+        "price": 380,
+        "yieldPct": 10
+      },
+      {
+        "id": "nairobi-3",
+        "name": "花卉栽培",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 66
+      }
+    ]
+  },
+  {
+    "id": "addis-ababa",
+    "nameJa": "アディスアベバ",
+    "nameEn": "Addis Ababa",
+    "country": "ET",
+    "countryJa": "エチオピア",
+    "region": "africa",
+    "lat": 9.03,
+    "lon": 38.74,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "コーヒー発祥センターと中国製鉄道。香り高き近代化が進む。",
+    "properties": [
+      {
+        "id": "addis-ababa-1",
+        "name": "コーヒー発祥センター",
+        "industry": "food",
+        "price": 29,
+        "yieldPct": 48
+      },
+      {
+        "id": "addis-ababa-2",
+        "name": "中国製鉄道",
+        "industry": "shipping",
+        "price": 130,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "cape-town",
+    "nameJa": "ケープタウン",
+    "nameEn": "Cape Town",
+    "country": "ZA",
+    "countryJa": "南アフリカ",
+    "region": "africa",
+    "lat": -33.92,
+    "lon": 18.42,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "landmark": "table_mountain",
+    "blurb": "ワインとテーブルマウンテンと修繕ドック。絶景に保険をかける。",
+    "properties": [
+      {
+        "id": "cape-town-1",
+        "name": "ワイナリー",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 44
+      },
+      {
+        "id": "cape-town-2",
+        "name": "テーブルマウンテン・ロープウェイ",
+        "industry": "tourism",
+        "price": 180,
+        "yieldPct": 13
+      },
+      {
+        "id": "cape-town-3",
+        "name": "港の修繕ドック",
+        "industry": "shipping",
+        "price": 170,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "johannesburg",
+    "nameJa": "ヨハネスブルグ",
+    "nameEn": "Johannesburg",
+    "country": "ZA",
+    "countryJa": "南アフリカ",
+    "region": "africa",
+    "lat": -26.2,
+    "lon": 28.05,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "金鉱山とタウンシップツアーと電力公社。停電の間も金は光る。",
+    "properties": [
+      {
+        "id": "johannesburg-1",
+        "name": "金鉱山",
+        "industry": "energy",
+        "price": 900,
+        "yieldPct": 4.5
+      },
+      {
+        "id": "johannesburg-2",
+        "name": "タウンシップ・ツアー",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 14
+      },
+      {
+        "id": "johannesburg-3",
+        "name": "電力公社",
+        "industry": "energy",
+        "price": 600,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "durban",
+    "nameJa": "ダーバン",
+    "nameEn": "Durban",
+    "country": "ZA",
+    "countryJa": "南アフリカ",
+    "region": "africa",
+    "lat": -29.86,
+    "lon": 31.02,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "港湾コンテナとカレー食堂。インド洋の香辛料が積み荷になる。",
+    "properties": [
+      {
+        "id": "durban-1",
+        "name": "港湾コンテナ",
+        "industry": "shipping",
+        "price": 190,
+        "yieldPct": 9
+      },
+      {
+        "id": "durban-2",
+        "name": "カレー食堂",
+        "industry": "food",
+        "price": 18,
+        "yieldPct": 47
+      }
+    ]
+  },
+  {
+    "id": "windhoek",
+    "nameJa": "ウィントフック",
+    "nameEn": "Windhoek",
+    "country": "NA",
+    "countryJa": "ナミビア",
+    "region": "africa",
+    "lat": -22.56,
+    "lon": 17.08,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "砂漠ロッジとウラン鉱。何もない景色が最も高く売れる。",
+    "properties": [
+      {
+        "id": "windhoek-1",
+        "name": "砂漠ロッジ",
+        "industry": "tourism",
+        "price": 85,
+        "yieldPct": 15
+      },
+      {
+        "id": "windhoek-2",
+        "name": "ウラン鉱",
+        "industry": "energy",
+        "price": 550,
+        "yieldPct": 5.5
+      }
+    ]
+  },
+  {
+    "id": "harare",
+    "nameJa": "ハラレ",
+    "nameEn": "Harare",
+    "country": "ZW",
+    "countryJa": "ジンバブエ",
+    "region": "africa",
+    "lat": -17.83,
+    "lon": 31.05,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "ハイパーインフレ博物館とタバコ農園。紙幣の歴史が観光資源。",
+    "properties": [
+      {
+        "id": "harare-1",
+        "name": "ハイパーインフレ博物館",
+        "industry": "media",
+        "price": 40,
+        "yieldPct": 22
+      },
+      {
+        "id": "harare-2",
+        "name": "タバコ農園",
+        "industry": "agri",
+        "price": 25,
+        "yieldPct": 60
+      }
+    ]
+  },
+  {
+    "id": "dar-es-salaam",
+    "nameJa": "ダルエスサラーム",
+    "nameEn": "Dar es Salaam",
+    "country": "TZ",
+    "countryJa": "タンザニア",
+    "region": "africa",
+    "lat": -6.79,
+    "lon": 39.21,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "港湾物流とスパイス市場。インド洋の風がカレーの匂いを運ぶ。",
+    "properties": [
+      {
+        "id": "dar-es-salaam-1",
+        "name": "港湾物流",
+        "industry": "shipping",
+        "price": 160,
+        "yieldPct": 10
+      },
+      {
+        "id": "dar-es-salaam-2",
+        "name": "スパイス市場",
+        "industry": "food",
+        "price": 15,
+        "yieldPct": 58
+      }
+    ]
+  },
+  {
+    "id": "kinshasa",
+    "nameJa": "キンシャサ",
+    "nameEn": "Kinshasa",
+    "country": "CD",
+    "countryJa": "コンゴ民主共和国",
+    "region": "africa",
+    "lat": -4.44,
+    "lon": 15.27,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "コバルト鉱山と川港。バッテリーの未来が泥の道から出荷される。",
+    "properties": [
+      {
+        "id": "kinshasa-1",
+        "name": "コバルト鉱山",
+        "industry": "energy",
+        "price": 850,
+        "yieldPct": 5
+      },
+      {
+        "id": "kinshasa-2",
+        "name": "川港",
+        "industry": "shipping",
+        "price": 100,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "tunis",
+    "nameJa": "チュニス",
+    "nameEn": "Tunis",
+    "country": "TN",
+    "countryJa": "チュニジア",
+    "region": "africa",
+    "lat": 36.81,
+    "lon": 10.18,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "古代遺跡ツアーとオリーブオイル。地中海の歴史を瓶詰めにする。",
+    "properties": [
+      {
+        "id": "tunis-1",
+        "name": "古代遺跡ツアー",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 16
+      },
+      {
+        "id": "tunis-2",
+        "name": "オリーブオイル",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 50
+      }
+    ]
+  },
+  {
+    "id": "new-york",
+    "nameJa": "ニューヨーク",
+    "nameEn": "New York",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 40.71,
+    "lon": -74.01,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "statue_liberty",
+    "blurb": "ウォール街の紙吹雪と24時間ベーグル。自由の女神は広告塔になった。",
+    "properties": [
+      {
+        "id": "new-york-1",
+        "name": "ウォール街の紙吹雪工場",
+        "industry": "finance",
+        "price": 3000,
+        "yieldPct": 2.8
+      },
+      {
+        "id": "new-york-2",
+        "name": "24時間ベーグル帝国",
+        "industry": "food",
+        "price": 29,
+        "yieldPct": 38
+      },
+      {
+        "id": "new-york-3",
+        "name": "ブロードウェイ切符転売",
+        "industry": "media",
+        "price": 290,
+        "yieldPct": 12
+      },
+      {
+        "id": "new-york-4",
+        "name": "高層ペントハウス",
+        "industry": "finance",
+        "price": 2200,
+        "yieldPct": 3.2
+      },
+      {
+        "id": "new-york-5",
+        "name": "ハドソンヤード広告塔",
+        "industry": "media",
+        "price": 300,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "los-angeles",
+    "nameJa": "ロサンゼルス",
+    "nameEn": "Los Angeles",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 34.05,
+    "lon": -118.24,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "blurb": "ハリウッドの夢と渋滞と山火事再保険。夢の値段は燃えやすい。",
+    "properties": [
+      {
+        "id": "los-angeles-1",
+        "name": "ハリウッド夢工場",
+        "industry": "media",
+        "price": 280,
+        "yieldPct": 11
+      },
+      {
+        "id": "los-angeles-2",
+        "name": "渋滞カーナビ保険",
+        "industry": "tech",
+        "price": 650,
+        "yieldPct": 6
+      },
+      {
+        "id": "los-angeles-3",
+        "name": "ビーチ沿いタコス帝国",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 42
+      },
+      {
+        "id": "los-angeles-4",
+        "name": "山火事再保険",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 4.5
+      }
+    ]
+  },
+  {
+    "id": "san-francisco",
+    "nameJa": "サンフランシスコ",
+    "nameEn": "San Francisco",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 37.77,
+    "lon": -122.42,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "golden_gate",
+    "blurb": "AIスタートアップと空きオフィスと霧。橋の向こうに別の家賃がある。",
+    "properties": [
+      {
+        "id": "san-francisco-1",
+        "name": "ゴールデンゲート橋通行料",
+        "industry": "shipping",
+        "price": 210,
+        "yieldPct": 8
+      },
+      {
+        "id": "san-francisco-2",
+        "name": "AIスタートアップ孵化器",
+        "industry": "tech",
+        "price": 1400,
+        "yieldPct": 6
+      },
+      {
+        "id": "san-francisco-3",
+        "name": "サワードウ・ベーカリー",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 44
+      },
+      {
+        "id": "san-francisco-4",
+        "name": "空きオフィス転貸屋",
+        "industry": "finance",
+        "price": 800,
+        "yieldPct": 4
+      }
+    ]
+  },
+  {
+    "id": "seattle",
+    "nameJa": "シアトル",
+    "nameEn": "Seattle",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 47.61,
+    "lon": -122.33,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "航空機とコーヒーとクラウド。雨の日もデータセンターは乾いている。",
+    "properties": [
+      {
+        "id": "seattle-1",
+        "name": "航空機組み立て城",
+        "industry": "industry",
+        "price": 300,
+        "yieldPct": 9
+      },
+      {
+        "id": "seattle-2",
+        "name": "コーヒー帝国本社",
+        "industry": "food",
+        "price": 29,
+        "yieldPct": 36
+      },
+      {
+        "id": "seattle-3",
+        "name": "クラウド大手データセンター",
+        "industry": "tech",
+        "price": 1300,
+        "yieldPct": 6
+      }
+    ]
+  },
+  {
+    "id": "chicago",
+    "nameJa": "シカゴ",
+    "nameEn": "Chicago",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 41.88,
+    "lon": -87.63,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "blurb": "穀物先物とピザと湖畔倉庫。風の街で相場が最も熱い。",
+    "properties": [
+      {
+        "id": "chicago-1",
+        "name": "穀物先物取引所",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4.5
+      },
+      {
+        "id": "chicago-2",
+        "name": "シカゴピザ・チェーン",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 40
+      },
+      {
+        "id": "chicago-3",
+        "name": "高層ビル風力発電",
+        "industry": "energy",
+        "price": 240,
+        "yieldPct": 8
+      },
+      {
+        "id": "chicago-4",
+        "name": "湖畔倉庫",
+        "industry": "shipping",
+        "price": 230,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "miami",
+    "nameJa": "マイアミ",
+    "nameEn": "Miami",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 25.76,
+    "lon": -80.19,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "ビーチコンドとクルーズ船。ハリケーン保険が最も売れる楽園。",
+    "properties": [
+      {
+        "id": "miami-1",
+        "name": "ビーチ・コンド投機",
+        "industry": "finance",
+        "price": 420,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "miami-2",
+        "name": "キューバ風サンドイッチ",
+        "industry": "food",
+        "price": 23,
+        "yieldPct": 46
+      },
+      {
+        "id": "miami-3",
+        "name": "クルーズ船会社",
+        "industry": "shipping",
+        "price": 260,
+        "yieldPct": 10
+      }
+    ]
+  },
+  {
+    "id": "boston",
+    "nameJa": "ボストン",
+    "nameEn": "Boston",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 42.36,
+    "lon": -71.06,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "大学基金とバイオテックとクラムチャウダー。知識が最も高配当。",
+    "properties": [
+      {
+        "id": "boston-1",
+        "name": "大学基金運用基金",
+        "industry": "finance",
+        "price": 950,
+        "yieldPct": 4
+      },
+      {
+        "id": "boston-2",
+        "name": "クラムチャウダー工場",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 41
+      },
+      {
+        "id": "boston-3",
+        "name": "バイオテック研究所",
+        "industry": "tech",
+        "price": 700,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "washington",
+    "nameJa": "ワシントン",
+    "nameEn": "Washington",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 38.9,
+    "lon": -77.04,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "ロビイストと博物館とシンクタンク。政治の副産物が観光名所になる。",
+    "properties": [
+      {
+        "id": "washington-1",
+        "name": "ロビイスト会員制クラブ",
+        "industry": "finance",
+        "price": 600,
+        "yieldPct": 6
+      },
+      {
+        "id": "washington-2",
+        "name": "国立博物館グッズ",
+        "industry": "media",
+        "price": 90,
+        "yieldPct": 15
+      },
+      {
+        "id": "washington-3",
+        "name": "シンクタンク不動産",
+        "industry": "finance",
+        "price": 380,
+        "yieldPct": 6.5
+      }
+    ]
+  },
+  {
+    "id": "houston",
+    "nameJa": "ヒューストン",
+    "nameEn": "Houston",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 29.76,
+    "lon": -95.37,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "石油掘削とBBQと湾岸倉庫。宇宙より地下のパイプが太い。",
+    "properties": [
+      {
+        "id": "houston-1",
+        "name": "石油掘削サービス",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "houston-2",
+        "name": "テキサスBBQ帝国",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 43
+      },
+      {
+        "id": "houston-3",
+        "name": "湾岸倉庫",
+        "industry": "shipping",
+        "price": 200,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "las-vegas",
+    "nameJa": "ラスベガス",
+    "nameEn": "Las Vegas",
+    "country": "US",
+    "countryJa": "アメリカ",
+    "region": "north_america",
+    "lat": 36.17,
+    "lon": -115.14,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "カジノと24時間ウェディングと砂漠ゴルフ。確率だけが砂に埋もれない。",
+    "properties": [
+      {
+        "id": "las-vegas-1",
+        "name": "カジノ・リート",
+        "industry": "tourism",
+        "price": 300,
+        "yieldPct": 12
+      },
+      {
+        "id": "las-vegas-2",
+        "name": "24時間ウェディング教会",
+        "industry": "media",
+        "price": 180,
+        "yieldPct": 14
+      },
+      {
+        "id": "las-vegas-3",
+        "name": "砂漠ゴルフ場",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "toronto",
+    "nameJa": "トロント",
+    "nameEn": "Toronto",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 43.65,
+    "lon": -79.38,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "landmark": "cn_tower",
+    "blurb": "CNタワーと不動産バブルとメープルシロップ。湖の向こうは別の国。",
+    "properties": [
+      {
+        "id": "toronto-1",
+        "name": "CNタワー展望ビジネス",
+        "industry": "tourism",
+        "price": 200,
+        "yieldPct": 12
+      },
+      {
+        "id": "toronto-2",
+        "name": "不動産バブル・ファンド",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4
+      },
+      {
+        "id": "toronto-3",
+        "name": "メープルシロップ・カルテル",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 62
+      },
+      {
+        "id": "toronto-4",
+        "name": "フィンテック・スタジオ",
+        "industry": "tech",
+        "price": 450,
+        "yieldPct": 7
+      }
+    ]
+  },
+  {
+    "id": "vancouver",
+    "nameJa": "バンクーバー",
+    "nameEn": "Vancouver",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 49.28,
+    "lon": -123.12,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "高級コンドとサーモンと港。山と海の間で家賃だけが登山する。",
+    "properties": [
+      {
+        "id": "vancouver-1",
+        "name": "高級コンドミニアム投機",
+        "industry": "finance",
+        "price": 700,
+        "yieldPct": 4.5
+      },
+      {
+        "id": "vancouver-2",
+        "name": "サーモン缶詰組合",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 56
+      },
+      {
+        "id": "vancouver-3",
+        "name": "港のコンテナ王",
+        "industry": "shipping",
+        "price": 240,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "montreal",
+    "nameJa": "モントリオール",
+    "nameEn": "Montreal",
+    "country": "CA",
+    "countryJa": "カナダ",
+    "region": "north_america",
+    "lat": 45.5,
+    "lon": -73.57,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "ジャズフェスとベーグル。二言語の街で夢も二重計上される。",
+    "properties": [
+      {
+        "id": "montreal-1",
+        "name": "ジャズフェス運営",
+        "industry": "media",
+        "price": 110,
+        "yieldPct": 15
+      },
+      {
+        "id": "montreal-2",
+        "name": "ベーグル職人組合",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 44
+      }
+    ]
+  },
+  {
+    "id": "mexico-city",
+    "nameJa": "メキシコシティ",
+    "nameEn": "Mexico City",
+    "country": "MX",
+    "countryJa": "メキシコ",
+    "region": "central_america",
+    "lat": 19.43,
+    "lon": -99.13,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "blurb": "遺跡の上の大聖堂とタコスと銀鉱山。地盤沈下より株価が高い。",
+    "properties": [
+      {
+        "id": "mexico-city-1",
+        "name": "遺跡上に建つ大聖堂",
+        "industry": "tourism",
+        "price": 220,
+        "yieldPct": 9
+      },
+      {
+        "id": "mexico-city-2",
+        "name": "タコス・タワー帝国",
+        "industry": "food",
+        "price": 19,
+        "yieldPct": 55
+      },
+      {
+        "id": "mexico-city-3",
+        "name": "銀鉱山ファンド",
+        "industry": "energy",
+        "price": 480,
+        "yieldPct": 6
+      },
+      {
+        "id": "mexico-city-4",
+        "name": "汚染マスク・ファッション",
+        "industry": "industry",
+        "price": 90,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "cancun",
+    "nameJa": "カンクン",
+    "nameEn": "Cancun",
+    "country": "MX",
+    "countryJa": "メキシコ",
+    "region": "central_america",
+    "lat": 21.16,
+    "lon": -86.85,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "landmark": "chichen_itza",
+    "blurb": "チチェン・イツァとオールインクルーシブとセノーテ。古代の雨乞いも今はパッケージ。",
+    "properties": [
+      {
+        "id": "cancun-1",
+        "name": "チチェン・イツァ観光パス",
+        "industry": "tourism",
+        "price": 240,
+        "yieldPct": 12
+      },
+      {
+        "id": "cancun-2",
+        "name": "オールインクルーシブ・ホテル",
+        "industry": "tourism",
+        "price": 280,
+        "yieldPct": 10
+      },
+      {
+        "id": "cancun-3",
+        "name": "セノーテ潜水ライセンス",
+        "industry": "tourism",
+        "price": 80,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "havana",
+    "nameJa": "ハバナ",
+    "nameEn": "Havana",
+    "country": "CU",
+    "countryJa": "キューバ",
+    "region": "central_america",
+    "lat": 23.11,
+    "lon": -82.37,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "クラシックカーと葉巻と革命広告。古いものが最も新しい観光資源。",
+    "properties": [
+      {
+        "id": "havana-1",
+        "name": "クラシックカー観光タクシー",
+        "industry": "tourism",
+        "price": 95,
+        "yieldPct": 16
+      },
+      {
+        "id": "havana-2",
+        "name": "葉巻熟成庫",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 50
+      },
+      {
+        "id": "havana-3",
+        "name": "革命広告リノベーション",
+        "industry": "media",
+        "price": 60,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "panama-city",
+    "nameJa": "パナマシティ",
+    "nameEn": "Panama City",
+    "country": "PA",
+    "countryJa": "パナマ",
+    "region": "central_america",
+    "lat": 8.98,
+    "lon": -79.52,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "運河通行料と金融センター。船が通るたびに国庫が太る。",
+    "properties": [
+      {
+        "id": "panama-city-1",
+        "name": "運河通行料徴収所",
+        "industry": "shipping",
+        "price": 300,
+        "yieldPct": 9
+      },
+      {
+        "id": "panama-city-2",
+        "name": "国際金融センター",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 6
+      },
+      {
+        "id": "panama-city-3",
+        "name": "コンテナ港倉庫",
+        "industry": "shipping",
+        "price": 220,
+        "yieldPct": 9
+      }
+    ]
+  },
+  {
+    "id": "puerto-limon",
+    "nameJa": "プエルトリモン",
+    "nameEn": "Puerto Limón",
+    "country": "CR",
+    "countryJa": "コスタリカ",
+    "region": "central_america",
+    "lat": 10,
+    "lon": -83.03,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "バナナとカリブ海クルーズ。港の匂いまで観光資源になる。",
+    "properties": [
+      {
+        "id": "puerto-limon-1",
+        "name": "バナナ輸出組合",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 63
+      },
+      {
+        "id": "puerto-limon-2",
+        "name": "カリブ海クルーズ・ターミナル",
+        "industry": "tourism",
+        "price": 110,
+        "yieldPct": 14
+      },
+      {
+        "id": "puerto-limon-3",
+        "name": "再造林カーボン債",
+        "industry": "energy",
+        "price": 260,
+        "yieldPct": 6.5
+      }
+    ]
+  },
+  {
+    "id": "guatemala-city",
+    "nameJa": "グアテマラシティ",
+    "nameEn": "Guatemala City",
+    "country": "GT",
+    "countryJa": "グアテマラ",
+    "region": "central_america",
+    "lat": 14.63,
+    "lon": -90.51,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "火山コーヒーとマヤ遺跡。噴火しても観光パンフレットは美しい。",
+    "properties": [
+      {
+        "id": "guatemala-city-1",
+        "name": "火山コーヒー農園",
+        "industry": "agri",
+        "price": 25,
+        "yieldPct": 61
+      },
+      {
+        "id": "guatemala-city-2",
+        "name": "マヤ遺跡ツアー",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 16
+      }
+    ]
+  },
+  {
+    "id": "rio-de-janeiro",
+    "nameJa": "リオデジャネイロ",
+    "nameEn": "Rio de Janeiro",
+    "country": "BR",
+    "countryJa": "ブラジル",
+    "region": "south_america",
+    "lat": -22.91,
+    "lon": -43.17,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "sugarloaf",
+    "blurb": "シュガーローフとカーニバルとビーチコンド。山と海の間に投資家が住む。",
+    "properties": [
+      {
+        "id": "rio-de-janeiro-1",
+        "name": "シュガーローフ・ロープウェイ",
+        "industry": "tourism",
+        "price": 230,
+        "yieldPct": 11
+      },
+      {
+        "id": "rio-de-janeiro-2",
+        "name": "カーニバル制作会社",
+        "industry": "media",
+        "price": 260,
+        "yieldPct": 12
+      },
+      {
+        "id": "rio-de-janeiro-3",
+        "name": "ビーチ・コンド投機",
+        "industry": "finance",
+        "price": 500,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "rio-de-janeiro-4",
+        "name": "サンバ学校組合",
+        "industry": "media",
+        "price": 90,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "sao-paulo",
+    "nameJa": "サンパウロ",
+    "nameEn": "São Paulo",
+    "country": "BR",
+    "countryJa": "ブラジル",
+    "region": "south_america",
+    "lat": -23.55,
+    "lon": -46.63,
+    "tier": 1,
+    "port": false,
+    "airport": true,
+    "blurb": "南米最大の金融街とコーヒーとヘリタクシー。渋滞は空から見る。",
+    "properties": [
+      {
+        "id": "sao-paulo-1",
+        "name": "南米最大の金融街",
+        "industry": "finance",
+        "price": 1100,
+        "yieldPct": 4
+      },
+      {
+        "id": "sao-paulo-2",
+        "name": "コーヒー輸出商社",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 57
+      },
+      {
+        "id": "sao-paulo-3",
+        "name": "ヘリタクシー会社",
+        "industry": "shipping",
+        "price": 190,
+        "yieldPct": 12
+      },
+      {
+        "id": "sao-paulo-4",
+        "name": "ストリートアート広告",
+        "industry": "media",
+        "price": 120,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "buenos-aires",
+    "nameJa": "ブエノスアイレス",
+    "nameEn": "Buenos Aires",
+    "country": "AR",
+    "countryJa": "アルゼンチン",
+    "region": "south_america",
+    "lat": -34.6,
+    "lon": -58.38,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "タンゴと牛肉とインフレ対策。紙幣の裏に踊る影が映る。",
+    "properties": [
+      {
+        "id": "buenos-aires-1",
+        "name": "タンゴ劇場",
+        "industry": "media",
+        "price": 150,
+        "yieldPct": 13
+      },
+      {
+        "id": "buenos-aires-2",
+        "name": "アルゼンチン牛ファンド",
+        "industry": "agri",
+        "price": 29,
+        "yieldPct": 54
+      },
+      {
+        "id": "buenos-aires-3",
+        "name": "インフレ対策コインランドリー",
+        "industry": "finance",
+        "price": 200,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "santiago",
+    "nameJa": "サンティアゴ",
+    "nameEn": "Santiago",
+    "country": "CL",
+    "countryJa": "チリ",
+    "region": "south_america",
+    "lat": -33.45,
+    "lon": -70.67,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "銅鉱山とワインとアンデススキー。山の上まで格差が続く。",
+    "properties": [
+      {
+        "id": "santiago-1",
+        "name": "銅鉱山ファンド",
+        "industry": "energy",
+        "price": 700,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "santiago-2",
+        "name": "ワイン輸出組合",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 55
+      },
+      {
+        "id": "santiago-3",
+        "name": "アンデス・スキー場",
+        "industry": "tourism",
+        "price": 120,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "lima",
+    "nameJa": "リマ",
+    "nameEn": "Lima",
+    "country": "PE",
+    "countryJa": "ペルー",
+    "region": "south_america",
+    "lat": -12.05,
+    "lon": -77.04,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "セビーチェと銅鉱山とミイラ観光。海沿いの砂漠に美食の都。",
+    "properties": [
+      {
+        "id": "lima-1",
+        "name": "セビーチェ帝国",
+        "industry": "food",
+        "price": 21,
+        "yieldPct": 52
+      },
+      {
+        "id": "lima-2",
+        "name": "銅・金鉱山",
+        "industry": "energy",
+        "price": 600,
+        "yieldPct": 5.5
+      },
+      {
+        "id": "lima-3",
+        "name": "ミイラ観光ツアー",
+        "industry": "tourism",
+        "price": 85,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "bogota",
+    "nameJa": "ボゴタ",
+    "nameEn": "Bogotá",
+    "country": "CO",
+    "countryJa": "コロンビア",
+    "region": "south_america",
+    "lat": 4.71,
+    "lon": -74.07,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "コーヒーとエメラルドと花輸出。緑の石と赤いバラが同じ倉庫に。",
+    "properties": [
+      {
+        "id": "bogota-1",
+        "name": "コーヒー農園",
+        "industry": "agri",
+        "price": 26,
+        "yieldPct": 60
+      },
+      {
+        "id": "bogota-2",
+        "name": "エメラルド市場",
+        "industry": "finance",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "bogota-3",
+        "name": "花輸出国",
+        "industry": "shipping",
+        "price": 130,
+        "yieldPct": 11
+      }
+    ]
+  },
+  {
+    "id": "quito",
+    "nameJa": "キト",
+    "nameEn": "Quito",
+    "country": "EC",
+    "countryJa": "エクアドル",
+    "region": "south_america",
+    "lat": -0.18,
+    "lon": -78.47,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "赤道記念碑とバラ農園。地球の真ん中で花の値段を決める。",
+    "properties": [
+      {
+        "id": "quito-1",
+        "name": "赤道記念碑",
+        "industry": "tourism",
+        "price": 60,
+        "yieldPct": 17
+      },
+      {
+        "id": "quito-2",
+        "name": "バラ農園",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 59
+      }
+    ]
+  },
+  {
+    "id": "caracas",
+    "nameJa": "カラカス",
+    "nameEn": "Caracas",
+    "country": "VE",
+    "countryJa": "ベネズエラ",
+    "region": "south_america",
+    "lat": 10.48,
+    "lon": -66.9,
+    "tier": 2,
+    "port": false,
+    "airport": true,
+    "blurb": "石油公社とカカオ農園。原油の下でカカオが静かに育つ。",
+    "properties": [
+      {
+        "id": "caracas-1",
+        "name": "石油公社",
+        "industry": "energy",
+        "price": 650,
+        "yieldPct": 5
+      },
+      {
+        "id": "caracas-2",
+        "name": "カカオ農園",
+        "industry": "agri",
+        "price": 24,
+        "yieldPct": 57
+      }
+    ]
+  },
+  {
+    "id": "montevideo",
+    "nameJa": "モンテビデオ",
+    "nameEn": "Montevideo",
+    "country": "UY",
+    "countryJa": "ウルグアイ",
+    "region": "south_america",
+    "lat": -34.9,
+    "lon": -56.16,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "牛肉輸出とリゾートカジノ。落ち着いた国で最も熱い賭け。",
+    "properties": [
+      {
+        "id": "montevideo-1",
+        "name": "牛肉輸出組合",
+        "industry": "agri",
+        "price": 28,
+        "yieldPct": 53
+      },
+      {
+        "id": "montevideo-2",
+        "name": "リゾート・カジノ",
+        "industry": "tourism",
+        "price": 100,
+        "yieldPct": 13
+      }
+    ]
+  },
+  {
+    "id": "la-paz",
+    "nameJa": "ラパス",
+    "nameEn": "La Paz",
+    "country": "BO",
+    "countryJa": "ボリビア",
+    "region": "south_america",
+    "lat": -16.49,
+    "lon": -68.12,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "blurb": "標高3000mのデータセンターとリチウム鉱山。空気は薄いが夢は濃い。",
+    "properties": [
+      {
+        "id": "la-paz-1",
+        "name": "標高3000mデータセンター",
+        "industry": "tech",
+        "price": 220,
+        "yieldPct": 7
+      },
+      {
+        "id": "la-paz-2",
+        "name": "リチウム鉱山",
+        "industry": "energy",
+        "price": 400,
+        "yieldPct": 6.5
+      }
+    ]
+  },
+  {
+    "id": "cusco",
+    "nameJa": "クスコ",
+    "nameEn": "Cusco",
+    "country": "PE",
+    "countryJa": "ペルー",
+    "region": "south_america",
+    "lat": -13.53,
+    "lon": -71.97,
+    "tier": 3,
+    "port": false,
+    "airport": true,
+    "landmark": "machu_picchu",
+    "blurb": "マチュピチュの入場券とアルパカ織物。インカの道は行列になった。",
+    "properties": [
+      {
+        "id": "cusco-1",
+        "name": "マチュピチュ観光パス",
+        "industry": "tourism",
+        "price": 280,
+        "yieldPct": 12
+      },
+      {
+        "id": "cusco-2",
+        "name": "アルパカ毛織物工房",
+        "industry": "industry",
+        "price": 70,
+        "yieldPct": 18
+      }
+    ]
+  },
+  {
+    "id": "sydney",
+    "nameJa": "シドニー",
+    "nameEn": "Sydney",
+    "country": "AU",
+    "countryJa": "オーストラリア",
+    "region": "oceania",
+    "lat": -33.87,
+    "lon": 151.21,
+    "tier": 1,
+    "port": true,
+    "airport": true,
+    "landmark": "harbour_bridge",
+    "blurb": "ハーバーブリッジとオペラハウスと不動産バブル。港の景色が担保になる。",
+    "properties": [
+      {
+        "id": "sydney-1",
+        "name": "ハーバーブリッジ通行料",
+        "industry": "shipping",
+        "price": 250,
+        "yieldPct": 9
+      },
+      {
+        "id": "sydney-2",
+        "name": "オペラハウス興行",
+        "industry": "media",
+        "price": 280,
+        "yieldPct": 11
+      },
+      {
+        "id": "sydney-3",
+        "name": "ボンダイビーチ・カフェ",
+        "industry": "tourism",
+        "price": 160,
+        "yieldPct": 13
+      },
+      {
+        "id": "sydney-4",
+        "name": "不動産バブル・ファンド",
+        "industry": "finance",
+        "price": 900,
+        "yieldPct": 4
+      }
+    ]
+  },
+  {
+    "id": "melbourne",
+    "nameJa": "メルボルン",
+    "nameEn": "Melbourne",
+    "country": "AU",
+    "countryJa": "オーストラリア",
+    "region": "oceania",
+    "lat": -37.81,
+    "lon": 144.96,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "コーヒー文化とメルボルンカップと大洋路。カフェインが経済の燃料。",
+    "properties": [
+      {
+        "id": "melbourne-1",
+        "name": "コーヒー文化帝国",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 45
+      },
+      {
+        "id": "melbourne-2",
+        "name": "メルボルン・カップ馬券",
+        "industry": "media",
+        "price": 180,
+        "yieldPct": 10
+      },
+      {
+        "id": "melbourne-3",
+        "name": "グレートオーシャンロード観光",
+        "industry": "tourism",
+        "price": 130,
+        "yieldPct": 12
+      }
+    ]
+  },
+  {
+    "id": "brisbane",
+    "nameJa": "ブリスベン",
+    "nameEn": "Brisbane",
+    "country": "AU",
+    "countryJa": "オーストラリア",
+    "region": "oceania",
+    "lat": -27.47,
+    "lon": 153.03,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "サンシャインコーストと炭鉱輸出。太陽と石炭が同じ港から出る。",
+    "properties": [
+      {
+        "id": "brisbane-1",
+        "name": "サンシャインコースト・リゾート",
+        "industry": "tourism",
+        "price": 140,
+        "yieldPct": 13
+      },
+      {
+        "id": "brisbane-2",
+        "name": "炭鉱輸出ターミナル",
+        "industry": "energy",
+        "price": 320,
+        "yieldPct": 8
+      }
+    ]
+  },
+  {
+    "id": "perth",
+    "nameJa": "パース",
+    "nameEn": "Perth",
+    "country": "AU",
+    "countryJa": "オーストラリア",
+    "region": "oceania",
+    "lat": -31.95,
+    "lon": 115.86,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "鉄鉱石輸出とクオッカ観光。世界で最も孤独な州都が最も強気。",
+    "properties": [
+      {
+        "id": "perth-1",
+        "name": "鉄鉱石輸出港",
+        "industry": "energy",
+        "price": 380,
+        "yieldPct": 8
+      },
+      {
+        "id": "perth-2",
+        "name": "クオッカ観光公社",
+        "industry": "tourism",
+        "price": 70,
+        "yieldPct": 17
+      }
+    ]
+  },
+  {
+    "id": "auckland",
+    "nameJa": "オークランド",
+    "nameEn": "Auckland",
+    "country": "NZ",
+    "countryJa": "ニュージーランド",
+    "region": "oceania",
+    "lat": -36.85,
+    "lon": 174.76,
+    "tier": 2,
+    "port": true,
+    "airport": true,
+    "blurb": "羊牧場とヨットレンタル。帆の数が人口より多い街。",
+    "properties": [
+      {
+        "id": "auckland-1",
+        "name": "羊牧場ファンド",
+        "industry": "agri",
+        "price": 27,
+        "yieldPct": 56
+      },
+      {
+        "id": "auckland-2",
+        "name": "ヨットレンタル王",
+        "industry": "tourism",
+        "price": 90,
+        "yieldPct": 15
+      }
+    ]
+  },
+  {
+    "id": "suva",
+    "nameJa": "スバ",
+    "nameEn": "Suva",
+    "country": "FJ",
+    "countryJa": "フィジー",
+    "region": "oceania",
+    "lat": -18.14,
+    "lon": 178.44,
+    "tier": 3,
+    "port": true,
+    "airport": true,
+    "blurb": "水リゾートとココナッツ輸出。楽園の水道代は意外に高い。",
+    "properties": [
+      {
+        "id": "suva-1",
+        "name": "フィジー水リゾート",
+        "industry": "tourism",
+        "price": 75,
+        "yieldPct": 16
+      },
+      {
+        "id": "suva-2",
+        "name": "ココナッツ輸出",
+        "industry": "agri",
+        "price": 20,
+        "yieldPct": 62
+      }
+    ]
+  }
+]

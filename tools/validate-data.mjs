@@ -1,0 +1,678 @@
+#!/usr/bin/env node
+/**
+ * validate-data.mjs — validate src/data/*.json against the contract in
+ * src/core/types.ts and docs/DESIGN.md.
+ *
+ * Run: node tools/validate-data.mjs
+ * Missing files are warnings. Invalid content is an error (exit code 1).
+ */
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const DATA_DIR = join(ROOT, 'src/data');
+const MAP_W = 4096;
+const MAP_H = 1909;
+const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const UNDERSCORE_ID = /^[a-z][a-z0-9_]*$/;
+const COLOR = /^#[0-9a-fA-F]{6}$/;
+
+const errors = [];
+const warnings = [];
+const err = (path, message) => errors.push(`${path}: ${message}`);
+const warn = (path, message) => warnings.push(`${path}: ${message}`);
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const isInt = (v) => Number.isInteger(v);
+const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
+const oneOf = (v, values) => values.includes(v);
+
+const INDUSTRIES = ['agri', 'food', 'tourism', 'industry', 'tech', 'finance', 'energy', 'shipping', 'media'];
+const REGIONS = [
+  'east_asia', 'southeast_asia', 'south_asia', 'middle_east', 'europe', 'russia_central_asia',
+  'africa', 'north_america', 'central_america', 'south_america', 'oceania',
+];
+const PERKS = [
+  'none', 'agri_boost', 'tech_boost', 'tourism_boost', 'finance_boost', 'sailor', 'lucky',
+  'tough', 'card_shark', 'haggler', 'pickpocket', 'piper_charm',
+];
+const ROLES = ['hero', 'sidekick', 'villain', 'animal', 'monster', 'royal', 'trickster'];
+const LINE_KEYS = [
+  'select', 'turn', 'buy', 'monopoly', 'goal', 'blue', 'red', 'card',
+  'piper_get', 'piper_hit', 'win', 'lose',
+];
+const WHO = ['self', 'all', 'others', 'richest', 'poorest', 'random_other'];
+const CARD_KINDS = ['move', 'money', 'attack', 'defense', 'special'];
+const SQUARE_KINDS = ['blue', 'red', 'yellow', 'news'];
+const EDGE_MODES = ['rail', 'sea'];
+const EFFECT_OPS = [
+  'cash', 'cash_pct', 'per_property', 'industry_mod', 'price_mod', 'sell',
+  'card', 'move', 'skip', 'piper', 'gamble',
+];
+
+const LANDMARK_CITY = {
+  big_ben: ['london'],
+  eiffel: ['paris'],
+  brandenburg: ['berlin'],
+  colosseum: ['rome'],
+  kremlin: ['moscow'],
+  statue_liberty: ['new-york'],
+  golden_gate: ['san-francisco'],
+  sugarloaf: ['rio-de-janeiro'],
+  pyramids: ['cairo'],
+  taj_mahal: ['agra', 'delhi'],
+  tokyo_tower: ['tokyo'],
+  great_wall: ['beijing'],
+  angkor_wat: ['siem-reap', 'phnom-penh'],
+  machu_picchu: ['cusco', 'lima'],
+  chichen_itza: ['cancun', 'mexico-city'],
+  table_mountain: ['cape-town'],
+  harbour_bridge: ['sydney'],
+  windmill: ['amsterdam'],
+  osaka_castle: ['osaka'],
+  acropolis: ['athens'],
+  cn_tower: ['toronto'],
+  gyeongbokgung: ['seoul'],
+  petra: ['amman'],
+  kilimanjaro: ['nairobi', 'arusha'],
+};
+
+// ---------------------------------------------------------------- DESIGN.md
+const design = readFileSync(join(ROOT, 'docs/DESIGN.md'), 'utf8');
+function designCharacterIds() {
+  const section = design.split('## 7.')[1]?.split('\n## ')[0] ?? '';
+  const ids = [];
+  for (const line of section.split('\n')) {
+    if (!line.startsWith('|') || line.includes('---') || line.includes('シート')) continue;
+    const cell = line.split('|').map((s) => s.trim())[2] ?? '';
+    for (const m of cell.matchAll(/([a-z][a-z0-9_]+)\s+[^,]+/g)) ids.push(m[1]);
+  }
+  return new Set(ids);
+}
+const DESIGN_CHAR_IDS = designCharacterIds();
+
+function designCardIds() {
+  const section = design.split('### 2.5')[1]?.split('### 2.6')[0] ?? '';
+  const ids = [];
+  for (const line of section.split('\n')) {
+    const m = line.match(/^\|\s*`([a-z0-9_]+)`/);
+    if (m) ids.push(m[1]);
+  }
+  return new Set(ids);
+}
+const DESIGN_CARD_IDS = designCardIds();
+
+function designNpcIds() {
+  const line = design.split('\n').find((l) => l.startsWith('NPC（')) ?? '';
+  return new Set([...line.matchAll(/`([a-z0-9_]+)`/g)].map((m) => m[1]).filter((id) => id !== 'npcs.json'));
+}
+const DESIGN_NPC_IDS = designNpcIds();
+
+if (DESIGN_CHAR_IDS.size !== 48) err('docs/DESIGN.md', `parsed ${DESIGN_CHAR_IDS.size} character ids (expected 48)`);
+if (DESIGN_CARD_IDS.size !== 13) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS.size} card ids (expected 13)`);
+if (DESIGN_NPC_IDS.size !== 8) err('docs/DESIGN.md', `parsed ${DESIGN_NPC_IDS.size} NPC ids (expected 8)`);
+
+// ---------------------------------------------------------------- load JSON
+const KNOWN = ['cities.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json'];
+const data = {};
+let jsonFiles = [];
+try {
+  jsonFiles = readdirSync(DATA_DIR).filter((f) => f.endsWith('.json')).sort();
+} catch (e) {
+  err('src/data', `cannot read directory: ${e.message}`);
+}
+for (const file of jsonFiles) {
+  const path = join(DATA_DIR, file);
+  if (!KNOWN.includes(file)) {
+    warn(`src/data/${file}`, 'unrecognised data file (not validated)');
+    continue;
+  }
+  try {
+    data[file] = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (e) {
+    err(`src/data/${file}`, `invalid JSON: ${e.message}`);
+  }
+}
+for (const file of KNOWN) {
+  if (!jsonFiles.includes(file)) warn(`src/data/${file}`, 'missing (warning only)');
+}
+
+const cities = Array.isArray(data['cities.json']) ? data['cities.json'] : null;
+const cityIds = new Set();
+if (cities) for (const c of cities) if (isObj(c) && isStr(c.id)) cityIds.add(c.id);
+
+// ---------------------------------------------------------------- cities
+if (data['cities.json'] !== undefined) {
+  if (!Array.isArray(data['cities.json'])) {
+    err('cities.json', 'must be an array of City');
+  } else {
+    if (cities.length !== 150) err('cities.json', `expected exactly 150 cities, got ${cities.length}`);
+    const seenIds = new Set();
+    const seenPropertyIds = new Set();
+    const seenLandmarks = new Map();
+    const regionCounts = {};
+    let tier1 = 0;
+
+    cities.forEach((c, ci) => {
+      const p = `cities[${ci}]`;
+      if (!isObj(c)) { err(p, 'must be an object'); return; }
+      if (!isStr(c.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (!KEBAB.test(c.id)) err(`${p}.id`, `must be kebab-case ascii, got "${c.id}"`);
+        if (seenIds.has(c.id)) err(`${p}.id`, `duplicate city id "${c.id}"`);
+        seenIds.add(c.id);
+      }
+      for (const key of ['nameJa', 'nameEn', 'countryJa', 'blurb']) {
+        if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
+      }
+      if (isStr(c.blurb) && c.blurb.includes('\n')) err(`${p}.blurb`, 'must be one line');
+      if (!isStr(c.country) || !/^[A-Z]{2}$/.test(c.country)) err(`${p}.country`, 'must be ISO 3166-1 alpha-2 uppercase');
+      if (!oneOf(c.region, REGIONS)) err(`${p}.region`, `invalid region "${c.region}"`);
+      else regionCounts[c.region] = (regionCounts[c.region] || 0) + 1;
+      if (!isNum(c.lat) || c.lat < -56 || c.lat > 80) err(`${p}.lat`, 'must be a finite number in [-56, 80]');
+      if (!isNum(c.lon) || c.lon < -180 || c.lon > 180) err(`${p}.lon`, 'must be a finite number in [-180, 180]');
+      if (isNum(c.lat) && Math.abs(c.lat * 100 - Math.round(c.lat * 100)) > 1e-6) err(`${p}.lat`, 'must have at most 2 decimals');
+      if (isNum(c.lon) && Math.abs(c.lon * 100 - Math.round(c.lon * 100)) > 1e-6) err(`${p}.lon`, 'must have at most 2 decimals');
+      if (![1, 2, 3].includes(c.tier)) err(`${p}.tier`, 'must be 1, 2 or 3');
+      if (c.tier === 1) tier1++;
+      if (typeof c.port !== 'boolean') err(`${p}.port`, 'must be boolean');
+      if (typeof c.airport !== 'boolean') err(`${p}.airport`, 'must be boolean');
+
+      if (c.landmark !== undefined) {
+        if (!isStr(c.landmark)) err(`${p}.landmark`, 'must be a non-empty string when present');
+        else if (!(c.landmark in LANDMARK_CITY)) err(`${p}.landmark`, `"${c.landmark}" is not an allowed landmark id`);
+        else {
+          if (seenLandmarks.has(c.landmark)) err(`${p}.landmark`, `duplicate landmark "${c.landmark}" (already on ${seenLandmarks.get(c.landmark)})`);
+          seenLandmarks.set(c.landmark, isStr(c.id) ? c.id : p);
+          if (!LANDMARK_CITY[c.landmark].includes(c.id)) {
+            err(`${p}.landmark`, `"${c.landmark}" belongs on ${LANDMARK_CITY[c.landmark].join(' or ')}, not "${c.id}"`);
+          }
+        }
+      }
+
+      if (!Array.isArray(c.properties)) {
+        err(`${p}.properties`, 'must be an array');
+      } else {
+        if (c.properties.length < 2 || c.properties.length > 6) {
+          err(`${p}.properties`, `must have 2..6 properties, got ${c.properties.length}`);
+        }
+        const localNames = new Set();
+        c.properties.forEach((pr, pi) => {
+          const pp = `${p}.properties[${pi}]`;
+          if (!isObj(pr)) { err(pp, 'must be an object'); return; }
+          if (!isStr(pr.id)) err(`${pp}.id`, 'must be a non-empty string');
+          else {
+            if (!isStr(c.id) || pr.id !== `${c.id}-${pi + 1}`) {
+              err(`${pp}.id`, `must be "${c.id}-${pi + 1}" (prefix + sequence)`);
+            }
+            if (seenPropertyIds.has(pr.id)) err(`${pp}.id`, `duplicate property id "${pr.id}"`);
+            seenPropertyIds.add(pr.id);
+          }
+          if (!isStr(pr.name)) err(`${pp}.name`, 'must be a non-empty string');
+          else {
+            if (localNames.has(pr.name)) warn(`${pp}.name`, `duplicate property name "${pr.name}" in this city`);
+            localNames.add(pr.name);
+          }
+          if (!oneOf(pr.industry, INDUSTRIES)) err(`${pp}.industry`, `invalid industry "${pr.industry}"`);
+          if (!isNum(pr.price) || pr.price <= 0) err(`${pp}.price`, 'must be a positive number');
+          if (!isNum(pr.yieldPct) || pr.yieldPct <= 0 || pr.yieldPct > 100) err(`${pp}.yieldPct`, 'must be in (0, 100]');
+          // Soft balance check documented in docs/CONTENT.md.
+          if (isNum(pr.price) && isNum(pr.yieldPct)) {
+            if (pr.industry === 'agri' || pr.industry === 'food') {
+              if (pr.price > 30 || pr.price < 1 || pr.yieldPct < 30 || pr.yieldPct > 80) {
+                warn(`${pp}`, 'agri/food normally 1..30億, yield 30..80%');
+              }
+            } else if (['finance', 'tech', 'energy'].includes(pr.industry)) {
+              if (pr.price < 200 || pr.price > 3000 || pr.yieldPct < 2 || pr.yieldPct > 10) {
+                warn(`${pp}`, 'finance/tech/energy normally 200..3000億, yield 2..10%');
+              }
+            } else if (pr.price < 20 || pr.price > 300 || pr.yieldPct < 8 || pr.yieldPct > 25) {
+              warn(`${pp}`, 'tourism/industry/shipping/media normally 20..300億, yield 8..25%');
+            }
+          }
+        });
+      }
+    });
+
+    for (const region of REGIONS) {
+      if (!regionCounts[region]) err('cities.json', `region "${region}" is not represented`);
+    }
+    if ((regionCounts.africa || 0) < 12) err('cities.json', `Africa needs at least 12 cities, got ${regionCounts.africa || 0}`);
+    if ((regionCounts.south_america || 0) < 10) err('cities.json', `South America needs at least 10 cities, got ${regionCounts.south_america || 0}`);
+    if ((regionCounts.oceania || 0) < 5) err('cities.json', `Oceania needs at least 5 cities, got ${regionCounts.oceania || 0}`);
+    const japan = cities.filter((c) => c.country === 'JP').length;
+    if (japan < 10 || japan > 14) warn('cities.json', `Japan should have ~12 cities, got ${japan}`);
+    if (tier1 < 22 || tier1 > 30) warn('cities.json', `tier 1 should be ~25 cities, got ${tier1}`);
+    for (const landmark of Object.keys(LANDMARK_CITY)) {
+      if (!seenLandmarks.has(landmark)) warn('cities.json', `landmark "${landmark}" is not used`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- board
+const boardNodeById = new Map();
+if (data['board.json'] !== undefined) {
+  const b = data['board.json'];
+  if (!isObj(b) || !Array.isArray(b.nodes) || !Array.isArray(b.edges)) {
+    err('board.json', 'must be { nodes: BoardNode[], edges: BoardEdge[] }');
+  } else {
+    const nodeIds = new Set();
+    const cityNodeIds = new Map();
+    const cityNodeCount = new Map();
+    const nodeById = new Map();
+    const squareNodes = [];
+    b.nodes.forEach((n, i) => {
+      const p = `board.nodes[${i}]`;
+      if (!isObj(n)) { err(p, 'must be an object'); return; }
+      if (!isStr(n.id)) { err(`${p}.id`, 'must be a non-empty string'); return; }
+      if (nodeIds.has(n.id)) err(`${p}.id`, `duplicate node id "${n.id}"`);
+      nodeIds.add(n.id);
+      nodeById.set(n.id, n);
+      if (!isNum(n.x) || n.x < 0 || n.x > MAP_W) err(`${p}.x`, 'must be in [0, 4096]');
+      if (!isNum(n.y) || n.y < 0 || n.y > MAP_H) err(`${p}.y`, 'must be in [0, 1909]');
+      if (isNum(n.x) && Math.abs(n.x * 10 - Math.round(n.x * 10)) > 1e-6) err(`${p}.x`, 'must be rounded to 0.1');
+      if (isNum(n.y) && Math.abs(n.y * 10 - Math.round(n.y * 10)) > 1e-6) err(`${p}.y`, 'must be rounded to 0.1');
+      if (n.kind === 'city') {
+        if (!isStr(n.cityId)) err(`${p}.cityId`, 'city node requires cityId');
+        else {
+          if (cityIds.size && !cityIds.has(n.cityId)) err(`${p}.cityId`, `unknown city "${n.cityId}"`);
+          if (n.id !== `c:${n.cityId}`) err(`${p}.id`, `city node id must be "c:${n.cityId}"`);
+          cityNodeCount.set(n.cityId, (cityNodeCount.get(n.cityId) || 0) + 1);
+          cityNodeIds.set(n.id, n.cityId);
+        }
+      } else if (oneOf(n.kind, SQUARE_KINDS)) {
+        if (n.cityId !== undefined) err(`${p}.cityId`, 'square nodes must not have cityId');
+        if (!/^s:\d+$/.test(n.id)) err(`${p}.id`, 'square node id must be "s:<n>"');
+        squareNodes.push(n);
+      } else {
+        err(`${p}.kind`, `invalid node kind "${n.kind}"`);
+      }
+    });
+    if (cityIds.size) {
+      for (const id of cityIds) {
+        const count = cityNodeCount.get(id) || 0;
+        if (count !== 1) err('board.json', `city "${id}" must have exactly one node, got ${count}`);
+      }
+      for (const id of cityNodeCount.keys()) {
+        if (!cityIds.has(id)) err('board.json', `board has node for unknown city "${id}"`);
+      }
+    }
+    if (b.nodes.length < 900) err('board.json', `expected >= 900 nodes, got ${b.nodes.length}`);
+
+    const adj = new Map();
+    for (const id of nodeIds) adj.set(id, []);
+    const edgeKeys = new Set();
+    b.edges.forEach((e, i) => {
+      const p = `board.edges[${i}]`;
+      if (!isObj(e)) { err(p, 'must be an object'); return; }
+      if (!nodeById.has(e.a)) err(`${p}.a`, `unknown node "${e.a}"`);
+      if (!nodeById.has(e.b)) err(`${p}.b`, `unknown node "${e.b}"`);
+      if (e.a === e.b) err(p, 'self-loop edge');
+      if (!oneOf(e.mode, EDGE_MODES)) err(`${p}.mode`, `invalid mode "${e.mode}"`);
+      if (nodeById.has(e.a) && nodeById.has(e.b)) {
+        const key = [e.a, e.b].sort().join('|');
+        if (edgeKeys.has(key)) err(p, `duplicate edge ${e.a} <-> ${e.b}`);
+        edgeKeys.add(key);
+        adj.get(e.a).push(e.b);
+        adj.get(e.b).push(e.a);
+      }
+    });
+    // Every city should be reachable and not isolated.
+    for (const [nodeId, cityId] of cityNodeIds) {
+      if ((adj.get(nodeId) || []).length === 0) err('board.json', `city node ${cityId} is isolated`);
+    }
+    // News squares must not touch each other.
+    for (const e of b.edges) {
+      const na = nodeById.get(e.a), nb = nodeById.get(e.b);
+      if (na?.kind === 'news' && nb?.kind === 'news') err('board.json', `two news squares are adjacent (${e.a} - ${e.b})`);
+    }
+    // Connectivity.
+    if (nodeById.size) {
+      const start = b.nodes.find((n) => nodeById.has(n.id))?.id;
+      const seen = new Set([start]);
+      const queue = [start];
+      for (let q = 0; q < queue.length; q++) {
+        for (const nxt of adj.get(queue[q])) {
+          if (!seen.has(nxt)) { seen.add(nxt); queue.push(nxt); }
+        }
+      }
+      if (seen.size !== nodeById.size) {
+        err('board.json', `graph is disconnected: ${nodeById.size - seen.size} of ${nodeById.size} nodes unreachable`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- land asset
+const LAND_PATH = join(ROOT, 'public/assets/map/land.json');
+if (!existsSync(LAND_PATH)) {
+  warn('public/assets/map/land.json', 'missing (run npm run board)');
+} else {
+  const size = statSync(LAND_PATH).size;
+  if (size > 600 * 1024) err('public/assets/map/land.json', `${(size / 1024).toFixed(1)} KB exceeds 600 KB`);
+  try {
+    const land = JSON.parse(readFileSync(LAND_PATH, 'utf8'));
+    if (!isObj(land) || land.w !== MAP_W || land.h !== MAP_H) err('public/assets/map/land.json', `expected w=${MAP_W}, h=${MAP_H}`);
+    if (!Array.isArray(land.polygons)) err('public/assets/map/land.json', 'polygons must be an array');
+    else {
+      land.polygons.forEach((poly, pi) => {
+        if (!Array.isArray(poly) || poly.length === 0) { err(`land.polygons[${pi}]`, 'must be a non-empty array of rings'); return; }
+        poly.forEach((ring, ri) => {
+          const p = `land.polygons[${pi}][${ri}]`;
+          if (!Array.isArray(ring) || ring.length < 8 || ring.length % 2 !== 0) {
+            err(p, 'must be a flat even-length array of >= 4 points');
+            return;
+          }
+          for (let i = 0; i < ring.length; i += 2) {
+            const x = ring[i], y = ring[i + 1];
+            if (!isNum(x) || !isNum(y)) { err(p, 'coordinates must be finite numbers'); break; }
+            if (x < 0 || x > MAP_W || y < 0 || y > MAP_H) { err(p, `coordinate out of bounds (${x}, ${y})`); break; }
+            if (i >= 2 && Math.abs(x - ring[i - 2]) > MAP_W / 2) { err(p, 'ring jumps across the map seam'); break; }
+          }
+          if (ring[0] !== ring[ring.length - 2] || ring[1] !== ring[ring.length - 1]) err(p, 'ring must be closed');
+        });
+      });
+    }
+  } catch (e) {
+    err('public/assets/map/land.json', `invalid JSON: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------- characters
+let charIds = new Set(DESIGN_CHAR_IDS);
+if (data['characters.json'] !== undefined) {
+  const chars = data['characters.json'];
+  if (!Array.isArray(chars)) {
+    err('characters.json', 'must be an array of Character');
+  } else {
+    const ids = new Set();
+    chars.forEach((c, i) => {
+      const p = `characters[${i}]`;
+      if (!isObj(c)) { err(p, 'must be an object'); return; }
+      if (!isStr(c.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (!UNDERSCORE_ID.test(c.id)) err(`${p}.id`, `must be ascii slug, got "${c.id}"`);
+        if (ids.has(c.id)) err(`${p}.id`, `duplicate character id "${c.id}"`);
+        ids.add(c.id);
+      }
+      for (const key of ['nameJa', 'origin', 'originRegion', 'personality']) {
+        if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
+      }
+      if (!oneOf(c.role, ROLES)) err(`${p}.role`, `invalid role "${c.role}"`);
+      if (!isStr(c.sprite)) err(`${p}.sprite`, 'must be a non-empty public-relative path');
+      else {
+        if (!c.sprite.startsWith('assets/')) err(`${p}.sprite`, 'must be public-relative starting with "assets/"');
+        if (!existsSync(join(ROOT, 'public', c.sprite))) warn(`${p}.sprite`, `file not found: public/${c.sprite}`);
+      }
+      if (!isStr(c.color) || !COLOR.test(c.color)) err(`${p}.color`, 'must be #rrggbb');
+      if (!oneOf(c.perk, PERKS)) err(`${p}.perk`, `invalid perk "${c.perk}"`);
+      validateVoice(c.voice, `${p}.voice`);
+      if (!isObj(c.lines)) err(`${p}.lines`, 'must be an object');
+      else {
+        for (const key of LINE_KEYS) {
+          if (!isStr(c.lines[key])) err(`${p}.lines.${key}`, 'must be a non-empty string');
+        }
+        for (const key of Object.keys(c.lines)) {
+          if (!LINE_KEYS.includes(key)) warn(`${p}.lines.${key}`, 'unknown line key');
+        }
+      }
+    });
+    if (chars.length !== 48) err('characters.json', `expected 48 characters, got ${chars.length}`);
+    for (const id of DESIGN_CHAR_IDS) if (!ids.has(id)) err('characters.json', `missing character id "${id}" from DESIGN.md §7`);
+    for (const id of ids) if (!DESIGN_CHAR_IDS.has(id)) err('characters.json', `unknown character id "${id}" (not in DESIGN.md §7)`);
+    charIds = ids;
+  }
+}
+
+// ---------------------------------------------------------------- npcs
+let npcIds = new Set([...DESIGN_NPC_IDS, 'narrator']);
+if (data['npcs.json'] !== undefined) {
+  const npcs = data['npcs.json'];
+  if (!Array.isArray(npcs)) {
+    err('npcs.json', 'must be an array of NpcDef');
+  } else {
+    const ids = new Set();
+    npcs.forEach((n, i) => {
+      const p = `npcs[${i}]`;
+      if (!isObj(n)) { err(p, 'must be an object'); return; }
+      if (!isStr(n.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (ids.has(n.id)) err(`${p}.id`, `duplicate npc id "${n.id}"`);
+        ids.add(n.id);
+        if (!DESIGN_NPC_IDS.has(n.id) && n.id !== 'narrator') err(`${p}.id`, `"${n.id}" is not a DESIGN.md NPC id`);
+      }
+      if (!isStr(n.nameJa)) err(`${p}.nameJa`, 'must be a non-empty string');
+      if (n.sprite !== undefined) {
+        if (!isStr(n.sprite) || !n.sprite.startsWith('assets/')) err(`${p}.sprite`, 'must be a public-relative path');
+        else if (!existsSync(join(ROOT, 'public', n.sprite))) warn(`${p}.sprite`, `file not found: public/${n.sprite}`);
+      }
+      validateVoice(n.voice, `${p}.voice`);
+    });
+    for (const id of DESIGN_NPC_IDS) if (!ids.has(id)) err('npcs.json', `missing NPC "${id}" from DESIGN.md §7`);
+    if (!ids.has('narrator')) warn('npcs.json', 'narrator entry is missing (narrator lines will be silent)');
+    npcIds = ids;
+  }
+}
+
+// ---------------------------------------------------------------- cards
+let cardIds = new Set(DESIGN_CARD_IDS);
+if (data['cards.json'] !== undefined) {
+  const cards = data['cards.json'];
+  if (!Array.isArray(cards)) {
+    err('cards.json', 'must be an array of CardDef');
+  } else {
+    const ids = new Set();
+    cards.forEach((c, i) => {
+      const p = `cards[${i}]`;
+      if (!isObj(c)) { err(p, 'must be an object'); return; }
+      if (!isStr(c.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (ids.has(c.id)) err(`${p}.id`, `duplicate card id "${c.id}"`);
+        ids.add(c.id);
+        if (!DESIGN_CARD_IDS.has(c.id)) err(`${p}.id`, `"${c.id}" is not a DESIGN.md §2.5 card id`);
+      }
+      for (const key of ['name', 'desc']) if (!isStr(c[key])) err(`${p}.${key}`, 'must be a non-empty string');
+      if (!oneOf(c.kind, CARD_KINDS)) err(`${p}.kind`, `invalid card kind "${c.kind}"`);
+      if (!isNum(c.weight) || c.weight <= 0) err(`${p}.weight`, 'must be a positive number');
+      if (c.needsTarget !== undefined && !['player', 'city', 'airport'].includes(c.needsTarget)) {
+        err(`${p}.needsTarget`, 'must be player, city or airport');
+      }
+    });
+    if (cards.length !== 13) err('cards.json', `expected 13 cards, got ${cards.length}`);
+    for (const id of DESIGN_CARD_IDS) if (!ids.has(id)) err('cards.json', `missing card id "${id}" from DESIGN.md §2.5`);
+    for (const id of ids) if (!DESIGN_CARD_IDS.has(id)) err('cards.json', `unknown card id "${id}"`);
+    cardIds = ids;
+  }
+}
+
+// ---------------------------------------------------------------- events
+if (data['events.json'] !== undefined) {
+  const events = data['events.json'];
+  if (!Array.isArray(events)) {
+    err('events.json', 'must be an array of GameEventDef');
+  } else {
+    const ids = new Set();
+    events.forEach((ev, i) => {
+      const p = `events[${i}]`;
+      if (!isObj(ev)) { err(p, 'must be an object'); return; }
+      if (!isStr(ev.id)) err(`${p}.id`, 'must be a non-empty string');
+      else {
+        if (!KEBAB.test(ev.id)) err(`${p}.id`, `must be kebab-case, got "${ev.id}"`);
+        if (ids.has(ev.id)) err(`${p}.id`, `duplicate event id "${ev.id}"`);
+        ids.add(ev.id);
+      }
+      if (!isStr(ev.title)) err(`${p}.title`, 'must be a non-empty string');
+      if (!['news', 'history', 'fable'].includes(ev.kind)) err(`${p}.kind`, `invalid kind "${ev.kind}"`);
+      if (!isStr(ev.satireNote)) err(`${p}.satireNote`, 'must be a non-empty string');
+      if (!isNum(ev.weight) || ev.weight <= 0) err(`${p}.weight`, 'must be a positive number');
+      if (ev.minYear !== undefined && (!isInt(ev.minYear) || ev.minYear < 1 || ev.minYear > 10)) {
+        err(`${p}.minYear`, 'must be an integer 1..10');
+      }
+      if (ev.once !== undefined && typeof ev.once !== 'boolean') err(`${p}.once`, 'must be boolean');
+      if (ev.image !== undefined && !isStr(ev.image)) err(`${p}.image`, 'must be a public-relative path');
+
+      if (ev.kind === 'news' || ev.kind === 'history') {
+        if (!isStr(ev.fact)) err(`${p}.fact`, 'required for news/history');
+        if (!Array.isArray(ev.sources) || ev.sources.length === 0) err(`${p}.sources`, 'required for news/history');
+      }
+      if (Array.isArray(ev.sources)) {
+        ev.sources.forEach((s, si) => {
+          const sp = `${p}.sources[${si}]`;
+          if (!isObj(s)) { err(sp, 'must be an object'); return; }
+          if (!isStr(s.title)) err(`${sp}.title`, 'must be a non-empty string');
+          if (!isStr(s.url)) err(`${sp}.url`, 'must be a non-empty string');
+          else if (!/^https?:\/\//.test(s.url)) warn(`${sp}.url`, 'should be an http(s) URL');
+          if (s.date !== undefined && !isStr(s.date)) err(`${sp}.date`, 'must be a string');
+        });
+      }
+
+      const validateLines = (lines, lp) => {
+        if (!Array.isArray(lines) || lines.length === 0) { err(lp, 'must be a non-empty array'); return; }
+        lines.forEach((line, li) => {
+          const lpp = `${lp}[${li}]`;
+          if (!isObj(line)) { err(lpp, 'must be an object'); return; }
+          validateSpeaker(line.speaker, `${lpp}.speaker`);
+          if (!isStr(line.text)) err(`${lpp}.text`, 'must be a non-empty string');
+        });
+      };
+      validateLines(ev.lines, `${p}.lines`);
+
+      if (ev.choices !== undefined) {
+        if (!Array.isArray(ev.choices) || ev.choices.length === 0) err(`${p}.choices`, 'must be a non-empty array when present');
+        else {
+          ev.choices.forEach((ch, ci) => {
+            const cp = `${p}.choices[${ci}]`;
+            if (!isObj(ch)) { err(cp, 'must be an object'); return; }
+            if (!isStr(ch.label)) err(`${cp}.label`, 'must be a non-empty string');
+            if (!isStr(ch.detail)) err(`${cp}.detail`, 'must be a non-empty string');
+            if (!Array.isArray(ch.effects) || ch.effects.length === 0) err(`${cp}.effects`, 'must be a non-empty array');
+            else ch.effects.forEach((ef, ei) => validateEffect(ef, `${cp}.effects[${ei}]`));
+            if (ch.reply !== undefined) validateLines(ch.reply, `${cp}.reply`);
+            if (ch.cpuWeight !== undefined && (!isNum(ch.cpuWeight) || ch.cpuWeight < 0)) err(`${cp}.cpuWeight`, 'must be a non-negative number');
+          });
+        }
+      }
+      if (ev.effects !== undefined) {
+        if (!Array.isArray(ev.effects)) err(`${p}.effects`, 'must be an array');
+        else ev.effects.forEach((ef, ei) => validateEffect(ef, `${p}.effects[${ei}]`));
+      }
+      if (ev.choices === undefined && ev.effects === undefined) err(p, 'must have choices or effects');
+    });
+  }
+}
+
+// ---------------------------------------------------------------- effect / speaker validators
+function validateVoice(v, p) {
+  if (!isObj(v)) { err(p, 'must be an object'); return; }
+  if (!isInt(v.speaker)) err(`${p}.speaker`, 'must be an integer VOICEVOX style id');
+  if (!isNum(v.speed) || v.speed <= 0) err(`${p}.speed`, 'must be a positive number');
+  if (!isNum(v.pitch)) err(`${p}.pitch`, 'must be a number');
+  if (!isNum(v.intonation) || v.intonation <= 0) err(`${p}.intonation`, 'must be a positive number');
+}
+
+function validateSpeaker(sp, p) {
+  if (sp === 'narrator') return;
+  if (sp === 'self') { err(p, '"self" is not allowed in events (use Fx say + lineKey)'); return; }
+  if (!isStr(sp)) { err(p, 'must be narrator, char:<id> or npc:<id>'); return; }
+  if (sp.startsWith('char:')) {
+    const id = sp.slice(5);
+    if (!charIds.has(id)) err(p, `unknown character "${id}"`);
+    return;
+  }
+  if (sp.startsWith('npc:')) {
+    const id = sp.slice(4);
+    if (!npcIds.has(id)) err(p, `unknown NPC "${id}"`);
+    return;
+  }
+  err(p, `invalid speaker reference "${sp}"`);
+}
+
+function validateEffect(ef, p, depth = 0) {
+  if (depth > 8) { err(p, 'effect nesting is too deep'); return; }
+  if (!isObj(ef)) { err(p, 'must be an object'); return; }
+  if (!EFFECT_OPS.includes(ef.op)) { err(`${p}.op`, `invalid effect op "${ef.op}"`); return; }
+  const who = (wp) => {
+    if (!oneOf(ef.who, WHO)) err(wp, `invalid who "${ef.who}"`);
+  };
+  const industry = (ip, allowAny = false) => {
+    if (allowAny && ef.industry === 'any') return;
+    if (!oneOf(ef.industry, INDUSTRIES)) err(ip, `invalid industry "${ef.industry}"`);
+  };
+  switch (ef.op) {
+    case 'cash':
+      who(`${p}.who`);
+      if (!isNum(ef.amount)) err(`${p}.amount`, 'must be a number');
+      if (ef.scale !== undefined && typeof ef.scale !== 'boolean') err(`${p}.scale`, 'must be boolean');
+      break;
+    case 'cash_pct':
+      who(`${p}.who`);
+      if (!isNum(ef.pct)) err(`${p}.pct`, 'must be a number');
+      break;
+    case 'per_property':
+      who(`${p}.who`);
+      industry(`${p}.industry`, true);
+      if (!isNum(ef.perProperty)) err(`${p}.perProperty`, 'must be a number');
+      if (ef.scale !== undefined && typeof ef.scale !== 'boolean') err(`${p}.scale`, 'must be boolean');
+      break;
+    case 'industry_mod':
+      industry(`${p}.industry`);
+      if (!isNum(ef.mult) || ef.mult <= 0) err(`${p}.mult`, 'must be a positive number');
+      if (!isInt(ef.years) || ef.years <= 0) err(`${p}.years`, 'must be a positive integer');
+      if (!isStr(ef.label)) err(`${p}.label`, 'must be a non-empty string');
+      break;
+    case 'price_mod':
+      industry(`${p}.industry`);
+      if (!isNum(ef.mult) || ef.mult <= 0) err(`${p}.mult`, 'must be a positive number');
+      break;
+    case 'sell':
+      who(`${p}.who`);
+      industry(`${p}.industry`, true);
+      if (!isInt(ef.count) || ef.count <= 0) err(`${p}.count`, 'must be a positive integer');
+      if (!isNum(ef.priceMult) || ef.priceMult < 0) err(`${p}.priceMult`, 'must be >= 0');
+      break;
+    case 'card':
+      who(`${p}.who`);
+      if (!isStr(ef.card)) err(`${p}.card`, 'must be a card id');
+      else if (!cardIds.has(ef.card)) err(`${p}.card`, `unknown card "${ef.card}"`);
+      if (ef.count !== undefined && (!isInt(ef.count) || ef.count <= 0)) err(`${p}.count`, 'must be a positive integer');
+      break;
+    case 'move': {
+      who(`${p}.who`);
+      const special = ['destination_near', 'random_city', 'nearest_port'];
+      if (!isStr(ef.to)) err(`${p}.to`, 'must be a city id or move keyword');
+      else if (!special.includes(ef.to) && !cityIds.has(ef.to)) {
+        if (cityIds.size) err(`${p}.to`, `unknown city "${ef.to}"`);
+      }
+      break;
+    }
+    case 'skip':
+      who(`${p}.who`);
+      if (!isInt(ef.turns) || ef.turns <= 0) err(`${p}.turns`, 'must be a positive integer');
+      break;
+    case 'piper':
+      if (!oneOf(ef.to, WHO)) err(`${p}.to`, `invalid who "${ef.to}"`);
+      break;
+    case 'gamble':
+      if (!isNum(ef.chance) || ef.chance < 0 || ef.chance > 1) err(`${p}.chance`, 'must be in [0, 1]');
+      if (!Array.isArray(ef.win)) err(`${p}.win`, 'must be an array');
+      else ef.win.forEach((x, i) => validateEffect(x, `${p}.win[${i}]`, depth + 1));
+      if (!Array.isArray(ef.lose)) err(`${p}.lose`, 'must be an array');
+      else ef.lose.forEach((x, i) => validateEffect(x, `${p}.lose[${i}]`, depth + 1));
+      break;
+  }
+}
+
+// ---------------------------------------------------------------- report
+if (warnings.length) {
+  console.log(`warnings (${warnings.length}):`);
+  for (const w of warnings) console.log(`  WARN ${w}`);
+}
+if (errors.length) {
+  console.error(`errors (${errors.length}):`);
+  for (const e of errors) console.error(`  ERR ${e}`);
+  console.error(`\nvalidation failed: ${errors.length} error(s), ${warnings.length} warning(s)`);
+  process.exit(1);
+}
+console.log(`validation OK: ${jsonFiles.length} data file(s), ${warnings.length} warning(s)`);

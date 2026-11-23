@@ -7,49 +7,49 @@
   {
     "id": "piper1",
     "nameJa": "ハーメルンの取り立て屋",
-    "sprite": "assets/npcs/piper1.png",
+    "sprite": "assets/npcs/piper1.webp",
     "voice": { "speaker": 51, "speed": 1, "pitch": -0.02, "intonation": 1 }
   },
   {
     "id": "piper2",
     "nameJa": "ブラック取り立て屋",
-    "sprite": "assets/npcs/piper2.png",
+    "sprite": "assets/npcs/piper2.webp",
     "voice": { "speaker": 87, "speed": 1.05, "pitch": -0.04, "intonation": 1.2 }
   },
   {
     "id": "piper3",
     "nameJa": "キング取り立て屋",
-    "sprite": "assets/npcs/piper3.png",
+    "sprite": "assets/npcs/piper3.webp",
     "voice": { "speaker": 88, "speed": 0.96, "pitch": -0.08, "intonation": 1.3 }
   },
   {
     "id": "owl_anchor",
     "nameJa": "フクロウキャスター",
-    "sprite": "assets/npcs/owl_anchor.png",
+    "sprite": "assets/npcs/owl_anchor.webp",
     "voice": { "speaker": 46, "speed": 1, "pitch": -0.04, "intonation": 1 }
   },
   {
     "id": "tariff_bulldog",
     "nameJa": "関税おじさん",
-    "sprite": "assets/npcs/tariff_bulldog.png",
+    "sprite": "assets/npcs/tariff_bulldog.webp",
     "voice": { "speaker": 87, "speed": 0.95, "pitch": -0.07, "intonation": 1.15 }
   },
   {
     "id": "banker_pig",
     "nameJa": "大きすぎて潰せない銀行ブタ",
-    "sprite": "assets/npcs/banker_pig.png",
+    "sprite": "assets/npcs/banker_pig.webp",
     "voice": { "speaker": 67, "speed": 0.9, "pitch": -0.08, "intonation": 1 }
   },
   {
     "id": "tech_kid",
     "nameJa": "AI長者の天才児（ロボット）",
-    "sprite": "assets/npcs/tech_kid.png",
+    "sprite": "assets/npcs/tech_kid.webp",
     "voice": { "speaker": 106, "speed": 1.2, "pitch": 0.06, "intonation": 1.5 }
   },
   {
     "id": "midas",
     "nameJa": "ミダス王",
-    "sprite": "assets/npcs/midas.png",
+    "sprite": "assets/npcs/midas.webp",
     "voice": { "speaker": 51, "speed": 0.9, "pitch": -0.06, "intonation": 0.95 }
   }
 ]
