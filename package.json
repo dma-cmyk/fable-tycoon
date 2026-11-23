@@ -12,5 +12,18 @@
     "board": "node tools/build-board.mjs",
     "validate": "node tools/validate-data.mjs",
     "voice": "node tools/gen-voice.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "d3-delaunay": "^6.0.6",
+    "d3-geo": "^3.1.2",
+    "topojson-client": "^3.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1",
+    "world-atlas": "^2.0.2"
+  },
+  "dependencies": {
+    "@fontsource/m-plus-rounded-1c": "^5.3.0"
   }
 }
