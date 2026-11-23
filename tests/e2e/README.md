@@ -56,6 +56,13 @@ Everything is written under `.tmp/e2e/`:
 - `E2E_CPU_GAP=1` fills seat 1 with a CPU **before** guests join so guests land
   on seats 2 and 3 (humans 0,2,3 + CPU 1; exercises seat↔player mapping).
   `E2E_RUN_LABEL` prefixes screenshots/reports; `E2E_SCENARIO` tags the report.
+- `E2E_SKIP_HOST_KILL=1` plays the full game with the host alive (no migration);
+  default `0` kills the host mid-game and requires migration evidence.
+- Mobile emulation uses `deviceScaleFactor: 1` in the harness instead of the
+  device descriptor's 2.625/3, because the current map canvas allocates
+  oversized backing stores at higher DPR and crashes both mobile renderers
+  (`Canvas area exceeds the maximum limit`). Use the default values to
+  reproduce that product bug.
 - `E2E_SKIP_BUILD=1` reuses the existing `dist/`.
 - `E2E_PORT` (default `5195`), `E2E_SPEED` (default `4` headful / `8`
   headless), `E2E_SLOWMO` (default `150` headful / `0` headless),

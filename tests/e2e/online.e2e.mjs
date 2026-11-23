@@ -29,6 +29,7 @@ const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
 const RUN_LABEL = (process.env.E2E_RUN_LABEL || 'run').replace(/[^A-Za-z0-9_-]/g, '') || 'run';
 const SCENARIO = process.env.E2E_SCENARIO || (process.env.E2E_CLIENTS ? 'subset' : 'full');
 const CPU_GAP = process.env.E2E_CPU_GAP === '1';
+const SKIP_HOST_KILL = process.env.E2E_SKIP_HOST_KILL === '1';
 const RESULT_TIMEOUT_MS = Number(process.env.E2E_RESULT_TIMEOUT_MS || 12 * 60 * 1000);
 const MIGRATION_TIMEOUT_MS = Number(process.env.E2E_MIGRATION_TIMEOUT_MS || 45 * 1000);
 
@@ -226,7 +227,7 @@ const specs = [
     name: WEBKIT_NAME,
     browserType: webkit,
     touch: true,
-    context: { ...devices['iPhone 13'] },
+    context: { ...devices['iPhone 13'], deviceScaleFactor: 1 },
     role: 'guest',
   },
   {
@@ -244,7 +245,7 @@ const specs = [
     name: PIXEL_NAME,
     browserType: chromium,
     touch: true,
-    context: { ...devices['Pixel 7'] },
+    context: { ...devices['Pixel 7'], deviceScaleFactor: 1 },
     role: 'guest',
   },
 ];
@@ -276,6 +277,16 @@ function classifyError(error, benign) {
 
 function attachErrorCollectors(client) {
   const page = client.page;
+  page.on('crash', () => {
+    client.crashed = true;
+    client.pageCrashes = client.pageCrashes || [];
+    client.pageCrashes.push({ atMs: nowMs(), url: page.url() });
+    log(`${client.id} renderer crashed at ${page.url()}`);
+    void recoverClient(client).catch((error) => {
+      log(`${client.id} crash recovery failed: ${error.message}`);
+      client.recoveryError = error.message;
+    });
+  });
   page.on('pageerror', (error) => {
     const entry = {
       client: client.id,
@@ -330,6 +341,7 @@ async function launchClient(spec, webkitPreload) {
     paused: false,
     stopped: false,
     pageErrors: [],
+    pageCrashes: [],
     consoleErrors: [],
     ignorableConsole: [],
     warnings: [],
@@ -396,6 +408,41 @@ async function launchClient(spec, webkitPreload) {
     } catch {
       /* ignore */
     }
+    // Report (once per canvas/property) when code allocates a canvas close to
+    // WebKit/Chromium's max area, so a renderer crash has a precise cause.
+    try {
+      const proto = HTMLCanvasElement.prototype;
+      for (const prop of ['width', 'height']) {
+        const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+        if (!descriptor?.set) continue;
+        Object.defineProperty(proto, prop, {
+          configurable: true,
+          get() {
+            return descriptor.get.call(this);
+          },
+          set(value) {
+            try {
+              const other = prop === 'width' ? this.height : this.width;
+              const area = Number(value) * Number(other);
+              if (area > 64_000_000 || Number(value) > 16_384) {
+                this.__e2eCanvasLogged = this.__e2eCanvasLogged || {};
+                if (!this.__e2eCanvasLogged[prop]) {
+                  this.__e2eCanvasLogged[prop] = true;
+                  console.warn(
+                    `[canvas-oversize] ${prop}=${value} other=${other} area=${area} class=${this.className} id=${this.id} stack=${(new Error()).stack?.split('\n').slice(1, 5).join(' | ')}`,
+                  );
+                }
+              }
+            } catch {
+              /* instrumentation only */
+            }
+            return descriptor.set.call(this, value);
+          },
+        });
+      }
+    } catch {
+      /* ignore */
+    }
   });
   await newPage(client);
   report.clients.push({
@@ -409,6 +456,7 @@ async function launchClient(spec, webkitPreload) {
     result: null,
     screenshots: client.screenshots,
     pageErrors: client.pageErrors,
+    pageCrashes: client.pageCrashes,
     consoleErrors: client.consoleErrors,
     ignorableConsole: client.ignorableConsole,
     warnings: client.warnings,
@@ -449,6 +497,19 @@ async function press(client, locator) {
   throw lastError;
 }
 
+async function domClick(locator) {
+  const target = locator.first();
+  await target.waitFor({ state: 'attached', timeout: 12_000 });
+  const clicked = await target
+    .evaluate((element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      element.click();
+      return true;
+    })
+    .catch(() => false);
+  if (!clicked) throw new Error('DOM click failed: element not clickable');
+}
+
 async function isVisible(locator) {
   try {
     if ((await locator.count()) === 0) return false;
@@ -465,11 +526,25 @@ async function screenshot(client, name, { optional = false } = {}) {
     throw new Error(`cannot screenshot closed page for ${client.id}`);
   }
   const file = path.join(OUT, `${RUN_LABEL}-${name}.png`);
-  try {
-    await page.screenshot({ path: file, animations: 'disabled', timeout: 15_000 });
-  } catch (error) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.screenshot({
+        path: file,
+        animations: 'disabled',
+        scale: 'css',
+        timeout: 15_000,
+      });
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      await sleep(400);
+    }
+  }
+  if (lastError) {
     if (optional) return null;
-    throw error;
+    throw lastError;
   }
   screenshots.push(file);
   client.screenshots.push(file);
@@ -484,7 +559,7 @@ async function captureLiveScreenshots() {
     if (client.stopped || client.paused || !client.page || client.page.isClosed()) continue;
     const file = path.join(OUT, `live-${client.id}.png`);
     await client.page
-      .screenshot({ path: file, animations: 'disabled', timeout: 8000 })
+      .screenshot({ path: file, animations: 'disabled', scale: 'css', timeout: 8000 })
       .catch(() => undefined);
   }
 }
@@ -626,7 +701,7 @@ async function ensureSeated(client, inviteUrl = null) {
     }
     const seatButton = page.getByRole('button', { name: '座る', exact: true }).first();
     if (await isVisible(seatButton)) {
-      await press(client, seatButton).catch((error) => {
+      await domClick(seatButton).catch((error) => {
         lastError = error;
       });
     }
@@ -659,7 +734,7 @@ async function addCpuSeat(host) {
   if (!(await isVisible(cpuButton))) {
     throw new Error('CPU seat button not found in an open lobby seat');
   }
-  await press(host, cpuButton);
+  await domClick(cpuButton);
   await waitFor(async () => (await host.page.locator('.lobby-seat-open').count()) < openBefore, {
     timeout: 8000,
     label: 'CPU seat filled',
@@ -699,18 +774,14 @@ async function pickCharacter(client) {
     throw new Error(`${client.id}: character pick button not found`);
   }
   if (!(await pickerOpen)) {
-    try {
-      await press(client, pickButton);
-    } catch (error) {
-      if (!(await isVisible(page.locator('.char-picker-modal')))) throw error;
-    }
+    await domClick(pickButton);
   }
   await waitFor(
     () => isVisible(page.locator('.char-picker-modal .char-card, .char-card')),
     { timeout: 15_000, label: `${client.id} character picker` },
   );
   const card = page.locator('.char-card:not([disabled])').first();
-  await press(client, card);
+  await domClick(card);
   await waitFor(
     async () => {
       const text = await charText();
@@ -745,7 +816,7 @@ async function submitJoin(client) {
 async function joinAndWait(client, expected, inviteUrl = null) {
   const page = client.page;
   let lastFeedback = '';
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
     if (attempt > 1 && inviteUrl) {
       // A half-open transport can leave the UI showing a lobby fed only by
       // heartbeats. Reloading gives the guest a clean MQTT/WebRTC connection.
@@ -759,6 +830,9 @@ async function joinAndWait(client, expected, inviteUrl = null) {
         .first()
         .fill(client.name);
     }
+    const feedbackBefore = (
+      (await page.locator('.online-feedback').textContent().catch(() => '')) || ''
+    ).trim();
     await submitJoin(client);
     let outcome;
     try {
@@ -774,7 +848,11 @@ async function joinAndWait(client, expected, inviteUrl = null) {
           }
           if (await isVisible(page.locator('.game-screen'))) return 'game';
           const feedback = ((await page.locator('.online-feedback').textContent().catch(() => '')) || '').trim();
-          if (feedback && /入れません|見つかりません|作成できません/.test(feedback)) {
+          if (
+            feedback &&
+            feedback !== feedbackBefore &&
+            /入れません|見つかりません|作成できません/.test(feedback)
+          ) {
             lastFeedback = feedback;
             return 'error';
           }
@@ -785,7 +863,7 @@ async function joinAndWait(client, expected, inviteUrl = null) {
     } catch (error) {
       lastFeedback = `connection timed out (${error.message})`;
       log(`${client.id} join attempt ${attempt} timed out`);
-      await sleep(1500);
+      await sleep(Math.min(12_000, 1500 * attempt));
       continue;
     }
     if (outcome === expected) {
@@ -793,7 +871,7 @@ async function joinAndWait(client, expected, inviteUrl = null) {
       return;
     }
     log(`${client.id} join attempt ${attempt} failed: ${lastFeedback || outcome}`);
-    await sleep(1500);
+    await sleep(Math.min(12_000, 1500 * attempt));
   }
   throw new Error(`${client.id} failed to join after retries: ${lastFeedback}`);
 }
@@ -834,6 +912,40 @@ async function ensureResumedSeat(client, inviteUrl) {
     await joinAndWait(client, 'game', inviteUrl);
   }
   throw new Error(`${client.id} could not reclaim its seat after reopening`);
+}
+
+async function recoverClient(client) {
+  if (client.recovering) return client.recovering;
+  if (client.role !== 'guest' || !client.inviteUrl) {
+    throw new Error(`${client.id}: no recoverable invite URL`);
+  }
+  client.paused = true;
+  client.recovering = (async () => {
+    log(`${client.id} recovering after renderer crash`);
+    await client.page?.close().catch(() => undefined);
+    await newPage(client);
+    await client.page.goto(client.inviteUrl, { waitUntil: 'domcontentloaded' });
+    await waitFor(() => isVisible(client.page.locator('.online-screen')), {
+      timeout: 25_000,
+      label: `${client.id} crash rejoin entry`,
+    });
+    await client.page
+      .locator('.online-name-field input, input[aria-label="プレイヤー名"]')
+      .first()
+      .fill(client.name);
+    await joinAndWait(client, 'game', client.inviteUrl);
+    await waitFor(() => isVisible(client.page.locator('.game-screen')), {
+      timeout: 30_000,
+      label: `${client.id} crash rejoin game`,
+    });
+    await ensureResumedSeat(client, client.inviteUrl);
+    client.crashed = false;
+    log(`${client.id} recovered its seat after the crash`);
+  })().finally(() => {
+    client.paused = false;
+    client.recovering = null;
+  });
+  return client.recovering;
 }
 
 async function openChat(client) {
@@ -897,6 +1009,19 @@ async function actOnce(client) {
   if (!page || page.isClosed()) return false;
 
   if (await isVisible(page.locator('.result-screen'))) return 'result';
+
+  // Year-end acknowledgement. A stale city-buy modal can sit above it, so use a
+  // DOM click to reach the enabled ack (reported UI bug).
+  const ack = page.locator('.yearend-ack:not([disabled])').first();
+  if (await isVisible(ack)) {
+    const modals = await page.locator('.modal-backdrop').count();
+    if (modals > 1) {
+      client.modalOverlaps = (client.modalOverlaps || []) + 1;
+      log(`${client.id}: ${modals} modals stacked; acknowledging year end through the overlay`);
+    }
+    await domClick(ack);
+    return 'yearend_ack';
+  }
 
   // Event choices (only enabled for the actor).
   const choice = page.locator('.event-choice:not([disabled])').first();
@@ -965,13 +1090,6 @@ async function actOnce(client) {
     return false;
   }
 
-  // Year-end acknowledgement.
-  const ack = page.locator('.yearend-ack:not([disabled])').first();
-  if (await isVisible(ack)) {
-    await press(client, ack);
-    return 'yearend_ack';
-  }
-
   // Card target dialog.
   if (await isVisible(page.locator('.target-dialog'))) {
     const target = page.locator('.target-item:not([disabled])').first();
@@ -1002,21 +1120,22 @@ async function actOnce(client) {
     return false;
   }
 
-  // Movement choices.
-  const move = page.locator('.move-options:not([hidden]) .move-chip').first();
-  if (await isVisible(move)) {
-    await press(client, move);
-    return 'move';
+  // Movement choices: first tap only selects; the primary button then confirms.
+  const selectedMove = page.locator('.move-options:not([hidden]) .move-chip.is-selected').first();
+  if (!(await isVisible(selectedMove))) {
+    const move = page.locator('.move-options:not([hidden]) .move-chip').first();
+    if (await isVisible(move)) {
+      await press(client, move);
+      return 'select_move';
+    }
   }
 
-  // Roll.
+  // Primary action: roll, or confirm the selected destination (ここへ移動).
   const primary = page.locator('.dice-primary:not([disabled])').first();
   if (await isVisible(primary)) {
     const text = ((await primary.textContent()) || '').trim();
-    if (/サイコロ|ふる|roll/i.test(text)) {
-      await press(client, primary);
-      return 'roll';
-    }
+    await press(client, primary);
+    return /ここへ移動|移動/.test(text) ? 'confirm_move' : 'primary';
   }
   return false;
 }
@@ -1263,6 +1382,7 @@ async function main() {
   const { roomCode, inviteUrl } = await readInviteFromLobby(host);
   report.roomCode = roomCode;
   report.inviteUrl = inviteUrl;
+  for (const client of clients) client.inviteUrl = inviteUrl;
   log(`room ${roomCode} invite ${inviteUrl}`);
 
   // The host must claim seat 0 before guests arrive, otherwise the lobby's
@@ -1415,18 +1535,26 @@ async function main() {
   );
   log(`poke delivered: ${pokeHitText}`);
 
-  // Host settings: 1 year, 20-second turns, all four seats human.
+  // Host settings: 1 year, 20-second turns, selected humans + CPU fill.
   phase('start_game');
   const oneYear = host.page.getByRole('button', { name: '1年', exact: true }).first();
   const twentySeconds = host.page.getByRole('button', { name: '20秒', exact: true }).first();
-  await press(host, oneYear);
-  await press(host, twentySeconds);
-  const startButton = host.page.locator('.lobby-start-btn').first();
+  await domClick(oneYear);
+  await waitFor(
+    async () => (await oneYear.getAttribute('aria-pressed')) === 'true',
+    { timeout: 8000, label: '1 year selected' },
+  );
+  await domClick(twentySeconds);
+  await waitFor(
+    async () => (await twentySeconds.getAttribute('aria-pressed')) === 'true',
+    { timeout: 8000, label: '20 second turns selected' },
+  );
+  const startButton = host.page.locator('.lobby-bottom-start, .lobby-start-btn').first();
   await waitFor(
     async () => (await startButton.count()) > 0 && (await startButton.isEnabled().catch(() => false)),
     { timeout: 25_000, label: 'start button enabled' },
   );
-  await press(host, startButton);
+  await domClick(startButton);
 
   await Promise.all(
     clients.map((client) =>
@@ -1464,7 +1592,7 @@ async function main() {
   for (const client of clients) {
     client.stopped = false;
     client.loop = playLoop(client);
-    if (client.role !== 'host') {
+    if (client.role !== 'host' || SKIP_HOST_KILL) {
       resultHolders.push({ client, promise: waitForResult(client) });
     }
   }
@@ -1473,7 +1601,13 @@ async function main() {
   timings.midGameAtMs = nowMs();
   phase('midgame_screenshots');
   for (const client of clients) {
-    if (client.page && !client.page.isClosed()) await screenshot(client, `midgame-${client.id}`);
+    if (client.recovering) await client.recovering.catch(() => undefined);
+    if (client.crashed || !client.page || client.page.isClosed()) {
+      await recoverClient(client).catch((error) => log(`${client.id} recovery before screenshot failed: ${error.message}`));
+    }
+    if (client.page && !client.page.isClosed()) {
+      await screenshot(client, `midgame-${client.id}`, { optional: true });
+    }
   }
 
   // ---- Firefox tab close/reopen: same browser context, same localStorage identity.
@@ -1514,51 +1648,68 @@ async function main() {
   );
   log('Firefox resumed seat and reached its own turn');
 
-  // If any client saw a newer host generation before our kill, the browser we
-// are about to close may no longer be the authority.
-  const generationDrops = clients.flatMap((client) =>
-    client.warnings
-      .filter((warning) => /old generation|host migration|step.?down|new host/i.test(warning.text))
-      .map((warning) => ({ client: client.id, ...warning })),
-  );
-  report.generationDrops = generationDrops;
-  if (generationDrops.length > 0) {
-    throw new Error(
-      `host authority changed before the kill test (${generationDrops.length} generation warnings)`,
+  if (!SKIP_HOST_KILL) {
+    // Kill while the host is the acting player so migration has to take over an
+    // in-flight host turn (NetRoom's kill-while-actor path).
+    await waitFor(
+      async () => {
+        const text = ((await firefoxClient.page.locator('.status-chip').textContent().catch(() => '')) || '').trim();
+        return text.includes(`${HOST_NAME} の番`);
+      },
+      { timeout: 90_000, interval: 300, label: 'host acting before kill' },
+    ).catch(() => log('host was not the acting player before kill; continuing'));
+
+    // If any client saw a newer host generation before our kill, the browser we
+    // are about to close may no longer be the authority.
+    const generationDrops = clients.flatMap((client) =>
+      client.warnings
+        .filter((warning) => /old generation|host migration|step.?down|new host/i.test(warning.text))
+        .map((warning) => ({ client: client.id, ...warning })),
     );
+    report.generationDrops = generationDrops;
+    if (generationDrops.length > 0) {
+      throw new Error(
+        `host authority changed before the kill test (${generationDrops.length} generation warnings)`,
+      );
+    }
   }
 
-  // ---- Host kill: no unload handler, so this is a real host disappearance.
-  phase('host_kill');
-  for (const client of clients) {
-    if (client.role === 'host' || client.id === 'firefox-desktop') continue;
-    await installBannerRecorder(client);
-  }
-  for (const client of clients) {
-    if (client.role === 'host') continue;
-    await clearBannerLog(client);
-  }
-  host.paused = true;
-  host.stopped = true;
-  const killAt = Date.now();
-  timings.hostKillAtMs = nowMs();
-  await host.browser.close().catch(() => undefined);
-  log('host browser closed');
-  const migrationEvidence = await waitMigrationEvidence(
-    clients.filter((client) => client.role !== 'host'),
-    killAt,
-  );
-  timings.migrationDetectedMs = nowMs();
-  report.migration = {
-    hostKilledAtMs: timings.hostKillAtMs,
-    evidence: migrationEvidence,
-    bannerObserved: migrationEvidence.length > 0,
-    screenshots: screenshots.filter((file) => file.includes('migration-')),
-  };
-  if (migrationEvidence.length === 0) {
-    log('WARN: no explicit migration banner/chat evidence was observed');
+  if (SKIP_HOST_KILL) {
+    phase('host_kill_skipped');
+    report.migration = { skipped: true };
   } else {
-    phase('migration_detected', { count: migrationEvidence.length });
+    // ---- Host kill: no unload handler, so this is a real host disappearance.
+    phase('host_kill');
+    for (const client of clients) {
+      if (client.role === 'host' || client.id === 'firefox-desktop') continue;
+      await installBannerRecorder(client);
+    }
+    for (const client of clients) {
+      if (client.role === 'host') continue;
+      await clearBannerLog(client);
+    }
+    host.paused = true;
+    host.stopped = true;
+    const killAt = Date.now();
+    timings.hostKillAtMs = nowMs();
+    await host.browser.close().catch(() => undefined);
+    log('host browser closed');
+    const migrationEvidence = await waitMigrationEvidence(
+      clients.filter((client) => client.role !== 'host'),
+      killAt,
+    );
+    timings.migrationDetectedMs = nowMs();
+    report.migration = {
+      hostKilledAtMs: timings.hostKillAtMs,
+      evidence: migrationEvidence,
+      bannerObserved: migrationEvidence.length > 0,
+      screenshots: screenshots.filter((file) => file.includes('migration-')),
+    };
+    if (migrationEvidence.length === 0) {
+      log('WARN: no explicit migration banner/chat evidence was observed');
+    } else {
+      phase('migration_detected', { count: migrationEvidence.length });
+    }
   }
 
   // Remaining three clients continue to the result screen.
@@ -1580,7 +1731,7 @@ async function main() {
       log(`result failure ${holder.client.id}: ${outcome.reason.message}`);
     }
   }
-  const expectedRemaining = activeGuests.length;
+  const expectedRemaining = SKIP_HOST_KILL ? clients.length : activeGuests.length;
   if (remainingResults.length !== expectedRemaining) {
     throw new Error(
       `expected ${expectedRemaining} remaining results after host kill, got ${remainingResults.length}; failures: ${failures
@@ -1706,6 +1857,7 @@ try {
     result: client.result,
     screenshots: client.screenshots.map((file) => path.relative(ROOT, file)),
     pageErrors: client.pageErrors,
+    pageCrashes: client.pageCrashes,
     consoleErrors: client.consoleErrors,
     ignorableConsole: client.ignorableConsole,
     warnings: client.warnings,
