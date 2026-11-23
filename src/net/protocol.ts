@@ -15,6 +15,8 @@ export interface SeatInfo {
   connected: boolean; // human only
   isHost: boolean;
   autoplay: boolean; // CPU is currently acting for this human (timeout / disconnected)
+  /** Set by the auto-mute rule (≥2 reporters). Additive field: clients may render it as muted. */
+  flagged?: boolean;
 }
 
 export interface RoomSettings {
@@ -73,7 +75,8 @@ export type ClientMsg =
   | { t: 'hello'; v: number; roomId: string; name: string; token?: string } // token = seatToken for reconnect
   | { t: 'take_seat'; index: number }
   | { t: 'leave_seat' }
-  | { t: 'pick_character'; characterId: string }
+  // `seat` is an additive extension: the host may pick a character for a CPU seat in the lobby.
+  | { t: 'pick_character'; characterId: string; seat?: number }
   | { t: 'set_seat'; index: number; kind: 'cpu' | 'open'; cpuLevel?: 1 | 2 | 3 } // host only
   | { t: 'settings'; settings: Partial<RoomSettings> } // host only
   | { t: 'start' } // host only
@@ -96,6 +99,8 @@ export type ServerMsg =
   | { t: 'chat'; line: ChatLine }
   | { t: 'emote'; emote: EmoteEvent } // fire-and-forget; clients may drop if their overlay is busy
   | { t: 'system'; text: string } // 例: "赤ずきん が切断しました（CPU が代行中）"
+  // Additive: auto-mute rule fired. Clients should mute/hide chat+emotes from this seat.
+  | { t: 'flag'; seat: number }
   | { t: 'error'; code: ErrorCode; message: string }
   | { t: 'pong'; at: number; serverNow: number };
 
