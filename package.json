@@ -1,0 +1,16 @@
+{
+  "name": "fable-tycoon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5180",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5181",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "board": "node tools/build-board.mjs",
+    "validate": "node tools/validate-data.mjs",
+    "voice": "node tools/gen-voice.mjs"
+  }
+}
