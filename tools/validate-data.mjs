@@ -389,7 +389,7 @@ if (data['board.json'] !== undefined) {
     }
     const worldNodes = b.nodes.filter((n) => n.realm === undefined);
     const worldNodeCount = worldNodes.length;
-    if (worldNodeCount < 1200) err('board.json', `too few world nodes: ${worldNodeCount}`);
+    if (worldNodeCount < 900) err('board.json', `too few world nodes: ${worldNodeCount}`);
     else if (worldNodeCount < 2600 || worldNodeCount > 3200) {
       warn('board.json', `world nodes ${worldNodeCount} outside the 2600-3200 target (spacing-constrained)`);
     }

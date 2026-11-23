@@ -185,7 +185,115 @@ if (indexMismatch > 0) {
 // ------------------------------------------------------------------ cities
 const cities = JSON.parse(readFileSync(CITY_PATH, 'utf8'));
 if (!Array.isArray(cities) || cities.length === 0) throw new Error('cities.json is empty');
-const projected = cities.map((c) => project(c.lon, c.lat));
+const trueProjected = cities.map((c) => project(c.lon, c.lat));
+let projected = trueProjected.map(([x, y]) => [x, y]);
+
+// Schematic station relaxation: subway/Momotetsu-style spacing on top of the
+// warped geography, with a spring back to the true position and a 220-unit cap.
+function relaxStations(start) {
+  const n = start.length;
+  const pos = start.map(([x, y]) => ({ x, y, ox: x, oy: y }));
+  const need = (i, j) => (cities[i].tier === 1 || cities[j].tier === 1 ? 120 : 100);
+  const relaxLandCache = new Map();
+  const landOK = (x, y, port) => {
+    const key = `${Math.round(x)},${Math.round(y)},${port ? 1 : 0}`;
+    if (relaxLandCache.has(key)) return relaxLandCache.get(key);
+    let ok = isLandAt(x, y);
+    if (!ok && port) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        if (isLandAt(wrapX(x + Math.cos(a) * 25), y + Math.sin(a) * 25)) { ok = true; break; }
+      }
+    }
+    relaxLandCache.set(key, ok);
+    return ok;
+  };
+  let violations = 0;
+  for (let iter = 0; iter < 240; iter++) {
+    const fx = new Float64Array(n), fy = new Float64Array(n);
+    violations = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = wrapDx(pos[i].x, pos[j].x), dy = pos[j].y - pos[i].y;
+        const d = Math.hypot(dx, dy);
+        const want = need(i, j);
+        if (d >= want) continue;
+        violations++;
+        const ux = d > 1e-6 ? dx / d : 0;
+        const uy = d > 1e-6 ? dy / d : 1;
+        const push = (want - d) * 1.35;
+        fx[i] -= ux * push; fy[i] -= uy * push;
+        fx[j] += ux * push; fy[j] += uy * push;
+      }
+    }
+    if (violations === 0) break;
+    for (let i = 0; i < n; i++) {
+      const p = pos[i];
+      fx[i] += (p.ox - p.x) * 0.02;
+      fy[i] += (p.oy - p.y) * 0.02;
+      const stepX = clamp(fx[i], -20, 20), stepY = clamp(fy[i], -20, 20);
+      let nx = p.x + stepX, ny = p.y + stepY;
+      if (!landOK(nx, ny, cities[i].port)) {
+        const len = Math.hypot(stepX, stepY) || 1;
+        let found = false;
+        for (const angle of [0.6, -0.6, 1.2, -1.2]) {
+          const ca = Math.cos(angle), sa = Math.sin(angle);
+          const tx = p.x + (stepX * ca - stepY * sa);
+          const ty = p.y + (stepX * sa + stepY * ca);
+          if (landOK(tx, ty, cities[i].port)) { nx = tx; ny = ty; found = true; break; }
+        }
+        if (!found) { nx = p.x + (p.ox - p.x) * 0.20; ny = p.y + (p.oy - p.y) * 0.20; }
+        if (!landOK(nx, ny, cities[i].port)) { nx = p.x; ny = p.y; }
+      }
+      let dx = wrapDx(p.ox, nx), dy = ny - p.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > 220) { dx = (dx / d) * 220; dy = (dy / d) * 220; }
+      p.x = wrapX(p.ox + dx);
+      p.y = p.oy + dy;
+    }
+  }
+  let maxDisp = 0;
+  for (const p of pos) maxDisp = Math.max(maxDisp, Math.hypot(wrapDx(p.ox, p.x), p.y - p.oy));
+  return { positions: pos.map((p) => [p.x, p.y]), maxDisp, violations };
+}
+
+function regionSpacing(points) {
+  const byRegion = new Map();
+  for (let i = 0; i < cities.length; i++) {
+    let best = Infinity;
+    for (let j = 0; j < cities.length; j++) {
+      if (i === j) continue;
+      const d = Math.hypot(wrapDx(points[i][0], points[j][0]), points[i][1] - points[j][1]);
+      if (d < best) best = d;
+    }
+    const r = cities[i].region;
+    if (!byRegion.has(r)) byRegion.set(r, []);
+    byRegion.get(r).push(best);
+  }
+  const out = new Map();
+  for (const [r, vals] of byRegion) {
+    vals.sort((a, b) => a - b);
+    out.set(r, { min: vals[0], median: vals[Math.floor(vals.length / 2)] });
+  }
+  return out;
+}
+
+const beforeSpacing = regionSpacing(trueProjected);
+const relaxed = relaxStations(trueProjected);
+projected = relaxed.positions;
+const afterSpacing = regionSpacing(projected);
+console.log('station relaxation:');
+for (const region of [...beforeSpacing.keys()].sort()) {
+  const b = beforeSpacing.get(region), a = afterSpacing.get(region);
+  console.log(`  ${region}: NN min/median ${b.min.toFixed(1)}/${b.median.toFixed(1)} -> ${a.min.toFixed(1)}/${a.median.toFixed(1)}`);
+}
+let stationPairsUnder100 = 0;
+for (let i = 0; i < cities.length; i++) {
+  for (let j = i + 1; j < cities.length; j++) {
+    if (Math.hypot(wrapDx(projected[i][0], projected[j][0]), projected[i][1] - projected[j][1]) < 100) stationPairsUnder100++;
+  }
+}
+console.log(`  max displacement ${relaxed.maxDisp.toFixed(1)}, unresolved pair constraints ${relaxed.violations}, station pairs <100: ${stationPairsUnder100}`);
 const cityIndex = new Map(cities.map((c, i) => [c.id, i]));
 
 // ------------------------------------------------------------------ Delaunay
@@ -214,6 +322,23 @@ function edgeLength(i, j) {
   const dx = wrapDx(projected[i][0], projected[j][0]);
   const dy = projected[j][1] - projected[i][1];
   return Math.hypot(dx, dy);
+}
+
+/** Gabriel graph test: no other station inside the circle with diameter ij. */
+function isGabriel(i, j, len) {
+  const ax = projected[i][0], ay = projected[i][1];
+  const bx = ax + wrapDx(ax, projected[j][0]), by = projected[j][1];
+  const l2 = len * len;
+  for (let k = 0; k < cities.length; k++) {
+    if (k === i || k === j) continue;
+    for (const m of [-1, 0, 1]) {
+      const kx = projected[k][0] + m * MAP_W, ky = projected[k][1];
+      const di = (kx - ax) ** 2 + (ky - ay) ** 2;
+      const dj = (kx - bx) ** 2 + (ky - by) ** 2;
+      if (di + dj < l2 - 1e-6) return false;
+    }
+  }
+  return true;
 }
 
 // ------------------------------------------------------------------ sampling / classification
@@ -350,9 +475,9 @@ function passesNearCity(seg) {
       const px = projected[k][0] + m * MAP_W;
       const py = projected[k][1];
       let t = ((px - ax) * dx + (py - ay) * dy) / L2;
-      if (t <= 0.12 || t >= 0.88) continue;
+      if (t <= 0.05 || t >= 0.95) continue;
       t = clamp(t, 0, 1);
-      if (Math.hypot(ax + dx * t - px, ay + dy * t - py) < 0.5) return true;
+      if (Math.hypot(ax + dx * t - px, ay + dy * t - py) < 45) return true;
     }
   }
   return false;
@@ -371,24 +496,44 @@ for (const [i, j] of pairMap.values()) {
 }
 candidates.sort((a, b) => a.len - b.len);
 
-// Keep the Tasman sea graph planar: two curated lanes, not a web of long chords.
-const TASMAN_CITIES = new Set(['sydney', 'melbourne', 'brisbane', 'hobart', 'auckland', 'wellington']);
-const TASMAN_SEA_KEEP = new Set(['auckland|sydney', 'hobart|melbourne']);
 const accepted = [];
 const rejected = [];
-const rejectStats = { short: 0, near: 0, cross: 0, classify: 0, accepted: 0 };
+const cityDegree = new Array(cities.length).fill(0);
+const degreeCap = (i) => (cities[i].tier === 1 ? 5 : 4);
+const rejectStats = { short: 0, gabriel: 0, cap: 0, near: 0, cross: 0, classify: 0, accepted: 0 };
 for (const seg of candidates) {
-  const segPair = [cities[seg.i].id, cities[seg.j].id].sort().join('|');
   if (seg.len < MIN_EDGE) { rejectStats.short++; rejected.push(seg); continue; }
+  if (!isGabriel(seg.i, seg.j, seg.len)) { rejectStats.gabriel++; rejected.push(seg); continue; }
+  if (cityDegree[seg.i] >= degreeCap(seg.i) || cityDegree[seg.j] >= degreeCap(seg.j)) { rejectStats.cap++; rejected.push(seg); continue; }
   if (passesNearCity(seg)) { rejectStats.near++; rejected.push(seg); continue; }
   if (crossesAccepted(seg, accepted)) { rejectStats.cross++; rejected.push(seg); continue; }
   const sample = sampleLand(seg.i, seg.j);
   const mode = classify(seg.i, seg.j, sample);
   if (!mode) { rejectStats.classify++; rejected.push(seg); continue; }
   rejectStats.accepted++;
+  cityDegree[seg.i]++;
+  cityDegree[seg.j]++;
   accepted.push({ ...seg, mode, sample });
 }
 console.log('  candidate reject stats:', rejectStats);
+
+// Clean regional connectors: only short links that pass the same 45-unit and
+// crossing tests, within the degree caps. This is not a dense kNN web.
+let cleanConnectors = 0;
+for (const seg of rejected.slice().sort((a, b) => a.len - b.len)) {
+  if (accepted.length >= 520) break;
+  if (seg.len > 500) continue;
+  if (cityDegree[seg.i] >= degreeCap(seg.i) || cityDegree[seg.j] >= degreeCap(seg.j)) continue;
+  if (passesNearCity(seg) || crossesAccepted(seg, accepted)) continue;
+  const sample = sampleLand(seg.i, seg.j);
+  const mode = classify(seg.i, seg.j, sample);
+  if (!mode) continue;
+  accepted.push({ ...seg, mode, sample });
+  cityDegree[seg.i]++;
+  cityDegree[seg.j]++;
+  cleanConnectors++;
+}
+console.log('  clean regional connectors: +' + cleanConnectors + ' (' + accepted.length + ' city links)');
 
 
 // ------------------------------------------------------------------ connectivity
@@ -530,7 +675,7 @@ for (const [aId, bId, mode] of corridors) {
   if (classified !== mode) {
     throw new Error(`corridor ${aId}-${bId} is not a valid ${mode} (classified ${classified}, land=${sample.landFrac.toFixed(2)})`);
   }
-  if (passesNearCity(seg)) { console.warn(`corridor skipped (passes near city): ${aId}-${bId}`); continue; }
+  // Required sea/land corridors are exempt from the local 45-unit near-station rule.
   // Find existing edges this corridor would cross, then add it and remove those
   // blockers if doing so keeps the graph connected.
   const blockers = [];
@@ -686,52 +831,9 @@ function pruneSeaEdges() {
 }
 pruneSeaEdges();
 
-// Dense regional rail webs: Delaunay plus each city's nearest neighbours gives
-// short commuter-style links without creating ocean shortcuts. This is what
-// keeps the larger board from becoming a chain of dead ends.
-function densifyRail(targetLinks = 800) {
-  if (accepted.length >= targetLinks) return 0;
-  const candidates = new Map();
-  for (const [i, j] of pairMap.values()) {
-    const lo = Math.min(i, j), hi = Math.max(i, j);
-    candidates.set(lo * 100000 + hi, [lo, hi]);
-  }
-  for (let i = 0; i < cities.length; i++) {
-    const near = [];
-    for (let j = 0; j < cities.length; j++) {
-      if (j === i) continue;
-      near.push([j, edgeLength(i, j)]);
-    }
-    near.sort((a, b) => a[1] - b[1]);
-    for (let k = 0; k < 24; k++) {
-      const j = near[k][0];
-      const lo = Math.min(i, j), hi = Math.max(i, j);
-      candidates.set(lo * 100000 + hi, [lo, hi]);
-    }
-  }
-  const list = [...candidates.values()]
-    .map(([i, j]) => ({ i, j, len: edgeLength(i, j) }))
-    .filter((e) => e.len >= MIN_EDGE && e.len <= MAX_EDGE)
-    .sort((a, b) => a.len - b.len);
-  let added = 0;
-  for (const c of list) {
-    if (accepted.length >= targetLinks) break;
-    const key = edgeKey(c.i, c.j);
-    if (edgeSet.has(key)) continue;
-    const ax = projected[c.i][0], ay = projected[c.i][1];
-    const bx = ax + wrapDx(ax, projected[c.j][0]), by = projected[c.j][1];
-    const seg = { i: c.i, j: c.j, len: c.len, ax, ay, bx, by };
-    if (passesNearCity(seg) || crossesAccepted(seg, accepted)) continue;
-    const sample = sampleLand(c.i, c.j);
-    if (classify(c.i, c.j, sample) !== 'rail') continue;
-    accepted.push({ ...seg, mode: 'rail', sample });
-    edgeSet.add(key);
-    added++;
-  }
-  return added;
-}
-const densified = densifyRail(800);
-if (densified) console.log(`  rail densify: +${densified} regional links (${accepted.length} city links)`);
+// Extra city links come only from connectivity repair and protected corridors.
+// (extra regional links are added only by connectivity repair/corridors, not as a dense kNN web)
+
 
 if (!graphConnected()) throw new Error('graph is disconnected after corridor/pruning');
 
@@ -919,6 +1021,17 @@ const farEnough = (x, y, minDist = 60, cityMin = minDist) => {
   }
   return true;
 };
+const farEnoughSquares = (x, y, minDist = 60) => {
+  const cx = Math.floor(x / NODE_CELL), cy = Math.floor(y / NODE_CELL);
+  for (let ix = cx - 1; ix <= cx + 1; ix++) {
+    for (let iy = cy - 1; iy <= cy + 1; iy++) {
+      for (const [px, py, kind] of nodeGrid.get(`${ix},${iy}`) || []) {
+        if (kind === 'square' && Math.hypot(wrapDx(x, px), y - py) < minDist) return false;
+      }
+    }
+  }
+  return true;
+};
 for (const n of nodes) addPlaced(n.x, n.y, 'city');
 
 accepted.sort((a, b) => a.len - b.len);
@@ -952,31 +1065,13 @@ for (const [edgeIndex, e] of accepted.entries()) {
       spot = [px, py];
       break;
     }
-    // In dense clusters, allow a square near a city label rather than dropping it.
-    if (!spot) {
-      for (const t of candidates) {
-        if (t < minT || t > 1 - minT) continue;
-        const rx = round1(wrapX(e.ax + dx * t)), ry = round1(e.ay + dy * t);
-        if (!farEnough(rx, ry, 60, 0)) continue;
-        if (e.mode === 'sea' ? (!isWaterArea(rx, ry) || isLandAt(rx, ry)) : !isLandAt(rx, ry)) continue;
-        spot = [rx, ry];
-        break;
-      }
-    }
-    // Two very close cities get a single square pushed off the line.
+    // Two very close cities get one midpoint square on the straight line, so
+    // the chain stays collinear and cannot create a crossing.
     if (!spot && count === 1 && e.len < 120) {
-      const x0 = wrapX(e.ax + dx * 0.5), y0 = e.ay + dy * 0.5;
-      const len = Math.max(e.len, 1);
-      const nx = -dy / len, ny = dx / len;
-      const h = Math.sqrt(Math.max(0, 62 * 62 - (e.len / 2) ** 2)) + 2;
-      for (const sign of [1, -1]) {
-        const x = round1(wrapX(x0 + nx * h * sign));
-        const y = round1(y0 + ny * h * sign);
-        if (y < 0 || y > MAP_H) continue;
-        if (e.mode === 'sea' ? !isWaterArea(x, y) : !isLandAt(x, y)) continue;
-        if (!farEnough(x, y)) continue;
+      const x = round1(wrapX(e.ax + dx * 0.5));
+      const y = round1(e.ay + dy * 0.5);
+      if (farEnoughSquares(x, y) && (e.mode === 'sea' ? isWaterArea(x, y) : isLandAt(x, y))) {
         spot = [x, y];
-        break;
       }
     }
     if (!spot) { skippedSquares++; continue; }
@@ -987,7 +1082,7 @@ for (const [edgeIndex, e] of accepted.entries()) {
       console.warn(`sea square on land: ${cities[e.i].id}-${cities[e.j].id} (${x},${y})`);
     }
     if (e.mode === 'rail' && !isLandAt(x, y)) railSquaresOnWater++;
-    const rec = { index: records.length, edgeIndex, k, count, x, y, adjacent: k === 0 || k === count - 1, mode: e.mode, edgeCityA: cities[e.i].id, edgeCityB: cities[e.j].id };
+    const rec = { index: records.length, edgeIndex, pos: list.length, k, count, x, y, adjacent: k === 0 || k === count - 1, mode: e.mode, edgeCityA: cities[e.i].id, edgeCityB: cities[e.j].id };
     list.push(rec);
     records.push(rec);
   }
@@ -1057,8 +1152,8 @@ for (const rec of newsCandidates) {
   const idx = rec.index;
   if (kinds[idx] !== null) continue;
   const list = edgeSquares[rec.edgeIndex];
-  const prev = list[rec.k - 1];
-  const next = list[rec.k + 1];
+  const prev = list[rec.pos - 1];
+  const next = list[rec.pos + 1];
   if ((prev && kinds[prev.index] === 'news') || (next && kinds[next.index] === 'news')) continue;
   kinds[idx] = 'news';
   news++;
@@ -1097,71 +1192,57 @@ for (const [edgeIndex, e] of accepted.entries()) {
   edges.push({ a: prevId, b: `c:${cities[e.j].id}`, mode: e.mode });
 }
 
-// Extra short rail junctions between a city and nearby station squares. This
-// raises the number of route choices without inventing non-planar city edges.
-function railLinkOK(ax, ay, bx, by) {
-  const [lon1, lat1] = unproject(ax, ay);
-  const [lon2, lat2] = unproject(bx, by);
-  let dlon = lon2 - lon1;
-  if (dlon > 180) dlon -= 360;
-  if (dlon < -180) dlon += 360;
-  const dlat = lat2 - lat1;
-  const midLat = ((lat1 + lat2) / 2) * Math.PI / 180;
-  const angular = Math.hypot(dlon * Math.cos(midLat), dlat);
-  const n = Math.max(4, Math.ceil(angular / 0.5));
-  let land = 0, waterRun = 0, maxWaterRun = 0;
-  for (let k = 0; k <= n; k++) {
-    const t = k / n;
-    if (isLand(lon1 + dlon * t, lat1 + dlat * t)) { land++; waterRun = 0; }
-    else { waterRun++; if (waterRun > maxWaterRun) maxWaterRun = waterRun; }
-  }
-  return land / (n + 1) >= 0.85 && maxWaterRun <= 1;
-}
-
+// Clean square-to-square loops: short rail links between nearby land squares,
+// never crossing an edge or passing within 45 units of a station.
 {
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const segments = edges.map((e) => ({ ...e, p: nodeById.get(e.a), q: nodeById.get(e.b) }));
-  const usedSquares = new Set();
-  let shortcuts = 0;
-  const attempts = [];
-  for (const rec of records) {
+  const modeByNode = new Map(records.map((r) => [r.id, r.mode]));
+  const squares = nodes.filter((n) => modeByNode.get(n.id) === 'rail');
+  const segments = edges.map((e) => ({ a: e.a, b: e.b, p: nodeById.get(e.a), q: nodeById.get(e.b) }));
+  const nearCity = (x1, y1, x2, y2) => {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
     for (let ci = 0; ci < cities.length; ci++) {
-      if (cities[ci].id === rec.edgeCityA || cities[ci].id === rec.edgeCityB) continue;
       const [cx, cy] = projected[ci];
-      const d = Math.hypot(wrapDx(cx, rec.x), cy - rec.y);
-      if (d > 220) continue;
-      attempts.push({ cityIndex: ci, rec, d });
+      for (const m of [-1, 0, 1]) {
+        const px = cx + m * MAP_W;
+        let t = ((px - x1) * dx + (cy - y1) * dy) / (l2 || 1);
+        if (t <= 0.05 || t >= 0.95) continue;
+        t = clamp(t, 0, 1);
+        if (Math.hypot(x1 + dx * t - px, y1 + dy * t - cy) < 45) return true;
+      }
+    }
+    return false;
+  };
+  const pairs = [];
+  for (let i = 0; i < squares.length; i++) {
+    for (let j = i + 1; j < squares.length; j++) {
+      const d = Math.hypot(wrapDx(squares[i].x, squares[j].x), squares[i].y - squares[j].y);
+      if (d >= 60 && d <= 140) pairs.push([squares[i], squares[j], d]);
     }
   }
-  attempts.sort((a, b) => a.d - b.d);
-  let tried = 0;
-  for (const { cityIndex, rec } of attempts) {
-    if (shortcuts >= 430 || tried++ >= 50000) break;
-    if (usedSquares.has(rec.id)) continue;
-    const [cx, cy] = projected[cityIndex];
-    if (!railLinkOK(cx, cy, rec.x, rec.y)) continue;
-    const cityNode = `c:${cities[cityIndex].id}`;
-    const [x1, y1, x2, y2] = normalizeSeg(cx, cy, rec.x, rec.y);
+  pairs.sort((a, b) => a[2] - b[2]);
+  let loops = 0;
+  for (const [a, b] of pairs) {
+    if (loops >= 30) break;
+    if (nearCity(a.x, a.y, b.x, b.y)) continue;
+    const [x1, y1, x2, y2] = normalizeSeg(a.x, a.y, b.x, b.y);
     let blocked = false;
     for (const seg of segments) {
       if (!seg.p || !seg.q) continue;
-      if (seg.p.id === cityNode || seg.q.id === cityNode || seg.p.id === rec.id || seg.q.id === rec.id) continue;
       const [u1, v1, u2, v2] = normalizeSeg(seg.p.x, seg.p.y, seg.q.x, seg.q.y);
       if (Math.max(u1, u2) < Math.min(x1, x2) || Math.min(u1, u2) > Math.max(x1, x2)) continue;
       if (Math.max(v1, v2) < Math.min(y1, y2) || Math.min(v1, v2) > Math.max(y1, y2)) continue;
-      let hit = false;
       for (const k of [-1, 0, 1]) {
-        if (segIntersect(x1, y1, x2, y2, u1 + k * MAP_W, v1, u2 + k * MAP_W, v2)) { hit = true; break; }
+        if (segIntersect(x1, y1, x2, y2, u1 + k * MAP_W, v1, u2 + k * MAP_W, v2)) { blocked = true; break; }
       }
-      if (hit) { blocked = true; break; }
+      if (blocked) break;
     }
     if (blocked) continue;
-    edges.push({ a: cityNode, b: rec.id, mode: 'rail' });
-    segments.push({ a: cityNode, b: rec.id, p: nodeById.get(cityNode), q: rec });
-    usedSquares.add(rec.id);
-    shortcuts++;
+    edges.push({ a: a.id, b: b.id, mode: 'rail' });
+    segments.push({ a: a.id, b: b.id, p: a, q: b });
+    loops++;
   }
-  if (shortcuts) console.log(`  rail junctions: +${shortcuts} city-square links`);
+  if (loops) console.log(`  clean square loops: +${loops}`);
 }
 
 // ------------------------------------------------------------------ board stats
