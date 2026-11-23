@@ -32,6 +32,16 @@ const CPU_GAP = process.env.E2E_CPU_GAP === '1';
 const SKIP_HOST_KILL = process.env.E2E_SKIP_HOST_KILL === '1';
 const RESULT_TIMEOUT_MS = Number(process.env.E2E_RESULT_TIMEOUT_MS || 12 * 60 * 1000);
 const MIGRATION_TIMEOUT_MS = Number(process.env.E2E_MIGRATION_TIMEOUT_MS || 45 * 1000);
+/**
+ * Mobile emulation DPR: `native` (default) uses the real device descriptor
+ * (iPhone 13: 3, Pixel 7: 2.625). `1` forces deviceScaleFactor 1, which is a
+ * temporary workaround for the map canvas over-allocation crash.
+ */
+const MOBILE_DPR_RAW = (process.env.E2E_MOBILE_DPR || 'native').toLowerCase();
+const MOBILE_DPR = MOBILE_DPR_RAW === '1' ? 1 : MOBILE_DPR_RAW === 'native' ? 'native' : null;
+if (MOBILE_DPR === null) {
+  throw new Error(`E2E_MOBILE_DPR must be "native" or "1" (got "${process.env.E2E_MOBILE_DPR}")`);
+}
 
 const HOST_NAME = 'HostChrome';
 const WEBKIT_NAME = 'WebKitPhone';
@@ -52,6 +62,7 @@ let report = {
   cpuGap: CPU_GAP,
   headful: HEADFUL,
   speed: SPEED,
+  mobileDpr: MOBILE_DPR,
   phases: phaseLog,
   clients: [],
   screenshots,
@@ -227,7 +238,7 @@ const specs = [
     name: WEBKIT_NAME,
     browserType: webkit,
     touch: true,
-    context: { ...devices['iPhone 13'], deviceScaleFactor: 1 },
+    context: mobileContext('iPhone 13'),
     role: 'guest',
   },
   {
@@ -245,10 +256,17 @@ const specs = [
     name: PIXEL_NAME,
     browserType: chromium,
     touch: true,
-    context: { ...devices['Pixel 7'], deviceScaleFactor: 1 },
+    context: mobileContext('Pixel 7'),
     role: 'guest',
   },
 ];
+
+/** Device descriptor as-is, unless E2E_MOBILE_DPR=1 forces DPR 1. */
+function mobileContext(deviceName) {
+  const base = { ...devices[deviceName] };
+  if (MOBILE_DPR === 'native') return base;
+  return { ...base, deviceScaleFactor: MOBILE_DPR };
+}
 
 const CLIENT_FILTER = (process.env.E2E_CLIENTS || '')
   .split(',')
@@ -1362,9 +1380,12 @@ async function main() {
   const firefoxClient = clients.find((client) => client.id === 'firefox-desktop');
   const pixelClient = clients.find((client) => client.id === 'chromium-pixel');
   const activeGuests = clients.filter((client) => client.role === 'guest');
-  const chatSender = webkitClient ?? firefoxClient ?? pixelClient;
-  const chatReceiver = (webkitClient ? firefoxClient : pixelClient) ?? firefoxClient;
-  const pokeTarget = webkitClient ? firefoxClient : pixelClient;
+  const chatSender = activeGuests[0] ?? host;
+  const chatReceiver = activeGuests[1] ?? host;
+  const pokeTarget = activeGuests.find((candidate) => candidate.seat !== chatSender.seat) ?? host;
+  if (activeGuests.length < 2) {
+    log(`only ${activeGuests.length} guest(s); chat/emote/poke checks use the host as peer`);
+  }
   report.webkitOmitted = !webkitClient;
 
   phase('host_create_room');
@@ -1612,7 +1633,10 @@ async function main() {
 
   // ---- Firefox tab close/reopen: same browser context, same localStorage identity.
   phase('firefox_rejoin_start');
-  const firefoxSeatBefore = firefoxClient.seat;
+  const firefoxSeatBefore = firefoxClient?.seat ?? null;
+  if (!firefoxClient) {
+    log('Firefox not selected; skipping close/reopen check');
+  } else {
   await firefoxClient.page.close();
   await sleep(2500);
   firefoxClient.page = null;
@@ -1647,13 +1671,16 @@ async function main() {
     { timeout: 90_000, label: 'Firefox gets a resumed turn' },
   );
   log('Firefox resumed seat and reached its own turn');
+  }
 
   if (!SKIP_HOST_KILL) {
+    const watcher = firefoxClient ?? activeGuests[0] ?? null;
     // Kill while the host is the acting player so migration has to take over an
     // in-flight host turn (NetRoom's kill-while-actor path).
     await waitFor(
       async () => {
-        const text = ((await firefoxClient.page.locator('.status-chip').textContent().catch(() => '')) || '').trim();
+        if (!watcher) return false;
+        const text = ((await watcher.page.locator('.status-chip').textContent().catch(() => '')) || '').trim();
         return text.includes(`${HOST_NAME} の番`);
       },
       { timeout: 90_000, interval: 300, label: 'host acting before kill' },
@@ -1681,7 +1708,7 @@ async function main() {
     // ---- Host kill: no unload handler, so this is a real host disappearance.
     phase('host_kill');
     for (const client of clients) {
-      if (client.role === 'host' || client.id === 'firefox-desktop') continue;
+      if (client.role === 'host') continue;
       await installBannerRecorder(client);
     }
     for (const client of clients) {

@@ -58,11 +58,11 @@ Everything is written under `.tmp/e2e/`:
   `E2E_RUN_LABEL` prefixes screenshots/reports; `E2E_SCENARIO` tags the report.
 - `E2E_SKIP_HOST_KILL=1` plays the full game with the host alive (no migration);
   default `0` kills the host mid-game and requires migration evidence.
-- Mobile emulation uses `deviceScaleFactor: 1` in the harness instead of the
-  device descriptor's 2.625/3, because the current map canvas allocates
-  oversized backing stores at higher DPR and crashes both mobile renderers
-  (`Canvas area exceeds the maximum limit`). Use the default values to
-  reproduce that product bug.
+- `E2E_MOBILE_DPR` selects mobile emulation DPR: `native` (**default**, real
+  device descriptor: iPhone 13 = 3, Pixel 7 = 2.625) or `1`. Use `1` only as a
+  temporary workaround for the map-canvas over-allocation crash
+  (`Canvas area exceeds the maximum limit`), which is reported to the renderer
+  owner; the chosen value is recorded as `mobileDpr` in `report.json`.
 - `E2E_SKIP_BUILD=1` reuses the existing `dist/`.
 - `E2E_PORT` (default `5195`), `E2E_SPEED` (default `4` headful / `8`
   headless), `E2E_SLOWMO` (default `150` headful / `0` headless),
