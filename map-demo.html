@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" href="data:," />
+    <title>MapView dev demo — グローバル寓話大富豪</title>
+    <style>
+      :root {
+        --navy: #152b57;
+        --navy-2: #203c72;
+        --gold: #ffcd33;
+        --cream: #fff7df;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #2da4df; }
+      body { font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif; }
+      #app { position: fixed; inset: 0; }
+      #map { width: 100%; height: 100%; display: block; touch-action: none; }
+      #panel {
+        position: fixed; top: 12px; left: 12px; width: min(420px, calc(100vw - 24px));
+        max-height: calc(100dvh - 24px); overflow: auto;
+        background: linear-gradient(180deg, rgba(21, 43, 87, 0.96), rgba(19, 36, 72, 0.96));
+        color: #fff; border: 3px solid #f4c542; border-radius: 18px;
+        box-shadow: 0 6px 0 rgba(8, 20, 42, 0.45), 0 14px 30px rgba(0, 0, 0, 0.3);
+        padding: 10px 12px 12px; z-index: 10;
+      }
+      #panel h1 {
+        margin: 0 0 2px; font-size: 16px; line-height: 1.2; letter-spacing: 0.02em;
+        color: var(--cream); text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+      }
+      #panel .sub { font-size: 10px; color: #bfe5ff; margin-bottom: 8px; }
+      .row { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0; }
+      button {
+        font-family: inherit; font-size: 11.5px; font-weight: 800; color: #20315a;
+        border: 2px solid #2b3d66; border-radius: 10px; padding: 5px 9px;
+        background: linear-gradient(180deg, #ffffff, #e6f3ff); cursor: pointer;
+        box-shadow: 0 2px 0 rgba(0,0,0,0.22);
+      }
+      button:hover { background: linear-gradient(180deg, #fffbe3, #ffe68f); }
+      button.gold { background: linear-gradient(180deg, #fff27a, #ffc21f); }
+      button.gold:hover { background: linear-gradient(180deg, #fff9b0, #ffd24d); }
+      #emotes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      #emotes button { padding: 5px 2px; font-size: 10.5px; }
+      #status {
+        position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+        max-width: calc(100vw - 24px); padding: 6px 14px; border-radius: 999px;
+        background: rgba(12, 28, 55, 0.82); color: #fff; font-size: 11.5px; font-weight: 700;
+        border: 2px solid rgba(255, 231, 128, 0.7); white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; z-index: 11; pointer-events: none;
+      }
+      #loading {
+        position: fixed; inset: 0; display: grid; place-content: center; gap: 8px; text-align: center;
+        background: radial-gradient(circle at 50% 35%, #6fd7ff, #1c7fc0 70%);
+        color: #fff; font-weight: 800; font-size: 15px; z-index: 30;
+        text-shadow: 0 2px 0 rgba(0, 40, 70, 0.35);
+      }
+      #loading .spinner {
+        width: 38px; height: 38px; margin: 0 auto; border-radius: 50%;
+        border: 5px solid rgba(255,255,255,0.35); border-top-color: #ffe066;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (max-width: 560px) {
+        #panel { top: 8px; left: 8px; width: calc(100vw - 16px); max-height: 42dvh; }
+        #panel h1 { font-size: 14px; }
+        #emotes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        #emotes button { font-size: 9.5px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"><canvas id="map"></canvas></div>
+
+    <div id="panel">
+      <h1>MapView 開発デモ</h1>
+      <div class="sub">グローバル寓話大富豪 — 世界地図 / 触って確認</div>
+      <div class="row">
+        <button id="btn-move" class="gold">ソウルへ移動</button>
+        <button id="btn-options" class="gold">移動先候補</button>
+        <button id="btn-focus">パリ拡大</button>
+        <button id="btn-fit">全体表示</button>
+      </div>
+      <div class="row">
+        <button id="btn-bubble">吹き出し</button>
+        <button id="btn-float">浮遊文字</button>
+        <button id="btn-measure">描画計測 3 秒</button>
+      </div>
+      <div class="row"><button id="btn-emote-all">全エモート再生</button></div>
+      <div id="emotes"></div>
+    </div>
+
+    <div id="status">読み込み中…</div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <div id="loading-text">世界地図を準備しています…</div>
+    </div>
+
+    <script type="module" src="/src/render/demo.ts"></script>
+  </body>
+</html>

@@ -52,13 +52,13 @@ PC（横長 ≥ 900px）:
 
 ### `src/render/map.ts` — `MapView`
 ```ts
-export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; }
+export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; npcs?: Map<string, HTMLImageElement>; vehicles?: Map<string, HTMLImageElement>; joy?: Map<string, HTMLImageElement>; sad?: Map<string, HTMLImageElement>; realms?: Map<RealmId, HTMLImageElement>; }
 export class MapView {
   constructor(canvas: HTMLCanvasElement, data: GameData, assets: MapAssets);
   setState(state: GameState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
   setMoveOptions(options: MoveOption[] | null, onPick: (nodeId: string) => void): void;
-  animateMove(playerId: number, path: string[], msPerStep: number): Promise<void>;
-  warp(playerId: number, nodeId: string): Promise<void>;
+  animateMove(playerId: number, path: string[], msPerStep: number, opts?: { dice?: number }): Promise<void>; // dice 1=列車 / 2=急行 / 3=超特急
+  warp(playerId: number, nodeId: string, via?: 'plane'|'rocket'|'carpet'|'event'|'tornado'|'realm'): Promise<void>;
   focusNode(nodeId: string, opts?: { zoom?: number; ms?: number }): Promise<void>;
   fitWorld(ms?: number): Promise<void>;
   follow(playerId: number | null): void;
@@ -70,6 +70,23 @@ export class MapView {
   playEmote(playerId: number, def: EmoteDef, targetPlayerId: number | null): Promise<void>;
   /** Speech bubble above a token (chat or emote line), auto-hides after ms. */
   bubble(playerId: number, text: string, ms?: number): void;
+  /** 表情差分。neutral/null で通常に戻る。 */
+  setMood(playerId: number, mood: 'joy' | 'sad' | 'neutral' | null, ms?: number): void;
+  /** イベント演出。nodeId 版と playerId 版のオーバーロード。 */
+  celebrate(nodeId: string, kind: 'buy' | 'monopoly' | 'goal' | 'bad'): void;
+  celebrate(playerId: number, kind?: 'buy' | 'monopoly' | 'goal' | 'bad'): void;
+  shake(intensity?: number): void;
+  /** 環境アニメーション（波・雲・交通・呼吸など）を止める。操作/移動演出は残る。 */
+  setReducedMotion(on: boolean): void;
+  /** 地上と異世界ビューを切り替える。follow/setState でも自動切替。 */
+  setView(realm: RealmId | 'world'): void;
+  /** 各ビューにいるプレイヤー数（UI バッジ用）。 */
+  readonly realmCounts: Record<RealmId | 'world', number>;
+  screenPositionOf(playerId: number): { x: number; y: number } | null;
+  screenPositionOfNode(nodeId: string): { x: number; y: number; visible?: boolean } | null;
+  isNodeVisible(nodeId: string): boolean;
+  /** 季節。1秒クロスフェード。 */
+  setMonth(month: number): void;
 }
 ```
 - 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（遠景: 大陸・航路・主要都市名のみ、近景: 全マス・全都市名・ランドマーク）。画面外カリング。
