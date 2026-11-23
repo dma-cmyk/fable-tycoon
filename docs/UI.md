@@ -52,15 +52,23 @@ PC（横長 ≥ 900px）:
 
 ### `src/render/map.ts` — `MapView`
 ```ts
-export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; npcs?: Map<string, HTMLImageElement>; vehicles?: Map<string, HTMLImageElement>; joy?: Map<string, HTMLImageElement>; sad?: Map<string, HTMLImageElement>; realms?: Map<RealmId, HTMLImageElement>; }
+export interface MapAssets { land: LandJson; chars: Map<string, HTMLImageElement>; landmarks: Map<string, HTMLImageElement>; npcs?: Map<string, HTMLImageElement>; vehicles?: Map<string, HTMLImageElement>; joy?: Map<string, HTMLImageElement>; sad?: Map<string, HTMLImageElement>; realms?: Map<RealmId, HTMLImageElement>; stamps?: Map<string, HTMLImageElement>; terrain?: HTMLImageElement; terrainLo?: HTMLImageElement; mapArt?: MapArtData; }
+export interface MoveOptionHooks { onSelect?: (nodeId: string) => void; onConfirm?: (nodeId: string) => void; numbers?: number[]; }
+export interface SafeArea { top: number; right: number; bottom: number; left: number; }
 export class MapView {
   constructor(canvas: HTMLCanvasElement, data: GameData, assets: MapAssets);
   setState(state: PublicState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
-  setMoveOptions(options: MoveOption[] | null, onPick: (nodeId: string) => void): void;
+  setMoveOptions(options: MoveOption[] | null, onPickOrHooks: ((nodeId: string) => void) | MoveOptionHooks | null): void;
+  /** 一覧から同じ選択状態にする（確定はしない）。 */
+  selectMoveOption(nodeId: string): void;
+  /** 地図外の確定ボタンから呼ぶ。nodeId 省略時は選択中。 */
+  confirmMoveOption(nodeId?: string): void;
+  /** HUD/パネルが覆う領域。カメラのフィット・フォーカス・フォローは残りの盤面領域基準になる。 */
+  setSafeArea(area: Partial<SafeArea>): void;
   animateMove(playerId: number, path: string[], msPerStep: number, opts?: { dice?: number }): Promise<void>; // dice 1=列車 / 2=急行 / 3=超特急
   warp(playerId: number, nodeId: string, via?: 'plane'|'rocket'|'carpet'|'event'|'tornado'|'realm'): Promise<void>;
   focusNode(nodeId: string, opts?: { zoom?: number; ms?: number }): Promise<void>;
-  fitWorld(ms?: number): Promise<void>;
+  fitWorld(ms?: number): Promise<void>; // セーフエリアの盤面領域に全体を収める（通常の最小ズームより小さくできる）
   follow(playerId: number | null): void;
   floatText(nodeId: string, text: string, color: string): void;
   onCityTap(cb: (cityId: string) => void): void;
@@ -91,7 +99,7 @@ export class MapView {
   setMiniMap(el: HTMLCanvasElement | null): void;
 }
 ```
-- 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（遠景: 大陸・航路・主要都市名のみ、近景: 全マス・全都市名・ランドマーク）。画面外カリング。
+- 描画: devicePixelRatio 対応、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ズームに応じた詳細度（全体表示: 主要路線・主要都市ドット・現在地/目的地マーカー、通常: マス・駅・ラベル）、画面外カリング。移動候補はUI一覧と同じ番号のピン（44px 判定）で表示し、初回タップ/`selectMoveOption` で選択、再タップ/`confirmMoveOption` で確定する。
 - 見た目: 海は青のグラデーション + 波の模様、大陸は明るい緑に濃い緑の縁と影、所々に木のスタンプ（決定的な疑似乱数で配置）。鉄道は白い太線 + 灰色の縁、航路は白の点線。マスは丸角の宝石風タイル（青 / 赤 / 黄 / ニュースは紫で「！」）。都市は白い台座の駅 + 名前ラベル（吹き出し風、所有者の色の帯、独占で金縁）、ランドマークがある都市は画像を描く。駒はキャラ画像（足元に影と色付きリング、同じマスに複数なら並べる）。目的地はチェッカーフラッグ + 脈動、取り立て屋は holder の駒の後ろに NPC 画像。
 
 ### `src/audio/audio.ts` — `Audio`

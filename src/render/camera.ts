@@ -159,9 +159,10 @@ export class Camera {
     return this.startTween(this.worldW / 2, this.worldH / 2, zoom, ms);
   }
 
-  startTween(toX: number, toY: number, toZoom: number, ms: number): Promise<void> {
+  startTween(toX: number, toY: number, toZoom: number, ms: number, minZoomOverride?: number): Promise<void> {
     this.stopTween();
-    const zoom = this.clampZoom(toZoom);
+    const min = Math.max(0.02, minZoomOverride ?? this.minZoom());
+    const zoom = Math.min(this.maxZoom(), Math.max(min, toZoom));
     if (ms <= 0) {
       this.x = this.clampCenterX(toX, zoom);
       this.y = this.clampCenterY(toY, zoom);

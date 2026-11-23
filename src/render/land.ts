@@ -330,7 +330,7 @@ export class LandLayer {
       // shallow-water halo just outside the coastline
       ctx.save();
       ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
-      ctx.lineWidth = Math.max(8, Math.min(46, 26 * scale));
+      ctx.lineWidth = Math.max(4, Math.min(12, 4 * cam.zoom)) * dpr;
       ctx.lineJoin = 'round';
       ctx.stroke(path);
       ctx.restore();

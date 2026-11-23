@@ -96,6 +96,20 @@ interface Rect {
   h: number;
 }
 
+export interface SafeArea {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface MoveOptionHooks {
+  onSelect?: (nodeId: string) => void;
+  onConfirm?: (nodeId: string) => void;
+  /** Optional numbers matching the UI list; defaults to 1..n. */
+  numbers?: number[];
+}
+
 interface CityEntry {
   city: City;
   node: BoardNode;
@@ -183,6 +197,13 @@ interface TokenLayout {
   switchPoof: boolean;
   warping: WarpVia | null;
   tilt: number;
+  badge: boolean;
+  badgeIndex: number;
+  badgeCount: number;
+  anchorX: number;
+  anchorY: number;
+  nodeId: string | null;
+  switchAt: number;
 }
 
 export type Mood = 'joy' | 'sad' | 'neutral';
@@ -294,6 +315,7 @@ export class MapView {
   private initialCameraDone = false;
   private lastCurrent = -1;
   private manualViewUntil = 0;
+  private safeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
   private reducedMotion = false;
   private ambientTimer: number | null = null;
   private lastDrawAt = 0;
@@ -326,6 +348,8 @@ export class MapView {
 
   private moveOptions: MoveOption[] | null = null;
   private movePick: ((nodeId: string) => void) | null = null;
+  private moveHooks: MoveOptionHooks | null = null;
+  private optionPinHits: Array<{ nodeId: string; x: number; y: number; r: number }> = [];
   private hoveredOption: string | null = null;
   private selectedOption: string | null = null;
   private lastPickAt = 0;
@@ -696,7 +720,7 @@ export class MapView {
       if (node) {
         this.initialCameraDone = true;
         // Momotetsu-like default: a regional close view centred on the actor.
-        this.camera.startTween(node.x, node.y, this.playZoomNear(actor.nodeId), 0);
+        void this.focusWorldPoint(node.x, node.y, this.playZoomNear(actor.nodeId), 0);
         this.followId = state.current;
       }
     }
@@ -741,15 +765,38 @@ export class MapView {
     this.requestRender();
   }
 
-  setMoveOptions(options: MoveOption[] | null, onPick: (nodeId: string) => void): void {
+  setMoveOptions(options: MoveOption[] | null, onPickOrHooks: ((nodeId: string) => void) | MoveOptionHooks | null): void {
     this.moveOptions = options ? options.map((o) => ({ nodeId: o.nodeId, path: [...o.path] })) : null;
-    this.movePick = onPick;
+    if (typeof onPickOrHooks === 'function') {
+      this.movePick = onPickOrHooks;
+      this.moveHooks = null;
+    } else {
+      this.movePick = null;
+      this.moveHooks = onPickOrHooks;
+    }
     this.hoveredOption = null;
     if (!options || !this.selectedOption || !options.some((o) => o.nodeId === this.selectedOption)) {
       this.selectedOption = null;
     }
     this.badgeRect = null;
+    if (this.moveOptions && this.moveOptions.length > 0) this.frameMoveOptions();
     this.requestRender();
+  }
+
+  /** List-driven selection: highlight the same route a map pin tap would. */
+  selectMoveOption(nodeId: string): void {
+    if (!this.moveOptions?.some((o) => o.nodeId === nodeId)) return;
+    this.selectedOption = nodeId;
+    this.hoveredOption = nodeId;
+    this.moveHooks?.onSelect?.(nodeId);
+    this.requestRender();
+  }
+
+  /** Explicit confirmation (UI confirm button or second map tap). */
+  confirmMoveOption(nodeId?: string): void {
+    const target = nodeId ?? this.selectedOption;
+    if (!target) return;
+    this.confirmOption(target);
   }
 
   animateMove(
@@ -806,14 +853,26 @@ export class MapView {
     const realm = node.realm ?? 'world';
     if (realm !== this.view) this.switchView(realm);
     this.followId = null;
-    const promise = this.camera.focus(node.x, node.y, opts?.zoom, opts?.ms ?? 550);
+    const promise = this.focusWorldPoint(node.x, node.y, opts?.zoom ?? this.camera.zoom, opts?.ms ?? 550);
     this.requestRender();
     return promise;
   }
 
   fitWorld(ms = 650): Promise<void> {
     this.followId = null;
-    const promise = this.camera.fitWorld(ms);
+    const cam = this.camera;
+    const box = this.boardBox();
+    const targetZoom = Math.min(box.w / cam.worldW, box.h / cam.worldH);
+    const zoom = Math.min(cam.maxZoom(), Math.max(0.02, targetZoom));
+    const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
+    const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
+    const promise = cam.startTween(
+      cam.worldW / 2 - offsetX / zoom,
+      cam.worldH / 2 - offsetY / zoom,
+      zoom,
+      ms,
+      Math.min(cam.minZoom(), zoom),
+    );
     this.requestRender();
     return promise;
   }
@@ -937,7 +996,7 @@ export class MapView {
     this.view = realm;
     const cam = this.camera;
     cam.setViewport(this.cssW, this.cssH);
-    if (!existed) cam.fitWorld(0);
+    if (!existed) void this.fitWorld(0);
     this.hoveredOption = null;
     this.selectedOption = null;
     this.badgeRect = null;
@@ -1057,15 +1116,34 @@ export class MapView {
     ctx.drawImage(this.miniLand, 0, 0, cssW, cssH);
     const toX = (x: number): number => (x / MAP_W) * cssW;
     const toY = (y: number): number => (y / MAP_H) * cssH;
+    const cam = this.camera;
+    if (this.view === 'world') {
+      const vx = toX(cam.x - cam.worldWidth() / 2);
+      const vy = toY(cam.y - cam.worldHeight() / 2);
+      const vw = (cam.worldWidth() / MAP_W) * cssW;
+      const vh = (cam.worldHeight() / MAP_H) * cssH;
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(vx, vy, Math.min(cssW - vx, vw), Math.min(cssH - vy, vh));
+    }
     const dest = this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) : null;
     if (dest) {
+      const dx = toX(dest.x);
+      const dy = toY(dest.y);
+      ctx.save();
+      ctx.translate(dx, dy);
       ctx.fillStyle = '#ffe04a';
       ctx.strokeStyle = '#20315a';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(toX(dest.x), toY(dest.y), 3.2, 0, TAU);
+      ctx.moveTo(0, -4);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-4, 0);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      ctx.restore();
     }
     for (const token of this.tokens) {
       const node = this.nodeById.get(token.nodeId);
@@ -1182,6 +1260,66 @@ export class MapView {
     }
   }
 
+  setSafeArea(area: Partial<SafeArea>): void {
+    this.safeArea = {
+      top: Math.max(0, area.top ?? this.safeArea.top),
+      right: Math.max(0, area.right ?? this.safeArea.right),
+      bottom: Math.max(0, area.bottom ?? this.safeArea.bottom),
+      left: Math.max(0, area.left ?? this.safeArea.left),
+    };
+    const cam = this.camera;
+    cam.vw = Math.max(1, this.cssW);
+    cam.vh = Math.max(1, this.cssH);
+    cam.x = cam.clampCenterX(cam.x, cam.zoom);
+    cam.y = cam.clampCenterY(cam.y, cam.zoom);
+    this.requestRender();
+  }
+
+  private boardBox(): { x: number; y: number; w: number; h: number } {
+    const x = Math.min(this.cssW - 1, Math.max(0, this.safeArea.left));
+    const y = Math.min(this.cssH - 1, Math.max(0, this.safeArea.top));
+    return {
+      x,
+      y,
+      w: Math.max(1, this.cssW - x - Math.max(0, this.safeArea.right)),
+      h: Math.max(1, this.cssH - y - Math.max(0, this.safeArea.bottom)),
+    };
+  }
+
+  private focusWorldPoint(x: number, y: number, zoom: number, ms: number): Promise<void> {
+    const z = this.camera.clampZoom(zoom);
+    const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
+    const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
+    const targetX = this.camera.x + (this.camera.wraps ? wrapDx(this.camera.x, x) : x - this.camera.x) - offsetX / z;
+    const targetY = this.camera.clampCenterY(y - offsetY / z, z);
+    return this.camera.startTween(targetX, targetY, z, ms);
+  }
+
+  private frameMoveOptions(): void {
+    const id = this.state?.players[this.state.current]?.nodeId;
+    if (!id || !this.moveOptions || this.moveOptions.length === 0) return;
+    const start = this.nodeById.get(id);
+    if (!start) return;
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    for (const option of this.moveOptions) {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) continue;
+      const dx = wrapDx(start.x, node.x);
+      minX = Math.min(minX, dx);
+      maxX = Math.max(maxX, dx);
+      minY = Math.min(minY, node.y - start.y);
+      maxY = Math.max(maxY, node.y - start.y);
+    }
+    const box = this.boardBox();
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const pad = 48;
+    const computed = Math.min((box.w - pad) / spanX, (box.h - pad) / spanY);
+    const cap = Math.max(this.playZoom(), Math.min(this.camera.zoom, this.playZoom() * 1.6));
+    const zoom = this.camera.clampZoom(Math.min(computed, cap));
+    void this.focusWorldPoint(start.x + (minX + maxX) / 2, start.y + (minY + maxY) / 2, zoom, 420);
+  }
+
   private playZoom(): number {
     return this.camera.clampZoom(MAP_W / 5460);
   }
@@ -1208,6 +1346,10 @@ export class MapView {
     return this.view === 'world' ? 1 : 2.5;
   }
 
+  private isOverview(): boolean {
+    return this.view === 'world' && !this.moveAnim && !this.warpAnim && this.camera.zoom <= this.camera.minZoom() * 1.18;
+  }
+
   private detailLevel(): number {
     if (this.view !== 'world') return this.camera.zoom < 0.8 ? 1 : 2;
     const z = this.camera.zoom;
@@ -1215,7 +1357,7 @@ export class MapView {
   }
 
   private tileRadius(): number {
-    return Math.min(this.view === 'world' ? 15 : 50, Math.max(5, (4 + this.camera.zoom * 6) * this.viewScale()));
+    return Math.min(this.view === 'world' ? 11 : 50, Math.max(5, (4 + this.camera.zoom * 6) * this.viewScale()));
   }
 
   private cityRadius(): number {
@@ -1223,7 +1365,7 @@ export class MapView {
   }
 
   private tokenHeight(): number {
-    return Math.min(190, Math.max(44, (44 + this.camera.zoom * 18) * this.viewScale()));
+    return Math.min(this.view === 'world' ? 104 : 108, Math.max(44, (44 + this.camera.zoom * 18) * this.viewScale()));
   }
 
   private playerColor(playerId: number): string {
@@ -1382,8 +1524,29 @@ export class MapView {
       if (followId !== null) {
         const target = this.tokenWorldPosition(followId, now);
         if (target) {
-          const dx = wrapDx(this.camera.x, target.x);
-          const dy = target.y - this.camera.y;
+          let lookX = 0;
+          let lookY = 0;
+          if (this.moveAnim) {
+            const move = this.moveAnim;
+            const full = [move.startNode, ...move.path];
+            const raw = Math.max(0, (now - move.start) / move.msPerStep);
+            const i = Math.min(full.length - 2, Math.floor(raw));
+            const a = this.nodeById.get(full[i]);
+            const b = this.nodeById.get(full[i + 1]);
+            if (a && b) {
+              const dx = wrapDx(a.x, b.x);
+              const dy = b.y - a.y;
+              const len = Math.hypot(dx, dy) || 1;
+              lookX = (dx / len) * (52 / this.camera.zoom);
+              lookY = (dy / len) * (52 / this.camera.zoom);
+            }
+          }
+          const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
+          const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
+          const desiredX = target.x + lookX - offsetX / this.camera.zoom;
+          const desiredY = target.y + lookY - offsetY / this.camera.zoom;
+          const dx = wrapDx(this.camera.x, desiredX);
+          const dy = desiredY - this.camera.y;
           if (Math.abs(dx) > 0.35 || Math.abs(dy) > 0.35) {
             const k = this.moveAnim || this.warpAnim ? 0.14 : 0.1;
             this.camera.x = wrapX(this.camera.x + dx * k);
@@ -1521,18 +1684,22 @@ export class MapView {
       this.drawRealmBoard(ctx, now);
       this.drawRealmAmbient(ctx, now);
     }
-    const layouts = this.computeLayouts(now);
-    this.drawCities(ctx, now, layouts);
-    this.drawMoveUi(ctx, now);
-    this.drawTokens(ctx, layouts, now);
-    this.drawSelectedPathOverlay(ctx);
-    this.drawOptionMarkers(ctx, now);
-    this.drawCelebrations(ctx, now);
-    this.drawProjectiles(ctx, layouts, now);
-    this.drawWarpOverlay(ctx, now);
-    this.drawFloatTexts(ctx, now);
-    this.drawBubbles(ctx, layouts, now);
-    this.drawBadge(ctx);
+    if (this.isOverview()) {
+      this.drawOverviewMarkers(ctx);
+    } else {
+      const layouts = this.computeLayouts(now);
+      this.drawCities(ctx, now, layouts);
+      this.drawMoveUi(ctx, now);
+      this.drawTokens(ctx, layouts, now);
+      this.drawSelectedPathOverlay(ctx);
+      this.drawOptionMarkers(ctx, now);
+      this.drawCelebrations(ctx, now);
+      this.drawProjectiles(ctx, layouts, now);
+      this.drawWarpOverlay(ctx, now);
+      this.drawFloatTexts(ctx, now);
+      this.drawBubbles(ctx, layouts, now);
+      this.drawBadge(ctx);
+    }
     ctx.restore();
     this.drawMiniMap();
   }
@@ -1606,7 +1773,13 @@ export class MapView {
       const kind = label.kind ?? 'country';
       if (kind === 'country' && (this.detailLevel() >= 2 || cam.zoom >= 0.9)) continue;
       const base = label.size ?? 24;
-      const cap = kind === 'ocean' || kind === 'continent' || kind === 'sea' ? 80 : kind === 'country' ? 24 : 18;
+      const cap = kind === 'ocean' || kind === 'continent'
+        ? (cam.zoom >= 0.8 ? 44 : 80)
+        : kind === 'sea'
+          ? (cam.zoom >= 0.85 ? 20 : 40)
+          : kind === 'country'
+            ? 24
+            : (cam.zoom >= 0.9 ? 12 : 18);
       const fs = Math.min(cap, Math.max(6, base * cam.zoom));
       const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
       ctx.save();
@@ -1912,6 +2085,7 @@ export class MapView {
     const hPx = hWorld * scale;
     const margin = 80 * dpr;
     const detail0 = this.detailLevel();
+    const overview = this.isOverview();
     this.drawMapArt(ctx, layer, detail0);
     this.drawTerrain(ctx, layer, detail0);
     this.drawCityClusters(ctx, layer, detail0);
@@ -1943,7 +2117,7 @@ export class MapView {
       const uy = ly / len;
       const nx = -uy;
       const ny = ux;
-      if (e.sea && zoomForTrack >= 0.5) {
+      if (e.sea && zoomForTrack >= 0.5 && !overview) {
         const interval = 34 * dpr;
         for (let d = interval; d < len; d += interval) {
           const t = d / len;
@@ -1953,7 +2127,7 @@ export class MapView {
           chevronPath.lineTo(px + nx * 2 * dpr, py + ny * 2 * dpr);
           chevronPath.lineTo(px - ux * 3 * dpr - nx * 2 * dpr, py - uy * 3 * dpr - ny * 2 * dpr);
         }
-      } else if (!e.sea && detailForTrack >= 1 && zoomForTrack >= 0.75) {
+      } else if (!e.sea && detailForTrack >= 1 && zoomForTrack >= 0.75 && !overview) {
         const interval = 15 * dpr;
         const half = Math.max(2 * dpr, zoomForTrack * 1.5 * dpr);
         for (let d = interval * 0.5; d < len; d += interval) {
@@ -1969,33 +2143,34 @@ export class MapView {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-    ctx.lineWidth = Math.min(3.4, Math.max(1.4, 1 + zoom * 0.8)) * dpr;
+    ctx.strokeStyle = overview ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.92)';
+    ctx.lineWidth = (overview ? 1.1 : Math.min(3.4, Math.max(1.4, 1 + zoom * 0.8))) * dpr;
     ctx.setLineDash([Math.max(2, zoom * 2.4) * dpr, Math.max(5, zoom * 5.2) * dpr]);
     ctx.stroke(seaPath);
     ctx.setLineDash([]);
     ctx.strokeStyle = 'rgba(232,255,255,0.85)';
     ctx.lineWidth = Math.max(1, 1.2 * dpr);
     ctx.stroke(chevronPath);
-    const railW = Math.min(7, Math.max(1.8, 1.4 + zoom * 1.7));
-    if (detailForTrack >= 1 && zoom >= 0.75) {
-      ctx.strokeStyle = '#7d8790';
+    const railW = overview ? 1.15 : Math.min(7, Math.max(1.8, 1.4 + zoom * 0.7));
+    const dimTracks = !overview && zoom >= 0.85;
+    if (detailForTrack >= 1 && zoom >= 0.75 && !overview) {
+      ctx.strokeStyle = dimTracks ? 'rgba(98, 110, 122, 0.55)' : '#7d8790';
       ctx.lineWidth = (railW + 7) * dpr;
       ctx.stroke(railPath);
-      ctx.strokeStyle = '#e9e2cf';
+      ctx.strokeStyle = dimTracks ? 'rgba(233, 228, 214, 0.6)' : '#e9e2cf';
       ctx.lineWidth = (railW + 4) * dpr;
       ctx.stroke(railPath);
-      ctx.strokeStyle = '#8b7658';
+      ctx.strokeStyle = dimTracks ? 'rgba(122, 108, 86, 0.5)' : '#8b7658';
       ctx.lineWidth = Math.max(1.1, 1.2 * dpr);
       ctx.stroke(sleeperPath);
-      ctx.strokeStyle = '#6f7a86';
+      ctx.strokeStyle = dimTracks ? 'rgba(95, 106, 118, 0.6)' : '#6f7a86';
       ctx.lineWidth = Math.max(1.2, railW * 0.7 * dpr);
       ctx.stroke(railPath);
     } else {
-      ctx.strokeStyle = '#7591a8';
-      ctx.lineWidth = (railW + 2.8) * dpr;
+      ctx.strokeStyle = overview ? 'rgba(90,105,120,0.5)' : 'rgba(117,145,168,0.85)';
+      ctx.lineWidth = (railW + (overview ? 1.4 : 2.8)) * dpr;
       ctx.stroke(railPath);
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = overview ? 'rgba(255,255,255,0.82)' : '#ffffff';
       ctx.lineWidth = railW * dpr;
       ctx.stroke(railPath);
     }
@@ -2018,12 +2193,24 @@ export class MapView {
       }
     }
 
-    // --- city pedestals (owner stripes are part of the static cache) --------
+    // --- city pedestals / overview dots ------------------------------------
     for (const entry of this.cityEntries) {
       const wx = centerX + wrapDx(centerX, entry.node.x);
       const [px, py] = toCanvas(wx, entry.node.y);
       if (px < -cityPad || px > wPx + cityPad || py < -cityPad || py > hPx + cityPad) continue;
-      this.drawCityPedestalAt(ctx, px, py, radius, this.ownership.get(entry.city.id));
+      if (overview) {
+        if (entry.city.tier !== 1) continue;
+        const rr = (entry.city.id === this.state?.destination ? 5.6 : 4.6) * dpr;
+        ctx.beginPath();
+        ctx.arc(px, py, rr, 0, TAU);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#23385c';
+        ctx.lineWidth = 1.4 * dpr;
+        ctx.stroke();
+      } else {
+        this.drawCityPedestalAt(ctx, px, py, radius, this.ownership.get(entry.city.id));
+      }
     }
   }
 
@@ -2154,7 +2341,8 @@ export class MapView {
         if (owner.counts[i] > best) { best = owner.counts[i]; topPlayer = i; }
       }
     }
-    const plateColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#fbfeff';
+    const plateColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#f7fcff';
+    const roofColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#8ecdf2';
     ctx.save();
     ctx.fillStyle = 'rgba(7, 35, 57, 0.36)';
     ctx.beginPath();
@@ -2168,7 +2356,7 @@ export class MapView {
     ctx.lineTo(left + w * 0.86, top - h * 0.42);
     ctx.lineTo(left + w + radius * 0.16, top + 1);
     ctx.closePath();
-    ctx.fillStyle = plateColor;
+    ctx.fillStyle = roofColor;
     ctx.fill();
     ctx.lineWidth = Math.max(1.4, radius * 0.11);
     ctx.strokeStyle = '#23385c';
@@ -2192,6 +2380,14 @@ export class MapView {
     ctx.fillStyle = '#4d5c73';
     ctx.fillRect(left + w * 0.21, top + h * 0.3, w * 0.22, h * 0.16);
     ctx.fillRect(left + w * 0.5, top + h * 0.3, w * 0.22, h * 0.16);
+    // small station mark so an unlabelled plate never reads as a blank label
+    ctx.fillStyle = '#23385c';
+    ctx.beginPath();
+    ctx.roundRect(left + w * 0.43, top + h * 0.58, w * 0.14, h * 0.24, h * 0.06);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(left + w * 0.46, top + h * 0.63, w * 0.035, h * 0.07);
+    ctx.fillRect(left + w * 0.515, top + h * 0.63, w * 0.035, h * 0.07);
 
     if (owner && owner.total > 0) {
       let owned = 0;
@@ -2245,6 +2441,15 @@ export class MapView {
     ctx.fillStyle = 'rgba(6, 40, 70, 0.26)';
     ctx.beginPath();
     ctx.ellipse(0.8, r * 0.56 + 2, r * 1.03, r * 0.44, 0, 0, TAU);
+    ctx.fill();
+    // 2–3 px side / thickness under the top face
+    ctx.beginPath();
+    ctx.arc(0, 3, r, 0, TAU);
+    ctx.fillStyle = palette.edge;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 3, r * 0.98, 0, TAU);
+    ctx.fillStyle = palette.dark;
     ctx.fill();
     const grad = ctx.createLinearGradient(0, -r, 0, r);
     grad.addColorStop(0, palette.light);
@@ -2373,9 +2578,6 @@ export class MapView {
     const cam = this.camera;
     const currentCityId = this.state ? this.cityNodeIdOfPlayer(this.state.current) : null;
     const tokenNodeIds = new Set(this.tokens.map((t) => t.nodeId));
-    const fs = Math.min(this.view === 'world' ? 13 : 34, Math.max(9.5, (this.view === 'world' ? 8.5 + cam.zoom * 0.9 : 9.5 + cam.zoom * 1.25) * this.viewScale()));
-    const font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
-    ctx.font = font;
     const tokenCityAt = (v: CityVis): boolean => tokenNodeIds.has(v.entry.node.id);
     const discGrid = new RectGrid<Rect>(64);
     const tr = this.tileRadius();
@@ -2430,6 +2632,16 @@ export class MapView {
 
     for (const v of candidates) {
       const text = v.entry.city.nameJa;
+      const priorityLabel = mustShow(v);
+      const fs = this.view === 'world'
+        ? priorityLabel
+          ? Math.min(14, Math.max(13, 10.5 + cam.zoom * 1.2))
+          : Math.min(12, Math.max(11, 9.5 + cam.zoom * 0.9))
+        : priorityLabel
+          ? Math.min(30, 13 * this.viewScale())
+          : Math.min(26, 11 * this.viewScale());
+      const font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+      ctx.font = font;
       const tw = this.measureText(ctx, text, font);
       const w = tw + 13;
       const h = fs + 8;
@@ -2447,6 +2659,21 @@ export class MapView {
         if (!freeOfAll(rect)) continue;
         chosen = rect;
         break;
+      }
+      if (!chosen) {
+        for (const rr of [radius + 14, radius + 28, radius + 44]) {
+          for (let i = 0; i < 12 && !chosen; i++) {
+            const a = (i / 12) * TAU;
+            const cx = v.x + Math.cos(a) * rr;
+            const cy = v.y + Math.sin(a) * rr * 0.85;
+            const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
+            if (rect.x < 3 || rect.y < 3 || rect.x + rect.w > this.camera.vw - 3 || rect.y + rect.h > this.camera.vh - 3) continue;
+            if (reserved.some((r) => rectsHit(rect, r, 2))) continue;
+            if (!freeOfDiscs(rect)) continue;
+            chosen = rect;
+          }
+          if (chosen) break;
+        }
       }
       if (!chosen && mustShow(v)) {
         for (const rr of [radius + 16, radius + 34, radius + 58, radius + 84]) {
@@ -2631,13 +2858,6 @@ export class MapView {
       ctx.restore();
     });
 
-    for (const option of this.moveOptions) {
-      if (option.nodeId === this.selectedOption || option.nodeId === this.hoveredOption) continue;
-      ctx.save();
-      ctx.globalAlpha = 0.28;
-      this.drawPathPreview(ctx, option, false);
-      ctx.restore();
-    }
     const shown = this.selectedOption ?? this.hoveredOption;
     if (shown) {
       const option = this.moveOptions.find((o) => o.nodeId === shown);
@@ -2656,6 +2876,7 @@ export class MapView {
   }
 
   private drawOptionMarkers(ctx: CanvasRenderingContext2D, now: number): void {
+    this.optionPinHits = [];
     if (!this.moveOptions) return;
     const cam = this.camera;
     const r = this.tileRadius();
@@ -2664,46 +2885,48 @@ export class MapView {
       if (!node) return;
       const x = cam.screenX(node.x);
       const y = cam.screenY(node.y);
-      if (x < -40 || x > cam.vw + 40 || y < -60 || y > cam.vh + 40) return;
+      if (x < -60 || x > cam.vw + 60 || y < -90 || y > cam.vh + 60) return;
       const selected = this.selectedOption === option.nodeId;
-      const bob = Math.sin(now / 280 + index * 1.8) * 3;
-      const my = y - r - 14 - bob;
-      const size = selected ? 11 : 8;
+      const bob = Math.sin(now / 280 + index * 1.8) * 2;
+      const pinY = y - r - 26 - bob;
+      const number = this.moveHooks?.numbers?.[index] ?? index + 1;
+      this.optionPinHits.push({ nodeId: option.nodeId, x, y: pinY, r: 22 });
       ctx.save();
-      ctx.translate(x, my);
-      ctx.fillStyle = 'rgba(22, 38, 64, 0.3)';
+      ctx.fillStyle = 'rgba(10, 30, 55, 0.28)';
       ctx.beginPath();
-      ctx.moveTo(0, size + 6);
-      ctx.lineTo(size * 0.9, 4);
-      ctx.lineTo(-size * 0.9, 4);
-      ctx.closePath();
+      ctx.ellipse(x + 1, y + 2, 9, 3.5, 0, 0, TAU);
       ctx.fill();
-      const grad = ctx.createLinearGradient(0, -size, 0, size);
-      grad.addColorStop(0, '#fff8a8');
-      grad.addColorStop(1, selected ? '#ffb703' : '#ffd83d');
+      // pin tail + body
       ctx.beginPath();
-      ctx.moveTo(size * 1.15, -size * 0.45);
-      ctx.lineTo(size * 0.25, -size * 0.9);
-      ctx.lineTo(-size * 0.9, -size * 0.15);
-      ctx.lineTo(0, size * 0.95);
-      ctx.lineTo(size * 0.9, -size * 0.15);
-      ctx.closePath();
+      ctx.moveTo(x, pinY + 12);
+      ctx.lineTo(x, y - r - 2);
+      ctx.strokeStyle = selected ? '#ffd83d' : '#f6efe0';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, pinY, 14, 0, TAU);
+      const grad = ctx.createLinearGradient(0, pinY - 14, 0, pinY + 14);
+      grad.addColorStop(0, selected ? '#fff27a' : '#ffffff');
+      grad.addColorStop(1, selected ? '#ffc21f' : '#ffe7a0');
       ctx.fillStyle = grad;
       ctx.fill();
-      ctx.strokeStyle = '#26385f';
-      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 2;
       ctx.stroke();
-      // pointer triangle
+      // square-kind colour chip
+      const palette = gemColors(node.kind);
       ctx.beginPath();
-      ctx.moveTo(-4, size * 0.7);
-      ctx.lineTo(4, size * 0.7);
-      ctx.lineTo(0, size + 7);
-      ctx.closePath();
-      ctx.fillStyle = selected ? '#ffb703' : '#ffd83d';
+      ctx.arc(x + 11, pinY + 9, 5, 0, TAU);
+      ctx.fillStyle = palette.main;
       ctx.fill();
-      ctx.strokeStyle = '#26385f';
+      ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.4;
       ctx.stroke();
+      ctx.fillStyle = '#20315a';
+      ctx.font = `800 15px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(number), x, pinY + 0.5);
       ctx.restore();
     });
   }
@@ -2737,22 +2960,13 @@ export class MapView {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     trace();
-    ctx.strokeStyle = 'rgba(12, 34, 62, 0.55)';
-    ctx.lineWidth = selected ? 10 : 8;
+    ctx.strokeStyle = 'rgba(12, 34, 62, 0.9)';
+    ctx.lineWidth = selected ? 9 : 7;
     ctx.stroke();
     trace();
-    ctx.strokeStyle = selected ? 'rgba(255, 216, 61, 0.95)' : 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = selected ? 6 : 4;
+    ctx.strokeStyle = selected ? 'rgba(255, 216, 61, 0.98)' : 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = selected ? 5 : 3.5;
     ctx.stroke();
-    if (selected) {
-      trace();
-      ctx.setLineDash([7, 8]);
-      ctx.lineDashOffset = -performance.now() / 45;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
     const end = points[points.length - 1];
     ctx.fillStyle = selected ? '#ffd83d' : 'rgba(255,255,255,0.92)';
     ctx.beginPath();
@@ -2812,7 +3026,6 @@ export class MapView {
   private computeLayouts(now: number): TokenLayout[] {
     const h = this.tokenHeight();
     const entries: TokenLayout[] = [];
-    const idleEntries: TokenLayout[] = [];
     const base = (playerId: number): Omit<TokenLayout, 'x' | 'y' | 'worldX' | 'worldY' | 'idle'> => ({
       playerId,
       fanX: 0,
@@ -2826,110 +3039,75 @@ export class MapView {
       switchPoof: false,
       warping: null,
       tilt: 0,
+      badge: false,
+      badgeIndex: 0,
+      badgeCount: 0,
+      anchorX: 0,
+      anchorY: 0,
+      nodeId: null,
+      switchAt: 0,
     });
-
+    const idleByNode = new Map<string, number[]>();
     for (const token of this.tokens) {
       if (this.tokenRealm(token.playerId) !== this.view) continue;
-      const move = this.moveAnim;
-      if (move && move.playerId === token.playerId) {
-        const full = [move.startNode, ...move.path];
-        const raw = Math.max(0, (now - move.start) / move.msPerStep);
-        const idx = Math.min(full.length - 2, Math.floor(raw));
-        const frac = Math.min(1, Math.max(0, raw - idx));
-        const a = this.nodeById.get(full[idx]);
-        const b = this.nodeById.get(full[idx + 1]);
-        if (!a || !b) continue;
-        const dx = wrapDx(a.x, b.x);
-        const mode = this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail';
-        const vehicle: VehicleKind =
-          mode === 'sea' ? 'ferry' : move.dice >= 3 ? 'bullet_train' : move.dice === 2 ? 'express' : 'train';
-        const prevNode = idx > 0 ? this.nodeById.get(full[idx - 1]) : null;
-        const prevMode = prevNode ? this.edgeModes.get(edgeKey(prevNode.id, a.id)) ?? 'rail' : null;
-        entries.push({
-          ...base(token.playerId),
-          x: this.camera.screenX(a.x + dx * frac),
-          y: this.camera.screenY(a.y + (b.y - a.y) * frac),
-          worldX: a.x + dx * frac,
-          worldY: a.y + (b.y - a.y) * frac,
-          idle: false,
-          facing: Math.abs(dx) > 0.01 ? Math.sign(dx) : 1,
-          moving: true,
-          vehicle,
-          stepFrac: frac,
-          stepIndex: idx,
-          switchPoof: prevMode !== null && prevMode !== mode && frac < 0.22,
-          tilt: Math.max(-0.12, Math.min(0.12, Math.atan2(b.y - a.y, Math.abs(dx) < 0.01 ? 0.01 : dx) * 0.28)),
-        });
-        continue;
-      }
-
-      const warp = this.warpAnim;
-      if (warp && warp.playerId === token.playerId) {
-        const world = this.tokenWorldPosition(token.playerId, now);
-        if (!world) continue;
-        const from = this.nodeById.get(warp.fromNode);
-        const to = this.nodeById.get(warp.toNode);
-        const dx = from && to ? wrapDx(from.x, to.x) : 1;
-        const vehicle: VehicleKind | null =
-          warp.via === 'plane' ? 'plane' : warp.via === 'rocket' ? 'rocket' : warp.via === 'carpet' ? 'carpet' : null;
-        entries.push({
-          ...base(token.playerId),
-          x: this.camera.screenX(world.x),
-          y: this.camera.screenY(world.y),
-          worldX: world.x,
-          worldY: world.y,
-          idle: false,
-          facing: Math.abs(dx) > 0.01 ? Math.sign(dx) : 1,
-          vehicle,
-          warping: warp.via,
-        });
-        continue;
-      }
-
-      const node = this.nodeById.get(token.nodeId);
+      if (this.moveAnim?.playerId === token.playerId || this.warpAnim?.playerId === token.playerId) continue;
+      const ids = idleByNode.get(token.nodeId) ?? [];
+      ids.push(token.playerId);
+      idleByNode.set(token.nodeId, ids);
+    }
+    for (const [nodeId, ids] of idleByNode) {
+      const node = this.nodeById.get(nodeId);
       if (!node) continue;
-      const emote = this.emoteActive.get(token.playerId);
-      const bob = !emote && this.state?.current === token.playerId ? Math.sin(now / 360) * 2.2 : 0;
-      idleEntries.push({
-        ...base(token.playerId),
-        x: this.camera.screenX(node.x),
-        y: this.camera.screenY(node.y) + bob,
-        worldX: node.x,
-        worldY: node.y,
-        idle: true,
+      const baseX = this.camera.screenX(node.x);
+      const baseY = this.camera.screenY(node.y);
+      const currentId = this.state?.current;
+      const hasCurrent = currentId !== undefined && ids.includes(currentId);
+      let badgeIds = hasCurrent ? ids.filter((id) => id !== currentId) : ids;
+      if (hasCurrent && currentId !== undefined) {
+        const currentEmote = this.emoteActive.get(currentId);
+        const bob = !currentEmote ? Math.sin(now / 360 + currentId) * 2.2 : 0;
+        entries.push({
+          ...base(currentId),
+          playerId: currentId,
+          x: baseX,
+          y: baseY + bob,
+          worldX: node.x,
+          worldY: node.y,
+          idle: true,
+          anchorX: baseX,
+          anchorY: baseY,
+          nodeId,
+        });
+      }
+      let hidden = 0;
+      if (badgeIds.length > 3) {
+        hidden = badgeIds.length - 3;
+        badgeIds = badgeIds.slice(0, 3);
+      }
+      const offsets: Array<[number, number]> = [
+        [-22, -20],
+        [22, -20],
+        [0, 22],
+      ];
+      badgeIds.forEach((playerId, index) => {
+        const [ox, oy] = offsets[index] ?? [0, 22];
+        entries.push({
+          ...base(playerId),
+          x: baseX + ox,
+          y: baseY + oy,
+          worldX: node.x,
+          worldY: node.y,
+          idle: true,
+          height: 26,
+          badge: true,
+          badgeIndex: index,
+          badgeCount: index === badgeIds.length - 1 ? hidden : 0,
+          anchorX: baseX,
+          anchorY: baseY,
+          nodeId,
+        });
       });
     }
-
-    // Fan out tokens that stand close together, not only exact same-node stacks,
-    // so metro clusters (Tokyo/Yokohama etc.) stay readable.
-    const used = new Set<number>();
-    const clusterRadius = h * 0.56;
-    for (let i = 0; i < idleEntries.length; i++) {
-      if (used.has(i)) continue;
-      const cluster = [i];
-      used.add(i);
-      for (let j = i + 1; j < idleEntries.length; j++) {
-        if (used.has(j)) continue;
-        const close = cluster.some((k) => {
-          const a = idleEntries[k];
-          const b = idleEntries[j];
-          return Math.hypot(a.x - b.x, a.y - b.y) < clusterRadius;
-        });
-        if (close) {
-          cluster.push(j);
-          used.add(j);
-        }
-      }
-      if (cluster.length <= 1) continue;
-      cluster.sort((a, b) => idleEntries[a].x - idleEntries[b].x);
-      const spacing = Math.min(64, Math.max(20, h * 0.72));
-      for (let k = 0; k < cluster.length; k++) {
-        const entry = idleEntries[cluster[k]];
-        entry.fanX = (k - (cluster.length - 1) / 2) * spacing;
-        entry.x += entry.fanX;
-      }
-    }
-    entries.push(...idleEntries);
     entries.sort((a, b) => a.y - b.y || a.playerId - b.playerId);
     const current = this.state?.current;
     if (current !== undefined) {
@@ -3072,6 +3250,10 @@ export class MapView {
             : null;
     const img = this.moodSprite(player.characterId, mood);
 
+    if (layout.badge) {
+      this.drawBadgeToken(ctx, layout, now, player, img, char, color);
+      return;
+    }
     if (layout.warping) {
       this.drawWarpFlight(ctx, layout, now, h, img, char, color, mood);
       return;
@@ -3145,6 +3327,118 @@ export class MapView {
         x: baseX, y: baseY, height: h, t: hitT, seed: layout.playerId + 7,
       });
     }
+  }
+
+  private drawBadgeToken(
+    ctx: CanvasRenderingContext2D,
+    layout: TokenLayout,
+    now: number,
+    player: PublicState['players'][number],
+    img: HTMLImageElement | undefined,
+    char: Character | undefined,
+    color: string,
+  ): void {
+    const r = 12;
+    let scale = 1;
+    const bounce = this.arrivalBounces.get(layout.playerId);
+    if (bounce !== undefined) {
+      const bp = Math.min(1, (now - bounce) / 450);
+      scale *= 1 + Math.sin(bp * Math.PI) * 0.2;
+    }
+    const active = this.emoteActive.get(layout.playerId);
+    let dx = 0;
+    let dy = 0;
+    if (active) {
+      const t = Math.min(1, (now - active.start) / active.duration);
+      const tr = tokenEmoteTransform(active.def.anim, t, layout.playerId + 1);
+      dx = tr.dx * 0.4;
+      dy = tr.dy * 0.4;
+      scale *= 0.92 + Math.min(0.18, Math.abs(tr.dy) * 0.01);
+    }
+    const x = layout.x + dx;
+    const y = layout.y + dy;
+    // leader line to the actual board node
+    if (Math.abs(layout.x - layout.anchorX) + Math.abs(layout.y - layout.anchorY) > 3) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(15, 35, 60, 0.35)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(layout.anchorX, layout.anchorY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = 'rgba(7, 30, 50, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(0, 9, 10, 3, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 2, 0, TAU);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#d9ecff';
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    if (img && img.naturalWidth > 0) {
+      const headH = img.naturalHeight * 0.58;
+      const scaleImg = Math.min((r * 2) / img.naturalWidth, (r * 2) / headH);
+      const w = img.naturalWidth * scaleImg;
+      const hh = headH * scaleImg;
+      ctx.drawImage(img, 0, 0, img.naturalWidth, headH, -w / 2, -r, w, hh);
+    } else {
+      ctx.fillStyle = color;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 12px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(char?.nameJa.slice(0, 1) ?? '?', 0, 0);
+    }
+    ctx.restore();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = '#23385c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 2, 0, TAU);
+    ctx.stroke();
+    if (layout.badgeCount > 0) {
+      ctx.beginPath();
+      ctx.arc(r - 1, -r + 1, 8, 0, TAU);
+      ctx.fillStyle = '#ffe04a';
+      ctx.fill();
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = '#20315a';
+      ctx.font = `800 9px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`+${layout.badgeCount}`, r - 1, -r + 1.5);
+    }
+    ctx.restore();
+    if (active) {
+      const t = Math.min(1, (now - active.start) / active.duration);
+      drawEmoteIcon(ctx, active.def.icon, x, y - 28, t);
+    }
+    const hitStart = this.hitOverlays.get(layout.playerId);
+    if (hitStart !== undefined) {
+      const ht = (now - hitStart) / HIT_DURATION_MS;
+      if (ht <= 1) drawHitFlash(ctx, x, y, 26, ht);
+    }
+    void player;
   }
 
   private idlePose(playerId: number, now: number): {
@@ -3291,6 +3585,38 @@ export class MapView {
       }
     }
 
+    if (layout.switchAt > 0 && now - layout.switchAt < 170) {
+      const g = 1 - (now - layout.switchAt) / 170;
+      ctx.save();
+      ctx.globalAlpha = g * 0.9;
+      ctx.strokeStyle = '#fff4a8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(baseX, vehY - metrics.h * 0.5, length * 0.62, metrics.h * 0.9, 0, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = g;
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) {
+        const a = now / 90 + (i / 4) * TAU;
+        ctx.beginPath();
+        ctx.arc(baseX + Math.cos(a) * length * 0.55, vehY - metrics.h * 0.5 + Math.sin(a) * metrics.h * 0.7, 3, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (this.reducedMotion) {
+      ctx.save();
+      ctx.font = `800 ${Math.max(14, h * 0.2)}px ${LABEL_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 3;
+      const icon = kind === 'ferry' || kind === 'sailboat' ? '⛴' : '🚆';
+      ctx.strokeText(icon, baseX, vehY - metrics.h - 16);
+      ctx.fillText(icon, baseX, vehY - metrics.h - 16);
+      ctx.restore();
+    }
     if (active) {
       const t = Math.min(1, (now - active.start) / active.duration);
       drawEmoteIcon(ctx, active.def.icon, baseX, vehY - metrics.h - charH - 14, t);
@@ -3502,6 +3828,81 @@ export class MapView {
     ctx.restore();
   }
 
+  private drawOverviewMarkers(ctx: CanvasRenderingContext2D): void {
+    const cam = this.camera;
+    const state = this.state;
+    if (!state) return;
+    const markerName = (x: number, y: number, text: string, color: string, shape: 'current' | 'destination'): void => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = 'rgba(8, 30, 52, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(0, 8, 9, 3.5, 0, 0, TAU);
+      ctx.fill();
+      if (shape === 'destination') {
+        ctx.strokeStyle = '#23385c';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -12); ctx.stroke();
+        for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) {
+          ctx.fillStyle = (r + c) % 2 === 0 ? '#1b2b47' : '#ffffff';
+          ctx.fillRect(2 + c * 6, -12 + r * 6, 6, 6);
+        }
+        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1; ctx.strokeRect(2, -12, 12, 12);
+      } else {
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.4; ctx.stroke();
+        ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1.2; ctx.stroke();
+      }
+      ctx.restore();
+      // Label in screen coordinates, after the translated marker drawing.
+      const fs = 12;
+      ctx.save();
+      ctx.font = `800 ${fs}px ${LABEL_FONT}`;
+      const tw = ctx.measureText(text).width + 14;
+      const bx = Math.max(3, Math.min(cam.vw - tw - 3, x - tw / 2));
+      const by = Math.max(3, Math.min(cam.vh - 20, y - 34));
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = shape === 'destination' ? '#c98a00' : color;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(bx, by, tw, 19, 9.5); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#23385c';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.fillStyle = shape === 'destination' ? '#8a5c00' : '#1a2b4c';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, bx + tw / 2, by + 10);
+      ctx.restore();
+    };
+    for (const token of this.tokens) {
+      if (this.tokenRealm(token.playerId) !== 'world') continue;
+      const node = this.nodeById.get(token.nodeId);
+      if (!node) continue;
+      const x = cam.screenX(node.x);
+      const y = cam.screenY(node.y);
+      if (x < -50 || x > cam.vw + 50 || y < -50 || y > cam.vh + 50) continue;
+      const isCurrent = token.playerId === state.current;
+      if (!isCurrent) {
+        ctx.fillStyle = this.playerColor(token.playerId);
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke();
+      }
+    }
+    const current = state.players[state.current];
+    if (current) {
+      const node = this.nodeById.get(current.nodeId);
+      if (node && (node.realm ?? 'world') === 'world') {
+        const player = state.players[state.current];
+        const name = this.characterById.get(player.characterId)?.nameJa ?? player.name;
+        markerName(cam.screenX(node.x), cam.screenY(node.y), name, this.playerColor(state.current), 'current');
+      }
+    }
+    const destCity = this.cityEntries.find((e) => e.city.id === state.destination);
+    if (destCity) {
+      markerName(cam.screenX(destCity.node.x), cam.screenY(destCity.node.y), destCity.city.nameJa, '#ffd23f', 'destination');
+    }
+  }
+
   private drawWorldWarpTiles(ctx: CanvasRenderingContext2D, now: number): void {
     if (this.view !== 'world' || this.detailLevel() < 1) return;
     const cam = this.camera;
@@ -3515,8 +3916,9 @@ export class MapView {
   }
 
   private drawSeasonParticles(ctx: CanvasRenderingContext2D, now: number): void {
-    if (this.reducedMotion || this.view !== 'world') return;
+    if (this.reducedMotion || this.view !== 'world' || this.isOverview()) return;
     const cam = this.camera;
+    if (Math.abs(this.geoAt(cam.x, cam.y).lat) < 23) return;
     const fade = this.seasonTransitionStart > 0 ? Math.min(1, (now - this.seasonTransitionStart) / 1000) : 1;
     ctx.save();
     ctx.globalAlpha = Math.max(0.2, fade);
@@ -4008,6 +4410,13 @@ export class MapView {
       this.lastTap = null;
       return;
     }
+    if (this.isOverview()) {
+      const world = this.camera.worldAt(x, y);
+      const zoom = Math.max(this.playZoom(), this.camera.minZoom() * 3.2);
+      void this.focusWorldPoint(world.x, world.y, zoom, 420);
+      this.lastTap = null;
+      return;
+    }
     if (this.badgeRect && insideRect(x, y, this.badgeRect) && this.selectedOption) {
       this.confirmOption(this.selectedOption);
       this.lastTap = null;
@@ -4019,6 +4428,7 @@ export class MapView {
       else {
         this.selectedOption = option.nodeId;
         this.hoveredOption = option.nodeId;
+        this.moveHooks?.onSelect?.(option.nodeId);
         this.requestRender();
       }
       this.lastTap = null;
@@ -4055,7 +4465,18 @@ export class MapView {
     if (!this.moveOptions) return null;
     let best: MoveOption | null = null;
     let bestDist = Infinity;
-    const radius = Math.max(18, this.tileRadius() + 10);
+    for (const pin of this.optionPinHits) {
+      const d = Math.hypot(pin.x - x, pin.y - y);
+      if (d <= pin.r && d < bestDist) {
+        const option = this.moveOptions.find((o) => o.nodeId === pin.nodeId) ?? null;
+        if (option) {
+          best = option;
+          bestDist = d;
+        }
+      }
+    }
+    if (best) return best;
+    const radius = Math.max(22, this.tileRadius() + 12);
     for (const option of this.moveOptions) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
@@ -4091,7 +4512,8 @@ export class MapView {
     const now = performance.now();
     if (now - this.lastPickAt < 400) return;
     this.lastPickAt = now;
-    this.movePick?.(nodeId);
+    if (this.moveHooks?.onConfirm) this.moveHooks.onConfirm(nodeId);
+    else this.movePick?.(nodeId);
   }
 }
 
