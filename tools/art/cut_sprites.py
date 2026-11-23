@@ -144,6 +144,10 @@ def main() -> None:
     for s, names in LANDMARKS.items():
         if ok(s):
             cut_grid(s, names, 4, 3, OUT / "landmarks", 256)
+    if ok("vehicles"):
+        BG["vehicles"] = "green"
+        cut_grid("vehicles", ["train", "express", "bullet_train", "ferry", "plane", "rocket", "carpet", "sailboat"],
+                 4, 2, OUT / "vehicles", 256)
     for s, names in EVENTS.items():
         if ok(s):
             cut_panels(s, names, OUT / "events")

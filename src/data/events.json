@@ -129,7 +129,8 @@
         "cpuWeight": 0.9
       }
     ],
-    "image": "assets/events/ai.webp"
+    "image": "assets/events/ai.webp",
+    "bgm": "event_crisis"
   },
   {
     "id": "ever-given-stuck",
@@ -491,7 +492,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "bank-run-2023",
@@ -598,7 +600,8 @@
         ],
         "cpuWeight": 1.2
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "tariff-war",
@@ -1404,7 +1407,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "rare-earth-controls",
@@ -1626,7 +1630,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "tulip-mania",
@@ -1727,7 +1732,8 @@
         "cpuWeight": 1.2
       }
     ],
-    "image": "assets/events/tulip.webp"
+    "image": "assets/events/tulip.webp",
+    "bgm": "event_crisis"
   },
   {
     "id": "south-sea-bubble",
@@ -1851,7 +1857,8 @@
         ],
         "cpuWeight": 0.9
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "mississippi-bubble",
@@ -1970,7 +1977,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "gold-rush-shovels",
@@ -2196,7 +2204,8 @@
         "cpuWeight": 0.7
       }
     ],
-    "image": "assets/events/hyperinflation.webp"
+    "image": "assets/events/hyperinflation.webp",
+    "bgm": "event_crisis"
   },
   {
     "id": "crash-1929",
@@ -2309,7 +2318,8 @@
         ],
         "cpuWeight": 1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "black-monday-1987",
@@ -2416,7 +2426,8 @@
         ],
         "cpuWeight": 1.3
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "japan-bubble-burst",
@@ -2548,7 +2559,8 @@
         ],
         "cpuWeight": 1.1
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "dotcom-bubble",
@@ -2667,7 +2679,8 @@
         ],
         "cpuWeight": 0.9
       }
-    ]
+    ],
+    "bgm": "event_crisis"
   },
   {
     "id": "too-big-to-fail",
@@ -2779,7 +2792,8 @@
         "cpuWeight": 1.2
       }
     ],
-    "image": "assets/events/bailout.webp"
+    "image": "assets/events/bailout.webp",
+    "bgm": "event_crisis"
   },
   {
     "id": "dutch-east-india-company",
@@ -3225,7 +3239,8 @@
         "cpuWeight": 1.1
       }
     ],
-    "image": "assets/events/hyperinflation.webp"
+    "image": "assets/events/hyperinflation.webp",
+    "bgm": "event_crisis"
   },
   {
     "id": "naked-emperor-ai",
@@ -3542,7 +3557,8 @@
         ],
         "cpuWeight": 1.2
       }
-    ]
+    ],
+    "bgm": "piper"
   },
   {
     "id": "wolf-boy-forecast",

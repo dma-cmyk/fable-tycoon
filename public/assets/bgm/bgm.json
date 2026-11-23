@@ -1,0 +1,62 @@
+{
+  "title": {
+    "file": "bgm/title.mp3",
+    "loopStart": 0,
+    "loopEnd": 45.246
+  },
+  "lobby": {
+    "file": "bgm/lobby.mp3",
+    "loopStart": 0,
+    "loopEnd": 56.471
+  },
+  "board_a": {
+    "file": "bgm/board_a.mp3",
+    "loopStart": 0,
+    "loopEnd": 45
+  },
+  "board_b": {
+    "file": "bgm/board_b.mp3",
+    "loopStart": 0,
+    "loopEnd": 46.667
+  },
+  "board_c": {
+    "file": "bgm/board_c.mp3",
+    "loopStart": 0,
+    "loopEnd": 75
+  },
+  "event_news": {
+    "file": "bgm/event_news.mp3",
+    "loopStart": 0,
+    "loopEnd": 25.532
+  },
+  "event_history": {
+    "file": "bgm/event_history.mp3",
+    "loopStart": 0,
+    "loopEnd": 99.692
+  },
+  "event_fable": {
+    "file": "bgm/event_fable.mp3",
+    "loopStart": 0,
+    "loopEnd": 44.286
+  },
+  "event_crisis": {
+    "file": "bgm/event_crisis.mp3",
+    "loopStart": 0,
+    "loopEnd": 52.645
+  },
+  "piper": {
+    "file": "bgm/piper.mp3",
+    "loopStart": 0,
+    "loopEnd": 63.448
+  },
+  "yearend": {
+    "file": "bgm/yearend.mp3",
+    "loopStart": 0,
+    "loopEnd": 67.317
+  },
+  "result": {
+    "file": "bgm/result.mp3",
+    "loopStart": 0,
+    "loopEnd": 73.043
+  }
+}

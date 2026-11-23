@@ -368,8 +368,11 @@ export type Action =
 export type Fx =
   | { t: 'turn'; playerId: number }
   | { t: 'dice'; values: number[] }
-  | { t: 'move'; playerId: number; path: string[] }
-  | { t: 'warp'; playerId: number; nodeId: string }
+  // dice = number of dice used for this move (1 normal, 2 急行, 3 超特急). Renderer picks the vehicle per hop:
+  // sea edge -> ship, rail edge -> train (dice 1) / express train (2) / bullet train (3).
+  | { t: 'move'; playerId: number; path: string[]; dice?: number }
+  // via: how the warp happens (plane = 飛行機カード, rocket = ロケットカード, carpet = 魔法のじゅうたん, event = イベント効果)
+  | { t: 'warp'; playerId: number; nodeId: string; via?: 'plane' | 'rocket' | 'carpet' | 'event' }
   | { t: 'cash'; playerId: number; delta: number; reason: string }
   | { t: 'buy'; playerId: number; propertyId: string; monopoly: boolean }
   | { t: 'sell'; playerId: number; propertyId: string; amount: number }
