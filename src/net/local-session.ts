@@ -270,6 +270,7 @@ export class LocalSession implements Session {
         state,
         deadline: controller.currentDeadline,
         lobby,
+        gen: 1,
       });
     }
     return session;
@@ -342,7 +343,18 @@ export class LocalSession implements Session {
     return first ?? null;
   }
 
-  private onMessage(msg: ServerMsg): void {
+  private stampGeneration(msg: ServerMsg): ServerMsg {
+    if (
+      (msg.t === 'welcome' || msg.t === 'lobby' || msg.t === 'snapshot' || msg.t === 'update') &&
+      msg.gen === undefined
+    ) {
+      return { ...msg, gen: 1 };
+    }
+    return msg;
+  }
+
+  private onMessage(raw: ServerMsg): void {
+    const msg = this.stampGeneration(raw);
     this.record(msg);
     if (!this.ready) return;
     for (const listener of this.listeners) listener(msg);

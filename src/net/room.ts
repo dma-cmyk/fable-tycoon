@@ -180,6 +180,8 @@ interface SerializedRoom {
   lastFx: Fx[];
   lastBy: number | null;
   deadline: number | null;
+  deadlineSeq: number;
+  deadlineActor: number | null;
   turnStartedAt: number;
   turnFxMs: number;
   playerIdBySeat: number[];
@@ -211,6 +213,8 @@ export interface RoomPublicSnapshot {
   hostSeat: number | null;
   /** seat index -> public-key fingerprint (never a secret). */
   seatKeys: Record<string, string>;
+  /** Per target seat -> fingerprints of seats that reported it (carried across migration). */
+  reportVotes: Record<string, string[]>;
   lastFx: Fx[];
   deadline: number | null;
 }
@@ -283,6 +287,8 @@ export class RoomController {
   private lastFx: Fx[] = [];
   private lastBy: number | null = null;
   private deadline: number | null = null;
+  private deadlineSeq = -1;
+  private deadlineActor: number | null = null;
   private turnStartedAt = 0;
   private turnFxMs = 0;
 
@@ -297,6 +303,7 @@ export class RoomController {
   private alarm: { at: number; handle: TimerHandle } | null = null;
   private ticking = false;
   private disposed = false;
+  private frozen = false;
 
   constructor(deps: RoomDeps) {
     this.deps = deps;
@@ -325,7 +332,7 @@ export class RoomController {
   resync(connId: string): void {
     const conn = this.connections.get(connId);
     if (!conn) return;
-    this.sendWelcome(conn);
+    this.sendWelcome(conn, true);
   }
 
   get currentSeq(): number {
@@ -358,6 +365,12 @@ export class RoomController {
       chat: this.chatHistory(),
       hostSeat: this.hostSeat,
       seatKeys,
+      reportVotes: Object.fromEntries(
+        [...this.reporters].map(([seat, votes]) => [
+          String(seat),
+          [...votes].map((voteSeat) => this.seats[voteSeat]?.token ?? String(voteSeat)),
+        ]),
+      ),
       lastFx: this.lastFx,
       deadline: this.deadline,
     };
@@ -433,6 +446,23 @@ export class RoomController {
     }
     if (this.hostSeat === seat.index) this.migrateHost();
     this.broadcastLobby();
+    this.armTurn(this.lastFx);
+  }
+
+  /** Freeze autonomous progress until a migrated host has majority acknowledgement. */
+  setFrozen(frozen: boolean): void {
+    if (this.frozen === frozen) return;
+    this.frozen = frozen;
+    if (frozen) {
+      this.clearTask('turn');
+      this.clearTask('ack');
+      this.clearTask('cpu');
+      for (const seat of this.seats) {
+        this.clearTask(`grace:${seat.index}`);
+        this.clearTask(`replace:${seat.index}`);
+      }
+      return;
+    }
     this.armTurn(this.lastFx);
   }
 
@@ -548,24 +578,8 @@ export class RoomController {
         this.bindReconnect(conn, seat);
         return;
       }
-      // A host-migration snapshot may have arrived before the host learned this seat's id.
-      // Reclaim only an empty-token, disconnected seat with the same display name.
-      const orphan =
-        name.length > 0
-          ? this.seats.find(
-              (candidate) =>
-                candidate.kind === 'human' &&
-                candidate.token === null &&
-                candidate.connId === null &&
-                candidate.name === name,
-            )
-          : undefined;
-      if (orphan) {
-        orphan.token = msg.token;
-        conn.token = msg.token;
-        this.bindReconnect(conn, orphan);
-        return;
-      }
+      // Never reclaim a seat by display name: the pinned public-key fingerprint is the only
+      // credential. A keyless seat stays CPU-autoplayed until its owner proves the key.
       // Unknown / expired token: fall through as a fresh connection.
     }
     if (conn.seat !== null) {
@@ -595,7 +609,7 @@ export class RoomController {
     this.system(`${characterLabel(seat)} が戻ってきました`);
     this.sendWelcome(conn);
     this.broadcastLobby();
-    if (this.status === 'playing' || this.status === 'finished') {
+    if (!this.frozen && (this.status === 'playing' || this.status === 'finished')) {
       if (this.actorSeat() === seat.index) {
         this.clearTask('cpu');
         if (this.deadline !== null) this.setTask('turn', this.deadline);
@@ -603,7 +617,11 @@ export class RoomController {
     }
   }
 
-  private sendWelcome(conn: Conn): void {
+  private sendWelcome(conn: Conn, resync = false): void {
+    const seatKeys: Record<string, string> = {};
+    for (const seat of this.seats) {
+      if (seat.kind === 'human' && seat.token) seatKeys[String(seat.index)] = seat.token;
+    }
     this.deps.send(conn.id, {
       t: 'welcome',
       roomId: this.roomId,
@@ -611,6 +629,7 @@ export class RoomController {
       seat: conn.seat,
       lobby: this.lobbyView(),
       chat: [...this.chat],
+      seatKeys,
     });
     if (this.state && (this.status === 'playing' || this.status === 'finished')) {
       this.deps.send(conn.id, {
@@ -619,6 +638,7 @@ export class RoomController {
         state: sanitizeState(this.state),
         deadline: this.deadline,
         lobby: this.lobbyView(),
+        ...(resync ? { resync: true } : {}),
       });
     }
   }
@@ -905,6 +925,7 @@ export class RoomController {
     // after the snapshot. Bump seq so the same state is adopted once with animation; reconnecting
     // clients only receive the current snapshot.
     this.seq += 1;
+    this.deadlineSeq = this.seq;
     this.deps.broadcast({
       t: 'update',
       seq: this.seq,
@@ -926,6 +947,10 @@ export class RoomController {
     const seat = this.seatOfConn(conn);
     if (!seat) {
       this.sendError(conn.id, 'not_your_turn', '席に座っていません');
+      return;
+    }
+    if (this.frozen) {
+      this.sendError(conn.id, 'bad_request', 'ホスト権限の確認待ちです');
       return;
     }
     const actor = actorOf(this.state);
@@ -1124,10 +1149,17 @@ export class RoomController {
     this.clearTask('turn');
     this.clearTask('ack');
     this.clearTask('cpu');
-    this.deadline = null;
-    this.turnStartedAt = this.deps.now();
+    const actorNow = this.state ? actorOf(this.state) : null;
+    const sameDecision = this.deadlineSeq === this.seq && this.deadlineActor === actorNow;
+    if (!sameDecision) {
+      this.deadline = null;
+      this.deadlineSeq = this.seq;
+      this.deadlineActor = actorNow;
+    }
+    this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
     this.turnFxMs = sumFxDuration(fx) * (this.deps.fxScale ?? 1);
 
+    if (this.frozen) return;
     if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
       return;
     }
@@ -1153,27 +1185,39 @@ export class RoomController {
     }
     if (seat.kind !== 'human') return;
 
-    if (this.state.phase.t === 'year_end') {
-      this.setTask('ack', now + this.yearEndAckMs);
+    if (seat.token === null && !seat.autoplay) {
+      // No pinned key after migration: CPU-autoplay until the owner proves key ownership.
+      seat.autoplay = true;
+    }
+    if (this.settings.turnSeconds > 0 && this.deadline === null) {
+      this.deadline = this.turnStartedAt + this.turnFxMs + this.settings.turnSeconds * 1000;
     }
 
+    if (this.state.phase.t === 'year_end') {
+      this.setTask('ack', now + this.turnFxMs + this.yearEndAckMs);
+    }
     if (seat.autoplay) {
       this.clearTask(`grace:${seat.index}`);
-      this.setTask('cpu', now + this.turnFxMs + this.cpuDelayMs);
+      if (this.deadline !== null && this.deadline <= now) {
+        this.setTask('cpu', now);
+        return;
+      }
+      this.setTask('cpu', Math.min(now + this.turnFxMs + this.cpuDelayMs, this.deadline ?? Number.POSITIVE_INFINITY));
       return;
     }
     if (!seatConnected(seat)) {
-      this.deadline =
-        this.settings.turnSeconds > 0
-          ? now + this.turnFxMs + this.settings.turnSeconds * 1000
-          : null;
+      if (this.settings.turnSeconds > 0 && this.deadline === null) {
+        this.deadline = this.turnStartedAt + this.turnFxMs + this.settings.turnSeconds * 1000;
+      }
       if (this.deadline !== null) this.setTask('turn', this.deadline);
       this.setTask(`grace:${seat.index}`, now + this.graceMs);
       return;
     }
 
     if (this.settings.turnSeconds > 0) {
-      this.deadline = now + this.turnFxMs + this.settings.turnSeconds * 1000;
+      if (this.deadline === null) {
+        this.deadline = this.turnStartedAt + this.turnFxMs + this.settings.turnSeconds * 1000;
+      }
       this.setTask('turn', this.deadline);
     }
   }
@@ -1669,6 +1713,8 @@ export class RoomController {
       lastFx: this.lastFx,
       lastBy: this.lastBy,
       deadline: this.deadline,
+      deadlineSeq: this.deadlineSeq,
+      deadlineActor: this.deadlineActor,
       turnStartedAt: this.turnStartedAt,
       turnFxMs: this.turnFxMs,
       playerIdBySeat: this.playerIdBySeat,
@@ -1702,6 +1748,8 @@ export class RoomController {
     room.lastFx = [...snapshot.lastFx];
     room.lastBy = null;
     room.deadline = snapshot.deadline;
+    room.deadlineSeq = room.seq;
+    room.deadlineActor = null;
     room.turnStartedAt = now;
     room.turnFxMs = sumFxDuration(snapshot.lastFx) * (deps.fxScale ?? 1);
     room.nextEmoteId = 1;
@@ -1718,7 +1766,9 @@ export class RoomController {
       seat.connId = null;
       seat.disconnectedAt =
         info.kind === 'human' && room.status !== 'lobby' ? now : null;
-      seat.autoplay = false;
+      // A seat whose public key is missing cannot be authenticated; drive it by CPU until the
+      // owner proves the key with a signed hello.
+      seat.autoplay = info.kind === 'human' && seat.token === null;
       return seat;
     });
     while (room.seats.length < MAX_SEATS) {
@@ -1727,6 +1777,15 @@ export class RoomController {
 
     if (snapshot.state) {
       room.state = withSeed({ ...snapshot.state, rng: 0 }, deps.randomInt(0x7fffffff) || 1);
+      room.deadlineActor = actorOf(room.state);
+    }
+
+    for (const [target, votes] of Object.entries(snapshot.reportVotes ?? {})) {
+      const targetSeat = Number(target);
+      const reporterSeats = votes
+        .map((fingerprint) => room.seats.find((seat) => seat.token === fingerprint)?.index)
+        .filter((index): index is number => index !== undefined);
+      if (reporterSeats.length > 0) room.reporters.set(targetSeat, new Set(reporterSeats));
     }
 
     room.playerIdBySeat = [];
@@ -1755,6 +1814,8 @@ export class RoomController {
     room.lastFx = parsed.lastFx ?? [];
     room.lastBy = parsed.lastBy;
     room.deadline = parsed.deadline;
+    room.deadlineSeq = parsed.deadlineSeq ?? -1;
+    room.deadlineActor = parsed.deadlineActor ?? null;
     room.turnStartedAt = parsed.turnStartedAt ?? deps.now();
     room.turnFxMs = parsed.turnFxMs ?? 0;
     room.playerIdBySeat = parsed.playerIdBySeat ?? [];

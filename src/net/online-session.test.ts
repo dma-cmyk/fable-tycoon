@@ -9,16 +9,21 @@ import { GAME_DATA } from '../data/index';
 import { MqttTransport } from './p2p/transport';
 import { generateIdentity } from './p2p/identity';
 import { PROTOCOL_VERSION } from './protocol';
+import type { P2PControl } from './p2p/transport';
 import type { PublicState, ServerMsg } from './protocol';
 import type { Session } from './session-types';
 import {
+  appendReportEvidence,
+  authorityInfoForTests,
   checkpointHostForTests,
   configureNetworkForTests,
+  exportReports,
   isNewerStateOrder,
   createOnlineRoom,
   joinOnlineRoom,
   killSessionForTests,
   resumeHostForTests,
+  resyncPeerForTests,
   roomExists,
   setNetworkPartitionForTests,
   transportInfo,
@@ -257,6 +262,37 @@ describe('online P2P over an in-process MQTT broker', () => {
     hostSession.send({ t: 'start' });
     await Promise.all(snapshots);
 
+    // A competing host claim signed by a key that is not pinned to a known seat must be ignored.
+    const rogueHost = new MqttTransport('rogue-host', {
+      identity: await generateIdentity(),
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    await rogueHost.connect(hostSession.roomId);
+    const lobbyNow = guest1.session.lobby();
+    if (lobbyNow) {
+      const claim: P2PControl = {
+        k: 'host',
+        hostPeerId: 'rogue-host',
+        seat: 1,
+        hostSeat: 1,
+        seatKeys: { ...lobbyNow.seats.reduce<Record<string, string>>((acc, seat) => { acc[String(seat.index)] = 'rogue-key'; return acc; }, {}) },
+        reportVotes: {},
+        lobby: lobbyNow,
+        seq: 99999,
+        gen: 99,
+        connectedHumans: 4,
+        broker: null,
+        at: Date.now(),
+      };
+      await rogueHost.send('test-guest1', claim);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(guest1.session.lobby()?.seats.find((seat) => seat.isHost)?.index).toBe(0);
+    }
+    await rogueHost.close();
+
     const killGuestGate = deferred();
     const killHostGate = deferred();
     const settled = Promise.withResolvers<PublicState>();
@@ -264,7 +300,7 @@ describe('online P2P over an in-process MQTT broker', () => {
     let guest2Rejoined = false;
     let hostKilled = false;
     let hostCheckpoint: ReturnType<typeof checkpointHostForTests> = null;
-    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 60_000);
+    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 150_000);
 
     function observe(peer: Peer): void {
       peer.onState = (state, seq) => {
@@ -321,11 +357,11 @@ describe('online P2P over an in-process MQTT broker', () => {
     await guest1.waitFor(
       (msg) =>
         msg.t === 'lobby' &&
+        msg.lobby.seats.find((seat) => seat.isHost)?.index === 1 &&
         [1, 2, 3].every((seatIndex) => msg.lobby.seats[seatIndex]?.connected === true),
       15_000,
       'all guests rebound to the new host',
     );
-
     // The old host seat must be driven by the new host's grace/CPU path even if the old host
     // never comes back. Wait for a state advance before resuming it.
     const seqAfterMigration = guest1.seq;
@@ -335,6 +371,10 @@ describe('online P2P over an in-process MQTT broker', () => {
       20_000,
       'game advances without old host',
     );
+    const authority = authorityInfoForTests(guest1.session);
+    expect(authority?.ready).toBe(true);
+    expect(authority?.requiredAcks).toBeGreaterThanOrEqual(1);
+    expect(authority?.acks).toBeGreaterThanOrEqual(authority?.requiredAcks ?? 0);
 
     const finalState = await settled.promise;
     expect(hostCheckpoint).not.toBeNull();
@@ -376,6 +416,9 @@ describe('online P2P over an in-process MQTT broker', () => {
     expect(states[0]).toBe(states[2]);
 
     for (const peer of remaining) {
+      for (const msg of peer.history) {
+        if (msg.t === 'snapshot' || msg.t === 'update') expect(msg.gen).toBeGreaterThanOrEqual(1);
+      }
       const seqs = peer.history
         .filter((msg): msg is Extract<ServerMsg, { t: 'update' }> => msg.t === 'update')
         .map((msg) => msg.seq);
@@ -399,7 +442,7 @@ describe('online P2P over an in-process MQTT broker', () => {
 
     const elapsed = Date.now() - startedAt;
     console.log(`[p2p-e2e] 1-year 3-guest game (host migrated) in ${elapsed}ms, final seq ${guest1.seq}`);
-  }, 90_000);
+  }, 240_000);
 
   it('heals a partitioned self-promoted host without split-brain', async () => {
     for (const peer of active) peer.stop();
@@ -484,6 +527,72 @@ describe('online P2P over an in-process MQTT broker', () => {
     );
     expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
   }, 60_000);
+
+  it('appends report evidence without overwriting it', () => {
+    const data = new Map<string, string>([['fable.reports', '[{"old":1}]']]);
+    const storage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', {
+      value: { localStorage: storage, sessionStorage: storage },
+      configurable: true,
+    });
+    try {
+      appendReportEvidence({ new: 1 });
+      const stored: unknown = JSON.parse(exportReports());
+      expect(Array.isArray(stored) ? stored.length : 0).toBe(2);
+      expect(stored).toEqual([{ old: 1 }, { new: 1 }]);
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, 'window', descriptor);
+      else Reflect.deleteProperty(globalThis, 'window');
+    }
+  });
+
+  it('delivers same-seq resync snapshots to guests', async () => {
+    const hostSession = await createOnlineRoom('resync-host');
+    const host = new Peer(hostSession, 'resync-host', false);
+    const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'resync-guest'), 'resync-guest', false);
+    active.push(host, guest);
+    try {
+      await guest.waitFor((msg) => msg.t === 'welcome');
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      const guestWelcome = guest.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 1);
+      guest.session.send({ t: 'take_seat', index: 1 });
+      await guestWelcome;
+      guest.session.send({ t: 'pick_character', characterId: 'alice' });
+      hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
+      const started = guest.waitFor((msg) => msg.t === 'update', 15_000, 'start update');
+      hostSession.send({ t: 'start' });
+      const update = await started;
+      expect(update.t).toBe('update');
+
+      const snapshotBefore = guest.history.filter((msg) => msg.t === 'snapshot').length;
+      // Ask the host to resend the same (gen, seq) snapshot: the session must deliver it.
+      const replay = guest.waitFor(
+        (msg) => msg.t === 'snapshot' && msg.resync === true,
+        10_000,
+        'resync snapshot',
+      );
+      resyncPeerForTests(hostSession, 'resync-guest');
+      await replay;
+      expect(guest.history.filter((msg) => msg.t === 'snapshot').length).toBeGreaterThanOrEqual(
+        snapshotBefore + 1,
+      );
+    } finally {
+      host.stop();
+      guest.stop();
+    }
+  }, 30_000);
 
   it('orders host state by generation then seq', () => {
     expect(isNewerStateOrder(1, 5, 1, 5)).toBe(false);

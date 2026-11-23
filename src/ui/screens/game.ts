@@ -724,11 +724,14 @@ export class GameScreen implements ScreenHandle {
   }
 
   private messageGen(msg: ServerMsg): number {
-    return (msg as ServerMsg & { gen?: number }).gen ?? this.latestGen;
+    if (msg.t === 'welcome' || msg.t === 'lobby' || msg.t === 'snapshot' || msg.t === 'update') {
+      return msg.gen ?? this.latestGen;
+    }
+    return this.latestGen;
   }
 
   private isResync(msg: ServerMsg): boolean {
-    return (msg as ServerMsg & { resync?: boolean }).resync === true;
+    return msg.t === 'snapshot' && msg.resync === true;
   }
 
   private beginGeneration(gen: number): void {
@@ -754,13 +757,16 @@ export class GameScreen implements ScreenHandle {
       return;
     }
     switch (msg.t) {
-      case 'welcome':
+      case 'welcome': {
+        const gen = this.messageGen(msg);
+        if (gen > this.latestGen) this.beginGeneration(gen);
         this.mySeat = msg.seat;
         this.lobby = msg.lobby;
         this.syncFlaggedSeats();
         for (const line of msg.chat) this.chat.addLine(line);
         this.renderConnections();
         break;
+      }
       case 'snapshot': {
         const gen = this.messageGen(msg);
         if (gen < this.latestGen) break;
@@ -794,11 +800,14 @@ export class GameScreen implements ScreenHandle {
         this.updateHud();
         break;
       }
-      case 'lobby':
+      case 'lobby': {
+        const gen = this.messageGen(msg);
+        if (gen > this.latestGen) this.beginGeneration(gen);
         this.lobby = msg.lobby;
         this.syncFlaggedSeats();
         this.renderConnections();
         break;
+      }
       case 'flag': {
         this.flaggedSeats.add(msg.seat);
         const playerId = this.playerIdOfSeat(msg.seat);
@@ -1655,6 +1664,7 @@ export class GameScreen implements ScreenHandle {
 
   private sendAction(action: Action): void {
     if (!this.state || this.actionPending || this.fxBusy) return;
+    if (this.appliedGen !== this.latestGen) return;
     this.actionPending = true;
     this.armPendingTimer();
     this.updateHud();

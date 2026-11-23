@@ -42,6 +42,7 @@ export type P2PControl =
       seat: number | null;
       hostSeat: number | null;
       seatKeys: Record<string, string>;
+      reportVotes: Record<string, string[]>;
       lobby: LobbyView;
       seq: number;
       gen: number;
@@ -55,6 +56,7 @@ export type P2PControl =
       seat: number | null;
       hostSeat: number | null;
       seatKeys: Record<string, string>;
+      reportVotes: Record<string, string[]>;
       lobby: LobbyView;
       seq: number;
       gen: number;
@@ -64,6 +66,7 @@ export type P2PControl =
     }
   | { k: 'presence'; peerId: string; seat: number | null; at: number }
   | { k: 'host_probe'; from: string; at: number }
+  | { k: 'host_ack'; hostPeerId: string; gen: number; seat: number | null; at: number }
   | { k: 'probe'; at: number }
   | { k: 'probeAck'; at: number }
   | { k: 'resync' }
@@ -177,6 +180,10 @@ export class MqttTransport implements P2PTransport {
   private readonly log: (message: string, detail?: unknown) => void;
   private client: MqttClient | null = null;
   private brokerUrl: string | null = null;
+  private brokerList: readonly string[] = [];
+  private brokerIndex = 0;
+  private failoverTimer: unknown = null;
+  private failoverInFlight = false;
   private root = '';
   private roomTopic = '';
   private inboxTopic = '';
@@ -244,8 +251,10 @@ export class MqttTransport implements P2PTransport {
     this.key = await deriveRoomKey(roomId);
 
     const brokers = this.options.brokers ?? DEFAULT_BROKERS;
+    this.brokerList = brokers;
     let lastError: unknown = null;
-    for (const broker of brokers) {
+    for (let index = 0; index < brokers.length; index += 1) {
+      const broker = brokers[index];
       try {
         const client = await this.openClient(broker);
         if (this.closed) {
@@ -254,6 +263,7 @@ export class MqttTransport implements P2PTransport {
         }
         this.client = client;
         this.brokerUrl = broker;
+        this.brokerIndex = index;
         this.attachClient(client);
         await this.subscribe(client);
         this.setStatus('open');
@@ -313,12 +323,16 @@ export class MqttTransport implements P2PTransport {
     client.on('close', () => {
       if (this.closed) return;
       this.setStatus('reconnecting');
+      this.scheduleFailover();
     });
     client.on('offline', () => {
-      if (!this.closed) this.setStatus('reconnecting');
+      if (this.closed) return;
+      this.setStatus('reconnecting');
+      this.scheduleFailover();
     });
     client.on('connect', () => {
       if (this.closed) return;
+      this.clearFailover();
       void this.subscribe(client).then(() => {
         this.setStatus('open');
         this.flushOfflineQueue();
@@ -338,6 +352,72 @@ export class MqttTransport implements P2PTransport {
         else resolve();
       });
     });
+  }
+
+  private scheduleFailover(): void {
+    if (this.closed || this.failoverTimer !== null) return;
+    this.failoverTimer = setTimeout(() => {
+      this.failoverTimer = null;
+      void this.failoverToNextBroker();
+    }, 5_000);
+  }
+
+  private clearFailover(): void {
+    if (this.failoverTimer === null) return;
+    clearTimeout(this.failoverTimer as number);
+    this.failoverTimer = null;
+  }
+
+  private async failoverToNextBroker(): Promise<void> {
+    if (this.closed || this.failoverInFlight) return;
+    if (this.client?.connected) return;
+    if (this.brokerList.length === 0) return;
+    this.failoverInFlight = true;
+    try {
+      const old = this.client;
+      this.client = null;
+      try {
+        old?.end(true);
+      } catch {
+        // ignore
+      }
+      this.brokerIndex = (this.brokerIndex + 1) % this.brokerList.length;
+      const broker = this.brokerList[this.brokerIndex];
+      this.log(`mqtt failover to ${broker}`);
+      const client = await this.openClient(broker);
+      if (this.closed) {
+        client.end(true);
+        return;
+      }
+      this.client = client;
+      this.brokerUrl = broker;
+      this.attachClient(client);
+      await this.subscribe(client);
+      this.setStatus('open');
+      this.flushOfflineQueue();
+    } catch (error) {
+      this.log('mqtt failover failed', error);
+      this.scheduleFailover();
+    } finally {
+      this.failoverInFlight = false;
+    }
+  }
+
+  /** Test seam: tear down the live MQTT client without touching DataChannels. */
+  debugKillMqttForTests(): void {
+    const client = this.client;
+    this.client = null;
+    try {
+      client?.end(true);
+    } catch {
+      // ignore
+    }
+    this.setStatus('reconnecting');
+  }
+
+  /** Test seam: run the broker rotation immediately. */
+  async debugFailoverForTests(): Promise<void> {
+    await this.failoverToNextBroker();
   }
 
   private setStatus(status: TransportStatus): void {
@@ -739,6 +819,7 @@ export class MqttTransport implements P2PTransport {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.clearFailover();
     for (const entry of this.parts.values()) clearTimeout(entry.timer);
     this.parts.clear();
     for (const peerId of [...this.peers.keys()]) this.teardownPc(peerId);

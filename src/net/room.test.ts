@@ -657,6 +657,33 @@ describe('RoomController timing, mapping and normalization', () => {
     expect(sentOf(harness, 'a2', 'snapshot')?.deadline).toBe(deadline);
   });
 
+  it('keeps a deadline while autoplay runs and restores it on reconnect', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { turnSeconds: 20 });
+    const firstDeadline = started.snapshot.deadline;
+    if (firstDeadline === null) throw new Error('expected deadline');
+    harness.clock.advance(firstDeadline - harness.clock.now());
+    const timedOut = latest(harness.broadcasts, 'update');
+    expect(timedOut?.seq ?? 0).toBeGreaterThan(started.seq);
+    const autoplayDeadline = harness.room.currentDeadline;
+    expect(autoplayDeadline).not.toBeNull();
+
+    harness.room.disconnect('a');
+    harness.room.connect('a2');
+    harness.room.message('a2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'A',
+      token: started.tokenA,
+    });
+    const snapshot = sentOf(harness, 'a2', 'snapshot');
+    expect(snapshot?.deadline).toBe(autoplayDeadline);
+    if (autoplayDeadline === null) throw new Error('expected autoplay deadline');
+    harness.clock.advance(autoplayDeadline - harness.clock.now());
+    expect(latest(harness.broadcasts, 'update')?.seq ?? 0).toBeGreaterThan(timedOut?.seq ?? 0);
+  });
+
   it('maps gapped lobby seats densely to player ids', () => {
     const harness = makeHarness();
     join(harness, 'a', 0, 'momotaro');
@@ -668,6 +695,89 @@ describe('RoomController timing, mapping and normalization', () => {
     expect(harness.room.playerToSeat(0)).toBe(0);
     expect(harness.room.playerToSeat(1)).toBe(2);
     expect(harness.room.playerToSeat(2)).toBeNull();
+  });
+});
+
+describe('RoomController frozen authority', () => {
+  it('rejects actions while frozen and resumes after unfreeze', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness);
+    harness.room.setFrozen(true);
+    harness.room.message('a', { t: 'action', seq: started.seq, action: { t: 'roll' } });
+    expect(errorsOf(harness, 'a')).toContain('bad_request');
+    harness.room.setFrozen(false);
+    const update = act(harness, 'a', started.seq, { t: 'roll' });
+    expect(update.by).toBe(0);
+  });
+});
+
+describe('RoomController migration authority and resync', () => {
+  it('cannot reclaim a seat by display name when the adopted key is missing', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness);
+    const pub = harness.room.publicSnapshot();
+    delete pub.seatKeys['1'];
+    const adoptedHarness = makeHarness();
+    const adopted = RoomController.adopt({ ...pub, hostSeat: 0 }, adoptedHarness.deps);
+    adopted.connect('g1');
+    adopted.message('g1', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'ぼリス',
+      token: 'attacker-key',
+    });
+    expect(sentOf(adoptedHarness, 'g1', 'welcome')?.seat).toBeNull();
+    expect(adopted.lobbyView().seats[1].kind).toBe('human');
+    expect(adopted.lobbyView().seats[1].autoplay).toBe(true);
+    void started;
+  });
+
+  it('carries pending report votes through adopt and flags on the second vote', () => {
+    const harness = makeHarness();
+    join(harness, 'a', 0, 'momotaro');
+    const tokenB = join(harness, 'b', 1, 'alice');
+    join(harness, 'c', 2, 'sinbad');
+    harness.room.message('a', { t: 'report', seat: 2, reason: 'spam' });
+    const pub = harness.room.publicSnapshot();
+    expect(pub.reportVotes['2']?.length).toBe(1);
+
+    const adoptedHarness = makeHarness();
+    const adopted = RoomController.adopt(pub, adoptedHarness.deps);
+    adopted.connect('b2');
+    adopted.message('b2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'B',
+      token: tokenB,
+    });
+    adopted.message('b2', { t: 'report', seat: 2, reason: 'abuse' });
+    expect(adoptedHarness.broadcasts.some((msg) => msg.t === 'flag' && msg.seat === 2)).toBe(true);
+    expect(harness.reports).toHaveLength(1);
+  });
+
+  it('flags explicit resync snapshots with the same seq', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness);
+    harness.room.connect('a2');
+    harness.room.message('a2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'A',
+      token: started.tokenA,
+    });
+    harness.room.resync('a2');
+    const snapshots = harness.sent
+      .filter((entry) => entry.connId === 'a2' && entry.msg.t === 'snapshot')
+      .map((entry) => entry.msg);
+    const last = snapshots[snapshots.length - 1];
+    expect(last?.t).toBe('snapshot');
+    if (last?.t === 'snapshot') {
+      expect(last.seq).toBe(started.seq);
+      expect(last.resync).toBe(true);
+    }
   });
 });
 

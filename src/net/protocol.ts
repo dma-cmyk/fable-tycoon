@@ -94,12 +94,35 @@ export type ClientMsg =
   | { t: 'ping'; at: number };
 
 // ---------------------------------------------------------------- server -> client
+//
+// Consumers MUST order state messages by (gen, seq), not seq alone: a new host may start with a
+// lower seq. `gen` is present on every welcome/lobby/snapshot/update delivered by a Session.
+// A snapshot with `resync: true` is an explicit request to re-adopt the same (gen, seq).
 
 export type ServerMsg =
-  | { t: 'welcome'; roomId: string; token: string; seat: number | null; lobby: LobbyView; chat: ChatLine[]; gen?: number }
+  | {
+      t: 'welcome';
+      roomId: string;
+      token: string;
+      seat: number | null;
+      lobby: LobbyView;
+      chat: ChatLine[];
+      gen?: number;
+      /** Public-key fingerprints per seat, so a reconnecting guest can validate host claims. */
+      seatKeys?: Record<string, string>;
+    }
   | { t: 'lobby'; lobby: LobbyView; gen?: number }
   // full state, sent on game start / reconnect; client renders it without animation
-  | { t: 'snapshot'; seq: number; state: PublicState; deadline: number | null; lobby: LobbyView; gen?: number }
+  | {
+      t: 'snapshot';
+      seq: number;
+      state: PublicState;
+      deadline: number | null;
+      lobby: LobbyView;
+      gen?: number;
+      /** Re-sent on explicit resync: same (gen, seq) must be delivered, not dropped. */
+      resync?: boolean;
+    }
   // incremental: apply fx animations then adopt state
   | { t: 'update'; seq: number; by: number; fx: Fx[]; state: PublicState; deadline: number | null; gen?: number }
   | { t: 'chat'; line: ChatLine }

@@ -60,6 +60,19 @@ describe('MqttTransport chunking and encryption', () => {
       await guest.send('chunk-host', { t: 'chat', text: 'p2p 経由の返信' });
       await expect(reply.promise).resolves.toMatchObject({ t: 'chat', text: 'p2p 経由の返信' });
 
+      // MQTT outage: messages queue and flush after broker failover/rotation.
+      host.debugKillMqttForTests();
+      const flushed = Promise.withResolvers<P2PMessage>();
+      const unsubscribeFlush = guest.onMessage((_from, message3) => {
+        if ('t' in message3 && message3.t === 'system' && message3.text === 'queued-during-outage') {
+          flushed.resolve(message3);
+        }
+      });
+      await host.send('chunk-guest', { t: 'system', text: 'queued-during-outage' });
+      await host.debugFailoverForTests();
+      await expect(flushed.promise).resolves.toMatchObject({ t: 'system', text: 'queued-during-outage' });
+      unsubscribeFlush();
+
       unsubscribe();
       unsubscribeHost();
       expect(guest.p2pPeers()).toBe(0);
