@@ -45,6 +45,8 @@ export interface City {
   landmark?: string; // landmark sprite id (public/assets/landmarks/<id>.png)
   blurb: string; // 一言紹介（ブラックユーモア可、1文）
   properties: Property[]; // 2..6
+  /** 異世界の駅なら realm id（lat/lon は無視、盤面座標は board.json の node.x/y を使う） */
+  realm?: RealmId;
 }
 
 export type SquareKind =
@@ -54,7 +56,11 @@ export type SquareKind =
   | 'yellow' // カードがもらえる
   | 'news' // ニュース/歴史イベント
   | 'shop' // カード売り場（所持金でカードを買える）
-  | 'warp'; // オズの竜巻マス（ランダムな都市へ吹き飛ばされる）
+  | 'warp' // オズの竜巻マス（ランダムな都市へ吹き飛ばされる）
+  | 'portal'; // 異世界の出口（止まる/通過で地上へ戻る。行き先は realm ごとの規則）
+
+/** 異世界マップ。地上 (world) とはつながっておらず、イベント・カード・特殊マスで出入りする。 */
+export type RealmId = 'heaven' | 'hell' | 'space';
 
 export type EdgeMode = 'rail' | 'sea';
 
@@ -64,6 +70,7 @@ export interface BoardNode {
   x: number; // map units (see geo.ts MAP_W/MAP_H)
   y: number;
   cityId?: string; // only for kind === 'city'
+  realm?: RealmId; // 省略 = 地上。異世界ノードの x/y はその realm の座標系（REALM_W × REALM_H）
 }
 
 export interface BoardEdge {
@@ -151,6 +158,8 @@ export type Effect =
   | { op: 'move'; who: Who; to: 'destination_near' | 'random_city' | 'nearest_port' | string /* cityId */ }
   | { op: 'skip'; who: Who; turns: number }
   | { op: 'piper'; to: Who }
+  // 異世界へ送る（入口ノードへワープ）。'world' なら地上の random city へ戻す
+  | { op: 'realm'; who: Who; realm: RealmId | 'world' }
   // probabilistic branch (chance 0..1), uses seeded rng
   | { op: 'gamble'; chance: number; win: Effect[]; lose: Effect[] };
 
@@ -191,6 +200,8 @@ export interface GameEventDef {
   sources?: Source[];
   /** どこが創作・誇張かの注記（ゲーム内「元ネタ」表示に使う） */
   satireNote: string;
+  /** ニュースマスで発生できる場所。省略 = 地上のみ。['hell'] なら地獄のニュースマス専用 */
+  realms?: (RealmId | 'world')[];
   weight: number; // 抽選の重み
   minYear?: number;
   once?: boolean; // 1 ゲーム 1 回
@@ -385,7 +396,7 @@ export type Fx =
   // sea edge -> ship, rail edge -> train (dice 1) / express train (2) / bullet train (3).
   | { t: 'move'; playerId: number; path: string[]; dice?: number }
   // via: how the warp happens (plane = 飛行機カード, rocket = ロケットカード, carpet = 魔法のじゅうたん, event = イベント効果, tornado = オズの竜巻マス)
-  | { t: 'warp'; playerId: number; nodeId: string; via?: 'plane' | 'rocket' | 'carpet' | 'event' | 'tornado' }
+  | { t: 'warp'; playerId: number; nodeId: string; via?: 'plane' | 'rocket' | 'carpet' | 'event' | 'tornado' | 'realm' }
   | { t: 'cash'; playerId: number; delta: number; reason: string }
   | { t: 'buy'; playerId: number; propertyId: string; monopoly: boolean }
   | { t: 'sell'; playerId: number; propertyId: string; amount: number }

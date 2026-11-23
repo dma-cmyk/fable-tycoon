@@ -161,6 +161,13 @@ def main() -> None:
         cut_grid("map_stamps", ["mountains", "snow_mountain", "volcano", "conifer_forest", "forest", "palms", "desert",
                                 "fields", "town", "metropolis", "port_town", "station", "iceberg", "ranch", "oil_rig",
                                 "factory"], 4, 4, OUT / "stamps", 192)
+    for realm in ("heaven", "hell", "space"):
+        if ok(f"realm_{realm}"):
+            im = Image.open(RAW / f"realm_{realm}.png").convert("RGB")
+            im = im.resize((2400, round(2400 * im.height / im.width)), Image.LANCZOS)
+            (OUT / "realms").mkdir(parents=True, exist_ok=True)
+            im.save(OUT / f"realms/{realm}.webp", "WEBP", quality=84, method=4)
+            print(f"  realm {realm}", im.size)
     for s, names in EVENTS.items():
         if ok(s):
             cut_panels(s, names, OUT / "events")
