@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { allNarrationTexts } from '../src/audio/narration.ts';
 import { voiceHash } from '../src/audio/voicekey.ts';
+import { buildVoiceManifest, voiceMetaMatches } from '../src/audio/voice-manifest.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -42,12 +43,19 @@ let force = false;
 let only = null;
 let limit = Infinity;
 let checkOnly = false;
+let failFirst = 0;
 let engine = DEFAULT_ENGINE;
 for (const arg of args) {
   if (arg === '--dry-run') {
     dryRun = true;
   } else if (arg === '--check-only') {
     checkOnly = true;
+  } else if (arg.startsWith('--fail-first=')) {
+    failFirst = Number.parseInt(arg.slice('--fail-first='.length), 10);
+    if (!Number.isFinite(failFirst) || failFirst < 0) {
+      console.error(`invalid --fail-first value "${arg}"`);
+      process.exit(2);
+    }
   } else if (arg.startsWith('--engine=')) {
     engine = arg.slice('--engine='.length).replace(/\/$/, '');
   } else if (arg === '--force') {
@@ -227,14 +235,7 @@ function voiceMeta(item) {
 }
 
 function metaMatches(a, b) {
-  return Boolean(
-    a &&
-      a.speaker === b.speaker &&
-      a.speed === b.speed &&
-      a.pitch === b.pitch &&
-      a.intonation === b.intonation &&
-      a.rev === b.rev,
-  );
+  return voiceMetaMatches(a, b);
 }
 
 let previousMeta = {};
@@ -561,6 +562,8 @@ async function checkCanary() {
   console.log('gen-voice: canary OK');
 }
 
+let forcedFailuresRemaining = failFirst;
+
 async function synthesize(item) {
   const meta = voiceMeta(item);
   const outPath = mp3Path(item);
@@ -570,6 +573,10 @@ async function synthesize(item) {
   try {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
+        if (forcedFailuresRemaining > 0) {
+          forcedFailuresRemaining -= 1;
+          throw new Error('forced failure (--fail-first)');
+        }
         const wav = await synthesizeToWav(item.text, meta.speaker, meta);
         await writeFile(wavPath, wav);
         const wavCheck = await analyzeSpeech(wavPath);
@@ -602,6 +609,7 @@ async function synthesize(item) {
           throw new Error(`speech check failed (mp3): ${mp3Check.reasons.join('; ')}`);
         }
         await rename(tempPath, outPath);
+        metaFallback.delete(item.hash);
         currentMeta[item.hash] = meta;
         return info.size;
       } catch (error) {
@@ -656,6 +664,9 @@ async function checkpointMeta() {
   await writeFile(VOICE_META_PATH, `${JSON.stringify(currentMeta, null, 2)}\n`);
 }
 
+/** Hash -> true when a failed regeneration left an existing mp3 that passed speech QC. */
+const metaFallback = new Map();
+
 const failures = [...collectionErrors];
 let generated = 0;
 let generatedBytes = 0;
@@ -676,6 +687,14 @@ async function worker() {
       const failure = { voiceKey: item.voiceKey, text: item.text, error: String(error?.message ?? error) };
       failures.push(failure);
       console.error(`  FAILED ${item.voiceKey}: ${failure.error} :: ${item.text.slice(0, 40)}`);
+      try {
+        if (statSync(mp3Path(item)).size > 0) {
+          const existing = await analyzeSpeech(mp3Path(item));
+          if (existing.ok) metaFallback.set(item.hash, true);
+        }
+      } catch {
+        /* no existing file: nothing to keep */
+      }
     }
     processed += 1;
     if (processed % 10 === 0 || processed === runnable.length) {
@@ -693,15 +712,26 @@ await Promise.all(Array.from({ length: Math.min(CONCURRENCY, runnable.length) },
 
 const elapsed = (Date.now() - startedAt) / 1000;
 
-// Manifest: every current item that actually has a file (not just this scope).
-const manifest = {};
-const nextMeta = {};
+// Manifest: verified files plus failed items whose existing mp3 passes speech QC now.
+// Anything else (missing file, or the old 2026-11-23 noise) stays out of the manifest.
+const candidates = [];
 for (const item of items) {
-  if (isPresent(item)) {
-    manifest[item.hash] = `voice/${item.hash}.mp3`;
-    nextMeta[item.hash] = currentMeta[item.hash];
+  let hasFile = false;
+  try {
+    hasFile = statSync(mp3Path(item)).size > 0;
+  } catch {
+    hasFile = false;
   }
+  const desired = voiceMeta(item);
+  candidates.push({
+    hash: item.hash,
+    desired,
+    hasFile,
+    verified: hasFile && metaMatches(currentMeta[item.hash], voiceMeta(item)),
+    fallbackVerified: hasFile && metaFallback.get(item.hash) === true,
+  });
 }
+const { manifest, meta: nextMeta, stale: staleHashes } = buildVoiceManifest(candidates);
 const manifestPath = path.join(VOICE_DIR, 'manifest.json');
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 await writeFile(VOICE_META_PATH, `${JSON.stringify(nextMeta, null, 2)}\n`);
@@ -726,7 +756,7 @@ for (const file of await readdir(VOICE_DIR)) {
 
 const usedSpeakers = new Map();
 for (const item of items) {
-  if (!isPresent(item)) continue;
+  if (!manifest[item.hash]) continue;
   const name = speakerNames.get(item.voice.speaker);
   if (name) usedSpeakers.set(`${name}\t${item.voice.speaker}`, name);
 }
@@ -738,6 +768,7 @@ console.log(`failures: ${failures.length}`);
 console.log(`orphan mp3 removed: ${removedOrphans}`);
 console.log(`manifest entries: ${Object.keys(manifest).length} -> ${path.relative(ROOT, manifestPath)}`);
 console.log(`parameter sidecar: ${Object.keys(nextMeta).length} -> ${path.relative(ROOT, VOICE_META_PATH)}`);
+console.log(`stale entries kept for retry: ${staleHashes.length}`);
 console.log(
   `voice library: ${voiceFiles} files, ${(voiceBytes / 1024 / 1024).toFixed(2)} MB ` +
     `(avg ${(voiceBytes / Math.max(voiceFiles, 1) / 1024).toFixed(1)} KB/file)`,

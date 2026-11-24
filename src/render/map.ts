@@ -39,6 +39,8 @@ import {
   hopDistances,
   lanePointAt,
   multiSourceHopDistances,
+  resolveMoveTarget,
+  type MoveTarget,
   routeModeOf,
   vehicleForStep,
   type GraphEdge,
@@ -47,8 +49,11 @@ import {
 import {
   LabelFade,
   bucketZoom,
+  pickFreeSlot,
   placeLabels,
   rectsOverlap,
+  spotlightHoles,
+  spreadBadges,
   zoomBucket,
   type LabelItem,
   type Rect,
@@ -477,6 +482,8 @@ export class MapView {
   private cityLabelDrawn: DrawnLabel[] = [];
   private artLabelDrawn: DrawnLabel[] = [];
   private readonly labelFade = new LabelFade();
+  /** Last resolved box offset per priority city label, frozen while a token animates. */
+  private readonly priorityLabelSlots = new Map<string, { offX: number; offY: number; w: number; h: number }>();
   private overviewMode = false;
   private overviewCallback: ((overview: boolean) => void) | null = null;
   private lastOverviewFlag = false;
@@ -502,6 +509,7 @@ export class MapView {
   private suppressTapUntil = 0;
 
   private miniMapEl: HTMLCanvasElement | null = null;
+  private readonly spotlightMask: HTMLCanvasElement = document.createElement('canvas');
   private miniLand: HTMLCanvasElement | null = null;
   private miniLandSize = '';
   private readonly miniPointer = (e: PointerEvent): void => this.handleMiniTap(e);
@@ -1196,6 +1204,7 @@ export class MapView {
     this.miniMapEl = el;
     if (this.miniLand) releaseCanvas(this.miniLand);
     this.miniLand = null;
+    releaseCanvas(this.spotlightMask);
     this.miniLandSize = '';
     if (el) el.addEventListener('pointerdown', this.miniPointer);
     this.drawMiniMap();
@@ -1366,6 +1375,7 @@ export class MapView {
     this.ocean.destroy();
     if (this.miniLand) releaseCanvas(this.miniLand);
     this.miniLand = null;
+    releaseCanvas(this.spotlightMask);
     for (const t of this.bubbleTimers.values()) window.clearTimeout(t);
     this.bubbleTimers.clear();
     this.bubbles.clear();
@@ -1428,16 +1438,28 @@ export class MapView {
     return chooseRecommended(candidates, resolved.distances)?.id ?? null;
   }
 
+  /**
+   * Goal for the current turn, taken from the ACTING PLAYER's board (their
+   * realm or the world), not from the view the camera happens to show.
+   */
+  private moveTarget(): MoveTarget | null {
+    const playerNodeId = this.state ? this.state.players[this.state.current]?.nodeId : null;
+    const realm = playerNodeId ? this.nodeById.get(playerNodeId)?.realm ?? null : null;
+    return resolveMoveTarget(realm, this.destinationNodeId);
+  }
+
   /** Board node the move should head for: the destination, or the nearest realm exit. */
   private moveTargetNode(): BoardNode | null {
-    if (this.view === 'world') {
-      return this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) ?? null : null;
+    const target = this.moveTarget();
+    if (!target) return null;
+    if (target.target === 'destination') {
+      return target.destinationNodeId ? this.nodeById.get(target.destinationNodeId) ?? null : null;
     }
     const playerNodeId = this.state ? this.state.players[this.state.current]?.nodeId : null;
     const player = playerNodeId ? this.nodeById.get(playerNodeId) : null;
     let best: BoardNode | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
-    for (const node of this.realmNodes.get(this.view) ?? []) {
+    for (const node of this.realmNodes.get(target.realm as RealmId) ?? []) {
       if (node.kind !== 'portal') continue;
       const distance = player ? Math.hypot(node.x - player.x, node.y - player.y) : 0;
       if (distance < bestDistance) {
@@ -1449,8 +1471,10 @@ export class MapView {
   }
 
   private moveTargetDistances(): { distances: Map<string, number>; target: 'destination' | 'exit' } | null {
-    if (this.view !== 'world') {
-      const realm = this.view;
+    const target = this.moveTarget();
+    if (!target) return null;
+    if (target.target === 'exit') {
+      const realm = target.realm as RealmId;
       if (this.realmExitCache?.realm !== realm) {
         const exits = (this.realmNodes.get(realm) ?? [])
           .filter((node) => node.kind === 'portal')
@@ -1460,7 +1484,7 @@ export class MapView {
       }
       return { distances: this.realmExitCache.distances, target: 'exit' };
     }
-    const destination = this.destinationNodeId;
+    const destination = target.destinationNodeId;
     if (!destination) return null;
     if (this.destinationNodeIdCache?.nodeId !== destination) {
       this.destinationNodeIdCache = { nodeId: destination, distances: hopDistances(destination, this.graphEdges) };
@@ -3497,6 +3521,51 @@ export class MapView {
       .concat(ownTokenBlocker ? [ownTokenBlocker] : [])
       .concat(blockers.filter((b) => !this.isTokenBlocker(b, now)));
     const ratio = this.camera.zoom / this.labelLayoutRefZoom;
+    // Priority names drawn this frame (they must not cover each other) and the
+    // permanent collision sources they have to dodge.
+    const priorityLabelRects: Rect[] = [];
+    const priorityTokenRects: Rect[] = [];
+    // Priority slots are resolved only while nothing is walking; during a move
+    // or warp the previous rect is reused, so dynamic blockers (a token leaving
+    // the square) can never make a name jump.
+    const labelsFrozen = !!(this.moveAnim || this.warpAnim);
+    if (!labelsFrozen) {
+      for (const b of blockers) {
+        if (this.isTokenBlocker(b, now)) priorityTokenRects.push(b);
+      }
+    }
+    const candidateRects: Rect[] = [];
+    const tileR = this.tileRadius();
+    for (const option of this.moveOptions ?? []) {
+      const node = this.nodeById.get(option.nodeId);
+      if (!node) continue;
+      const cx = this.camera.screenX(node.x);
+      const cy = this.camera.screenY(node.y);
+      candidateRects.push({
+        x: cx - tileR - 12,
+        y: cy - tileR - 12,
+        w: (tileR + 12) * 2,
+        h: (tileR + 12) * 2,
+      });
+    }
+    // Ordinary labels keep their static slot; priority labels may only avoid
+    // them. Both sets are known up front so a priority name cannot land on a
+    // general one (review: 鹿児島/長崎 and サンディエゴ/フェニックス overlapped).
+    const staticLabelRects: Rect[] = [];
+    const staticLabelIds = new Set<string>();
+    for (const v of visible) {
+      if (priority(v)) continue;
+      const plan = this.cityLabelPlan.get(v.entry.city.id);
+      if (!plan || plan.slot < 0) continue;
+      if (detail === 0 && v.entry.city.tier !== 1) continue;
+      staticLabelIds.add(v.entry.city.id);
+      staticLabelRects.push({
+        x: v.x + plan.dx * ratio - (plan.w * ratio) / 2,
+        y: v.y + plan.dy * ratio - (plan.h * ratio) / 2,
+        w: plan.w * ratio,
+        h: plan.h * ratio,
+      });
+    }
     for (const v of visible) {
       const city = v.entry.city;
       const plan = this.cityLabelPlan.get(city.id);
@@ -3513,35 +3582,49 @@ export class MapView {
       let dy = plan.dy;
       let rect = { x: v.x + dx * ratio - w / 2, y: v.y + dy * ratio - h / 2, w, h };
       if (isPriority) {
-        // Priority names must never sit on a fixed occluder (own token, HUD
-        // panel, minimap, portrait). Reuse the same static slot set — only the
-        // order changes — so placement stays stable and never drifts frame to
-        // frame. Slot 0 is kept whenever it is clear.
+        // Priority names dodge the fixed chrome (HUD, minimap, portrait, own
+        // token), the tokens parked on the same square, the candidate number
+        // discs and each other. They only reorder the same static slot set, so
+        // nothing drifts between frames.
         const startSlot = Math.max(0, plan.slot);
         const ordered = plan.slots.slice(startSlot).concat(plan.slots.slice(0, startSlot));
-        for (const slot of ordered) {
-          const trial: Rect = { x: v.x + slot.dx * ratio - w / 2, y: v.y + slot.dy * ratio - h / 2, w, h };
-          if (!inside(trial)) continue;
-          if (fixedBlockers.some((b) => rectsOverlap(trial, b, 2))) continue;
-          dx = slot.dx;
-          dy = slot.dy;
-          rect = trial;
-          break;
-        }
-        if (blockers.some((b) => rectsOverlap(rect, b, 2))) {
-          // Every slot is covered: hide rather than draw over the HUD.
-          continue;
+        const cached = this.priorityLabelSlots.get(city.id);
+        if (labelsFrozen && cached && Math.abs(cached.w - w) < 0.5 && Math.abs(cached.h - h) < 0.5) {
+          // Keep the pre-move slot verbatim; only the anchor may move.
+          dx = cached.offX;
+          dy = cached.offY;
+          rect = { x: v.x + dx, y: v.y + dy, w, h };
+        } else {
+          const avoid = fixedBlockers.concat(
+            priorityLabelRects,
+            priorityTokenRects,
+            candidateRects,
+            staticLabelRects,
+          );
+          const free = pickFreeSlot(v.x, v.y, w, h, ordered, avoid, inside, 2);
+          if (!free) continue;
+          dx = free.dx;
+          dy = free.dy;
+          rect = { x: v.x + dx * ratio - w / 2, y: v.y + dy * ratio - h / 2, w, h };
         }
       }
       if (!inside(rect)) continue;
       let alpha = 1;
       if (!isPriority) {
+        // A priority name may dodge into this label's static slot; the ordinary
+        // name then hides, so the two can never overlap.
+        const shadowed = staticLabelIds.has(city.id)
+          && priorityLabelRects.some((r) => rectsOverlap(rect, r, 1));
         alpha = this.labelFade.update(
           `city:${city.id}`,
-          !blockers.some((b) => rectsOverlap(rect, b, 2)),
+          !shadowed && !blockers.some((b) => rectsOverlap(rect, b, 2)),
           now,
         );
         if (alpha <= 0.02) continue;
+      }
+      if (isPriority) {
+        priorityLabelRects.push(rect);
+        this.priorityLabelSlots.set(city.id, { offX: rect.x - v.x, offY: rect.y - v.y, w, h });
       }
       const labelHit = { cityId: city.id, rect };
       this.cityLabelHits.push(labelHit);
@@ -3708,29 +3791,56 @@ export class MapView {
    * One path: a board-sized rect wound one way plus reverse-wound holes. With
    * the non-zero fill rule overlapping holes stay open, unlike even-odd.
    */
+  /**
+   * Dim everything except the actor and the candidate squares.
+   *
+   * Holes are punched on an offscreen mask with `destination-out`, so any
+   * number of overlapping holes still produces a clean union. (Winding-count
+   * holes in one path re-darken wherever two circles overlap.)
+   */
   private drawMoveSpotlight(ctx: CanvasRenderingContext2D): void {
     if (!this.moveOptions || this.moveOptions.length === 0) return;
     const cam = this.camera;
     const r = this.tileRadius();
+    const w = Math.max(1, Math.ceil(cam.vw));
+    const h = Math.max(1, Math.ceil(cam.vh));
+    const mask = this.spotlightMask;
+    if (mask.width !== w || mask.height !== h) {
+      releaseCanvas(mask);
+      mask.width = w;
+      mask.height = h;
+    }
+    const mctx = mask.getContext('2d');
+    if (!mctx) return;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.globalCompositeOperation = 'source-over';
+    mctx.clearRect(0, 0, w, h);
+    mctx.fillStyle = 'rgba(4, 12, 26, 0.57)';
+    mctx.fillRect(0, 0, w, h);
+    mctx.globalCompositeOperation = 'destination-out';
+    mctx.fillStyle = '#000';
     const currentId = this.state?.players[this.state.current]?.nodeId ?? null;
     const current = currentId ? this.nodeById.get(currentId) : null;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, cam.vw, cam.vh);
-    const hole = (x: number, y: number, radius: number): void => {
-      ctx.moveTo(x + radius, y);
-      ctx.arc(x, y, radius, 0, TAU, true);
-    };
-    if (current) hole(cam.screenX(current.x), cam.screenY(current.y), r + 44);
-    // Candidate squares get clean circular holes; routes are not punched out
-    // (a chain of small holes left jagged bright scallops across the dim).
+    const candidatePoints: Array<{ x: number; y: number }> = [];
     for (const option of this.moveOptions) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
-      hole(cam.screenX(node.x), cam.screenY(node.y), r + 32);
+      candidatePoints.push({ x: cam.screenX(node.x), y: cam.screenY(node.y) });
     }
-    ctx.fillStyle = 'rgba(4, 12, 26, 0.57)';
-    ctx.fill();
+    const holes = spotlightHoles(
+      current ? { x: cam.screenX(current.x), y: cam.screenY(current.y) } : null,
+      candidatePoints,
+      r + 44,
+      r + 32,
+    );
+    for (const hole of holes) {
+      mctx.beginPath();
+      mctx.arc(hole.x, hole.y, hole.r, 0, TAU);
+      mctx.fill();
+    }
+    mctx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.drawImage(mask, 0, 0, w, h);
     ctx.restore();
   }
 
@@ -3967,22 +4077,95 @@ export class MapView {
     });
     const MAX_EDGE_BADGES = 6;
     const hiddenOffBoard = Math.max(0, offBoard.length - MAX_EDGE_BADGES);
-    const placedBadges: Array<{ x: number; y: number }> = [];
-    offBoard.slice(0, MAX_EDGE_BADGES).forEach(({ index, node, x, y }) => {
-      let bx = Math.max(board.x + 26, Math.min(board.x + board.w - 26, x));
-      let by = Math.max(board.y + 26, Math.min(board.y + board.h - 26, y));
-      for (let guard = 0; guard < 10; guard++) {
-        const clash = placedBadges.some((p) => Math.hypot(p.x - bx, p.y - by) < 46);
-        if (!clash) break;
-        if (bx <= board.x + 30 || bx >= board.x + board.w - 30) {
-          by += by < cam.vh / 2 ? 46 : -46;
-        } else {
-          bx += bx < cam.vw / 2 ? 46 : -46;
+    // Badges clamp to the board edge nearest their square, then spread
+    // monotonically along that edge. The old ping-pong nudge could move two
+    // badges onto the same point (review: 22 and 28 landed on top of 10).
+    const BADGE_GAP = 42;
+    const edgeOrder = ['left', 'right', 'top', 'bottom'] as const;
+    type Edge = (typeof edgeOrder)[number];
+    interface BadgePlan {
+      index: number;
+      node: BoardNode;
+      fromX: number;
+      fromY: number;
+      edge: Edge;
+      fixed: number;
+      along: number;
+    }
+    const plans: BadgePlan[] = [];
+    for (const entry of offBoard.slice(0, MAX_EDGE_BADGES)) {
+      const clampedX = Math.max(board.x + 26, Math.min(board.x + board.w - 26, entry.x));
+      const clampedY = Math.max(board.y + 26, Math.min(board.y + board.h - 26, entry.y));
+      const dl = Math.abs(clampedX - (board.x + 26));
+      const dr = Math.abs(clampedX - (board.x + board.w - 26));
+      const dt = Math.abs(clampedY - (board.y + 26));
+      const db = Math.abs(clampedY - (board.y + board.h - 26));
+      const min = Math.min(dl, dr, dt, db);
+      const edge: Edge = min === dl ? 'left' : min === dr ? 'right' : min === dt ? 'top' : 'bottom';
+      const vertical = edge === 'left' || edge === 'right';
+      plans.push({
+        index: entry.index,
+        node: entry.node,
+        fromX: entry.x,
+        fromY: entry.y,
+        edge,
+        fixed: vertical ? clampedX : clampedY,
+        along: vertical ? clampedY : clampedX,
+      });
+    }
+    const slotsByEdge: Record<Edge, number[]> = { left: [], right: [], top: [], bottom: [] };
+    for (const edge of edgeOrder) {
+      const group = plans.filter((plan) => plan.edge === edge).sort((a, b) => a.along - b.along);
+      const vertical = edge === 'left' || edge === 'right';
+      const lo = (vertical ? board.y : board.x) + 26;
+      const hi = (vertical ? board.y + board.h : board.x + board.w) - 26;
+      const spread = spreadBadges(group.map((plan) => plan.along), BADGE_GAP, lo, hi);
+      slotsByEdge[edge] = spread;
+      group.forEach((plan, i) => { plan.along = spread[i] ?? plan.along; });
+    }
+    // Corner clashes: badges from adjacent edges can still meet near a corner,
+    // so relax the whole set a few times moving only along each badge's edge.
+    for (let pass = 0; pass < 4; pass += 1) {
+      let moved = false;
+      for (let i = 0; i < plans.length; i += 1) {
+        for (let j = i + 1; j < plans.length; j += 1) {
+          const a = plans[i];
+          const b = plans[j];
+          const ax = a.edge === 'left' || a.edge === 'right' ? a.fixed : a.along;
+          const ay = a.edge === 'top' || a.edge === 'bottom' ? a.fixed : a.along;
+          const bx = b.edge === 'left' || b.edge === 'right' ? b.fixed : b.along;
+          const by = b.edge === 'top' || b.edge === 'bottom' ? b.fixed : b.along;
+          const dx = ax - bx;
+          const dy = ay - by;
+          const dist = Math.hypot(dx, dy);
+          if (dist >= BADGE_GAP) continue;
+          const push = (BADGE_GAP - dist) / 2 + 0.5;
+          const vertical = a.edge === 'left' || a.edge === 'right';
+          a.along += (vertical ? (dy >= 0 ? push : -push) : (dx >= 0 ? push : -push));
+          b.along -= (vertical ? (dy >= 0 ? push : -push) : (dx >= 0 ? push : -push));
+          moved = true;
         }
-        bx = Math.max(board.x + 26, Math.min(board.x + board.w - 26, bx));
-        by = Math.max(board.y + 26, Math.min(board.y + board.h - 26, by));
       }
-      placedBadges.push({ x: bx, y: by });
+      if (!moved) break;
+    }
+    for (const plan of plans) {
+      const vertical = plan.edge === 'left' || plan.edge === 'right';
+      const lo = (vertical ? board.y : board.x) + 26;
+      const hi = (vertical ? board.y + board.h : board.x + board.w) - 26;
+      plan.along = Math.max(lo, Math.min(hi, plan.along));
+    }
+    // Final guard: badges from different edges can still meet at a corner, so
+    // drop any badge that would visually overlap one already placed. Losing a
+    // badge beats stacking two numbers on the same spot.
+    const placedPoints: Array<{ x: number; y: number }> = [];
+    for (const plan of plans) {
+      const { index, node, fromX, fromY } = plan;
+      const bx = plan.edge === 'left' || plan.edge === 'right' ? plan.fixed : plan.along;
+      const by = plan.edge === 'top' || plan.edge === 'bottom' ? plan.fixed : plan.along;
+      if (placedPoints.some((point) => Math.hypot(point.x - bx, point.y - by) < 36)) continue;
+      placedPoints.push({ x: bx, y: by });
+      const x = fromX;
+      const y = fromY;
       const selected = this.selectedOption === node.id;
       const isRecommended = node.id === recommended;
       const chip = moveKindChip(node.kind);
@@ -4022,7 +4205,7 @@ export class MapView {
       ctx.textBaseline = 'middle';
       ctx.fillText(String(number), bx, by + 0.5);
       ctx.restore();
-    });
+    }
     if (hiddenOffBoard > 0) this.drawHiddenCandidateCounter(ctx, board, hiddenOffBoard);
   }
 

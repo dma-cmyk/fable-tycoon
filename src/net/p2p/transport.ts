@@ -42,11 +42,14 @@ export type P2PControl =
       seat: number | null;
       hostSeat: number | null;
       seatKeys: Record<string, string>;
+      /** Additive: CPU seats that may still be reclaimed by their previous human key. */
+      reclaimKeys?: Record<string, string>;
       reportVotes: Record<string, string[]>;
       lobby: LobbyView;
       seq: number;
       gen: number;
       connectedHumans: number;
+      stateHash: string;
       broker: string | null;
       at: number;
     }
@@ -56,19 +59,53 @@ export type P2PControl =
       seat: number | null;
       hostSeat: number | null;
       seatKeys: Record<string, string>;
+      /** Additive: CPU seats that may still be reclaimed by their previous human key. */
+      reclaimKeys?: Record<string, string>;
       reportVotes: Record<string, string[]>;
       lobby: LobbyView;
       seq: number;
       gen: number;
       connectedHumans: number;
+      stateHash: string;
       broker: string | null;
       at: number;
     }
-  | { k: 'presence'; peerId: string; seat: number | null; at: number }
+  | {
+      k: 'presence';
+      peerId: string;
+      seat: number | null;
+      /** The single host this client currently follows (fingerprint + generation). */
+      following: { hostFp: string; gen: number } | null;
+      at: number;
+    }
   | { k: 'host_probe'; from: string; at: number }
-  | { k: 'host_ack'; hostPeerId: string; gen: number; seat: number | null; at: number }
-  | { k: 'report_vote'; voteId: string; target: number; voter: string; gen: number; at: number }
-  | { k: 'report_vote_ack'; voteId: string; gen: number }
+  | {
+      k: 'host_ack';
+      hostPeerId: string;
+      gen: number;
+      seat: number | null;
+      hostFp: string;
+      at: number;
+    }
+  | {
+      k: 'report_vote';
+      voteId: string;
+      target: number;
+      voter: string;
+      gen: number;
+      /** Fingerprint of the host that accepted the vote (receivers verify before applying). */
+      hostFp: string;
+      at: number;
+    }
+  | { k: 'report_vote_ack'; voteId: string; gen: number; voter: string }
+  | {
+      k: 'gen_bump';
+      hostPeerId: string;
+      from: string;
+      /** Lowest generation the requester has seen; the authority must announce above it. */
+      gen: number;
+      at: number;
+    }
   | { k: 'probe'; at: number }
   | { k: 'probeAck'; at: number }
   | { k: 'resync' }

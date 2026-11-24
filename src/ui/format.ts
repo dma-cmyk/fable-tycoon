@@ -37,6 +37,32 @@ export const INDUSTRY_JA: Record<Industry, string> = {
   media: '娯楽・メディア',
 };
 
+/** 業種バッジ用の短縮ラベル（OS 絵文字の代わりに CSS バッジで表示する）。 */
+export const INDUSTRY_SHORT: Record<Industry, string> = {
+  agri: '農',
+  food: '食',
+  tourism: '観',
+  industry: '工',
+  tech: 'IT',
+  finance: '金',
+  energy: 'エ',
+  shipping: '船',
+  media: '映',
+};
+
+/** 業種バッジの基調色（背景・文字）。絵文字を使わず統一トーンで描く。 */
+export const INDUSTRY_TONE: Record<Industry, { bg: string; fg: string }> = {
+  agri: { bg: '#dff0cc', fg: '#2f6b1f' },
+  food: { bg: '#ffe4c2', fg: '#8a4a08' },
+  tourism: { bg: '#cfe6fb', fg: '#17527f' },
+  industry: { bg: '#e0e4ea', fg: '#3d4b60' },
+  tech: { bg: '#ded4ff', fg: '#4630a2' },
+  finance: { bg: '#ffe6a3', fg: '#7a5200' },
+  energy: { bg: '#ffd9cc', fg: '#8f3418' },
+  shipping: { bg: '#c9ecf2', fg: '#14586a' },
+  media: { bg: '#ffd3e6', fg: '#8a1f56' },
+};
+
 export const INDUSTRY_ICON: Record<Industry, string> = {
   agri: '🌾',
   food: '🍜',

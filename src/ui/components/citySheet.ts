@@ -14,8 +14,9 @@ import {
   displayPlayerName,
   formatOku,
   formatOkuShort,
-  INDUSTRY_ICON,
   INDUSTRY_JA,
+  INDUSTRY_SHORT,
+  INDUSTRY_TONE,
   playerColor,
 } from '../format';
 
@@ -274,7 +275,17 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         h(
           'span',
           { class: 'property-industry-chip', attrs: { 'aria-hidden': 'true' } },
-          h('span', { class: 'property-industry-emoji', text: INDUSTRY_ICON[property.industry], attrs: { 'aria-hidden': 'true' } }),
+          h(
+            'span',
+            {
+              class: 'property-industry-badge',
+              attrs: {
+                style: `--industry-bg:${INDUSTRY_TONE[property.industry].bg};--industry-fg:${INDUSTRY_TONE[property.industry].fg}`,
+                'aria-hidden': 'true',
+              },
+            },
+            INDUSTRY_SHORT[property.industry],
+          ),
           h('span', { class: 'property-industry-chip-label', text: INDUSTRY_JA[property.industry] }),
         ),
         h(

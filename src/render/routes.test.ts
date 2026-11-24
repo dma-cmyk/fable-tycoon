@@ -5,6 +5,7 @@ import {
   hopDistances,
   lanePointAt,
   multiSourceHopDistances,
+  resolveMoveTarget,
   routeModeOf,
   vehicleForStep,
 } from './routes';
@@ -150,5 +151,38 @@ describe('multiSourceHopDistances', () => {
 
   it('keeps hopDistances as the single-start case', () => {
     expect([...hopDistances('c', edges).entries()]).toEqual([...multiSourceHopDistances(['c'], edges).entries()]);
+  });
+});
+
+describe('resolveMoveTarget', () => {
+  it('heads for the realm exits when the player is in a realm', () => {
+    expect(resolveMoveTarget('heaven', 'c:paris')).toEqual({
+      target: 'exit',
+      realm: 'heaven',
+      destinationNodeId: null,
+    });
+  });
+
+  it('heads for the destination when the player is on the world board', () => {
+    expect(resolveMoveTarget(null, 'c:paris')).toEqual({
+      target: 'destination',
+      realm: null,
+      destinationNodeId: 'c:paris',
+    });
+  });
+
+  it('treats a missing realm marker as the world board', () => {
+    expect(resolveMoveTarget(undefined, 'c:tokyo')?.target).toBe('destination');
+  });
+
+  it('returns null when the world destination is unknown', () => {
+    expect(resolveMoveTarget(null, null)).toBeNull();
+    expect(resolveMoveTarget(undefined, undefined)).toBeNull();
+  });
+
+  it('ignores the destination when the player is inside a realm', () => {
+    const target = resolveMoveTarget('space', 'c:tokyo');
+    expect(target?.target).toBe('exit');
+    expect(target?.destinationNodeId).toBeNull();
   });
 });

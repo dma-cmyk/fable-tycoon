@@ -70,6 +70,7 @@ interface Harness {
   sent: Sent[];
   broadcasts: ServerMsg[];
   reports: (Report & { room: string; recentChat: ChatLine[] })[];
+  accepted: { target: number; reporter: number }[];
   deps: RoomDeps;
 }
 
@@ -79,6 +80,7 @@ function makeHarness(): Harness {
   const sent: Sent[] = [];
   const broadcasts: ServerMsg[] = [];
   const reports: (Report & { room: string; recentChat: ChatLine[] })[] = [];
+  const accepted: { target: number; reporter: number }[] = [];
   const deps: RoomDeps = {
     roomId: 'ROOM01',
     now: clock.now,
@@ -92,9 +94,10 @@ function makeHarness(): Harness {
     send: (connId, msg) => sent.push({ connId, msg }),
     broadcast: (msg) => broadcasts.push(msg),
     report: (report) => reports.push(report),
+    reportAccepted: (target, reporter) => accepted.push({ target, reporter }),
   };
   const room = new RoomController(deps);
-  return { clock, room, sent, broadcasts, reports, deps };
+  return { clock, room, sent, broadcasts, reports, accepted, deps };
 }
 
 function latest<T extends ServerMsg['t']>(messages: readonly ServerMsg[], type: T): Extract<ServerMsg, { t: T }> | undefined {
@@ -488,6 +491,16 @@ describe('RoomController communication', () => {
     expect(harness.broadcasts.some((msg) => msg.t === 'flag' && msg.seat === 2)).toBe(true);
     expect(latest(harness.broadcasts, 'lobby')?.lobby.seats[2].flagged).toBe(true);
     expect(harness.reports.length).toBe(2);
+    // The replication hook fires only for accepted reports (never for rejected ones).
+    expect(harness.accepted).toEqual([
+      { target: 2, reporter: 0 },
+      { target: 2, reporter: 1 },
+    ]);
+    const rejectedBefore = harness.accepted.length;
+    harness.room.message('a', { t: 'report', seat: 0, reason: 'spam' }); // self-report
+    harness.room.message('a', { t: 'report', seat: 3, reason: 'spam' }); // empty seat
+    harness.room.message('a', { t: 'report', seat: 1, reason: 'nope' as never }); // bad reason
+    expect(harness.accepted.length).toBe(rejectedBefore);
 
     harness.room.disconnect('c');
     harness.room.connect('c2');
@@ -541,6 +554,7 @@ describe('RoomController full game', () => {
       sent: [],
       broadcasts: [],
       reports: [],
+      accepted: [],
       deps: undefined as unknown as RoomDeps,
     };
     harnessB.deps = {
@@ -708,6 +722,61 @@ describe('RoomController frozen authority', () => {
     harness.room.setFrozen(false);
     const update = act(harness, 'a', started.seq, { t: 'roll' });
     expect(update.by).toBe(0);
+  });
+
+  it('replaces an absent human with CPU while frozen, so a lone player can continue', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { years: 20, turnSeconds: 0 });
+    harness.room.setFrozen(true);
+    const seqAtFreeze = harness.room.currentSeq;
+    harness.room.disconnect('b');
+    // Replacement is not game progress: it must still happen while the room is frozen.
+    harness.clock.advance(121_000);
+    const lobby = latest(harness.broadcasts, 'lobby')?.lobby;
+    expect(lobby?.seats[1].kind).toBe('cpu');
+    expect(harness.room.currentSeq).toBe(seqAtFreeze);
+    // With the other seat now CPU the remaining human is a majority of one and can play.
+    harness.room.setFrozen(false);
+    const update = act(harness, 'a', started.seq, { t: 'roll' });
+    expect(update.by).toBe(0);
+  });
+
+  it('lets a 120s-replaced human reclaim the seat with its key (assets kept)', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { years: 20, turnSeconds: 0 });
+    const cash = started.state.players[1]?.cash;
+    harness.room.disconnect('b');
+    harness.clock.advance(121_000);
+    expect(harness.room.lobbyView().seats[1].kind).toBe('cpu');
+
+    harness.room.connect('b2');
+    harness.room.message('b2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'ぼリス',
+      token: started.tokenB,
+    });
+    const welcome = sentOf(harness, 'b2', 'welcome');
+    expect(welcome?.seat).toBe(1);
+    expect(welcome?.lobby.seats[1].kind).toBe('human');
+    expect(harness.room.publicState()?.players[1]?.cash).toBe(cash);
+    expect(harness.room.lobbyView().seats[1].autoplay).toBe(false);
+  });
+
+  it('does not let a leaving human reclaim the CPU seat it gave up', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { years: 20, turnSeconds: 0 });
+    harness.room.message('b', { t: 'leave' });
+    harness.room.connect('b2');
+    harness.room.message('b2', {
+      t: 'hello',
+      v: PROTOCOL_VERSION,
+      roomId: 'ROOM01',
+      name: 'ぼリス',
+      token: started.tokenB,
+    });
+    expect(sentOf(harness, 'b2', 'welcome')?.seat).toBeNull();
   });
 });
 

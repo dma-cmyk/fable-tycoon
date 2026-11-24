@@ -693,15 +693,24 @@ export class LobbyScreen implements ScreenHandle {
     clear(this.transportHost);
     if (!info) return;
     this.transportHost.append(
-      h('span', {
-        class: `chip chip-small transport-chip ${info.p2pPeers > 0 ? 'is-good' : ''}`,
-        attrs: { title: info.broker ? `シグナリング: ${info.broker}` : 'シグナリング未接続' },
-        text: `⚡ P2P 直結 ${info.p2pPeers}`,
-      }),
-      h('span', {
-        class: `chip chip-small transport-chip ${info.relayPeers > 0 ? 'is-relay' : ''}`,
-        text: `🔁 中継 ${info.relayPeers}`,
-      }),
+      h(
+        'span',
+        {
+          class: `chip chip-small transport-chip ${info.p2pPeers > 0 ? 'is-good' : ''}`,
+          attrs: { title: info.broker ? `シグナリング: ${info.broker}` : 'シグナリング未接続' },
+        },
+        h('span', { class: 'transport-chip-long', text: `⚡ P2P 直結 ${info.p2pPeers}` }),
+        h('span', { class: 'transport-chip-short', text: `P2P ${info.p2pPeers}` }),
+      ),
+      h(
+        'span',
+        {
+          class: `chip chip-small transport-chip ${info.relayPeers > 0 ? 'is-relay' : ''}`,
+          attrs: { title: '中継ピア数' },
+        },
+        h('span', { class: 'transport-chip-long', text: `🔁 中継 ${info.relayPeers}` }),
+        h('span', { class: 'transport-chip-short', text: `中継 ${info.relayPeers}` }),
+      ),
     );
   }
 

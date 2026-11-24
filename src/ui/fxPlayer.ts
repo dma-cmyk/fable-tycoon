@@ -68,12 +68,16 @@ export class FxPlayer {
     void this.pump();
   }
 
-  /** Snapshot / reconnect: abandon animations and apply immediately. */
+  /**
+   * Snapshot / reconnect: abandon animations and apply immediately.
+   * Registered presentation cleanups are run (not dropped) so an interrupted voice line,
+   * dice overlay or similar does not outlive the state it belonged to.
+   */
   reset(): void {
     this.epoch++;
+    this.runSkipCallbacks();
     this.queue = [];
     this.finishActive();
-    this.skipCallbacks.clear();
     this.skipRequested = false;
     this.running = false;
     this.host.setBusy(false);
@@ -84,6 +88,12 @@ export class FxPlayer {
   skip(): boolean {
     if (!this.running) return false;
     this.skipRequested = true;
+    this.runSkipCallbacks();
+    this.finishActive();
+    return true;
+  }
+
+  private runSkipCallbacks(): void {
     const callbacks = [...this.skipCallbacks];
     this.skipCallbacks.clear();
     for (const callback of callbacks) {
@@ -93,8 +103,6 @@ export class FxPlayer {
         /* presentation cleanup must not break the queue */
       }
     }
-    this.finishActive();
-    return true;
   }
 
   destroy(): void {

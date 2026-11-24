@@ -37,6 +37,7 @@ import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
 import { rubyName } from '../ruby';
 import { placeDestinationArrow } from '../destArrow';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
+import { isIdenticalResync, type ResyncWatermark } from '../resync';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
@@ -108,6 +109,8 @@ export class GameScreen implements ScreenHandle {
   private appliedSeq = -1;
   private latestGen = 0;
   private appliedGen = -1;
+  private appliedWatermark: ResyncWatermark | null = null;
+  private lastDestinationBannerAt = 0;
   private mapReady = false;
   private readonly pendingMessages: ServerMsg[] = [];
   private deadline: number | null = null;
@@ -777,7 +780,7 @@ export class GameScreen implements ScreenHandle {
   }
 
   private beginGeneration(gen: number): void {
-    this.fxPlayer.reset();
+    this.interruptInFlightFx();
     this.latestGen = gen;
     this.latestSeq = -1;
     this.appliedSeq = -1;
@@ -785,6 +788,28 @@ export class GameScreen implements ScreenHandle {
     this.actionPending = false;
     this.clearPendingTimer();
     this.eventPanel.resetChosen();
+  }
+
+  /**
+   * Cancels everything a re-adopted snapshot invalidates: the running voice line, the 3D dice,
+   * pending fx awaits (resolved, not dropped) and the move-option UI. Must run before applying
+   * the snapshot, while the old presentation is still coherent.
+   */
+  private interruptInFlightFx(): void {
+    Audio.stopVoice();
+    this.dice.cancel();
+    this.fxPlayer.reset();
+    this.stopStepsCounter();
+    this.clearSay();
+    this.moveSelection = null;
+    this.moveOptionsCache = [];
+    this.moveOptionsKey = '';
+    this.moveRemain.clear();
+    this.moveRemainTarget = 'destination';
+    this.recommendedMoveNodeId = null;
+    this.moveOptionsHost.hidden = true;
+    this.moveOptionsHost.replaceChildren();
+    this.map?.setMoveOptions(null, () => undefined);
   }
 
   private flushPendingMessages(): void {
@@ -815,7 +840,20 @@ export class GameScreen implements ScreenHandle {
         if (gen > this.latestGen) this.beginGeneration(gen);
         const resync = this.isResync(msg);
         if (!resync && msg.seq < this.latestSeq) break;
-        this.fxPlayer.reset();
+        // A same-(gen, seq) resync that matches what is already on screen (and is not replacing
+        // queued fx) must not interrupt a running cutscene.
+        if (
+          resync &&
+          !this.fxPlayer.busy &&
+          isIdenticalResync(this.appliedWatermark, { gen, seq: msg.seq, state: msg.state })
+        ) {
+          this.deadline = msg.deadline;
+          this.lobby = msg.lobby;
+          this.syncFlaggedSeats();
+          this.updateHud();
+          break;
+        }
+        this.interruptInFlightFx();
         this.latestGen = gen;
         this.latestSeq = Math.max(this.latestSeq, msg.seq);
         this.lobby = msg.lobby;
@@ -924,6 +962,7 @@ export class GameScreen implements ScreenHandle {
     }
     this.appliedSeq = seq;
     this.seq = Math.max(this.seq, seq);
+    this.appliedWatermark = { gen, seq, state };
     const previousYear = this.state?.year;
     this.state = state;
     this.deadline = deadline;
@@ -2931,6 +2970,7 @@ export class GameScreen implements ScreenHandle {
         const city = citiesById.get(fx.cityId);
         await this.showDestinationRoulette(fx.cityId, control);
         if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 0.8, ms: 700 });
+        this.lastDestinationBannerAt = Date.now();
         this.showGameBanner(
           h(
             'span',
@@ -2991,6 +3031,12 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'toast': {
+        // The destination banner already announces this; a second floating toast covers it.
+        if (fx.text.startsWith('新しい目的地は') && Date.now() - this.lastDestinationBannerAt < 6000) {
+          this.addLog(fx.text);
+          await control.wait(FX_MS.toast);
+          return;
+        }
         this.app.toasts.show(fx.text, 'info', 3200);
         this.addLog(fx.text);
         await control.wait(FX_MS.toast);
@@ -3020,7 +3066,10 @@ export class GameScreen implements ScreenHandle {
         ? state.players[speakerSeat ?? state.current]?.name ?? '手番'
         : speakerName(speaker);
     const label = speaker === 'self' ? `${displayName}` : speakerName(speaker);
-    this.showSayBubble(label, fx.text);
+    // While an event panel is open it owns the dialogue; do not mirror the same line on the
+    // portrait unless the speaker is the acting player ("self").
+    if (!this.eventPanel.isOpen || speaker === 'self') this.showSayBubble(label, fx.text);
+    else this.clearSay();
     if (this.eventPanel.isOpen) this.eventPanel.setSpeaker(speaker, fx.text);
     if (speakerSeat !== null && speaker !== 'narrator') {
       this.map?.bubble(speakerSeat, fx.text, 4200);

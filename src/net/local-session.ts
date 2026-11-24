@@ -350,6 +350,12 @@ export class LocalSession implements Session {
     };
   }
 
+  appliedOrder(): { gen: number; seq: number } | null {
+    const msg = this.lastUpdate ?? this.lastSnapshot;
+    if (!msg) return null;
+    return { gen: 1, seq: msg.seq };
+  }
+
   send(msg: ClientMsg): void {
     if (this.disposed) return;
     if (msg.t === 'ping') return;

@@ -21,6 +21,8 @@ export interface Session {
   /** Receives every ServerMsg in order. Returns unsubscribe. */
   subscribe(listener: (msg: ServerMsg) => void): () => void;
   onConnection(listener: (s: ConnectionState) => void): () => void;
+  /** The (gen, seq) of the last state actually delivered to subscribers (null before the first). */
+  appliedOrder?(): { gen: number; seq: number } | null;
   /** Leave permanently (online: sends 'leave' then closes). */
   close(): void;
 }

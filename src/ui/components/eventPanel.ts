@@ -1,6 +1,7 @@
 import type { PublicState } from '../../core/engine';
-import type {EventChoice, GameEventDef} from '../../core/types';
+import type { EventChoice, GameEventDef } from '../../core/types';
 import { h } from '../dom';
+import { describeEffect } from '../eventEffects';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
 import {
   assetUrl,
@@ -29,6 +30,7 @@ export class EventPanel {
   private readonly choicesHost: HTMLElement;
   private readonly choicesNote: HTMLElement;
   private readonly metaBody: HTMLElement;
+  private readonly effectSummary: HTMLElement;
   private readonly metaToggle: HTMLButtonElement;
   private readonly seasonBadge: HTMLElement;
   private event: GameEventDef | null = null;
@@ -66,6 +68,7 @@ export class EventPanel {
     this.choicesHost = h('div', { class: 'event-choices' });
     this.choicesNote = h('p', { class: 'event-choices-note' });
     this.metaBody = h('div', { class: 'event-meta-body', attrs: { hidden: 'hidden' } });
+    this.effectSummary = h('section', { class: 'event-effect-summary', attrs: { hidden: 'hidden' } });
     this.metaToggle = h('button', {
       class: 'event-meta-toggle',
       text: '📚 元ネタ',
@@ -109,6 +112,7 @@ export class EventPanel {
           ),
         ),
         h('div', { class: 'event-meta' }, this.metaToggle, this.metaBody),
+        this.effectSummary,
         h('div', { class: 'event-choice-area' }, this.choicesHost, this.choicesNote),
       ),
       h('p', {
@@ -144,6 +148,7 @@ export class EventPanel {
     this.metaBody.hidden = true;
     this.renderImage(event);
     this.renderMeta(event);
+    this.renderEffectSummary(event);
     this.setSpeaker('narrator', '……世界のどこかで、ニュースが動き出す。');
     this.setState(state, false);
   }
@@ -255,6 +260,23 @@ export class EventPanel {
     this.hero.classList.remove('no-image');
     this.image.src = assetUrl(path);
     this.kindBadge.dataset.kind = event.kind;
+  }
+
+  /** Effect summary card for auto-applied (choice-less) events. */
+  private renderEffectSummary(event: GameEventDef): void {
+    const hasChoices = (event.choices?.length ?? 0) > 0;
+    const effects = event.effects ?? [];
+    this.el.classList.toggle('is-compact', !hasChoices);
+    if (hasChoices || effects.length === 0) {
+      this.effectSummary.hidden = true;
+      this.effectSummary.replaceChildren();
+      return;
+    }
+    this.effectSummary.hidden = false;
+    this.effectSummary.replaceChildren(
+      h('h4', { class: 'event-effect-title', text: '自動で適用される効果' }),
+      h('ul', { class: 'event-effect-list' }, ...effects.map((effect) => h('li', { text: describeEffect(effect) }))),
+    );
   }
 
   private renderMeta(event: GameEventDef): void {

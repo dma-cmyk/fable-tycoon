@@ -351,3 +351,92 @@ export class LabelFade {
     }
   }
 }
+export interface SlotOffset {
+  dx: number;
+  dy: number;
+}
+
+/**
+ * First slot whose box is inside the board and clear of every blocker.
+ *
+ * Priority city labels use this to step aside from chrome, token stacks and
+ * candidate discs without inventing new positions: the candidate list stays
+ * the same static set, only the order changes.
+ */
+export function pickFreeSlot(
+  anchorX: number,
+  anchorY: number,
+  w: number,
+  h: number,
+  slots: readonly SlotOffset[],
+  blocked: readonly Rect[],
+  inside: (rect: Rect) => boolean = () => true,
+  pad = 2,
+): SlotOffset | null {
+  for (const slot of slots) {
+    const rect: Rect = { x: anchorX + slot.dx - w / 2, y: anchorY + slot.dy - h / 2, w, h };
+    if (!inside(rect)) continue;
+    let hit = false;
+    for (const b of blocked) {
+      if (rectsOverlap(rect, b, pad)) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) return slot;
+  }
+  return null;
+}
+
+/**
+ * Push badges apart along one edge so none of them overlap.
+ *
+ * Input positions are clamped into `[min, max]`, sorted ascending, then pushed
+ * forward monotonically with at least `gap` between neighbours. The sweep runs
+ * both ways so the last badge also respects the upper bound.
+ */
+export function spreadBadges(positions: readonly number[], gap: number, min: number, max: number): number[] {
+  if (positions.length === 0) return [];
+  const sorted = positions.map((p) => Math.min(max, Math.max(min, p))).sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] < gap) sorted[i] = sorted[i - 1] + gap;
+  }
+  if (sorted[sorted.length - 1] > max) {
+    sorted[sorted.length - 1] = Math.max(min, max);
+    for (let i = sorted.length - 2; i >= 0; i--) {
+      if (sorted[i + 1] - sorted[i] < gap) sorted[i] = sorted[i + 1] - gap;
+    }
+  }
+  // Not enough room for the requested gap: distribute evenly instead, so the
+  // badges stay ordered and distinct rather than piling up at the origin.
+  if (sorted[0] < min) {
+    const span = Math.max(0, max - min);
+    for (let i = 0; i < sorted.length; i += 1) {
+      sorted[i] = min + (sorted.length === 1 ? 0 : (span * i) / (sorted.length - 1));
+    }
+  }
+  return sorted;
+}
+
+export interface SpotlightHole {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/**
+ * Circles that must stay lit: the actor plus every candidate square. They are
+ * punched into a mask with `destination-out`, so overlaps are a harmless union
+ * (a winding-count path would re-darken the intersection).
+ */
+export function spotlightHoles(
+  current: { x: number; y: number } | null,
+  candidates: ReadonlyArray<{ x: number; y: number }>,
+  actorRadius: number,
+  candidateRadius: number,
+): SpotlightHole[] {
+  const holes: SpotlightHole[] = [];
+  if (current) holes.push({ x: current.x, y: current.y, r: actorRadius });
+  for (const candidate of candidates) holes.push({ x: candidate.x, y: candidate.y, r: candidateRadius });
+  return holes;
+}

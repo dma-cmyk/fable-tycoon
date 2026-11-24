@@ -1,6 +1,6 @@
 import type { PublicState } from '../../core/engine';
 import type {YearReport} from '../../core/types';
-import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
+import { avatar, h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
 import { animateCounter, confettiBurst, motionReduced } from '../motion';
 import { characterSprite, charsById, displayPlayerName, formatDelta, formatOku, playerColor } from '../format';
 import { assetLegend, drawAssetChart } from './assetChart';
@@ -87,7 +87,6 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
       'button',
       {
         class: 'btn btn-gold yearend-ack',
-        text: finalYear ? '🏆 最終結果を見る' : '▶ 次の年へ',
         attrs: { type: 'button', disabled: !canAct || acked },
         on: {
           click: (event) => {
@@ -100,6 +99,8 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
           },
         },
       },
+      uiIcon(finalYear ? 'trophy' : 'chart', finalYear ? '🏆' : '▶', 'btn-icon'),
+      finalYear ? '最終結果を見る' : '次の年へ',
     );
 
     const scroll = h(
@@ -161,7 +162,7 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
 
   render();
   modalHandle = options.modal.open(body, {
-    title: '📊 年度決算',
+    title: '年度決算',
     subtitle: '収益・総資産ランキングと資産推移',
     className: 'yearend-modal modal-wide',
     // The actor must acknowledge before the game continues; do not let a stray Esc skip it.

@@ -57,6 +57,8 @@ export interface RoomDeps {
   log?(message: string, detail?: unknown): void;
   /** Persist a report. `recentChat` is the last 10 lines sent by the reported seat. */
   report?(report: Report & { room: string; recentChat: ChatLine[] }): void;
+  /** Called only when the report passed validation (used to replicate the vote). */
+  reportAccepted?(target: number, reporter: number): void;
   /** Optional timing overrides (tests). Production keeps the DESIGN defaults below. */
   graceMs?: number;
   replaceMs?: number;
@@ -147,6 +149,8 @@ interface Seat {
   cpuLevel: 1 | 2 | 3;
   connId: string | null;
   token: string | null;
+  /** Key that may reclaim this seat after a disconnect -> CPU replacement (assets are kept). */
+  reclaimToken: string | null;
   autoplay: boolean;
   disconnectedAt: number | null;
   chatBucket: TokenBucket;
@@ -215,6 +219,8 @@ export interface RoomPublicSnapshot {
   seatKeys: Record<string, string>;
   /** Per target seat -> fingerprints of seats that reported it (carried across migration). */
   reportVotes: Record<string, string[]>;
+  /** Additive: seat index -> key allowed to reclaim a timeout-replaced CPU seat. */
+  reclaimKeys?: Record<string, string>;
   lastFx: Fx[];
   deadline: number | null;
 }
@@ -355,11 +361,14 @@ export class RoomController {
   /** Sanitized snapshot safe to replicate to every guest / use for host migration. */
   publicSnapshot(): RoomPublicSnapshot {
     const seatKeys: Record<string, string> = {};
+    const reclaimKeys: Record<string, string> = {};
     for (const seat of this.seats) {
       if (seat.kind === 'human' && seat.token) seatKeys[String(seat.index)] = seat.token;
+      if (seat.kind === 'cpu' && seat.reclaimToken) reclaimKeys[String(seat.index)] = seat.reclaimToken;
     }
     return {
       roomId: this.roomId,
+      reclaimKeys,
       lobby: this.lobbyView(),
       state: this.state ? sanitizeState(this.state) : null,
       seq: this.seq,
@@ -450,20 +459,16 @@ export class RoomController {
     this.armTurn(this.lastFx);
   }
 
-  /** Freeze autonomous progress until a migrated host has majority acknowledgement. */
+  /**
+   * Freeze autonomous progress until a migrated host has majority acknowledgement.
+   *
+   * The disconnect -> CPU replacement timer intentionally keeps running while frozen: replacing an
+   * absent human is not game progress, and it is what lets a lone remaining human continue a
+   * 2-player game after the other tab closed. Freezing therefore only stops turn/CPU/ack/grace.
+   */
   setFrozen(frozen: boolean): void {
     if (this.frozen === frozen) return;
     this.frozen = frozen;
-    if (frozen) {
-      this.clearTask('turn');
-      this.clearTask('ack');
-      this.clearTask('cpu');
-      for (const seat of this.seats) {
-        this.clearTask(`grace:${seat.index}`);
-        this.clearTask(`replace:${seat.index}`);
-      }
-      return;
-    }
     this.armTurn(this.lastFx);
   }
 
@@ -579,10 +584,23 @@ export class RoomController {
         if (seat.connId === conn.id && seatConnected(seat)) {
           // Same connection re-authenticating: idempotent. No 「戻りました」, no autoplay reset
           // and no snapshot (which could cancel in-flight fx). Explicit resync requests snapshots.
+          // The lobby is still re-sent to that connection so a client that just recovered from a
+          // partition sees the current seat/connection state immediately.
           this.sendWelcome(conn, false, false);
+          this.deps.send(conn.id, { t: 'lobby', lobby: this.lobbyView() });
           return;
         }
         this.bindReconnect(conn, seat);
+        return;
+      }
+      // A timed-out human seat was replaced by CPU but keeps its key: the owner can take it back
+      // (assets and position intact) instead of being locked out for the rest of the game.
+      const reclaimable =
+        this.status !== 'lobby'
+          ? this.seats.find((candidate) => candidate.kind === 'cpu' && candidate.reclaimToken === msg.token)
+          : undefined;
+      if (reclaimable) {
+        this.bindReclaim(conn, reclaimable, msg.token);
         return;
       }
       // Never reclaim a seat by display name: the pinned public-key fingerprint is the only
@@ -595,6 +613,26 @@ export class RoomController {
       return;
     }
     this.sendWelcome(conn);
+  }
+
+  private bindReclaim(conn: Conn, seat: Seat, token: string): void {
+    seat.kind = 'human';
+    seat.token = token;
+    seat.reclaimToken = null;
+    seat.name = conn.name;
+    seat.connId = conn.id;
+    seat.disconnectedAt = null;
+    seat.autoplay = false;
+    seat.chatBucket = initialBucket(this.deps.now(), COMM.chatBurst);
+    seat.emoteBucket = initialBucket(this.deps.now(), COMM.emoteBurst);
+    conn.seat = seat.index;
+    conn.token = token;
+    this.clearTask(`replace:${seat.index}`);
+    this.clearTask(`grace:${seat.index}`);
+    this.system(`${characterLabel(seat)} が席に戻りました`);
+    this.sendWelcome(conn);
+    this.broadcastLobby();
+    this.armTurn(this.lastFx);
   }
 
   private bindReconnect(conn: Conn, seat: Seat): void {
@@ -1091,6 +1129,8 @@ export class RoomController {
       }
     }
 
+    this.deps.reportAccepted?.(msg.seat, seat.index);
+
     let set = this.reporters.get(msg.seat);
     if (!set) {
       set = new Set();
@@ -1166,17 +1206,11 @@ export class RoomController {
     this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
     this.turnFxMs = sumFxDuration(fx) * (this.deps.fxScale ?? 1);
 
-    if (this.frozen) return;
     if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
       return;
     }
-    const actor = actorOf(this.state);
-    if (actor === null) return;
-    const seat = this.seats[this.seatByPlayerId[actor]];
-    if (!seat) return;
     const now = this.deps.now();
-
-    // Replacement is independent of whose turn it is.
+    // Replacement is independent of whose turn it is, and keeps running while frozen.
     for (const human of this.seats) {
       if (human.kind === 'human' && !seatConnected(human)) {
         const since = human.disconnectedAt ?? now;
@@ -1185,6 +1219,11 @@ export class RoomController {
         this.clearTask(`replace:${human.index}`);
       }
     }
+    if (this.frozen) return;
+    const actor = actorOf(this.state);
+    if (actor === null) return;
+    const seat = this.seats[this.seatByPlayerId[actor]];
+    if (!seat) return;
 
     if (seat.kind === 'cpu') {
       this.setTask('cpu', now + this.turnFxMs + this.cpuDelayMs);
@@ -1458,6 +1497,7 @@ export class RoomController {
       cpuLevel: 1,
       connId: null,
       token: null,
+      reclaimToken: null,
       autoplay: false,
       disconnectedAt: null,
       chatBucket: initialBucket(now, COMM.chatBurst),
@@ -1476,6 +1516,7 @@ export class RoomController {
     seat.cpuLevel = 1;
     seat.connId = null;
     seat.token = null;
+    seat.reclaimToken = null;
     seat.autoplay = false;
     seat.disconnectedAt = null;
     seat.chatBucket = initialBucket(now, COMM.chatBurst);
@@ -1492,6 +1533,9 @@ export class RoomController {
     const oldName = characterLabel(seat);
     seat.kind = 'cpu';
     seat.connId = null;
+    // A timeout replacement keeps the key so the owner can reclaim the seat (资产 kept). An explicit
+    // leave is final: the player is gone and the CPU owns the seat.
+    seat.reclaimToken = why === 'timeout' ? seat.token : null;
     seat.token = null;
     seat.disconnectedAt = null;
     seat.autoplay = false;
@@ -1773,6 +1817,8 @@ export class RoomController {
       seat.flagged = info.flagged ?? false;
       seat.token =
         info.kind === 'human' ? (snapshot.seatKeys?.[String(info.index)] ?? null) : null;
+      seat.reclaimToken =
+        info.kind === 'cpu' ? (snapshot.reclaimKeys?.[String(info.index)] ?? null) : null;
       seat.connId = null;
       seat.disconnectedAt =
         info.kind === 'human' && room.status !== 'lobby' ? now : null;

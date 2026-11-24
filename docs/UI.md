@@ -111,7 +111,8 @@ export class MapView {
   isOverviewMode(): boolean;
   /** 全体地図モードの変化だけを通知。戻り値は解除関数、null で解除。購読時に現在値は push しない。 */
   setOverviewCallback(cb: ((overview: boolean) => void) | null): () => void;
-  /** 目的地（地上）/最寄りの異世界出口（天国・地獄・宇宙）までの残りホップ数。到達不能は null。 */
+  /** 目的地（地上）/最寄りの異世界出口（天国・地獄・宇宙）までの残りホップ数。到達不能は null。
+   *  目標は表示中のビューではなく手番プレイヤーのいる盤面で決まる（異世界で地上マップを表示中でも出口距離）。 */
   getMoveOptionDistanceInfo(nodeId: string): { hops: number; target: 'destination' | 'exit' } | null;
   getMoveOptionDistance(nodeId: string): number | null; // getMoveOptionDistanceInfo()?.hops
   /** QA 用: 直近フレームで描いたラベル矩形とアンカー（ラベルが動かないことの検証用）。 */

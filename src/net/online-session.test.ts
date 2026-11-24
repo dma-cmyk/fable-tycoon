@@ -15,6 +15,9 @@ import type { Session } from './session-types';
 import {
   appendReportEvidence,
   authorityInfoForTests,
+  onlineSaveIssue,
+  resumeOnline,
+  verifiedSuccessorForRoom,
   checkpointHostForTests,
   configureNetworkForTests,
   exportReports,
@@ -49,6 +52,9 @@ class Peer {
   seq = 0;
   seat: number | null = null;
   lastSentSeq = -1;
+  lastRejectedSeq = -1;
+  /** Generation of the last state applied; a change re-arms the action (the UI re-derives). */
+  gen = 0;
   history: ServerMsg[] = [];
   onState: ((state: PublicState, seq: number) => void) | null = null;
   private waiters: Waiter[] = [];
@@ -106,12 +112,27 @@ class Peer {
 
   private handle(msg: ServerMsg): void {
     this.history.push(msg);
+    if (msg.t === 'error' && msg.code === 'stale' && this.lastSentSeq === this.seq) {
+      // A soft rejection (authority switch / stale screen) re-opens the turn, exactly like the
+      // UI re-rendering its action buttons. Retry once per seq so a real loop stays visible.
+      if (this.lastRejectedSeq !== this.seq) {
+        this.lastRejectedSeq = this.seq;
+        this.lastSentSeq = -1;
+        queueMicrotask(() => this.kickAutoPlay());
+      }
+    }
     if (this.history.length > 4_000) this.history.splice(0, this.history.length - 4_000);
     if (msg.t === 'welcome') {
       this.seat = msg.seat;
       this.lastSentSeq = -1;
     }
     if (msg.t === 'snapshot' || msg.t === 'update') {
+      const gen = msg.gen ?? 1;
+      if (gen !== this.gen) {
+        this.gen = gen;
+        this.lastSentSeq = -1; // a new authority generation re-opens the current turn
+        this.lastRejectedSeq = -1;
+      }
       this.state = msg.state;
       this.seq = msg.seq;
       this.onState?.(msg.state, msg.seq);
@@ -314,6 +335,7 @@ async function createSplitRoom(
         seq: 99999,
         gen: 99,
         connectedHumans: 4,
+        stateHash: 'deadbeef',
         broker: null,
         at: Date.now(),
       };
@@ -557,11 +579,15 @@ async function createSplitRoom(
     guest3.kickAutoPlay();
     expect(checkpointHostForTests(guest3.session)).toBeNull();
     const before = guest3.seq;
-    await guest3.waitFor(
-      (msg) => msg.t === 'update' && msg.seq > before,
-      15_000,
-      'game continues after conflict',
-    );
+    try {
+      await guest3.waitForNew(
+        (msg) => msg.t === 'update' && msg.seq > before,
+        15_000,
+        'game continues after conflict',
+      );
+    } catch (error) {
+      throw error;
+    }
     expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
   }, 60_000);
 
@@ -591,6 +617,49 @@ async function createSplitRoom(
       else Reflect.deleteProperty(globalThis, 'window');
     }
   });
+
+  it('delivers a stateful snapshot to a late subscriber before any fx', async () => {
+    const hostSession = await createOnlineRoom('late-host');
+    const host = new Peer(hostSession, 'late-host', false);
+    const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'late-guest'), 'late-guest', false);
+    active.push(host, guest);
+    try {
+      await guest.waitFor((msg) => msg.t === 'welcome');
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      const guestWelcome = guest.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 1);
+      guest.session.send({ t: 'take_seat', index: 1 });
+      await guestWelcome;
+      guest.session.send({ t: 'pick_character', characterId: 'alice' });
+      hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
+      const started = guest.waitFor((msg) => msg.t === 'update', 15_000, 'start update');
+      hostSession.send({ t: 'start' });
+      const firstUpdate = await started;
+      expect(firstUpdate.t).toBe('update');
+
+      // A newly opened GameScreen subscribes after several updates: it must receive the board
+      // (a snapshot carrying state) before anything else, not an fx-bearing update alone.
+      const late: ServerMsg[] = [];
+      const unsubscribe = guest.session.subscribe((msg) => late.push(msg));
+      try {
+        const stateful = late.find((msg) => msg.t === 'snapshot' || msg.t === 'update');
+        expect(stateful?.t).toBe('snapshot');
+        if (stateful?.t === 'snapshot') {
+          expect(stateful.state.phase.t).not.toBe('game_over');
+          expect(stateful.seq).toBe(guest.seq);
+          expect(stateful.resync).toBe(true);
+        }
+        expect(late.some((msg) => msg.t === 'update')).toBe(false);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      host.stop();
+      guest.stop();
+    }
+  }, 30_000);
 
   it('delivers same-seq resync snapshots to guests', async () => {
     const hostSession = await createOnlineRoom('resync-host');
@@ -673,11 +742,15 @@ async function createSplitRoom(
     expect(authorityInfoForTests(host.session)?.frozen).toBe(true);
 
     const hostSeq = host.seq;
+    // No side may advance during the split: a 2/2 partition has no strict majority anywhere.
+    const frozenSeqs = [host.seq, guests[0].seq, guests[1].seq, guests[2].seq];
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    expect([host.seq, guests[0].seq, guests[1].seq, guests[2].seq]).toEqual(frozenSeqs);
     setBlockedPeersForTests(host.session, []);
     setBlockedPeersForTests(guests[0].session, []);
     setBlockedPeersForTests(guests[1].session, []);
     setBlockedPeersForTests(guests[2].session, []);
-    await host.waitFor(
+    await host.waitForNew(
       (msg) => msg.t === 'update' && msg.seq > hostSeq,
       15_000,
       'game resumes after 2/2 heal',
@@ -716,17 +789,31 @@ async function createSplitRoom(
     setBlockedPeersForTests(guests[0].session, ['s3-c']);
     setBlockedPeersForTests(guests[1].session, ['s3-c']);
     setBlockedPeersForTests(guests[2].session, ['s3-host', 's3-a', 's3-b']);
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    // The 3-person side keeps a strict majority, so it must keep advancing the game.
+    const majoritySeq = host.seq;
+    await host.waitForNew(
+      (msg) => msg.t === 'update' && msg.seq > majoritySeq,
+      15_000,
+      'majority side keeps playing',
+    );
     expect(authorityInfoForTests(host.session)?.frozen).toBe(false);
+    // The isolated seat stops advancing (it has no majority).
+    const isolatedSeq = guests[2].seq;
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    // In-flight deliveries may land, but the isolated side must not keep playing.
+    expect(guests[2].seq).toBeLessThanOrEqual(isolatedSeq + 1);
     setBlockedPeersForTests(host.session, []);
     setBlockedPeersForTests(guests[0].session, []);
     setBlockedPeersForTests(guests[1].session, []);
     setBlockedPeersForTests(guests[2].session, []);
-    await host.waitFor(
-      (msg) => msg.t === 'lobby' && [1, 2, 3].every((i) => msg.lobby.seats[i].connected),
+    const isolatedBefore = guests[2].seq;
+    await guests[2].waitForNew(
+      (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > isolatedBefore,
       15_000,
-      '3/1 heal reconnects all seats',
+      'isolated seat rejoins the live updates',
     );
+    const healedLobby = host.session.lobby();
+    expect([1, 2, 3].every((i) => healedLobby?.seats[i].connected === true)).toBe(true);
   }, 60_000);
 
   it('discovers the host on a secondary broker before joining', async () => {
@@ -771,6 +858,88 @@ async function createSplitRoom(
       await new Promise<void>((resolve) => second.close(() => resolve()));
     }
   }, 30_000);
+
+  it('rejects an online host save from a different board version', () => {
+    const data = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', {
+      value: { localStorage: storage, sessionStorage: storage },
+      configurable: true,
+    });
+    try {
+      data.set(
+        'fable.online.host',
+        JSON.stringify({
+          roomId: 'ABC123-XYZ9',
+          name: 'host',
+          snapshot: '{"v":1}',
+          generation: 1,
+          boardVersion: 'obsolete-board-version',
+          savedAt: 1,
+        }),
+      );
+      expect(resumeOnline()).toBeNull();
+      expect(onlineSaveIssue()).toContain('盤面');
+      expect(data.has('fable.online.host')).toBe(false);
+
+      // A save with no version field at all is also rejected (it predates the board check).
+      data.set(
+        'fable.online.host',
+        JSON.stringify({ roomId: 'ABC123-XYZ9', name: 'host', snapshot: '{"v":1}', generation: 1 }),
+      );
+      expect(resumeOnline()).toBeNull();
+      expect(onlineSaveIssue()).toContain('古い');
+    } finally {
+      if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor);
+      else Reflect.deleteProperty(globalThis, 'window');
+    }
+  });
+
+  it('prefers a verified successor over the invite URL pin after a host transfer', () => {
+    const data = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', {
+      value: { localStorage: storage, sessionStorage: storage },
+      configurable: true,
+    });
+    try {
+      // The invite URL pinned the ORIGINAL host; storage holds a majority-approved successor.
+      data.set(
+        'fable.keychain.KCHAIN-TEST1',
+        JSON.stringify([
+          { fp: 'a'.repeat(64), gen: 1, approvedBy: [], needed: 1 },
+          { fp: 'b'.repeat(64), gen: 3, approvedBy: ['c'.repeat(64), 'd'.repeat(64)], needed: 1 },
+        ]),
+      );
+      const successor = verifiedSuccessorForRoom('KCHAIN-TEST1', ['a'.repeat(64), 'c'.repeat(64), 'd'.repeat(64)]);
+      expect(successor).toEqual({ fp: 'b'.repeat(64), gen: 3 });
+      // An approval list containing a key that is not an agreed seat is not verified.
+      expect(
+        verifiedSuccessorForRoom('KCHAIN-TEST1', ['a'.repeat(64), 'c'.repeat(64)]),
+      ).toBeNull();
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, 'window', descriptor);
+      else Reflect.deleteProperty(globalThis, 'window');
+    }
+  });
 
   it('orders host state by generation then seq', () => {
     expect(isNewerStateOrder(1, 5, 1, 5)).toBe(false);

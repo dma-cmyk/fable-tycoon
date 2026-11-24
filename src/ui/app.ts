@@ -1,9 +1,16 @@
 import { Audio } from '../audio/audio';
 import type { LocalSetup } from '../net/local-session';
-import { clearLocalSave, createLocal, hasLocalSave, resumeLocal } from '../net/local-session';
+import {
+  clearLocalSave,
+  createLocal,
+  hasLocalSave,
+  localSaveIssue,
+  resumeLocal,
+} from '../net/local-session';
 import {
   createOnlineRoom,
   joinOnlineRoom,
+  onlineSaveIssue,
   resumeOnline,
   roomExists,
   transportInfo,
@@ -61,6 +68,8 @@ export class App {
         this.showLobby(resumed);
         return;
       }
+      const issue = onlineSaveIssue();
+      if (issue) this.toasts.show(issue, 'bad', 6000);
     } catch {
       // no resumable online room; continue to the title
     }
@@ -162,13 +171,13 @@ export class App {
     try {
       const session = resumeLocal();
       if (!session) {
-        this.toasts.show('保存されたゲームが見つかりませんでした', 'bad');
+        this.toasts.show(localSaveIssue() ?? '保存されたゲームが見つかりませんでした', 'bad', 6000);
         return;
       }
       this.session = session;
       this.showGame(session);
     } catch {
-      this.toasts.show('保存されたゲームを再開できませんでした', 'bad');
+      this.toasts.show(localSaveIssue() ?? '保存されたゲームを再開できませんでした', 'bad', 6000);
     }
   }
 

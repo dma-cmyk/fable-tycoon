@@ -2,7 +2,7 @@ import { Audio, voiceKeyOf } from '../../audio/audio';
 import {  annualIncome, netWorth, type PublicState } from '../../core/engine';
 import type {} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
-import { avatar, h } from '../dom';
+import { avatar, h, uiIcon } from '../dom';
 import {
   characterSprite,
   charsById,
@@ -78,10 +78,18 @@ export class ResultScreen {
             h(
               'div',
               { class: 'result-row-stats' },
-              h('span', { class: 'muted', text: '総資産 ' }),
-              h('strong', { class: index === 0 ? 'gold' : '', text: formatOku(net) }),
-              h('span', { class: 'muted', text: ' ・ 年間収益 ' }),
-              h('strong', { text: formatOku(income) }),
+              h(
+                'span',
+                { class: 'result-stat-pair' },
+                h('span', { class: 'muted', text: '総資産 ' }),
+                h('strong', { class: index === 0 ? 'gold' : '', text: formatOku(net) }),
+              ),
+              h(
+                'span',
+                { class: 'result-stat-pair' },
+                h('span', { class: 'muted', text: ' ・ 年間収益 ' }),
+                h('strong', { text: formatOku(income) }),
+              ),
             ),
           ),
         ),
@@ -96,18 +104,26 @@ export class ResultScreen {
       canvas,
     );
 
-    const titleButton = h('button', {
-      class: 'btn btn-ghost result-btn',
-      text: '🏠 タイトルへ',
-      attrs: { type: 'button' },
-      on: { click: options.onTitle },
-    });
-    const rematchButton = h('button', {
-      class: 'btn btn-gold result-btn',
-      text: options.mode === 'online' ? '🌐 別のルームへ' : '🔁 もう一度',
-      attrs: { type: 'button' },
-      on: { click: options.onRematch },
-    });
+    const titleButton = h(
+      'button',
+      {
+        class: 'btn btn-ghost result-btn',
+        attrs: { type: 'button' },
+        on: { click: () => options.onTitle },
+      },
+      uiIcon('logo', '🏠', 'btn-icon'),
+      'タイトルへ',
+    );
+    const rematchButton = h(
+      'button',
+      {
+        class: 'btn btn-gold result-btn',
+        attrs: { type: 'button' },
+        on: { click: () => options.onRematch },
+      },
+      options.mode === 'online' ? uiIcon('globe', '🌐', 'btn-icon') : null,
+      options.mode === 'online' ? '別のルームへ' : 'もう一度',
+    );
 
     const confetti = h('div', { class: 'result-confetti', attrs: { 'aria-hidden': 'true' } });
     for (let i = 0; i < 18; i++) {

@@ -143,3 +143,26 @@ export function chooseRecommended<T extends { id: string; kind: string }>(
   }
   return best;
 }
+
+/** Where a move should head, resolved from the acting player's own board. */
+export interface MoveTarget {
+  target: 'destination' | 'exit';
+  /** Realm whose exits are the goal; null for the world board. */
+  realm: string | null;
+  /** World destination node id; only set when `target === 'destination'`. */
+  destinationNodeId: string | null;
+}
+
+/**
+ * Resolve the move goal from the acting player's board rather than from the
+ * board currently on screen. A player standing in heaven/hell/space heads for
+ * that realm's exits even while the camera shows the world (and vice versa).
+ */
+export function resolveMoveTarget(
+  playerRealm: string | null | undefined,
+  destinationNodeId: string | null | undefined,
+): MoveTarget | null {
+  if (playerRealm) return { target: 'exit', realm: playerRealm, destinationNodeId: null };
+  if (!destinationNodeId) return null;
+  return { target: 'destination', realm: null, destinationNodeId };
+}

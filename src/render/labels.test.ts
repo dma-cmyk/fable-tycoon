@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   LabelFade,
+  pickFreeSlot,
   placeLabels,
   rectsOverlap,
+  spotlightHoles,
+  spreadBadges,
   zoomBucket,
   bucketZoom,
   type LabelItem,
@@ -146,5 +149,109 @@ describe('placeLabels', () => {
     const chosen = slotsRightLeft[1];
     const rect = { x: 1000 + chosen.dx - 20, y: 1000 + chosen.dy - 10, w: 40, h: 20 };
     expect(rectsOverlap(rect, { x: 1060 - 18, y: 1000 - 18, w: 36, h: 36 }, 2)).toBe(false);
+  });
+});
+describe('pickFreeSlot', () => {
+  const slots = [
+    { dx: 0, dy: 0 },
+    { dx: 40, dy: 0 },
+    { dx: 0, dy: 40 },
+  ];
+
+  it('keeps the first slot when nothing blocks it', () => {
+    expect(pickFreeSlot(100, 100, 20, 20, slots, [])).toEqual(slots[0]);
+  });
+
+  it('steps to the next slot when a blocker covers the first', () => {
+    const blocker = { x: 90, y: 90, w: 20, h: 20 };
+    expect(pickFreeSlot(100, 100, 20, 20, slots, [blocker])).toEqual(slots[1]);
+  });
+
+  it('returns null when every slot is blocked or outside the board', () => {
+    const blocker = { x: 0, y: 0, w: 400, h: 400 };
+    expect(pickFreeSlot(100, 100, 20, 20, slots, [blocker])).toBeNull();
+  });
+
+  it('skips slots that leave the board', () => {
+    const inside = (r: { x: number; y: number; w: number; h: number }): boolean => r.x >= 0 && r.y >= 0 && r.x + r.w <= 120;
+    expect(pickFreeSlot(100, 100, 20, 20, slots, [], inside)).toEqual(slots[0]);
+    // Only the slot shifted right clears x = 100 on a narrow board.
+    const tight = (r: { x: number; y: number; w: number; h: number }): boolean => r.x >= 100;
+    expect(pickFreeSlot(100, 100, 20, 20, slots, [], tight)).toEqual(slots[1]);
+  });
+});
+
+describe('spreadBadges', () => {
+  it('pushes neighbours to the minimum gap along one axis', () => {
+    expect(spreadBadges([10, 12, 20], 42, 0, 400)).toEqual([10, 52, 94]);
+  });
+
+  it('keeps the upper bound by backing the group down', () => {
+    const out = spreadBadges([100, 105, 108], 42, 0, 150);
+    expect(out[out.length - 1]).toBeLessThanOrEqual(150);
+    for (let i = 1; i < out.length; i += 1) expect(out[i] - out[i - 1]).toBeGreaterThanOrEqual(42 - 1e-9);
+  });
+
+  it('never leaves two badges on the same point', () => {
+    const out = spreadBadges([50, 50, 50], 42, 0, 400);
+    expect(new Set(out).size).toBe(3);
+    expect(out).toEqual([50, 92, 134]);
+  });
+
+  it('clamps and passes through single values', () => {
+    expect(spreadBadges([], 42, 0, 100)).toEqual([]);
+    expect(spreadBadges([120], 42, 0, 100)).toEqual([100]);
+  });
+});
+
+describe('spotlightHoles', () => {
+  it('lists the actor first, then every candidate', () => {
+    const holes = spotlightHoles({ x: 10, y: 20 }, [{ x: 30, y: 40 }, { x: 50, y: 60 }], 40, 30);
+    expect(holes).toEqual([
+      { x: 10, y: 20, r: 40 },
+      { x: 30, y: 40, r: 30 },
+      { x: 50, y: 60, r: 30 },
+    ]);
+  });
+
+  it('handles a missing actor and overlapping candidates', () => {
+    const holes = spotlightHoles(null, [{ x: 0, y: 0 }, { x: 1, y: 1 }], 40, 30);
+    expect(holes).toHaveLength(2);
+    expect(holes.every((h) => h.r === 30)).toBe(true);
+  });
+});
+
+describe('badge spread across a shared edge', () => {
+  it('keeps the minimum gap when three badges clamp to the same corner', () => {
+    const out = spreadBadges([26, 26, 26], 42, 26, 694);
+    expect(new Set(out).size).toBe(3);
+    for (let i = 1; i < out.length; i += 1) expect(out[i] - out[i - 1]).toBeGreaterThanOrEqual(42 - 1e-9);
+  });
+
+  it('spreads evenly when the run cannot hold the requested gap', () => {
+    const out = spreadBadges([10, 11, 12, 13, 14, 15], 42, 26, 200);
+    expect(out[0]).toBeGreaterThanOrEqual(26 - 1e-9);
+    expect(out[out.length - 1]).toBeLessThanOrEqual(200 + 1e-9);
+    // Six badges need 210px but only 174px exist: fall back to even spacing,
+    // still ordered and never coincident.
+    for (let i = 1; i < out.length; i += 1) expect(out[i]).toBeGreaterThan(out[i - 1]);
+    expect(out[1] - out[0]).toBeCloseTo((200 - 26) / 5, 5);
+  });
+});
+
+describe('priority label freeze', () => {
+  it('shows why the map caches slots while a token walks', () => {
+    // First slot (right of the anchor) is free, so it is used.
+    const slots = [{ dx: 30, dy: 0 }, { dx: -30, dy: 0 }];
+    const first = pickFreeSlot(100, 100, 20, 20, slots, [{ x: 60, y: 90, w: 20, h: 20 }]);
+    expect(first).toEqual(slots[0]);
+    // Same blockers plus a token under the chosen slot: a fresh evaluation has
+    // no free slot at all, which is exactly why the map must reuse `first`
+    // instead of re-running this while an animation is in flight.
+    const reEvaluated = pickFreeSlot(
+      100, 100, 20, 20, slots,
+      [{ x: 60, y: 90, w: 20, h: 20 }, { x: 120, y: 90, w: 20, h: 20 }],
+    );
+    expect(reEvaluated).toBeNull();
   });
 });
