@@ -2049,6 +2049,12 @@ try {
       ]),
     ),
   };
+  for (const client of clients) {
+    const text = (client.warnings || []).map((warning) => warning.text).join('\n');
+    client.brokersConnected = [...text.matchAll(/connected to (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
+    client.brokersFailed = [...text.matchAll(/broker failed: (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
+    client.brokerUnique = [...new Set(client.brokersConnected)];
+  }
   report.clients = clients.map((client) => ({
     id: client.id,
     label: client.label,
@@ -2071,7 +2077,16 @@ try {
     fxBusyMaxMs: client.fxBusyMaxSeen || 0,
     skipLog: client.skipLog || [],
     fxDurationsMs: client.fxDurations || [],
+    brokersConnected: client.brokersConnected || [],
+    brokersFailed: client.brokersFailed || [],
+    brokerUnique: client.brokerUnique || [],
   }));
+  report.brokers = Object.fromEntries(
+    report.clients.map((client) => [
+      client.id,
+      { unique: client.brokerUnique, connected: client.brokersConnected, failed: client.brokersFailed },
+    ]),
+  );
   await writeFile(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
   await cleanup();
   if (report.ok) {
