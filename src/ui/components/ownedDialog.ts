@@ -11,6 +11,7 @@ import {
   playerColor,
   propertiesById,
 } from '../format';
+import { cityTileUrl, tileThumb } from '../squareInfo';
 
 export interface OwnedDialogOptions {
   modal: ModalHost;
@@ -115,6 +116,7 @@ export function openOwnedDialog(options: OwnedDialogOptions): void {
           h(
             'header',
             { class: 'owned-city-head' },
+            tileThumb(cityTileUrl(city, true), 'owned-city-tile'),
             h('h3', { text: city.nameJa }),
             h('span', { class: 'muted', text: `${propertyIds.length} / ${city.properties.length} 件` }),
             allOwned ? h('span', { class: 'badge badge-gold', text: '👑 独占（収益2倍）' }) : null,

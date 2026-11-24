@@ -7,6 +7,13 @@
 import { MAP_H, MAP_W, project, wrapDx, wrapX } from '../core/geo';
 import { REALMS, REALM_H, REALM_W } from '../core/realm';
 import realmCitiesData from '../data/realms.json';
+import {
+  buildCityRouteConnections,
+  commonCityTileKind,
+  hasCityTile,
+  squareInfoOf,
+  type CityRouteConnections,
+} from '../ui/squareInfo';
 import type {
   BoardNode,
   Character,
@@ -121,10 +128,25 @@ export interface MapAssets {
   realms?: Map<RealmId, HTMLImageElement>;
   /** Terrain and town stamps. */
   stamps?: Map<string, HTMLImageElement>;
+  /** 256px board square tiles (`tiles/<kind>.webp`). */
+  squareTiles?: Map<string, HTMLImageElement>;
+  /** 64px board square tiles (`tiles/small/<kind>.webp`). */
+  squareTilesSmall?: Map<string, HTMLImageElement>;
+  /** 256px common city tiles (`tiles/city/<kind>.webp`). */
+  cityTiles?: Map<string, HTMLImageElement>;
+  /** 64px common city tiles (`tiles/city/small/<kind>.webp`). */
+  cityTilesSmall?: Map<string, HTMLImageElement>;
   /** MapArt terrain texture (full/lo). */
   terrain?: HTMLImageElement;
   terrainLo?: HTMLImageElement;
   mapArt?: MapArtData;
+}
+
+export interface SquareInspectEvent {
+  node: BoardNode;
+  x: number;
+  y: number;
+  trigger: 'hover' | 'longpress';
 }
 
 export interface FrameStats {
@@ -420,6 +442,7 @@ export class MapView {
   private readonly edges: DrawEdge[] = [];
   private readonly edgeModes = new Map<string, RouteMode>();
   private readonly airNodes = new Set<string>();
+  private readonly cityRouteConnections: CityRouteConnections;
   private readonly graphEdges: GraphEdge[] = [];
   private destinationNodeIdCache: { nodeId: string; distances: Map<string, number> } | null = null;
   private realmExitCache: { realm: RealmId; distances: Map<string, number> } | null = null;
@@ -494,6 +517,15 @@ export class MapView {
   private overviewCallback: ((overview: boolean) => void) | null = null;
   private lastOverviewFlag = false;
   private cityTap: ((cityId: string) => void) | null = null;
+  private squareInspectCb: ((info: SquareInspectEvent | null) => void) | null = null;
+  private hoveredInspectNodeId: string | null = null;
+  private longPressTimer: number | null = null;
+  private longPressActive = false;
+  /** Bounded on-demand LRU caches for per-city tiles (`tiles/cities/<id>.webp`). */
+  private readonly cityTileFullCache = new Map<string, HTMLImageElement>();
+  private readonly cityTileSmallCache = new Map<string, HTMLImageElement>();
+  private readonly cityTileLoading = new Set<string>();
+  private cityTileFlushTimer: number | null = null;
 
   private cityHits: Array<{ cityId: string; x: number; y: number; r: number }> = [];
   private cityLabelHits: Array<{ cityId: string; rect: Rect }> = [];
@@ -595,6 +627,7 @@ export class MapView {
       }
     }
     for (const edge of data.board.edges) this.graphEdges.push({ a: edge.a, b: edge.b });
+    this.cityRouteConnections = buildCityRouteConnections(data.board.edges);
     for (const node of data.board.nodes) {
       if (node.kind === 'warp') this.warpNodes.push(node);
     }
@@ -784,6 +817,7 @@ export class MapView {
 
   private drawCityClusters(ctx: CanvasRenderingContext2D, layer: LayerTransform, detail: number): void {
     if (detail < 1) return;
+    if ((this.assets.cityTiles?.size ?? 0) > 0 || (this.assets.cityTilesSmall?.size ?? 0) > 0) return;
     const { toCanvas, scale } = layer;
     const centerX = layer.ox + layer.wWorld / 2;
     const wPx = layer.wWorld * scale;
@@ -1073,6 +1107,91 @@ export class MapView {
 
   onCityTap(cb: (cityId: string) => void): void {
     this.cityTap = cb;
+  }
+
+  onSquareInspect(cb: (info: SquareInspectEvent | null) => void): void {
+    this.squareInspectCb = cb;
+  }
+
+  private getSquareTileImage(kind: string, drawSizePx: number): HTMLImageElement | null {
+    const preferSmall = drawSizePx <= 56;
+    const primary = preferSmall ? this.assets.squareTilesSmall?.get(kind) : this.assets.squareTiles?.get(kind);
+    if (primary && primary.complete && primary.naturalWidth > 0) return primary;
+    const fallback = preferSmall ? this.assets.squareTiles?.get(kind) : this.assets.squareTilesSmall?.get(kind);
+    if (fallback && fallback.complete && fallback.naturalWidth > 0) return fallback;
+    return null;
+  }
+
+  private touchLru(cache: Map<string, HTMLImageElement>, key: string): HTMLImageElement | null {
+    const hit = cache.get(key);
+    if (!hit) return null;
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit.complete && hit.naturalWidth > 0 ? hit : null;
+  }
+
+  private putLru(cache: Map<string, HTMLImageElement>, key: string, img: HTMLImageElement, limit: number): void {
+    cache.delete(key);
+    cache.set(key, img);
+    while (cache.size > limit) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
+  }
+
+  private scheduleCityTileRefresh(): void {
+    if (this.destroyed || this.cityTileFlushTimer !== null) return;
+    this.cityTileFlushTimer = window.setTimeout(() => {
+      this.cityTileFlushTimer = null;
+      if (this.destroyed) return;
+      this.staticRevision += 1;
+      this.landLayer.invalidate();
+      this.requestRender();
+    }, 45);
+  }
+
+  private requestCityTile(cityId: string, small: boolean): void {
+    if (this.destroyed || typeof Image === 'undefined') return;
+    const key = small ? `s:${cityId}` : `f:${cityId}`;
+    if (this.cityTileLoading.has(key)) return;
+    this.cityTileLoading.add(key);
+    const rel = small ? `assets/tiles/cities/small/${cityId}.webp` : `assets/tiles/cities/${cityId}.webp`;
+    const url = new URL(rel, document.baseURI).href;
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      this.cityTileLoading.delete(key);
+      if (this.destroyed) return;
+      const cache = small ? this.cityTileSmallCache : this.cityTileFullCache;
+      const limit = small ? 160 : 48;
+      this.putLru(cache, cityId, img, limit);
+      this.scheduleCityTileRefresh();
+    };
+    img.onerror = () => {
+      this.cityTileLoading.delete(key);
+    };
+    img.src = url;
+  }
+
+  private getCityTileImage(city: City | undefined, drawSizePx: number): HTMLImageElement | null {
+    const preferSmall = drawSizePx <= 64;
+    if (city && hasCityTile(city.id)) {
+      const primaryCache = preferSmall ? this.cityTileSmallCache : this.cityTileFullCache;
+      const hit = this.touchLru(primaryCache, city.id);
+      if (hit) return hit;
+      this.requestCityTile(city.id, preferSmall);
+      const secondaryCache = preferSmall ? this.cityTileFullCache : this.cityTileSmallCache;
+      const alt = this.touchLru(secondaryCache, city.id);
+      if (alt) return alt;
+      if (!preferSmall) this.requestCityTile(city.id, true);
+    }
+    const kind = city ? commonCityTileKind(city, this.cityRouteConnections) : 'metro';
+    const primary = preferSmall ? this.assets.cityTilesSmall?.get(kind) : this.assets.cityTiles?.get(kind);
+    if (primary && primary.complete && primary.naturalWidth > 0) return primary;
+    const fallback = preferSmall ? this.assets.cityTiles?.get(kind) : this.assets.cityTilesSmall?.get(kind);
+    if (fallback && fallback.complete && fallback.naturalWidth > 0) return fallback;
+    return null;
   }
 
   bubble(playerId: number, text: string, ms = 4000): void {
@@ -1393,6 +1512,13 @@ export class MapView {
     document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.ambientTimer !== null) window.clearTimeout(this.ambientTimer);
     this.ambientTimer = null;
+    if (this.cityTileFlushTimer !== null) window.clearTimeout(this.cityTileFlushTimer);
+    this.cityTileFlushTimer = null;
+    if (this.longPressTimer !== null) window.clearTimeout(this.longPressTimer);
+    this.longPressTimer = null;
+    this.cityTileFullCache.clear();
+    this.cityTileSmallCache.clear();
+    this.cityTileLoading.clear();
     this.detachInput();
     this.landLayer.destroy();
     this.ocean.destroy();
@@ -2214,6 +2340,7 @@ export class MapView {
       const layouts = this.computeLayouts(now);
       this.drawMoveSpotlight(ctx);
       this.drawCities(ctx, now);
+      this.drawSquareShortLabels(ctx);
       this.drawMoveUi(ctx, now);
       this.drawTokens(ctx, layouts, now);
       this.drawSelectedPathOverlay(ctx);
@@ -2310,11 +2437,17 @@ export class MapView {
       if (node.kind === 'city') continue;
       staticDiscs.push({ x: node.x, y: node.y, r: staticTileR * 1.25 * invZoom });
     }
+    const hasTileArt = (this.assets.cityTiles?.size ?? 0) > 0 || (this.assets.cityTilesSmall?.size ?? 0) > 0;
     for (const entry of staticEntries) {
-      staticDiscs.push({ x: entry.node.x, y: entry.node.y, r: staticCityR * 1.05 * invZoom });
+      staticDiscs.push({ x: entry.node.x, y: entry.node.y, r: staticCityR * (hasTileArt ? 1.2 : 1.05) * invZoom });
+      if (hasTileArt) {
+        staticDiscs.push({ x: entry.node.x, y: entry.node.y - staticCityR * 0.72 * invZoom, r: staticCityR * 0.9 * invZoom });
+      }
       if (!entry.city.landmark) continue;
+      if (hasTileArt && hasCityTile(entry.city.id)) continue;
       if (staticDetail === 0 && entry.city.tier !== 1) continue;
       if (!this.assets.landmarks.has(entry.city.landmark)) continue;
+      if (hasTileArt) continue;
       const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
       const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192);
       const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
@@ -2450,11 +2583,12 @@ export class MapView {
       // Sized for the priority tier with extra gutter when furigana sits on the top row.
       const w = Math.max(nameWidth, kanaWidth) + (kana ? 14 : 10);
       const h = fsPriority + 7 + (kana ? kanaFs + 4 : 0);
+      const tilePad = hasTileArt ? 4 : 0;
       const slotPx: Array<{ dx: number; dy: number }> = [
-        { dx: cityR + 6 + w / 2, dy: -h * 0.12 },
-        { dx: -(cityR + 6 + w / 2), dy: -h * 0.12 },
-        { dx: 0, dy: -(cityR + 5 + h / 2) },
-        { dx: 0, dy: cityR + 5 + h / 2 },
+        { dx: cityR + 6 + tilePad + w / 2, dy: -h * 0.12 },
+        { dx: -(cityR + 6 + tilePad + w / 2), dy: -h * 0.12 },
+        { dx: 0, dy: cityR + 6 + tilePad + h / 2 },
+        { dx: 0, dy: -(cityR * (hasTileArt ? 1.55 : 1) + 5 + h / 2) },
       ];
       for (const rr of [cityR + 14, cityR + 30]) {
         for (let a = 0; a < 12; a++) {
@@ -2788,7 +2922,7 @@ export class MapView {
         } else if (node.kind === 'warp') {
           this.drawWarpTile(ctx, x, y, r, now, node.id);
         } else {
-          this.drawGem(ctx, node, x, y, r, detail);
+          this.drawGem(ctx, node, x, y, r, detail, this.dpr);
         }
       }
     }
@@ -2800,7 +2934,7 @@ export class MapView {
       const x = cam.screenX(entry.node.x);
       const y = cam.screenY(entry.node.y);
       if (x < -180 || x > cam.vw + 180 || y < -180 || y > cam.vh + 180) continue;
-      this.drawCityPedestalAt(ctx, x, y, radius, this.ownership.get(entry.city.id));
+      this.drawCityPedestalAt(ctx, x, y, radius, this.ownership.get(entry.city.id), entry.city, this.dpr);
     }
     // Realm station rows can land before cities.json; keep them visible with a
     // generic station plate/label until the data catches up.
@@ -2809,7 +2943,7 @@ export class MapView {
       const x = cam.screenX(node.x);
       const y = cam.screenY(node.y);
       if (x < -180 || x > cam.vw + 180 || y < -180 || y > cam.vh + 180) continue;
-      this.drawCityPedestalAt(ctx, x, y, radius, undefined);
+      this.drawCityPedestalAt(ctx, x, y, radius, undefined, undefined, this.dpr);
       const label = (node.cityId ?? node.id).replace(/-/g, ' ');
       ctx.save();
       ctx.font = `800 ${Math.max(10, 9.5 + cam.zoom * 1.25).toFixed(1)}px ${LABEL_FONT}`;
@@ -2841,30 +2975,36 @@ export class MapView {
   ): void {
     const realm = node.realm ?? 'world';
     const gold = realm === 'heaven';
+    const drawSize = r * 3.15;
+    const tileImg = this.getSquareTileImage('portal', drawSize * this.dpr);
     ctx.save();
     ctx.translate(x, y);
     const glow = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 2.6);
-    glow.addColorStop(0, gold ? 'rgba(255,240,150,0.85)' : 'rgba(160,230,255,0.8)');
+    glow.addColorStop(0, gold ? 'rgba(255,240,150,0.85)' : realm === 'hell' ? 'rgba(255,120,80,0.8)' : 'rgba(160,230,255,0.8)');
     glow.addColorStop(1, 'rgba(255,240,150,0)');
     ctx.fillStyle = glow;
     ctx.beginPath();
     ctx.arc(0, 0, r * 2.6, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = gold ? '#ffd75a' : realm === 'hell' ? '#ff6b4a' : '#5ad8ff';
-    ctx.strokeStyle = '#24365c';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.15, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
-    ctx.rotate(now / 380);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1.5, r * 0.2);
-    for (let i = 0; i < 3; i++) {
+    if (tileImg) {
+      ctx.drawImage(tileImg, -drawSize * 0.5, -drawSize * 0.62, drawSize, drawSize);
+    } else {
+      ctx.fillStyle = gold ? '#ffd75a' : realm === 'hell' ? '#ff6b4a' : '#5ad8ff';
+      ctx.strokeStyle = '#24365c';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      const a = (i / 3) * TAU;
-      ctx.arc(0, 0, r * 0.7, a, a + 1.4);
+      ctx.arc(0, 0, r * 1.15, 0, TAU);
+      ctx.fill();
       ctx.stroke();
+      ctx.rotate(now / 380);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.5, r * 0.2);
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        const a = (i / 3) * TAU;
+        ctx.arc(0, 0, r * 0.7, a, a + 1.4);
+        ctx.stroke();
+      }
     }
     ctx.restore();
     if (realm === 'hell') {
@@ -2881,8 +3021,34 @@ export class MapView {
   }
 
   private drawWarpTile(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, now: number, seed: string): void {
+    const drawSize = r * 3.05;
+    const tileImg = this.getSquareTileImage('warp', drawSize * this.dpr);
     ctx.save();
     ctx.translate(x, y);
+    if (tileImg) {
+      if (!this.reducedMotion) {
+        const pulse = 0.55 + 0.25 * Math.sin(now / 320 + (hashString(seed) % 31));
+        ctx.save();
+        ctx.globalAlpha = pulse * 0.42;
+        ctx.strokeStyle = '#6fe2ff';
+        ctx.lineWidth = Math.max(1.4, r * 0.16);
+        ctx.rotate(now / 420);
+        for (let i = 0; i < 2; i++) {
+          const a = i * Math.PI;
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 1.26, a, a + 1.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      ctx.fillStyle = 'rgba(6,40,70,0.22)';
+      ctx.beginPath();
+      ctx.ellipse(0.6, r * 0.62, r * 1.02, r * 0.44, 0, 0, TAU);
+      ctx.fill();
+      ctx.drawImage(tileImg, -drawSize * 0.5, -drawSize * 0.6, drawSize, drawSize);
+      ctx.restore();
+      return;
+    }
     ctx.rotate(Math.sin(hashString(seed) % 100) * 0.2);
     const grad = ctx.createLinearGradient(0, -r, 0, r);
     grad.addColorStop(0, '#d9fbff');
@@ -3114,7 +3280,7 @@ export class MapView {
         ctx.lineWidth = 1.4 * dpr;
         ctx.stroke();
       } else {
-        this.drawCityPedestalAt(ctx, px, py, radius, this.ownership.get(entry.city.id));
+        this.drawCityPedestalAt(ctx, px, py, radius, this.ownership.get(entry.city.id), entry.city, 1);
       }
     }
   }
@@ -3152,8 +3318,10 @@ export class MapView {
     }
 
     if (destination) this.drawDestinationFlag(ctx, destination, radius, now);
+    const hasCityTileArt = (this.assets.cityTiles?.size ?? 0) > 0 || (this.assets.cityTilesSmall?.size ?? 0) > 0;
     for (const v of visible) {
       if (!v.entry.city.landmark) continue;
+      if (hasCityTileArt && hasCityTile(v.entry.city.id)) continue;
       if (detail === 0 && v.entry.city.tier !== 1) continue;
       const img = this.assets.landmarks.get(v.entry.city.landmark);
       if (!img) continue;
@@ -3174,8 +3342,8 @@ export class MapView {
       let top = -1; let best = 0;
       for (let i = 0; i < owner.counts.length; i++) if (owner.counts[i] > best) { best = owner.counts[i]; top = i; }
       if (top < 0) continue;
-      const fx = v.x + radius * 0.75;
-      const fy = v.y - radius * 0.95;
+      const fx = v.x + radius * (hasCityTileArt ? 0.95 : 0.75);
+      const fy = v.y - radius * (hasCityTileArt ? 1.05 : 0.95);
       ctx.save();
       ctx.strokeStyle = '#23385c';
       ctx.lineWidth = 2;
@@ -3221,18 +3389,88 @@ export class MapView {
     y: number,
     radius: number,
     owner: { counts: number[]; total: number; monopoly: number } | undefined,
+    city?: City,
+    pixelScale = 1,
   ): void {
+    let topPlayer = -1;
+    let best = 0;
+    let owned = 0;
+    if (owner) {
+      for (let i = 0; i < owner.counts.length; i++) {
+        owned += owner.counts[i];
+        if (owner.counts[i] > best) { best = owner.counts[i]; topPlayer = i; }
+      }
+    }
+    const drawSize = radius * 3.4;
+    const tileImg = this.getCityTileImage(city, drawSize * pixelScale);
+    if (tileImg) {
+      ctx.save();
+      // Monopoly aura / owner base ring under the station platform.
+      if (owner && owner.monopoly >= 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(x, y + radius * 0.14, radius * 1.48, radius * 0.9, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(255, 206, 56, 0.28)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffc928';
+        ctx.lineWidth = Math.max(2, radius * 0.16);
+        ctx.shadowColor = 'rgba(255, 200, 40, 0.85)';
+        ctx.shadowBlur = radius * 0.55;
+        ctx.stroke();
+        ctx.restore();
+      } else if (topPlayer >= 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(x, y + radius * 0.16, radius * 1.32, radius * 0.8, 0, 0, TAU);
+        ctx.fillStyle = 'rgba(12, 26, 52, 0.22)';
+        ctx.fill();
+        ctx.strokeStyle = this.playerColor(topPlayer);
+        ctx.lineWidth = Math.max(1.8, radius * 0.14);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = 'rgba(7, 35, 57, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(x + 0.8, y + radius * 0.26, radius * 1.18, radius * 0.58, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      // Draw the isometric station tile with its platform foot anchored at (x, y).
+      ctx.drawImage(tileImg, x - drawSize * 0.5, y - drawSize * 0.72, drawSize, drawSize);
+
+      // Compact ownership bar along the front lip of the platform.
+      if (owner && owner.total > 0 && owned > 0) {
+        const bw = Math.max(16, radius * 1.95);
+        const bh = Math.max(3.6, radius * 0.26);
+        const bx = x - bw / 2;
+        const by = y + drawSize * 0.2;
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 28, 52, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(bx - 1.2, by - 1.2, bw + 2.4, bh + 2.4, bh * 0.65);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, bh, bh * 0.5);
+        ctx.clip();
+        let cursor = bx;
+        for (let i = 0; i < owner.counts.length; i++) {
+          const count = owner.counts[i];
+          if (count <= 0) continue;
+          const sw = (count / owner.total) * bw;
+          ctx.fillStyle = this.playerColor(i);
+          ctx.fillRect(cursor, by, sw, bh);
+          cursor += sw;
+        }
+        ctx.restore();
+      }
+      ctx.restore();
+      return;
+    }
+
     const w = radius * 2.25;
     const h = radius * 1.5;
     const left = x - w / 2;
     const top = y - h * 0.62;
-    let topPlayer = -1;
-    let best = 0;
-    if (owner) {
-      for (let i = 0; i < owner.counts.length; i++) {
-        if (owner.counts[i] > best) { best = owner.counts[i]; topPlayer = i; }
-      }
-    }
     const plateColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#f7fcff';
     const roofColor = topPlayer >= 0 ? this.playerColor(topPlayer) : '#8ecdf2';
     ctx.save();
@@ -3281,29 +3519,25 @@ export class MapView {
     ctx.fillRect(left + w * 0.46, top + h * 0.63, w * 0.035, h * 0.07);
     ctx.fillRect(left + w * 0.515, top + h * 0.63, w * 0.035, h * 0.07);
 
-    if (owner && owner.total > 0) {
-      let owned = 0;
-      for (const c of owner.counts) owned += c;
-      if (owned > 0) {
-        const bx = left + 3;
-        const by = top + h - 6.5;
-        const bw = w - 6;
-        const bh = 4.2;
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(bx, by, bw, bh, 2);
-        ctx.clip();
-        let cursor = bx;
-        for (let i = 0; i < owner.counts.length; i++) {
-          const count = owner.counts[i];
-          if (count <= 0) continue;
-          const sw = (count / owner.total) * bw;
-          ctx.fillStyle = this.playerColor(i);
-          ctx.fillRect(cursor, by, sw, bh);
-          cursor += sw;
-        }
-        ctx.restore();
+    if (owner && owner.total > 0 && owned > 0) {
+      const bx = left + 3;
+      const by = top + h - 6.5;
+      const bw = w - 6;
+      const bh = 4.2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 2);
+      ctx.clip();
+      let cursor = bx;
+      for (let i = 0; i < owner.counts.length; i++) {
+        const count = owner.counts[i];
+        if (count <= 0) continue;
+        const sw = (count / owner.total) * bw;
+        ctx.fillStyle = this.playerColor(i);
+        ctx.fillRect(cursor, by, sw, bh);
+        cursor += sw;
       }
+      ctx.restore();
     }
 
     if (owner && owner.monopoly >= 0) {
@@ -3325,7 +3559,30 @@ export class MapView {
     y: number,
     r: number,
     detail: number,
+    pixelScale = 1,
   ): void {
+    const drawSize = r * 2.95;
+    const tileImg = this.getSquareTileImage(node.kind, drawSize * pixelScale);
+    if (tileImg) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (this.airNodes.has(node.id) && detail >= 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.52, r * 0.55, r * 0.66, r * 0.32, 0, 0, TAU);
+        ctx.ellipse(r * 0.52, r * 0.52, r * 0.62, r * 0.3, 0, 0, TAU);
+        ctx.ellipse(0, r * 0.42, r * 0.88, r * 0.38, 0, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(6, 40, 70, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(0.6, r * 0.6, r * 1.0, r * 0.42, 0, 0, TAU);
+      ctx.fill();
+      ctx.drawImage(tileImg, -drawSize * 0.5, -drawSize * 0.58, drawSize, drawSize);
+      ctx.restore();
+      return;
+    }
+
     const palette = gemColors(node.kind);
     ctx.save();
     ctx.translate(x, y);
@@ -3423,6 +3680,54 @@ export class MapView {
         ctx.arc(-r * 0.25, -r * 0.22, Math.max(1.3, r * 0.11), 0, TAU);
         ctx.fill();
       }
+    }
+    ctx.restore();
+  }
+
+  /** Show short square names beneath non-city squares only when zoomed in closely. */
+  private drawSquareShortLabels(ctx: CanvasRenderingContext2D): void {
+    const zoomedIn = this.view === 'world' ? this.camera.zoom >= 1.95 : this.camera.zoom >= 1.05;
+    if (!zoomedIn || this.isOverview()) return;
+    const cam = this.camera;
+    const r = this.tileRadius();
+    const board = this.freeBoardBox();
+    const optionIds = new Set((this.moveOptions ?? []).map((o) => o.nodeId));
+    const placed: Rect[] = [];
+    const fs = Math.min(11, Math.max(9.5, 8.5 + cam.zoom * 0.8));
+    const font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+    ctx.save();
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const node of this.nodesForView()) {
+      if (node.kind === 'city') continue;
+      if (optionIds.has(node.id)) continue;
+      const sx = cam.screenX(node.x);
+      const sy = cam.screenY(node.y);
+      if (sx < board.x + 24 || sx > board.x + board.w - 24) continue;
+      if (sy < board.y + 18 || sy > board.y + board.h - 24) continue;
+      const label = squareInfoOf(node.kind).shortLabel;
+      const tw = this.measureText(ctx, label, font);
+      const padX = 5;
+      const w = tw + padX * 2;
+      const h = fs + 4.5;
+      const bx = sx - w / 2;
+      const by = sy + r * 1.24;
+      const rect: Rect = { x: bx, y: by, w, h };
+      if (rect.y + rect.h > board.y + board.h - 4) continue;
+      if (this.cityLabelDrawn.some((c) => rectsOverlap(rect, c.rect, 2))) continue;
+      if (this.labelObstacles.some((o) => rectsOverlap(rect, o, 2))) continue;
+      if (placed.some((p) => rectsOverlap(rect, p, 2))) continue;
+      placed.push(rect);
+      ctx.fillStyle = 'rgba(10, 24, 50, 0.78)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, w, h, h * 0.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#f5faff';
+      ctx.fillText(label, sx, by + h / 2 + 0.3);
     }
     ctx.restore();
   }
@@ -5744,6 +6049,21 @@ export class MapView {
 
   // ---------------------------------------------------------------- input
 
+  private cancelLongPress(): void {
+    if (this.longPressTimer !== null) {
+      window.clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  private clearSquareInspect(): void {
+    if (this.hoveredInspectNodeId !== null || this.longPressActive) {
+      this.hoveredInspectNodeId = null;
+      this.longPressActive = false;
+      this.squareInspectCb?.(null);
+    }
+  }
+
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
@@ -5757,15 +6077,34 @@ export class MapView {
     this.camera.stopTween();
     this.velocityX = 0;
     this.velocityY = 0;
+    this.cancelLongPress();
+    if (this.longPressActive || e.pointerType === 'mouse') {
+      this.clearSquareInspect();
+    }
     if (this.pointers.size === 1) {
       this.primaryPointerId = e.pointerId;
       this.dragStartX = p.x;
       this.dragStartY = p.y;
-          this.dragMoved = 0;
+      this.dragMoved = 0;
       this.dragging = false;
       this.followPausedUntil = performance.now() + 1600;
       this.canvas.style.cursor = 'grabbing';
+      if (e.pointerType !== 'mouse' && !this.isOverview() && this.squareInspectCb) {
+        const startX = p.x;
+        const startY = p.y;
+        this.longPressTimer = window.setTimeout(() => {
+          this.longPressTimer = null;
+          if (this.dragging || this.pointers.size !== 1 || this.isOverview()) return;
+          const node = this.hitBoardNode(startX, startY);
+          if (!node) return;
+          this.longPressActive = true;
+          this.hoveredInspectNodeId = node.id;
+          this.suppressTapUntil = performance.now() + 750;
+          this.squareInspectCb?.({ node, x: startX, y: startY, trigger: 'longpress' });
+        }, 420);
+      }
     } else if (this.pointers.size === 2) {
+      this.clearSquareInspect();
       this.beginPinch();
     }
     this.requestRender();
@@ -5780,6 +6119,8 @@ export class MapView {
     }
     this.pointers.set(e.pointerId, p);
     if (this.pointers.size >= 2) {
+      this.cancelLongPress();
+      this.clearSquareInspect();
       this.applyPinch();
       return;
     }
@@ -5788,6 +6129,10 @@ export class MapView {
     const dy = p.y - previous.y;
     const total = Math.hypot(p.x - this.dragStartX, p.y - this.dragStartY);
     this.dragMoved = Math.max(this.dragMoved, total);
+    if (total > 8) {
+      this.cancelLongPress();
+      this.clearSquareInspect();
+    }
     if (!this.dragging && total > 8) {
       this.dragging = true;
       this.camera.panByScreen(p.x - this.dragStartX, p.y - this.dragStartY);
@@ -5808,6 +6153,7 @@ export class MapView {
   private readonly onPointerUp = (e: PointerEvent): void => {
     const p = this.pointers.get(e.pointerId) ?? this.eventPoint(e);
     this.pointers.delete(e.pointerId);
+    this.cancelLongPress();
     try {
       this.canvas.releasePointerCapture(e.pointerId);
     } catch {
@@ -5849,6 +6195,7 @@ export class MapView {
 
   private readonly onPointerCancel = (e: PointerEvent): void => {
     this.pointers.delete(e.pointerId);
+    this.cancelLongPress();
     this.velocityX = 0;
     this.velocityY = 0;
     if (this.pointers.size === 0) {
@@ -5859,9 +6206,15 @@ export class MapView {
     this.requestRender();
   };
 
+  private readonly onPointerLeave = (): void => {
+    if (!this.longPressActive) this.clearSquareInspect();
+  };
+
   private readonly onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     this.overviewMode = false;
+    this.cancelLongPress();
+    this.clearSquareInspect();
     const p = this.eventPoint(e);
     const scale = e.deltaMode === 1 ? 16 : 1;
     const factor = Math.exp(-e.deltaY * scale * 0.0014);
@@ -5881,6 +6234,7 @@ export class MapView {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerCancel);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
     this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.canvas.addEventListener('contextmenu', this.onContextMenu);
     this.canvas.style.cursor = 'grab';
@@ -5892,6 +6246,7 @@ export class MapView {
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.canvas.removeEventListener('wheel', this.onWheel);
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
   }
@@ -5944,7 +6299,21 @@ export class MapView {
       this.requestRender();
     }
     const city = option ? null : this.hitCity(x, y);
-    this.canvas.style.cursor = option || city ? 'pointer' : 'grab';
+    const inspected = this.isOverview() ? null : this.hitBoardNode(x, y);
+    const nextInspectId = inspected?.id ?? null;
+    if (inspected) {
+      this.hoveredInspectNodeId = nextInspectId;
+      this.longPressActive = false;
+      this.squareInspectCb?.({
+        node: inspected,
+        x: this.camera.screenX(inspected.x),
+        y: this.camera.screenY(inspected.y),
+        trigger: 'hover',
+      });
+    } else if (this.hoveredInspectNodeId !== null && !this.longPressActive) {
+      this.clearSquareInspect();
+    }
+    this.canvas.style.cursor = option || city ? 'pointer' : inspected ? 'help' : 'grab';
   }
 
   private handleTap(x: number, y: number): void {
@@ -6060,6 +6429,33 @@ export class MapView {
       if (insideRect(x, y, hit.rect)) return { cityId: hit.cityId };
     }
     return null;
+  }
+
+  /** Hit-test any visible board square or station for hover / long-press inspection. */
+  private hitBoardNode(x: number, y: number): BoardNode | null {
+    if (this.isOverview()) return null;
+    const city = this.hitCity(x, y);
+    if (city) {
+      const nodeId = this.cityNodeId.get(city.cityId);
+      const node = nodeId ? this.nodeById.get(nodeId) : undefined;
+      if (node) return node;
+    }
+    if (this.detailLevel() < 1) return null;
+    const hitR = Math.max(16, this.tileRadius() * 1.48);
+    let best: BoardNode | null = null;
+    let bestDist = Infinity;
+    for (const node of this.nodesForView()) {
+      if (node.kind === 'city') continue;
+      const sx = this.camera.screenX(node.x);
+      const sy = this.camera.screenY(node.y);
+      if (Math.abs(sx - x) > hitR || Math.abs(sy - y) > hitR) continue;
+      const d = Math.hypot(sx - x, sy - y);
+      if (d <= hitR && d < bestDist) {
+        best = node;
+        bestDist = d;
+      }
+    }
+    return best;
   }
 
   private confirmOption(nodeId: string): void {

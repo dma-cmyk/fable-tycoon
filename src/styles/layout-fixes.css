@@ -3958,3 +3958,1115 @@
     flex: 0 0 auto;
   }
 }
+
+/* ============================================================================
+   5. マスの見分け方・タイルアイコン（PC / スマホ共通、スマホ配置は不変）
+   ============================================================================ */
+
+/* スマホでは PC 専用パーツを完全に隠し、既存のスマホ縦・横レイアウトを保つ。 */
+.player-plate-dest,
+.pc-key-hint,
+.pc-topbar-ranking,
+.pc-comm-fab,
+.pc-comm-drawer {
+  display: none;
+}
+
+/* 行き先候補チップ内のタイル画像と種類名 */
+.move-chip-kind.is-tile {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(8, 22, 48, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 2px;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.move-chip-tile {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.move-chip-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.move-chip-type {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(63, 155, 255, 0.25);
+  border: 1px solid rgba(130, 200, 255, 0.55);
+  color: #dff1ff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.move-chip.is-selected .move-chip-type {
+  background: rgba(24, 45, 86, 0.16);
+  border-color: rgba(24, 45, 86, 0.42);
+  color: #182b52;
+}
+
+/* 物件画面・カタログ・持ち物の見出しに添える small/ 都市タイル */
+.city-heading-tile,
+.catalog-city-tile,
+.owned-city-tile {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.city-hero-tile {
+  object-fit: contain;
+  padding: 4px;
+  background: radial-gradient(circle at 50% 62%, rgba(255, 255, 255, 0.24), rgba(10, 26, 56, 0.14));
+  border-radius: 14px;
+}
+
+/* ホバー / 長押しで出すマスの説明札 */
+.square-inspect-card {
+  position: absolute;
+  z-index: 44;
+  width: min(300px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 214, 96, 0.78);
+  background: linear-gradient(180deg, rgba(22, 48, 96, 0.96), rgba(9, 22, 48, 0.98));
+  box-shadow: 0 10px 26px rgba(3, 10, 26, 0.58), 0 0 0 2px rgba(5, 14, 34, 0.45);
+  color: #f4f9ff;
+  pointer-events: none;
+  animation: square-inspect-in 120ms ease-out;
+}
+
+.square-inspect-card.is-pinned {
+  pointer-events: auto;
+}
+
+.square-inspect-card[hidden] {
+  display: none;
+}
+
+@keyframes square-inspect-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.square-inspect-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.square-inspect-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px;
+}
+
+.square-inspect-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.square-inspect-title {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: #ffffff;
+}
+
+.square-inspect-badge {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 214, 96, 0.2);
+  border: 1px solid rgba(255, 214, 96, 0.45);
+  color: #ffe58f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.square-inspect-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.square-inspect-desc {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.48;
+  color: #e6f1ff;
+}
+
+.square-inspect-extra {
+  margin: 5px 0 0;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffe285;
+}
+
+/* マスの種類の凡例（≡ メニュー & 遊び方 共通。クリーム色のモーダル本文上で高コントラスト） */
+.square-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.square-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+
+@media (max-width: 680px) {
+  .square-legend-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.square-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: 11px;
+  background: #fffcf4;
+  border: 1.5px solid rgba(25, 48, 92, 0.16);
+  box-shadow: 0 2px 5px rgba(18, 36, 70, 0.05);
+}
+
+.square-legend-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #1c3a72, #10244c);
+  border: 1.5px solid rgba(25, 48, 92, 0.24);
+  display: grid;
+  place-items: center;
+  padding: 3px;
+}
+
+.square-legend-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.square-legend-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.square-legend-name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 900;
+  color: #16284d;
+  margin-bottom: 1px;
+}
+
+.square-legend-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.36;
+  color: #2c4066;
+}
+
+.square-legend-note {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #9e4f00;
+}
+
+.square-legend-realms {
+  padding: 7px 10px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #1b386e, #10244b);
+  border: 1.5px solid rgba(255, 214, 96, 0.55);
+}
+
+.square-legend-subhead {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 900;
+  color: #ffe285;
+}
+
+.square-legend-realm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.square-legend-realm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #e6f2ff;
+}
+
+.square-legend-realm-name {
+  min-width: 108px;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.square-legend-realm-mults {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.square-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.square-legend-pill.is-blue {
+  background: rgba(47, 157, 240, 0.32);
+  border: 1px solid rgba(110, 198, 255, 0.72);
+  color: #dcf2ff;
+}
+
+.square-legend-pill.is-red {
+  background: rgba(240, 69, 94, 0.32);
+  border: 1px solid rgba(255, 132, 150, 0.72);
+  color: #ffe3e8;
+}
+
+.square-legend-realm-exit {
+  color: #cfe0fa;
+  font-size: 11.5px;
+}
+
+.square-legend-tip {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #364e78;
+}
+
+.square-legend-modal .modal-body {
+  padding: 12px 16px;
+}
+
+/* ============================================================================
+   6. PC 版 UI の簡素化（幅 900px 以上のみ。「見る場所は 3 つだけ」）
+   ============================================================================ */
+@media (min-width: 900px) {
+  /* 外すもの：左下の大きな立ち絵・右下の資産パネル・常時ミニマップ・重複チップ・余分なボタン */
+  .game-screen .portrait-area,
+  .game-screen .money-panel,
+  .game-screen .game-minimap,
+  .game-screen .game-topbar .dest-chip,
+  .game-screen .game-topbar .status-chip,
+  .game-screen .game-topbar .top-action-secondary,
+  .game-screen .game-bottom-bar .hud-other-btn,
+  .game-screen .game-bottom-bar .hud-comm {
+    display: none !important;
+  }
+
+  /* 1) 上（状況）：左＝手番パネル / 中央＝年月とターン / 右＝順位横並び4枚＋≡メニュー */
+  .game-screen .game-topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    min-height: 68px;
+    padding: 7px 14px;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(180deg, rgba(11, 27, 60, 0.94), rgba(8, 20, 46, 0.88));
+    border-bottom: 2px solid rgba(255, 214, 96, 0.38);
+    box-shadow: 0 6px 20px rgba(3, 10, 26, 0.42);
+    z-index: 36;
+  }
+
+  /* 左：手番パネル（顔・名前・所持金・目的地とあとNマスを 1 枚に統合、幅制限を解除） */
+  .game-screen .game-topbar .player-plate {
+    display: grid !important;
+    grid-template-columns: 42px auto auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 0;
+    align-items: center;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 54px;
+    padding: 5px 14px 5px 8px !important;
+    border-radius: 16px;
+    border: 2px solid rgba(255, 214, 96, 0.62);
+    background: linear-gradient(180deg, rgba(24, 54, 106, 0.95), rgba(11, 26, 58, 0.96));
+    box-shadow: 0 4px 14px rgba(3, 10, 26, 0.38);
+    color: #fff;
+    cursor: pointer;
+    overflow: visible !important;
+    flex: 0 0 auto;
+  }
+
+  .game-screen .game-topbar .player-plate:hover {
+    border-color: var(--gold);
+    filter: brightness(1.06);
+  }
+
+  .game-screen .player-plate-avatar {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 2px solid var(--seat-color, var(--gold));
+    background: linear-gradient(180deg, #d8ecff, #8fbfe8);
+    overflow: hidden;
+    display: grid;
+    place-items: end center;
+  }
+
+  .game-screen .player-plate-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: 50% 100%;
+  }
+
+  .game-screen .player-plate-text {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .game-screen .player-plate-name {
+    font-size: 14.5px;
+    font-weight: 900;
+    line-height: 1.15;
+    max-width: 124px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #e6f2ff;
+  }
+
+  .game-screen .player-plate-sub {
+    display: none !important;
+  }
+
+  .game-screen .player-plate-cash {
+    grid-column: 2;
+    grid-row: 2;
+    margin-left: 0 !important;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #ffe27a;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+  }
+
+  .game-screen .player-plate-dest {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+    padding-left: 12px;
+    border-left: 1.5px solid rgba(255, 255, 255, 0.24);
+    white-space: nowrap;
+  }
+
+  .game-screen .player-plate-dest-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .game-screen .player-plate-dest-name {
+    font-size: 15px;
+    font-weight: 900;
+    color: #ffffff;
+    max-width: 118px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .game-screen .player-plate-dest-name ruby rt {
+    font-size: 9px;
+    color: #cde3ff;
+  }
+
+  .game-screen .player-plate-dest-steps {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(63, 155, 255, 0.26);
+    border: 1px solid rgba(130, 200, 255, 0.55);
+    color: #e4f3ff;
+    font-size: 13.5px;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .game-screen .player-plate-dest.is-realm .player-plate-dest-steps {
+    background: rgba(255, 200, 56, 0.24);
+    border-color: rgba(255, 220, 110, 0.65);
+    color: #fff2b2;
+  }
+
+  /* 中央：年月とターン */
+  .game-screen .game-topbar .game-chips {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .game-screen .game-topbar .game-year-chip,
+  .game-screen .game-topbar .game-turn-chip {
+    font-size: 15px;
+    font-weight: 900;
+    padding: 7px 13px;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+
+  .game-screen .game-topbar .turn-timer {
+    justify-self: center;
+  }
+
+  /* 右：順位の横並び（顔・順位・総資産の 4 枚） */
+  .game-screen .pc-topbar-ranking {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .game-screen .pc-topbar-ranking .ranking-panel {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 6px !important;
+    overflow: visible;
+  }
+
+  .game-screen .pc-topbar-ranking .ranking-caption {
+    display: none !important;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-row {
+    position: relative;
+    width: auto !important;
+    min-width: 102px;
+    max-width: 152px;
+    min-height: 52px;
+    padding: 5px 9px 5px 6px !important;
+    gap: 6px !important;
+    border-radius: 14px !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.22) !important;
+    background: linear-gradient(180deg, rgba(24, 52, 102, 0.92), rgba(11, 25, 56, 0.94)) !important;
+    color: #fff;
+    display: inline-flex !important;
+    align-items: center;
+    flex: 0 1 auto;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-row.is-current {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.34), 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-row.is-mine:not(.is-current) {
+    border-color: rgba(110, 198, 255, 0.72) !important;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-badge {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    font-size: 13px;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-avatar {
+    width: 34px !important;
+    height: 34px !important;
+    flex: 0 0 34px !important;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-name-line {
+    display: none;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-money-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 14.5px;
+    font-weight: 900;
+    color: #fff5cc;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-coin {
+    display: none;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-piper {
+    font-size: 11px;
+    padding: 0 5px;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-menu {
+    display: none;
+  }
+
+  .game-screen .pc-topbar-ranking .rank-bubble {
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    max-width: 200px;
+  }
+
+  /* 広いモニタ（1500px以上）では順位カードに名前も1行添える */
+  @media (min-width: 1500px) {
+    .game-screen .pc-topbar-ranking .rank-row {
+      max-width: 205px;
+      padding: 5px 12px 5px 8px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-name-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 116px;
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #d6e7ff;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-tag {
+      display: none;
+    }
+  }
+
+  /* 900〜1290px で上バーが絶対に重ならないように微調整 */
+  @media (max-width: 1290px) {
+    .game-screen .game-topbar {
+      gap: 8px;
+      padding: 6px 10px;
+      grid-template-columns: auto auto minmax(0, 1fr) auto;
+    }
+
+    .game-screen .game-topbar .player-plate {
+      padding: 5px 10px 5px 7px !important;
+      column-gap: 8px;
+    }
+
+    .game-screen .player-plate-name {
+      font-size: 13.5px;
+      max-width: 92px;
+    }
+
+    .game-screen .player-plate-cash {
+      font-size: 16px;
+    }
+
+    .game-screen .player-plate-dest {
+      padding-left: 9px;
+      margin-left: 2px;
+      gap: 4px;
+    }
+
+    .game-screen .player-plate-dest-name {
+      font-size: 14px;
+      max-width: 96px;
+    }
+
+    .game-screen .player-plate-dest-steps {
+      font-size: 12.5px;
+      padding: 2px 7px;
+    }
+
+    .game-screen .game-topbar .game-year-chip,
+    .game-screen .game-topbar .game-turn-chip {
+      font-size: 14px;
+      padding: 6px 10px;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-row {
+      min-width: 92px;
+      padding: 4px 8px 4px 6px !important;
+      gap: 5px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-avatar {
+      width: 30px !important;
+      height: 30px !important;
+      flex: 0 0 30px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-money-line {
+      font-size: 13.5px;
+    }
+  }
+
+  /* 右上 ≡ メニュー 1 つだけ */
+  .game-screen .game-topbar .top-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .game-screen .game-topbar .top-action-menu {
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    border-radius: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    background: linear-gradient(180deg, rgba(28, 58, 114, 0.94), rgba(13, 29, 64, 0.96));
+    padding: 4px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .game-screen .game-topbar .top-action-menu:hover {
+    border-color: var(--gold);
+  }
+
+  /* 2) 下中央（操作）：桃鉄式コマンド窓 */
+  .game-screen .game-bottom-bar {
+    position: absolute;
+    left: 50% !important;
+    right: auto !important;
+    bottom: calc(14px + var(--safe-bottom)) !important;
+    transform: translateX(-50%) !important;
+    width: auto !important;
+    max-width: calc(100vw - 170px);
+    padding: 10px 14px !important;
+    border-radius: 22px !important;
+    border: 2px solid rgba(255, 214, 96, 0.52) !important;
+    background: linear-gradient(180deg, rgba(20, 46, 94, 0.95), rgba(9, 22, 50, 0.97)) !important;
+    box-shadow: 0 12px 30px rgba(3, 10, 26, 0.54), 0 0 0 3px rgba(5, 14, 34, 0.45) !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 36;
+  }
+
+  .game-screen .game-bottom-bar .bottom-primary-row {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 12px !important;
+    width: auto !important;
+  }
+
+  /* 自分の番の主ボタン（一番大きい金色サイコロボタン） */
+  .game-screen .game-bottom-bar .dice-primary {
+    position: relative;
+    min-height: 64px !important;
+    min-width: 240px;
+    padding: 0 26px !important;
+    border-radius: 16px !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .game-screen .game-bottom-bar .hud-icons {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 10px !important;
+    flex: 0 0 auto;
+  }
+
+  /* 4 つのコマンドボタン（カード・物件・目的地・地図） */
+  .game-screen .game-bottom-bar .hud-icon {
+    position: relative;
+    min-width: 96px !important;
+    min-height: 62px !important;
+    padding: 8px 14px !important;
+    border-radius: 16px !important;
+    border: 2px solid rgba(255, 255, 255, 0.26) !important;
+    background: linear-gradient(180deg, rgba(33, 68, 128, 0.94), rgba(15, 34, 74, 0.96)) !important;
+    color: #f4f9ff !important;
+    display: inline-flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    cursor: pointer;
+    transition: transform 110ms ease, border-color 110ms ease, filter 110ms ease;
+  }
+
+  .game-screen .game-bottom-bar .hud-icon:hover {
+    border-color: var(--gold) !important;
+    filter: brightness(1.08);
+    transform: translateY(-2px);
+  }
+
+  .game-screen .game-bottom-bar .hud-icon .icon-btn-label {
+    font-size: 15px !important;
+    font-weight: 900;
+    line-height: 1.15;
+  }
+
+  .game-screen .game-bottom-bar .hud-icon .ui-icon-img,
+  .game-screen .game-bottom-bar .hud-icon .ui-icon-fallback {
+    width: 24px;
+    height: 24px;
+    font-size: 20px;
+  }
+
+  /* 「その他」ボタンは ≡ メニューへ統合したため PC では必ず非表示にする */
+  .game-screen .game-bottom-bar .hud-icon.hud-other-btn {
+    display: none !important;
+  }
+
+  /* PC キーボードショートカット表示（Space / 1〜5） */
+  .game-screen .pc-key-hint {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    min-width: 19px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 6px;
+    background: rgba(6, 16, 38, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #dcebff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .game-screen .pc-key-hint.pc-key-primary {
+    position: static;
+    margin-left: 6px;
+    height: 22px;
+    padding: 0 7px;
+    background: rgba(30, 18, 0, 0.22);
+    border-color: rgba(45, 26, 0, 0.35);
+    color: #2c1900;
+    font-size: 12px;
+  }
+
+  .game-screen .pc-key-hint[hidden] {
+    display: none !important;
+  }
+
+  /* 他人の番：コマンド窓を「⌛ ○○の番」の 1 行だけにする */
+  .game-screen .game-bottom-bar.is-waiting-turn {
+    padding: 8px 18px !important;
+    border-radius: 999px !important;
+  }
+
+  .game-screen .game-bottom-bar.is-waiting-turn .hud-icons {
+    display: none !important;
+  }
+
+  .game-screen .game-bottom-bar.is-waiting-turn .dice-primary {
+    min-height: 52px !important;
+    min-width: 240px;
+    padding: 0 24px !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #eef6ff !important;
+    font-size: 17px !important;
+    opacity: 1 !important;
+  }
+
+  /* 行き先候補トレイ（PC で広く快適に） */
+  .game-screen .game-bottom-bar .move-options {
+    width: min(980px, calc(100vw - 180px));
+    max-width: 100%;
+  }
+
+  .game-screen .game-bottom-bar .move-chip {
+    min-height: 58px;
+    min-width: 288px;
+    padding: 8px 12px;
+  }
+
+  .game-screen .game-bottom-bar .move-chip-main {
+    min-width: 96px;
+  }
+
+  .game-screen .game-bottom-bar .move-chip-name {
+    font-size: 15px;
+  }
+
+  /* イベントパネル開時：PCで右寄せされたパネルとコマンド窓が重ならないよう左へ逃がす */
+  .game-screen.event-open .game-bottom-bar {
+    left: calc(20px + var(--safe-left)) !important;
+    transform: none !important;
+    max-width: calc(100vw - 520px);
+  }
+
+  /* 右下のチャット・エモート統合丸ボタン 1 つ */
+  .game-screen .pc-comm-fab {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    right: calc(18px + var(--safe-right));
+    bottom: calc(18px + var(--safe-bottom));
+    z-index: 42;
+    width: 60px;
+    height: 60px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 214, 96, 0.72);
+    background: linear-gradient(180deg, rgba(28, 60, 118, 0.96), rgba(11, 26, 58, 0.98));
+    box-shadow: 0 8px 22px rgba(3, 10, 26, 0.52);
+    color: #fff;
+    cursor: pointer;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .game-screen .pc-comm-fab:hover,
+  .game-screen .pc-comm-fab.is-open {
+    border-color: var(--gold);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(3, 10, 26, 0.62), 0 0 0 3px rgba(255, 210, 63, 0.28);
+  }
+
+  .game-screen .pc-comm-fab-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    font-size: 24px;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .game-screen .pc-comm-fab-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .game-screen .pc-comm-badge {
+    top: -4px;
+    right: -4px;
+  }
+
+  /* チャット・エモート タブ付き統合パネル */
+  .game-screen .pc-comm-drawer {
+    display: flex !important;
+    flex-direction: column;
+    position: absolute;
+    right: calc(18px + var(--safe-right));
+    bottom: calc(88px + var(--safe-bottom));
+    z-index: 48;
+    width: min(400px, calc(100vw - 36px));
+    max-height: min(520px, calc(100vh - 180px));
+    border-radius: 18px;
+    border: 2px solid rgba(255, 214, 96, 0.68);
+    background: linear-gradient(180deg, rgba(20, 46, 94, 0.97), rgba(9, 22, 50, 0.99));
+    box-shadow: 0 14px 36px rgba(2, 8, 22, 0.64);
+    overflow: hidden;
+  }
+
+  .game-screen .pc-comm-drawer[hidden] {
+    display: none !important;
+  }
+
+  .game-screen .pc-comm-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.14);
+    background: rgba(8, 20, 44, 0.72);
+  }
+
+  .game-screen .pc-comm-tabs {
+    display: inline-flex;
+    gap: 6px;
+    flex: 1 1 auto;
+  }
+
+  .game-screen .pc-comm-tab {
+    flex: 1 1 0;
+    min-height: 40px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #cfe2ff;
+    font-size: 14.5px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 110ms ease, border-color 110ms ease, color 110ms ease;
+  }
+
+  .game-screen .pc-comm-tab.is-active {
+    background: linear-gradient(180deg, #ffe07d, #f5b930);
+    border-color: #fff3bf;
+    color: #221400;
+  }
+
+  .game-screen .pc-comm-close {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .game-screen .pc-comm-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .game-screen .pc-comm-body .chat-panel,
+  .game-screen .pc-comm-body .emote-palette {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: min(450px, calc(100vh - 245px)) !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
+    display: none;
+  }
+
+  .game-screen .pc-comm-body .chat-panel.is-open,
+  .game-screen .pc-comm-body .emote-palette.is-open {
+    display: flex !important;
+  }
+
+  .game-screen .pc-comm-body .chat-head,
+  .game-screen .pc-comm-body .emote-head {
+    display: none !important;
+  }
+
+  /* 手番のコマへ戻るボタンも左上・上バー下へスッキリ配置（モバイル用 translateX(-50%) を解除） */
+  .game-screen .map-recenter {
+    top: calc(78px + var(--safe-top));
+    left: calc(16px + var(--safe-left));
+    right: auto;
+    transform: none !important;
+  }
+
+  /* イベントパネルが PC 右端からチャット丸ボタンと被らないように位置調整 */
+  .game-screen.event-open .pc-comm-fab {
+    right: calc(490px + var(--safe-right));
+  }
+
+  .game-screen.event-open .pc-comm-drawer {
+    right: calc(490px + var(--safe-right));
+  }
+}

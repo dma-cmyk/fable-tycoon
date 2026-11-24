@@ -9,6 +9,7 @@ import {
   INDUSTRY_JA,
   playerColor,
 } from '../format';
+import { cityTileUrl, tileThumb } from '../squareInfo';
 
 export interface PropertyCatalogOptions {
   modal: ModalHost;
@@ -92,6 +93,7 @@ export function openPropertyCatalog(options: PropertyCatalogOptions): void {
       h(
         'summary',
         { class: 'catalog-summary' },
+        tileThumb(cityTileUrl(city, true), 'catalog-city-tile'),
         h('span', { class: 'catalog-flag', text: countryFlag(city.country) }),
         h('span', { class: 'catalog-city-name', text: city.nameJa }),
         h('span', { class: 'catalog-city-country muted', text: city.countryJa }),

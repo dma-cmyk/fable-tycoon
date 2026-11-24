@@ -6,6 +6,11 @@ import type { LandJson, MapAssets, MapArtData } from './map';
 import { VEHICLE_FILES, VEHICLE_KINDS } from './vehicles';
 import { REALMS } from '../core/realm';
 import type { RealmId } from '../core/types';
+import {
+  COMMON_CITY_TILE_KINDS,
+  SQUARE_TILE_KINDS,
+  squareTileAssetPath,
+} from '../ui/squareInfo';
 
 export type { LandJson, MapAssets };
 
@@ -85,6 +90,10 @@ export async function loadMapAssets(
   const sad = new Map<string, HTMLImageElement>();
   const realms = new Map<RealmId, HTMLImageElement>();
   const stamps = new Map<string, HTMLImageElement>();
+  const squareTiles = new Map<string, HTMLImageElement>();
+  const squareTilesSmall = new Map<string, HTMLImageElement>();
+  const cityTiles = new Map<string, HTMLImageElement>();
+  const cityTilesSmall = new Map<string, HTMLImageElement>();
   let terrain: HTMLImageElement | undefined;
   let terrainLo: HTMLImageElement | undefined;
 
@@ -129,6 +138,30 @@ export async function loadMapAssets(
       label: `stamps/${name}`,
       url: assetUrl(`stamps/${name}.webp`),
       put: (img) => stamps.set(name, img),
+    });
+  }
+  for (const kind of SQUARE_TILE_KINDS) {
+    jobs.push({
+      label: `tiles/${kind}`,
+      url: assetUrl(squareTileAssetPath(kind, false)),
+      put: (img) => squareTiles.set(kind, img),
+    });
+    jobs.push({
+      label: `tiles/small/${kind}`,
+      url: assetUrl(squareTileAssetPath(kind, true)),
+      put: (img) => squareTilesSmall.set(kind, img),
+    });
+  }
+  for (const kind of COMMON_CITY_TILE_KINDS) {
+    jobs.push({
+      label: `tiles/city/${kind}`,
+      url: assetUrl(`tiles/city/${kind}.webp`),
+      put: (img) => cityTiles.set(kind, img),
+    });
+    jobs.push({
+      label: `tiles/city/small/${kind}`,
+      url: assetUrl(`tiles/city/small/${kind}.webp`),
+      put: (img) => cityTilesSmall.set(kind, img),
     });
   }
   for (const kind of VEHICLE_KINDS) {
@@ -194,7 +227,28 @@ export async function loadMapAssets(
       ...sad.values(),
       ...realms.values(),
       ...stamps.values(),
+      ...squareTiles.values(),
+      ...squareTilesSmall.values(),
+      ...cityTiles.values(),
+      ...cityTilesSmall.values(),
     ].map((img) => img.decode().catch(() => undefined)),
   );
-  return { land, chars, landmarks, npcs, vehicles, joy, sad, realms, stamps, terrain, terrainLo, mapArt };
+  return {
+    land,
+    chars,
+    landmarks,
+    npcs,
+    vehicles,
+    joy,
+    sad,
+    realms,
+    stamps,
+    squareTiles,
+    squareTilesSmall,
+    cityTiles,
+    cityTilesSmall,
+    terrain,
+    terrainLo,
+    mapArt,
+  };
 }

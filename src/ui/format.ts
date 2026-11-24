@@ -76,14 +76,14 @@ export const INDUSTRY_ICON: Record<Industry, string> = {
 };
 
 export const SQUARE_JA: Record<SquareKind, string> = {
-  city: '都市',
+  city: '駅（都市）',
   blue: '青マス',
   red: '赤マス',
-  yellow: '黄マス',
-  news: 'ニュース',
+  yellow: '黄マス（カード）',
+  news: 'ニュースマス',
   shop: 'カード売り場',
-  warp: '竜巻',
-  portal: '出口',
+  warp: '竜巻マス（ワープ）',
+  portal: '異世界の出口',
 };
 
 export const SQUARE_ICON: Record<SquareKind, string> = {

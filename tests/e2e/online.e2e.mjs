@@ -1086,8 +1086,15 @@ async function recoverClient(client) {
 async function openChat(client) {
   const page = client.page;
   if (!(await isVisible(page.locator('.chat-panel.is-open')))) {
+    const pcFab = page.locator('.pc-comm-fab').first();
+    const pcChatTab = page.locator('.pc-comm-tab[data-tab="chat"]').first();
     try {
-      await press(client, page.locator('.chat-fab').first());
+      if (await isVisible(pcFab)) {
+        if (!(await isVisible(pcChatTab))) await press(client, pcFab);
+        if (await isVisible(pcChatTab)) await press(client, pcChatTab);
+      } else {
+        await press(client, page.locator('.chat-fab').first());
+      }
     } catch (error) {
       // The opening panel can intercept the same click that opened it on WebKit.
       if (!(await isVisible(page.locator('.chat-panel.is-open')))) throw error;
@@ -1101,6 +1108,11 @@ async function openChat(client) {
 
 async function closeChat(client) {
   const page = client.page;
+  const pcClose = page.locator('.pc-comm-close').first();
+  if (await isVisible(pcClose)) {
+    await pcClose.click({ timeout: 5000 }).catch(() => undefined);
+    return;
+  }
   const close = page.locator('.chat-close').first();
   if (await isVisible(close)) await close.click({ timeout: 5000 }).catch(() => undefined);
 }
@@ -1108,8 +1120,15 @@ async function closeChat(client) {
 async function openEmoteTab(client, tabName) {
   const page = client.page;
   if (!(await isVisible(page.locator('.emote-palette.is-open')))) {
+    const pcFab = page.locator('.pc-comm-fab').first();
+    const pcEmoteTab = page.locator('.pc-comm-tab[data-tab="emote"]').first();
     try {
-      await press(client, page.locator('.emote-fab').first());
+      if (await isVisible(pcFab)) {
+        if (!(await isVisible(pcEmoteTab))) await press(client, pcFab);
+        if (await isVisible(pcEmoteTab)) await press(client, pcEmoteTab);
+      } else {
+        await press(client, page.locator('.emote-fab').first());
+      }
     } catch (error) {
       if (!(await isVisible(page.locator('.emote-palette.is-open')))) throw error;
     }
@@ -1850,7 +1869,9 @@ async function main() {
   await screenshot(firefoxClient, 'firefox-rejoined');
   await installBannerRecorder(firefoxClient);
   await waitFor(
-    () => isVisible(firefoxClient.page.locator('.status-chip.is-mine')),
+    async () =>
+      (await isVisible(firefoxClient.page.locator('.status-chip.is-mine'))) ||
+      (await isVisible(firefoxClient.page.locator('.game-bottom-bar.is-my-turn'))),
     { timeout: 90_000, label: 'Firefox gets a resumed turn' },
   );
   log('Firefox resumed seat and reached its own turn');

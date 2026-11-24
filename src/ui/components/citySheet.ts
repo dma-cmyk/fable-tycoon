@@ -2,9 +2,10 @@ import type { PublicState } from '../../core/engine';
 import { purchasePrice } from '../../core/economy';
 import type {Property} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
-import { avatar, h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
+import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import { rubyName } from '../ruby';
 import { LANDMARK_FILES } from '../assetManifest';
+import { cityTileUrl, hasCityTile, tileThumb } from '../squareInfo';
 import {
   assetUrl,
   citiesById,
@@ -132,6 +133,10 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       city.landmark && LANDMARK_FILES.has(city.landmark)
         ? assetUrl(`assets/landmarks/${city.landmark}.webp`)
         : '';
+    const citySmallTile = cityTileUrl(city, true);
+    const heroArt = hasCityTile(city.id)
+      ? cityTileUrl(city, false)
+      : landmarkAsset || cityTileUrl(city, false);
     const ownerIds = new Set(
       city.properties.map((property) => state.owner[property.id]).filter((id): id is number => id !== undefined),
     );
@@ -147,18 +152,17 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         class: 'city-hero',
         attrs: { style: `--city-accent:${soleOwner !== undefined ? playerColor(state.players[soleOwner]) : '#45b7ff'}` },
       },
-      landmarkAsset
-        ? h('img', {
-            class: 'city-hero-landmark',
-            attrs: { src: landmarkAsset, alt: '', loading: 'lazy', draggable: 'false' },
-          })
-        : h('span', { class: 'city-hero-emoji' }, uiIcon('property', '🏙️', 'city-hero-emoji-mark')),
+      h('img', {
+        class: 'city-hero-landmark city-hero-tile',
+        attrs: { src: heroArt, alt: '', loading: 'lazy', draggable: 'false' },
+      }),
       h(
         'div',
         { class: 'city-hero-text' },
         h(
           'div',
           { class: 'city-hero-title-row' },
+          tileThumb(citySmallTile, 'city-heading-tile'),
           h('h3', { class: 'city-hero-name' }, rubyName(city.nameJa, city.nameKana)),
           h('span', { class: 'city-flag', text: countryFlag(city.country) }),
           destination ? h('span', { class: 'badge badge-gold', text: '🎯 目的地' }) : null,

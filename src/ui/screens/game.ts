@@ -7,7 +7,7 @@ import type {Action, Fx, MoveOption, RealmId, SpeakerRef} from '../../core/types
 import { GAME_DATA } from '../../data/index';
 import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
-import { MapView, moveKindChip } from '../../render/map';
+import { MapView, moveKindChip, type SquareInspectEvent } from '../../render/map';
 import { loadMapAssets, type AssetProgress } from '../../render/assets';
 import {
   assetUrl,
@@ -52,8 +52,10 @@ import { openCardsDialog } from '../components/cardsDialog';
 import { openOwnedDialog } from '../components/ownedDialog';
 import { openPropertyCatalog } from '../components/propertyCatalog';
 import { openInfoDialog, type NewsLogEntry } from '../components/infoDialog';
+import { openSquareLegendDialog } from '../components/squareLegend';
 import { openYearEndDialog, type YearEndHandle } from '../components/yearEndDialog';
 import { openShopDialog, type ShopHandle } from '../components/shopDialog';
+import { describeBoardNode, squareInfoOf, squareTileUrl, tileThumb } from '../squareInfo';
 import { JOY_SPRITE_IDS, LANDMARK_FILES, SAD_SPRITE_IDS } from '../assetManifest';
 import { animateCounter, confettiBurst, motionReduced, watchMotionPreference } from '../motion';
 import { extraMapView, type MapViewId } from '../mapMotion';
@@ -191,6 +193,7 @@ export class GameScreen implements ScreenHandle {
   private readonly primary: HTMLButtonElement;
   private readonly primaryIcon: HTMLElement;
   private readonly primaryLabel: HTMLElement;
+  private readonly primaryKeyHint: HTMLElement;
   private readonly moveOptionsHost: HTMLElement;
   private readonly cardBadge: HTMLElement;
   private readonly statusChip: HTMLElement;
@@ -198,6 +201,16 @@ export class GameScreen implements ScreenHandle {
   private readonly recenterButton: HTMLButtonElement;
   private readonly overviewBanner: HTMLButtonElement;
   private readonly mapButton: HTMLButtonElement;
+  private readonly pcRankingSlot: HTMLElement;
+  private readonly pcCommFab: HTMLButtonElement;
+  private readonly pcCommBadge: HTMLElement;
+  private readonly pcCommDrawer: HTMLElement;
+  private readonly pcCommTabChat: HTMLButtonElement;
+  private readonly pcCommTabEmote: HTMLButtonElement;
+  private readonly pcCommBody: HTMLElement;
+  private pcCommTab: 'chat' | 'emote' = 'chat';
+  private pcCommUnread = 0;
+  private readonly squareInspectCard: HTMLElement;
   private moveSelection: string | null = null;
   private moveOptionsKey = '';
   private moveOptionsCache: MoveOption[] = [];
@@ -234,6 +247,9 @@ export class GameScreen implements ScreenHandle {
   private readonly playerPlateName: HTMLElement;
   private readonly playerPlateSub: HTMLElement;
   private readonly playerPlateCash: HTMLElement;
+  private readonly playerPlateDest: HTMLElement;
+  private readonly playerPlateDestName: HTMLElement;
+  private readonly playerPlateDestSteps: HTMLElement;
   private readonly realmChip: HTMLButtonElement;
   private readonly turnBanner: HTMLElement;
   private readonly turnBannerAvatar: HTMLElement;
@@ -291,6 +307,15 @@ export class GameScreen implements ScreenHandle {
     this.playerPlateName = h('span', { class: 'player-plate-name', text: '' });
     this.playerPlateSub = h('span', { class: 'player-plate-sub', text: '所持金' });
     this.playerPlateCash = h('strong', { class: 'player-plate-cash', text: '—' });
+    this.playerPlateDestName = h('span', { class: 'player-plate-dest-name', text: '目的地' });
+    this.playerPlateDestSteps = h('span', { class: 'player-plate-dest-steps', text: 'あと—マス' });
+    this.playerPlateDest = h(
+      'span',
+      { class: 'player-plate-dest' },
+      h('span', { class: 'player-plate-dest-icon', text: '🎯', attrs: { 'aria-hidden': 'true' } }),
+      this.playerPlateDestName,
+      this.playerPlateDestSteps,
+    );
     this.playerPlate = h(
       'button',
       {
@@ -301,6 +326,7 @@ export class GameScreen implements ScreenHandle {
       this.playerPlateAvatar,
       h('span', { class: 'player-plate-text' }, this.playerPlateName, this.playerPlateSub),
       this.playerPlateCash,
+      this.playerPlateDest,
     );
     this.realmChip = h(
       'button',
@@ -398,6 +424,7 @@ export class GameScreen implements ScreenHandle {
       h('span', { text: '全体地図 ・ タップで拡大' }),
     );
 
+    this.pcRankingSlot = h('div', { class: 'pc-topbar-ranking' });
     this.topbar = h(
       'header',
       { class: 'game-topbar' },
@@ -410,12 +437,13 @@ export class GameScreen implements ScreenHandle {
       ),
       h('div', { class: 'game-chips' }, this.yearChip, this.statusChip, this.destChip, this.stepsCounter, this.turnChip, this.realmChip),
       this.timerHost,
+      this.pcRankingSlot,
       h(
         'div',
         { class: 'top-actions' },
-        iconButton('menu', 'メニュー', () => this.openMenu(), { class: 'top-action' }),
-        iconButton('gear', '設定', () => this.app.openSettings(), { class: 'top-action' }),
-        iconButton('help', 'ヘルプ', () => this.app.openHelp(), { class: 'top-action' }),
+        iconButton('menu', 'メニュー', () => this.openMenu(), { class: 'top-action top-action-menu' }),
+        iconButton('gear', '設定', () => this.app.openSettings(), { class: 'top-action top-action-secondary' }),
+        iconButton('help', 'ヘルプ', () => this.app.openHelp(), { class: 'top-action top-action-secondary' }),
       ),
     );
 
@@ -450,6 +478,7 @@ export class GameScreen implements ScreenHandle {
 
     this.primaryIcon = h('span', { class: 'primary-icon', text: '▶', attrs: { 'aria-hidden': 'true' } });
     this.primaryLabel = h('span', { class: 'primary-label', text: 'サイコロをふる' });
+    this.primaryKeyHint = h('kbd', { class: 'pc-key-hint pc-key-primary', text: 'Space / 1' });
     this.primary = h(
       'button',
       {
@@ -459,28 +488,82 @@ export class GameScreen implements ScreenHandle {
       },
       this.primaryIcon,
       this.primaryLabel,
+      this.primaryKeyHint,
     );
     this.cardBadge = h('span', { class: 'icon-btn-badge', text: '0', attrs: { hidden: 'hidden' } });
-    const cardButton = iconButton('cards', 'カード', () => this.openHand(), { class: 'hud-icon' });
-    cardButton.append(this.cardBadge);
-    const mapButton = iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary' });
+    const cardButton = iconButton('cards', 'カード', () => this.openHand(), { class: 'hud-icon hud-cmd-card' });
+    cardButton.append(this.cardBadge, h('kbd', { class: 'pc-key-hint', text: '2' }));
+    const propertyButton = iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon hud-secondary hud-cmd-property' });
+    propertyButton.append(h('kbd', { class: 'pc-key-hint', text: '3' }));
+    const destButton = iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon hud-secondary hud-cmd-dest' });
+    destButton.append(h('kbd', { class: 'pc-key-hint', text: '4' }));
+    const mapButton = iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary hud-cmd-map' });
     mapButton.setAttribute('aria-pressed', 'false');
+    mapButton.append(h('kbd', { class: 'pc-key-hint', text: '5' }));
     this.mapButton = mapButton;
+    const otherButton = iconButton('treasure', 'その他', () => this.openOtherMenu(), { class: 'hud-icon hud-other-btn' });
     this.commDock = h('div', { class: 'hud-comm' });
     const iconRow = h(
       'div',
       { class: 'hud-icons' },
       cardButton,
-      iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon hud-secondary' }),
-      iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon hud-secondary' }),
+      propertyButton,
+      destButton,
       mapButton,
-      iconButton('treasure', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
+      otherButton,
       this.commDock,
     );
     this.hudIcons = iconRow;
     this.moveOptionsHost = h('div', { class: 'move-options', attrs: { hidden: 'hidden' } });
     this.bottomBar = h('div', { class: 'game-bottom-bar' }, this.moveOptionsHost, h('div', { class: 'bottom-primary-row' }, this.primary, iconRow));
     this.moneyHost = h('div', { class: 'money-panel' });
+
+    this.pcCommBadge = h('span', { class: 'icon-btn-badge pc-comm-badge', text: '0', attrs: { hidden: 'hidden' } });
+    this.pcCommFab = h(
+      'button',
+      {
+        class: 'pc-comm-fab',
+        attrs: { type: 'button', 'aria-label': 'チャットとエモートをひらく', title: 'チャット・エモート' },
+        on: { click: () => this.togglePcComm() },
+      },
+      uiIcon('chat', '💬', 'pc-comm-fab-icon'),
+      this.pcCommBadge,
+    );
+    this.pcCommTabChat = h('button', {
+      class: 'pc-comm-tab is-active',
+      text: '💬 チャット',
+      dataset: { tab: 'chat' },
+      attrs: { type: 'button', role: 'tab', 'aria-selected': 'true' },
+      on: { click: () => this.openPcComm('chat') },
+    });
+    this.pcCommTabEmote = h('button', {
+      class: 'pc-comm-tab',
+      text: '😆 エモート',
+      dataset: { tab: 'emote' },
+      attrs: { type: 'button', role: 'tab', 'aria-selected': 'false' },
+      on: { click: () => this.openPcComm('emote') },
+    });
+    this.pcCommBody = h('div', { class: 'pc-comm-body' });
+    this.pcCommDrawer = h(
+      'aside',
+      { class: 'pc-comm-drawer', attrs: { hidden: 'hidden', 'aria-label': 'チャットとエモート' } },
+      h(
+        'header',
+        { class: 'pc-comm-head' },
+        h('div', { class: 'pc-comm-tabs', attrs: { role: 'tablist' } }, this.pcCommTabChat, this.pcCommTabEmote),
+        h('button', {
+          class: 'pc-comm-close',
+          text: '✕',
+          attrs: { type: 'button', 'aria-label': 'チャットとエモートをとじる' },
+          on: { click: () => this.closePcComm() },
+        }),
+      ),
+      this.pcCommBody,
+    );
+    this.squareInspectCard = h('div', {
+      class: 'square-inspect-card',
+      attrs: { hidden: 'hidden', role: 'tooltip', 'aria-live': 'polite' },
+    });
 
     this.chat = new ChatPanel({
       session: this.session,
@@ -489,6 +572,10 @@ export class GameScreen implements ScreenHandle {
       isMuted: (seat) => this.muteOf(seat).chat,
       showChat: () => uiSettings().showChat,
       onIncoming: (line) => {
+        if (!this.chat.isOpen) {
+          this.pcCommUnread += 1;
+          this.syncPcCommBadge();
+        }
         const playerId = this.playerIdOfSeat(line.seat);
         if (playerId === null) return;
         if (!this.session.mySeats().includes(line.seat)) Audio.sfx('chat');
@@ -496,7 +583,16 @@ export class GameScreen implements ScreenHandle {
         this.map?.bubble(playerId, line.text, 4200);
         this.addLog(`💬 ${this.playerName(playerId)}: ${line.text}`);
       },
-      onOpenChange: () => this.updateMapSafeArea(),
+      onOpenChange: (open) => {
+        if (open) {
+          this.pcCommUnread = 0;
+          this.syncPcCommBadge();
+          if (this.isPcLayout() && this.emotes.isOpen) this.emotes.close();
+          this.pcCommTab = 'chat';
+        }
+        this.syncPcCommUi();
+        this.updateMapSafeArea();
+      },
       class: 'game-chat-panel',
     });
 
@@ -520,7 +616,14 @@ export class GameScreen implements ScreenHandle {
         const targetSeat = targetPlayerId !== null ? this.seatOfPlayer(targetPlayerId) : null;
         this.session.send({ t: 'emote', emoteId, ...(targetSeat !== null ? { target: targetSeat } : {}) });
       },
-      onOpenChange: () => this.updateMapSafeArea(),
+      onOpenChange: (open) => {
+        if (open) {
+          if (this.isPcLayout() && this.chat.isOpen) this.chat.close();
+          this.pcCommTab = 'emote';
+        }
+        this.syncPcCommUi();
+        this.updateMapSafeArea();
+      },
     });
 
     this.eventPanel = new EventPanel({
@@ -643,13 +746,17 @@ export class GameScreen implements ScreenHandle {
       this.monthFlip,
       this.rouletteOverlay,
       this.destArrow,
+      this.squareInspectCard,
       this.confettiHost,
       this.cityPickBanner,
       this.skipHint,
       this.loading,
+      this.pcCommFab,
+      this.pcCommDrawer,
       this.chat.panel,
       this.emotes.panel,
     );
+    this.syncResponsiveLayout();
 
     this.fxPlayer = new FxPlayer({
       settings: () => effectiveUiSettings(),
@@ -751,6 +858,7 @@ export class GameScreen implements ScreenHandle {
       this.map = new MapView(this.canvas, GAME_DATA, assets);
       this.map.setReducedMotion(motionReduced());
       this.map.onCityTap((cityId) => this.onCityTap(cityId));
+      this.map.onSquareInspect((info) => this.renderSquareInspect(info));
       this.map.setMiniMap(this.miniMapCanvas);
       this.map.resize();
       this.map.setOverviewCallback(() => this.syncOverviewUi());
@@ -1117,6 +1225,11 @@ export class GameScreen implements ScreenHandle {
     const stepsLabel = Number.isFinite(steps) ? `あと${steps}マス` : '距離不明';
     this.destChip.title = `${destFullName}（${stepsLabel}）`;
     this.destChip.setAttribute('aria-label', `目的地 ${destFullName}、${stepsLabel}。タップでマップ表示`);
+    this.playerPlateDestName.replaceChildren(
+      inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
+    );
+    this.playerPlateDestSteps.textContent = stepsLabel;
+    this.playerPlateDest.classList.toggle('is-realm', inRealm);
     this.updateDestArrow(state, actor, destNode);
     this.updateStatusChip(state, actor);
 
@@ -1425,7 +1538,10 @@ export class GameScreen implements ScreenHandle {
 
     visibleEntries.forEach(({ option, index }) => {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
-      const kind = moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue');
+      const node = nodesById.get(option.nodeId);
+      const nodeKind = node?.kind ?? 'blue';
+      const kind = moveKindChip(nodeKind);
+      const info = squareInfoOf(nodeKind);
       const remain = this.moveRemain.get(option.nodeId) ?? null;
       // 距離が取れたときはマップが見ている対象（目的地/出口）に合わせ、
       // 取れないときは手番プレイヤーのいる盤面で言い分ける。
@@ -1436,15 +1552,17 @@ export class GameScreen implements ScreenHandle {
       const topNear = many && !recommended && index < 3;
       const selected = this.moveSelection === option.nodeId;
       const city = cityOfNode(option.nodeId);
-      const nameContent = city ? rubyName(city.nameJa, city.nameKana) : nodeLabel(option.nodeId);
+      const nameContent = city ? rubyName(city.nameJa, city.nameKana) : info.name;
+      const fullAriaName = city ? `${city.nameJa}（駅）` : info.name;
+      const tileSrc = squareTileUrl(nodeKind, true, city);
       const chip = h(
         'button',
         {
           class: `move-chip ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''} ${topNear ? 'is-top-near' : ''}`.trim(),
-          dataset: { nodeId: option.nodeId },
+          dataset: { nodeId: option.nodeId, kind: nodeKind },
           attrs: {
             type: 'button',
-            'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ。${remainText}`,
+            'aria-label': `${index + 1}: ${fullAriaName} を選ぶ。${remainText}`,
             'aria-pressed': String(selected),
             style: `--kind-color:${kind.color}`,
           },
@@ -1457,13 +1575,18 @@ export class GameScreen implements ScreenHandle {
         ),
         h(
           'span',
-          { class: 'move-chip-kind', attrs: { style: `--kind-color:${kind.color}`, title: kind.label, 'aria-hidden': 'true' } },
-          kind.symbol,
+          { class: 'move-chip-kind is-tile', attrs: { style: `--kind-color:${kind.color}`, title: info.name, 'aria-hidden': 'true' } },
+          tileThumb(tileSrc, 'move-chip-tile', info.name),
         ),
         h(
           'span',
           { class: 'move-chip-main' },
-          h('span', { class: 'move-chip-name' }, nameContent),
+          h(
+            'span',
+            { class: 'move-chip-name-row' },
+            h('span', { class: 'move-chip-name' }, nameContent),
+            city ? h('span', { class: 'move-chip-type', text: '駅' }) : null,
+          ),
           h(
             'span',
             { class: 'move-chip-vehicle' },
@@ -1676,6 +1799,12 @@ export class GameScreen implements ScreenHandle {
     this.primaryLabel.textContent = label;
     this.primary.disabled = disabled;
     this.primary.className = className;
+    this.primaryKeyHint.hidden = disabled;
+    const isGameOver = state.phase.t === 'game_over' || this.resultScreen !== null;
+    const isMyTurn = mine && !isGameOver;
+    const waitingTurn = !isGameOver && (!mine || this.fxBusy || this.actionPending);
+    this.bottomBar.classList.toggle('is-my-turn', isMyTurn);
+    this.bottomBar.classList.toggle('is-waiting-turn', waitingTurn);
   }
 
   private updateTimer(state: PublicState, actor: number | null): void {
@@ -2196,8 +2325,144 @@ export class GameScreen implements ScreenHandle {
     return portalNodeFor(realm) ?? null;
   }
 
+  private isPcLayout(): boolean {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 900px)').matches;
+  }
+
+  /** Keep PC-only DOM placements cleanly separated from the mobile vertical/landscape tree. */
+  private syncResponsiveLayout(): void {
+    const isPc = this.isPcLayout();
+    if (isPc) {
+      if (this.rankingHost.parentElement !== this.pcRankingSlot) {
+        this.pcRankingSlot.append(this.rankingHost);
+      }
+      if (this.chat.panel.parentElement !== this.pcCommBody) {
+        this.pcCommBody.append(this.chat.panel);
+      }
+      if (this.emotes.panel.parentElement !== this.pcCommBody) {
+        this.pcCommBody.append(this.emotes.panel);
+      }
+    } else {
+      if (this.rankingHost.parentElement !== this.el && this.miniMapCanvas.isConnected) {
+        this.miniMapCanvas.after(this.rankingHost);
+      }
+      if (this.chat.panel.parentElement !== this.el) {
+        this.el.append(this.chat.panel);
+      }
+      if (this.emotes.panel.parentElement !== this.el) {
+        this.el.append(this.emotes.panel);
+      }
+      this.pcCommDrawer.hidden = true;
+    }
+    this.syncPcCommUi();
+  }
+
+  private togglePcComm(): void {
+    if (this.chat.isOpen || this.emotes.isOpen) {
+      this.closePcComm();
+    } else {
+      this.openPcComm(this.pcCommTab);
+    }
+  }
+
+  private openPcComm(tab: 'chat' | 'emote'): void {
+    this.pcCommTab = tab;
+    if (tab === 'chat') {
+      if (this.emotes.isOpen) this.emotes.close();
+      if (!this.chat.isOpen) this.chat.openPanel();
+    } else {
+      if (this.chat.isOpen) this.chat.close();
+      if (!this.emotes.isOpen) this.emotes.openPalette();
+    }
+    this.syncPcCommUi();
+  }
+
+  private closePcComm(): void {
+    if (this.chat.isOpen) this.chat.close();
+    if (this.emotes.isOpen) this.emotes.close();
+    this.syncPcCommUi();
+  }
+
+  private syncPcCommUi(): void {
+    const isPc = this.isPcLayout();
+    const anyOpen = this.chat.isOpen || this.emotes.isOpen;
+    this.pcCommDrawer.hidden = !isPc || !anyOpen;
+    this.pcCommFab.classList.toggle('is-open', isPc && anyOpen);
+    this.pcCommFab.setAttribute('aria-expanded', String(isPc && anyOpen));
+    const chatActive = this.chat.isOpen || (!this.emotes.isOpen && this.pcCommTab === 'chat');
+    this.pcCommTabChat.classList.toggle('is-active', chatActive);
+    this.pcCommTabChat.setAttribute('aria-selected', String(chatActive));
+    this.pcCommTabEmote.classList.toggle('is-active', !chatActive);
+    this.pcCommTabEmote.setAttribute('aria-selected', String(!chatActive));
+  }
+
+  private syncPcCommBadge(): void {
+    const count = Math.min(99, this.pcCommUnread);
+    this.pcCommBadge.textContent = count > 9 ? '9+' : String(count);
+    this.pcCommBadge.hidden = count <= 0;
+  }
+
+  private hideSquareInspect(): void {
+    this.squareInspectCard.hidden = true;
+    this.squareInspectCard.classList.remove('is-pinned');
+  }
+
+  private renderSquareInspect(info: SquareInspectEvent | null): void {
+    if (!info || this.app.modal.isOpen() || this.resultScreen) {
+      this.hideSquareInspect();
+      return;
+    }
+    const card = describeBoardNode(info.node, this.state);
+    const pinned = info.trigger === 'longpress';
+    this.squareInspectCard.classList.toggle('is-pinned', pinned);
+    const parts: Node[] = [
+      h(
+        'div',
+        { class: 'square-inspect-head' },
+        tileThumb(card.iconUrl, 'square-inspect-icon', card.title),
+        h(
+          'div',
+          { class: 'square-inspect-titles' },
+          h('strong', { class: 'square-inspect-title', text: card.title }),
+          h('span', { class: 'square-inspect-badge', text: card.badge }),
+        ),
+        pinned
+          ? h('button', {
+              class: 'square-inspect-close',
+              text: '✕',
+              attrs: { type: 'button', 'aria-label': '説明をとじる' },
+              on: { click: () => this.hideSquareInspect() },
+            })
+          : null,
+      ),
+      h('p', { class: 'square-inspect-desc', text: card.description }),
+    ];
+    if (card.extra) parts.push(h('p', { class: 'square-inspect-extra', text: card.extra }));
+    this.squareInspectCard.replaceChildren(...parts);
+    this.squareInspectCard.hidden = false;
+
+    // Position the card cleanly near the square while clamping inside the viewport and HUD.
+    const rootRect = this.el.getBoundingClientRect();
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const cardRect = this.squareInspectCard.getBoundingClientRect();
+    const topBound = (this.isLayoutVisible(this.topbar) ? this.topbar.getBoundingClientRect().bottom - rootRect.top : 0) + 10;
+    const bottomBound =
+      (this.isLayoutVisible(this.bottomBar) ? this.bottomBar.getBoundingClientRect().top - rootRect.top : rootRect.height) - 10;
+    const anchorX = canvasRect.left - rootRect.left + info.x;
+    const anchorY = canvasRect.top - rootRect.top + info.y;
+    const width = Math.max(200, cardRect.width || 260);
+    const height = Math.max(76, cardRect.height || 100);
+    const left = Math.max(10, Math.min(rootRect.width - width - 10, anchorX - width / 2));
+    let top = anchorY - height - 22;
+    if (top < topBound) top = anchorY + 26;
+    top = Math.max(topBound, Math.min(Math.max(topBound, bottomBound - height), top));
+    this.squareInspectCard.style.left = `${Math.round(left)}px`;
+    this.squareInspectCard.style.top = `${Math.round(top)}px`;
+  }
+
   private readonly onWindowResize = (): void => {
     this.map?.resize();
+    this.syncResponsiveLayout();
     this.syncEventComm();
     this.updateMapSafeArea();
   };
@@ -2282,7 +2547,10 @@ export class GameScreen implements ScreenHandle {
       if (ranking) top = Math.max(top, ranking.bottom - root.top + 6);
       if (money) bottomInset = Math.max(bottomInset, root.bottom - money.top + 6);
     } else {
-      if (ranking) left = Math.max(0, ranking.right - root.left + 8);
+      // On PC (>= 900px) ranking sits inside the top bar, so left stays full-width.
+      if (ranking && this.rankingHost.parentElement !== this.pcRankingSlot) {
+        left = Math.max(0, ranking.right - root.left + 8);
+      }
       if (event) right = Math.max(0, root.right - event.left + 8);
     }
     if (event && narrow) top = Math.max(top, event.top - root.top + 6);
@@ -2329,6 +2597,8 @@ export class GameScreen implements ScreenHandle {
     addObstacle(this.eventPanel.el, this.eventPanel.isOpen);
     addObstacle(this.chat.panel, this.chat.isOpen);
     addObstacle(this.emotes.panel, this.emotes.isOpen);
+    addObstacle(this.pcCommFab);
+    addObstacle(this.pcCommDrawer, !this.pcCommDrawer.hidden);
     addObstacle(this.recenterButton, !this.recenterButton.hidden);
     addObstacle(this.overviewBanner, !this.overviewBanner.hidden);
     map.setLabelObstacles(obstacles);
@@ -2402,9 +2672,10 @@ export class GameScreen implements ScreenHandle {
     const bottomBar = toLocal(this.bottomBar);
     const ranking = toLocal(this.rankingHost);
     const event = this.eventPanel.isOpen ? toLocal(this.eventPanel.el) : null;
-    // 狭い画面では順位表が横一列（上部）なので、左ではなく上を詰める。
+    // 狭い画面では順位表が横一列（上部）、PC版でも上バー右に統合されているため左は全幅使える。
     const narrow = window.matchMedia('(max-width: 899px)').matches;
-    let left = narrow ? 6 : Math.max(6, ranking ? ranking.right - rect.left + 10 : 6);
+    const rankingOnSide = !narrow && ranking && this.rankingHost.parentElement !== this.pcRankingSlot;
+    let left = rankingOnSide ? Math.max(6, ranking.right - rect.left + 10) : 6;
     let right = rect.width - 6;
     let top = Math.max(6, topbar ? topbar.bottom - rect.top + 8 : 6);
     if (narrow && ranking) top = Math.max(top, ranking.bottom - rect.top + 8);
@@ -2418,7 +2689,7 @@ export class GameScreen implements ScreenHandle {
   private destArrowBlockers(rect: DOMRect): Array<{ left: number; top: number; right: number; bottom: number }> {
     const out: Array<{ left: number; top: number; right: number; bottom: number }> = [];
     const add = (el: HTMLElement | null | undefined, visible = true): void => {
-      if (!el || !visible || el.hidden) return;
+      if (!el || !visible || !this.isLayoutVisible(el)) return;
       const r = el.getBoundingClientRect();
       if (r.width < 2 || r.height < 2) return;
       out.push({ left: r.left - rect.left, top: r.top - rect.top, right: r.right - rect.left, bottom: r.bottom - rect.top });
@@ -2426,7 +2697,9 @@ export class GameScreen implements ScreenHandle {
     add(this.portraitHost);
     add(this.moneyHost, !this.moneyHost.hidden);
     add(this.miniMapCanvas);
-    add(this.rankingHost);
+    if (this.rankingHost.parentElement !== this.pcRankingSlot) add(this.rankingHost);
+    add(this.pcCommFab);
+    add(this.pcCommDrawer, !this.pcCommDrawer.hidden);
     add(this.recenterButton, !this.recenterButton.hidden);
     return out;
   }
@@ -2555,6 +2828,7 @@ export class GameScreen implements ScreenHandle {
       { class: 'game-menu' },
       item('property', '持ち物', '所有している物件の一覧', () => this.openOwned()),
       item('chart', '情報', '業種の相場・ニュース・行動ログ', () => this.openInfo()),
+      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => openSquareLegendDialog(this.app.modal)),
       item('globe', '全体マップ', '地上のマップを引いて見る', () => {
         this.manualView = true;
         this.viewRealm = 'world';
@@ -2566,7 +2840,7 @@ export class GameScreen implements ScreenHandle {
       item('help', '遊び方', 'ルールと操作の説明', () => this.app.openHelp()),
       item('trophy', 'クレジット', 'キャラクターと素材の出典', () => this.app.openCredits()),
     );
-    handle = this.app.modal.open(body, { title: 'その他', subtitle: '持ち物・情報・設定' });
+    handle = this.app.modal.open(body, { title: 'その他', subtitle: '持ち物・情報・マスの種類・設定' });
   }
 
 
@@ -2615,7 +2889,8 @@ export class GameScreen implements ScreenHandle {
 
   private showCoinFlow(playerId: number, delta: number): void {
     if (motionReduced() || Math.abs(delta) < 0.5) return;
-    const wallet = this.moneyHost.getBoundingClientRect();
+    const targetEl = this.isLayoutVisible(this.moneyHost) ? this.moneyHost : this.playerPlate;
+    const wallet = targetEl.getBoundingClientRect();
     if (wallet.width === 0) return;
     const origin = this.map?.screenPositionOf(playerId) ?? { x: this.canvas.clientWidth / 2, y: this.canvas.clientHeight / 2 };
     const targetX = wallet.left + wallet.width / 2;
@@ -2985,7 +3260,7 @@ export class GameScreen implements ScreenHandle {
     const state = this.state;
     const body = h('div', { class: 'game-menu' });
     let handle: ModalHandle | null = null;
-    const item = (icon: string, label: string, action: () => void, danger = false): HTMLElement =>
+    const item = (icon: string, label: string, desc: string, action: () => void, danger = false): HTMLElement =>
       h(
         'button',
         {
@@ -2999,7 +3274,12 @@ export class GameScreen implements ScreenHandle {
           },
         },
         h('span', { class: 'game-menu-icon' }, uiIcon(icon, icon)),
-        h('span', { class: 'game-menu-label', text: label }),
+        h(
+          'span',
+          { class: 'game-menu-label' },
+          label,
+          desc ? h('span', { class: 'game-menu-desc', text: desc }) : null,
+        ),
         h('span', { class: 'game-menu-arrow', text: '▶', attrs: { 'aria-hidden': 'true' } }),
       );
     body.append(
@@ -3007,18 +3287,18 @@ export class GameScreen implements ScreenHandle {
         class: 'game-menu-room',
         text: `モード: ${this.session.mode === 'local' ? 'ローカル' : 'オンライン'} ・ ルーム ${this.session.roomId}`,
       }),
-      item('property', '物件情報', () => this.openCatalog()),
-      item('flag', '目的地', () => this.openDestination()),
-      item('globe', '全体地図', () => this.openMapViewDialog()),
-      item('gear', '設定', () => this.app.openSettings()),
-      item('help', '遊び方', () => this.app.openHelp()),
-      item('trophy', 'クレジット', () => this.app.openCredits()),
-      item('menu', this.session.mode === 'online' ? '退出してタイトルへ' : 'タイトルへ', () => this.confirmLeave(), true),
+      item('property', '持ち物', '所有している物件の一覧と収益見込み', () => this.openOwned()),
+      item('chart', '情報', '業種倍率・目的地・経済ニュース・行動ログ', () => this.openInfo()),
+      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => openSquareLegendDialog(this.app.modal)),
+      item('gear', '設定', '音量・演出速度・チャット表示・ミュート', () => this.app.openSettings()),
+      item('help', '遊び方', 'ルール・マスの種類・キーボード操作', () => this.app.openHelp()),
+      item('trophy', 'クレジット', 'キャラクターと素材の出典', () => this.app.openCredits()),
+      item('menu', this.session.mode === 'online' ? '退出してタイトルへ' : 'タイトルへ', '', () => this.confirmLeave(), true),
     );
     if (state?.phase.t === 'game_over') {
-      body.append(item('trophy', '結果画面を表示', () => this.showResult(state)));
+      body.append(item('trophy', '結果画面を表示', '最終順位と決算サマリー', () => this.showResult(state)));
     }
-    handle = this.app.modal.open(body, { title: '☰ メニュー', subtitle: 'ゲームを止めずに設定を変えられます' });
+    handle = this.app.modal.open(body, { title: '☰ メニュー', subtitle: '持ち物・情報・マスの種類・設定' });
   }
 
   private confirmLeave(): void {
@@ -3851,6 +4131,11 @@ export class GameScreen implements ScreenHandle {
       const inText = target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
       if (event.key === 'Escape') {
         if (this.app.modal.isOpen()) return;
+        if (!this.squareInspectCard.hidden) {
+          this.hideSquareInspect();
+          event.preventDefault();
+          return;
+        }
         if (this.emotes.isOpen) {
           this.emotes.close();
           event.preventDefault();
@@ -3891,6 +4176,27 @@ export class GameScreen implements ScreenHandle {
         if (button) {
           event.preventDefault();
           button.click();
+        }
+        return;
+      }
+      if (!this.eventPanel.isOpen && !this.fxBusy && !this.bottomBar.classList.contains('is-waiting-turn') && /^[1-5]$/.test(event.key)) {
+        event.preventDefault();
+        switch (event.key) {
+          case '1':
+            if (!this.primary.disabled) this.primary.click();
+            break;
+          case '2':
+            this.openHand();
+            break;
+          case '3':
+            this.openCatalog();
+            break;
+          case '4':
+            this.openDestination();
+            break;
+          case '5':
+            this.openMapViewDialog();
+            break;
         }
         return;
       }

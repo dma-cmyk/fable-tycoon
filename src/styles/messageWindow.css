@@ -2,12 +2,12 @@
 
 .msgwin {
   position: absolute;
-  bottom: calc(96px + var(--safe-bottom));
+  bottom: calc(106px + var(--safe-bottom));
   z-index: 34;
-  left: calc(230px + var(--safe-left));
-  right: calc(310px + var(--safe-right));
-  width: auto;
-  transform: none;
+  left: 50%;
+  right: auto;
+  width: min(740px, calc(100vw - 210px));
+  transform: translateX(-50%);
   border-radius: 16px;
   border: 2px solid var(--gold);
   background:
@@ -238,9 +238,17 @@
 /* While the event panel is open both must stay visible: dock the window to the left of the
    panel on PC, and lift the panel above the window on phones. */
 @media (min-width: 900px) {
+  .game-screen:has(.game-bottom-bar.is-waiting-turn) .msgwin {
+    bottom: calc(94px + var(--safe-bottom));
+  }
+
+  .game-screen:has(.move-options:not([hidden])) .msgwin {
+    bottom: calc(226px + var(--safe-bottom));
+  }
+
   .event-open .msgwin {
-    left: calc(230px + var(--safe-left));
-    right: calc(500px + var(--safe-right));
+    left: calc(20px + var(--safe-left));
+    right: calc(490px + var(--safe-right));
     width: auto;
     transform: none;
   }
