@@ -523,12 +523,27 @@
 }
 
 .event-choice-effect {
+  display: block;
   color: #4b4232;
   font-weight: 800;
 }
 
 .event-choice-risk {
+  display: block;
   color: #a3261e;
+  font-weight: 700;
+}
+
+.event-choice-risk-title {
+  display: block;
+  margin-top: 2px;
+  color: #8f1f1a;
+  font-weight: 800;
+}
+
+.event-choice-risk-loss {
+  display: block;
+  color: #7c231c;
   font-weight: 700;
 }
 
@@ -1090,14 +1105,17 @@
     display: inline-flex;
   }
 
-  .dest-distance-label,
+  .dest-distance-label {
+    display: none;
+  }
+
   .dest-distance-unit {
     display: inline;
   }
 
   .dest-distance {
     font-size: 10px;
-    padding: 1px 5px;
+    padding: 1px 4px;
   }
 
   .hud-icons {
@@ -2365,15 +2383,26 @@
   }
 }
 
-/* 横向きの低い画面: 案内行＋チップが 82px に収まらず切れるため、高さ制限を外す。 */
+/* 横向きの低い画面: 案内行＋チップが 82px に収まらず切れるため、高さ制限を外しつつ省スペース化。 */
 @media (max-height: 520px) and (min-width: 700px) {
   .move-options {
     max-height: none;
     overflow: visible;
+    padding: 3px 6px 4px;
+    gap: 3px;
+  }
+
+  .move-options-head {
+    gap: 4px;
+  }
+
+  .move-chip {
+    min-height: 44px;
+    padding: 3px 7px;
   }
 
   .move-scroll-btn {
-    min-height: 34px;
+    min-height: 30px;
   }
 }
 
@@ -2390,11 +2419,20 @@
   }
 
   .game-turn-label {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
   }
 
   .dest-chip {
+    flex: 1 1 auto;
     min-width: 132px;
+    max-width: none;
+    padding: 2px 6px;
+    gap: 3px;
+  }
+
+  .dest-name {
+    font-size: 11px;
+    letter-spacing: -0.02em;
   }
 
   /* (b) カード枚数バッジが隣のボタンに潜らないよう、片面を前面へ。 */
@@ -2410,9 +2448,18 @@
 }
 
 @media (max-height: 520px) and (min-width: 700px) {
-  /* (c) 横画面: 目的地名の3文字省略と「エモート」の文字切れを解消する。 */
+  /* (c) 横画面: 目的地名の3文字省略と「エモート」の文字切れ、CPU名切れを解消する。 */
+  .game-turn-label {
+    max-width: 172px;
+  }
+
   .dest-chip {
     max-width: 310px;
+  }
+
+  .dest-name {
+    font-size: 12.5px;
+    letter-spacing: 0;
   }
 
   /* プレイヤー名が「あ…」に潰れないよう、所持金サブラベルを落として幅を確保する。 */
@@ -3250,10 +3297,16 @@
   top: calc(150px + var(--safe-top));
 }
 
-/* 必須8(c): スマホのスキップ表示を資産パネルから離す。 */
+/* 必須8(c): スマホのスキップ表示を資産パネルから離す。横画面ではサイコロ中央に被らないよう下端バー直上へ。 */
 @media (max-width: 899px) {
   .skip-hint {
     bottom: calc(192px + var(--safe-bottom));
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .skip-hint {
+    bottom: calc(60px + var(--safe-bottom));
   }
 }
 

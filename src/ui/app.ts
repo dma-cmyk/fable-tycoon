@@ -158,7 +158,7 @@ export class App {
     try {
       this.closeSession();
       clearLocalSave();
-      const session = createLocal({ ...setup, speed: effectiveFxSpeed() });
+      const session = createLocal({ ...setup, getSpeed: () => effectiveFxSpeed() });
       this.lastLocalSetup = setup;
       this.session = session;
       this.showGame(session);
@@ -169,7 +169,7 @@ export class App {
 
   resumeLocalGame(): void {
     try {
-      const session = resumeLocal();
+      const session = resumeLocal(() => effectiveFxSpeed());
       if (!session) {
         this.toasts.show(localSaveIssue() ?? '保存されたゲームが見つかりませんでした', 'bad', 6000);
         return;

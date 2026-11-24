@@ -52,6 +52,7 @@ import {
   pickFreeSlot,
   placeLabels,
   rectsOverlap,
+  segmentHitsRect,
   spotlightHoles,
   spreadBadges,
   zoomBucket,
@@ -61,7 +62,12 @@ import {
   type SceneSegment,
 } from './labels';
 import { drawVehicle, vehicleMetrics, type VehicleKind } from './vehicles';
-import { resolveCancelledToken, shouldCancelForSnapshot } from './mapState';
+import {
+  computeFreeBoardBox,
+  isCandidateRingVisible,
+  resolveCancelledToken,
+  shouldCancelForSnapshot,
+} from './mapState';
 import {
   detectCanvasBudget,
   fitBackingStore,
@@ -933,6 +939,14 @@ export class MapView {
     this.requestRender();
   }
 
+  /** Re-frame current move options after HUD layout (e.g. move-options tray) updates safeArea. */
+  reframeMoveOptions(): void {
+    if (this.moveOptions && this.moveOptions.length > 0) {
+      this.frameMoveOptions();
+      this.requestRender();
+    }
+  }
+
   /** List-driven selection: highlight and frame the same route a map pin tap would. */
   selectMoveOption(nodeId: string, opts?: { frame?: boolean }): void {
     if (!this.moveOptions?.some((o) => o.nodeId === nodeId)) return;
@@ -978,13 +992,15 @@ export class MapView {
     });
   }
 
-  warp(playerId: number, nodeId: string, via: WarpVia = 'event'): Promise<void> {
+  warp(playerId: number, nodeId: string, via: WarpVia = 'event', speed = 1): Promise<void> {
     const token = this.tokens[playerId];
     if (!token || !this.nodeById.has(nodeId)) return Promise.resolve();
     this.cancelWarp();
     this.cancelMove();
     if (via === 'rocket') this.shake(0.7);
-    const duration = via === 'rocket' ? 1900 : via === 'plane' || via === 'carpet' || via === 'tornado' ? 1550 : 780;
+    const baseDuration = via === 'rocket' ? 1400 : via === 'plane' || via === 'carpet' || via === 'tornado' ? 1100 : 650;
+    const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
+    const duration = Math.max(140, Math.round(baseDuration / rate));
     return new Promise((resolve) => {
       this.warpAnim = {
         playerId,
@@ -998,6 +1014,13 @@ export class MapView {
       };
       this.requestRender();
     });
+  }
+
+  /** Explicitly end any in-flight move or warp animation (used on resync and fx skip). */
+  cancelAnimations(applyEnd = false): void {
+    this.cancelMove(applyEnd);
+    this.cancelWarp(applyEnd);
+    this.requestRender();
   }
 
   focusNode(nodeId: string, opts?: { zoom?: number; ms?: number }): Promise<void> {
@@ -1634,37 +1657,12 @@ export class MapView {
   }
 
   /**
-   * Board area that the HUD panels leave free. Each overlapping obstacle cuts
-   * the cheapest of its four edges, so a top bar or a bottom action panel
-   * shrinks the frame without making camera framing ignore it.
+   * Board area that the HUD panels leave free. Delegates to pure computeFreeBoardBox so
+   * tight landscape phones (e.g. 844x390 with move-options open) keep both top ranking and
+   * bottom move list out of the candidate framing box.
    */
   private freeBoardBox(inset = 0): { x: number; y: number; w: number; h: number } {
-    const board = this.boardBox();
-    let x0 = board.x + inset;
-    let y0 = board.y + inset;
-    let x1 = board.x + board.w - inset;
-    let y1 = board.y + board.h - inset;
-    for (let pass = 0; pass < 3; pass++) {
-      let changed = false;
-      for (const o of this.labelObstacles) {
-        const overlapW = Math.min(x1, o.x + o.w) - Math.max(x0, o.x);
-        const overlapH = Math.min(y1, o.y + o.h) - Math.max(y0, o.y);
-        if (overlapW <= 0 || overlapH <= 0) continue;
-        const cutLeft = o.x + o.w - x0;
-        const cutRight = x1 - o.x;
-        const cutTop = o.y + o.h - y0;
-        const cutBottom = y1 - o.y;
-        const cut = Math.min(cutLeft, cutRight, cutTop, cutBottom);
-        if (cut <= 0) continue;
-        if (cut === cutLeft) x0 = Math.min(x1 - 60, o.x + o.w + 2);
-        else if (cut === cutRight) x1 = Math.max(x0 + 60, o.x - 2);
-        else if (cut === cutTop) y0 = Math.min(y1 - 60, o.y + o.h + 2);
-        else y1 = Math.max(y0 + 60, o.y - 2);
-        changed = true;
-      }
-      if (!changed) break;
-    }
-    return { x: x0, y: y0, w: Math.max(60, x1 - x0), h: Math.max(60, y1 - y0) };
+    return computeFreeBoardBox(this.cssW, this.cssH, this.safeArea, this.labelObstacles, inset);
   }
 
   private focusWorldPoint(x: number, y: number, zoom: number, ms: number): Promise<void> {
@@ -1690,7 +1688,11 @@ export class MapView {
     }
     if (entries.length === 0) return;
     const free = this.freeBoardBox();
-    const margin = Math.min(80, Math.max(30, Math.min(free.w, free.h) * 0.08));
+    const sideReserve = Math.min(54, Math.max(28, free.w * 0.08));
+    const topReserve = Math.min(64, Math.max(36, free.h * 0.2));
+    const bottomReserve = Math.min(42, Math.max(24, free.h * 0.14));
+    const usableW = Math.max(40, free.w - sideReserve * 2);
+    const usableH = Math.max(40, free.h - topReserve - bottomReserve);
     // Phones cannot show 40 candidates at play zoom; allow the frame to pull
     // back further (never below the world fit) so every lit square is visible.
     const floor = Math.max(this.camera.minZoom(), this.playZoom() * 0.42);
@@ -1707,8 +1709,7 @@ export class MapView {
       }
       const spanX = Math.max(60, maxX - minX);
       const spanY = Math.max(60, maxY - minY);
-      // Same reserves as the final fit, so a candidate kept here really fits.
-      return Math.min((free.w - margin * 2 - 68) / spanX, (free.h - margin * 2 - 86) / spanY);
+      return Math.min(usableW / spanX, usableH / spanY);
     };
     let kept = entries;
     if (fitZoom(entries) < floor * 0.98) {
@@ -1731,22 +1732,20 @@ export class MapView {
       minY = Math.min(minY, entry.dy);
       maxY = Math.max(maxY, entry.dy);
     }
-    // Reserved screen space for pins and pulse rings is handled below by
-    // shrinking the free area and nudging the target down.
     const spanX = Math.max(60, maxX - minX);
     const spanY = Math.max(60, maxY - minY);
-    // 68px for ring/label sides, 86px for the pin above and the ring below.
-    const computed = Math.min(
-      (free.w - margin * 2 - 68) / spanX,
-      (free.h - margin * 2 - 86) / spanY,
-    );
+    const computed = Math.min(usableW / spanX, usableH / spanY);
     const cap = Math.max(this.playZoom(), Math.min(this.camera.zoom, this.playZoom() * 1.6));
     const zoom = Math.max(floor, Math.min(computed, cap));
     const cam = this.camera;
     const centerX = start.x + (minX + maxX) / 2;
     const centerY = start.y + (minY + maxY) / 2;
-    const offsetX = free.x + free.w / 2 - cam.vw / 2;
-    const offsetY = free.y + free.h / 2 - cam.vh / 2 - 13;
+    // Place the fitted bounding box inside the reserved sub-rect of `free` so top pins
+    // stay clear of the ranking strip and bottom rings stay clear of the move-option list.
+    const targetScreenX = free.x + free.w / 2;
+    const targetScreenY = free.y + topReserve + usableH / 2;
+    const offsetX = targetScreenX - cam.vw / 2;
+    const offsetY = targetScreenY - cam.vh / 2;
     const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
     const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
     this.overviewMode = false;
@@ -1776,16 +1775,22 @@ export class MapView {
       prev = node;
     }
     const cam = this.camera;
-    const box = this.boardBox();
-    const pad = 52;
+    const free = this.freeBoardBox();
+    const padX = Math.min(54, Math.max(30, free.w * 0.1));
+    const padTop = Math.min(64, Math.max(38, free.h * 0.22));
+    const padBottom = Math.min(44, Math.max(26, free.h * 0.16));
+    const usableW = Math.max(40, free.w - padX * 2);
+    const usableH = Math.max(40, free.h - padTop - padBottom);
     const spanX = Math.max(1, maxX - minX);
     const spanY = Math.max(1, maxY - minY);
-    const computed = Math.min((box.w - pad * 2) / spanX, (box.h - pad * 2) / spanY);
+    const computed = Math.min(usableW / spanX, usableH / spanY);
     const zoom = Math.max(0.02, Math.min(cam.maxZoom(), this.playZoom() * 1.8, Math.max(computed, 0.02)));
     const centerX = start.x + (minX + maxX) / 2;
     const centerY = start.y + (minY + maxY) / 2;
-    const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
-    const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
+    const targetScreenX = free.x + free.w / 2;
+    const targetScreenY = free.y + padTop + usableH / 2;
+    const offsetX = targetScreenX - cam.vw / 2;
+    const offsetY = targetScreenY - cam.vh / 2;
     const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
     const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
     void cam.startTween(targetX, targetY, zoom, 360, Math.min(cam.minZoom(), zoom));
@@ -2442,9 +2447,9 @@ export class MapView {
       const priorityFont = `800 ${fsPriority.toFixed(1)}px ${LABEL_FONT}`;
       const nameWidth = this.measureText(this.ctx, text, priorityFont);
       const kanaWidth = kana ? this.measureText(this.ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
-      // Sized for the priority tier + a slimmer 9px gutter (was 13px).
-      const w = Math.max(nameWidth, kanaWidth) + 9;
-      const h = fsPriority + 7 + (kana ? kanaFs + 2 : 0);
+      // Sized for the priority tier with extra gutter when furigana sits on the top row.
+      const w = Math.max(nameWidth, kanaWidth) + (kana ? 14 : 10);
+      const h = fsPriority + 7 + (kana ? kanaFs + 4 : 0);
       const slotPx: Array<{ dx: number; dy: number }> = [
         { dx: cityR + 6 + w / 2, dy: -h * 0.12 },
         { dx: -(cityR + 6 + w / 2), dy: -h * 0.12 },
@@ -3486,19 +3491,41 @@ export class MapView {
 
   private drawCityLabels(ctx: CanvasRenderingContext2D, visible: CityVis[], detail: number): void {
     this.ensureLabelLayout();
-    const board = this.boardBox();
+    const board = this.freeBoardBox();
     const now = performance.now();
     const currentCityId = this.state ? this.cityNodeIdOfPlayer(this.state.current) : null;
     const tokenNodeIds = new Set(this.tokens.map((t) => t.nodeId));
     const optionCities = new Set(
       (this.moveOptions ?? []).filter((o) => this.nodeById.get(o.nodeId)?.kind === 'city').map((o) => o.nodeId),
     );
-    // Labels that must never fade out, and whose slot never changes with game state.
+    // Selected (or hovered) move route: keep every city label off the gold route line
+    // and ensure intermediate pass-through city names stay readable beside the route.
+    const activeRouteId = this.selectedOption ?? this.hoveredOption;
+    const activeRouteOption =
+      activeRouteId && this.moveOptions
+        ? this.moveOptions.find((o) => o.nodeId === activeRouteId) ?? null
+        : null;
+    const routeSegments: SceneSegment[] = [];
+    const routeCities = new Set<string>();
+    if (activeRouteOption) {
+      const pts = this.optionScreenPath(activeRouteOption);
+      if (pts && pts.length >= 2) {
+        for (let i = 1; i < pts.length; i++) {
+          routeSegments.push({ ax: pts[i - 1][0], ay: pts[i - 1][1], bx: pts[i][0], by: pts[i][1] });
+        }
+      }
+      for (const nid of activeRouteOption.path) {
+        if (this.nodeById.get(nid)?.kind === 'city') routeCities.add(nid);
+      }
+    }
+    const routePad = 10;
+    // Labels that must never fade out, and whose slot stays clear of chrome and selected route.
     const priority = (v: CityVis): boolean =>
       v.entry.node.id === this.destinationNodeId
       || v.entry.node.id === currentCityId
       || tokenNodeIds.has(v.entry.node.id)
-      || optionCities.has(v.entry.node.id);
+      || optionCities.has(v.entry.node.id)
+      || routeCities.has(v.entry.node.id);
     const blockers = this.dynamicLabelBlockers(now);
     // Slot dodging only reacts to fixed chrome (HUD panels, portrait, minimap,
     // overview markers), never to a walking token that would make a priority
@@ -3588,6 +3615,17 @@ export class MapView {
         // nothing drifts between frames.
         const startSlot = Math.max(0, plan.slot);
         const ordered = plan.slots.slice(startSlot).concat(plan.slots.slice(0, startSlot));
+        const scaledSlots = ordered.map((s) => ({ dx: s.dx * ratio, dy: s.dy * ratio }));
+        if (optionCities.has(v.entry.node.id) || routeCities.has(v.entry.node.id)) {
+          const rx = w / 2 + tileR + 18;
+          const ry = h / 2 + tileR + 18;
+          scaledSlots.push(
+            { dx: rx, dy: 0 },
+            { dx: -rx, dy: 0 },
+            { dx: 0, dy: -ry },
+            { dx: 0, dy: ry },
+          );
+        }
         const cached = this.priorityLabelSlots.get(city.id);
         if (labelsFrozen && cached && Math.abs(cached.w - w) < 0.5 && Math.abs(cached.h - h) < 0.5) {
           // Keep the pre-move slot verbatim; only the anchor may move.
@@ -3601,23 +3639,37 @@ export class MapView {
             candidateRects,
             staticLabelRects,
           );
-          const free = pickFreeSlot(v.x, v.y, w, h, ordered, avoid, inside, 2);
+          let free = pickFreeSlot(v.x, v.y, w, h, scaledSlots, avoid, inside, 2, routeSegments, routePad);
+          if (!free && routeSegments.length > 0) {
+            // Crowded area near a selected route: at minimum stay clear of the gold route,
+            // HUD chrome and already-placed priority names so the city name sits beside the route.
+            const minimalAvoid = fixedBlockers.concat(priorityLabelRects);
+            free = pickFreeSlot(v.x, v.y, w, h, scaledSlots, minimalAvoid, inside, 2, routeSegments, routePad);
+          }
           if (!free) continue;
-          dx = free.dx;
-          dy = free.dy;
-          rect = { x: v.x + dx * ratio - w / 2, y: v.y + dy * ratio - h / 2, w, h };
+          rect = { x: v.x + free.dx - w / 2, y: v.y + free.dy - h / 2, w, h };
+        }
+      }
+      if (!isPriority && routeSegments.length > 0 && routeSegments.some((seg) => segmentHitsRect(seg, rect, routePad))) {
+        const scaledSlots = plan.slots.map((s) => ({ dx: s.dx * ratio, dy: s.dy * ratio }));
+        const avoid = fixedBlockers.concat(priorityLabelRects, staticLabelRects);
+        const side = pickFreeSlot(v.x, v.y, w, h, scaledSlots, avoid, inside, 2, routeSegments, routePad);
+        if (side) {
+          rect = { x: v.x + side.dx - w / 2, y: v.y + side.dy - h / 2, w, h };
         }
       }
       if (!inside(rect)) continue;
       let alpha = 1;
       if (!isPriority) {
         // A priority name may dodge into this label's static slot; the ordinary
-        // name then hides, so the two can never overlap.
+        // name then hides, so the two can never overlap. Also hide if the gold route still crosses it.
         const shadowed = staticLabelIds.has(city.id)
           && priorityLabelRects.some((r) => rectsOverlap(rect, r, 1));
+        const crossedByRoute =
+          routeSegments.length > 0 && routeSegments.some((seg) => segmentHitsRect(seg, rect, routePad));
         alpha = this.labelFade.update(
           `city:${city.id}`,
-          !shadowed && !blockers.some((b) => rectsOverlap(rect, b, 2)),
+          !shadowed && !crossedByRoute && !blockers.some((b) => rectsOverlap(rect, b, 2)),
           now,
         );
         if (alpha <= 0.02) continue;
@@ -3685,14 +3737,15 @@ export class MapView {
       ctx.stroke();
     }
 
+    const radius = plan.kana ? Math.min(10, rect.h * 0.36) : (rect.h + 2) / 2;
     ctx.fillStyle = 'rgba(9, 30, 58, 0.28)';
     ctx.beginPath();
-    ctx.roundRect(rect.x + 0.5, rect.y + 2.2, rect.w, rect.h, (rect.h + 2) / 2);
+    ctx.roundRect(rect.x + 0.5, rect.y + 2.2, rect.w, rect.h, radius);
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, (rect.h + 2) / 2);
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, radius);
     ctx.fill();
     ctx.lineWidth = isDestination ? 2.2 : 1.55;
     ctx.strokeStyle = isDestination ? '#f0a900' : '#23385c';
@@ -3725,17 +3778,18 @@ export class MapView {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const centerX = rect.x + rect.w / 2 + (owner && owner.total > 0 ? 2 : 0);
+    const maxTextW = Math.max(12, rect.w - 8);
     if (plan.kana) {
-      // Furigana sits above the name inside the same bubble, centred on it.
+      // Furigana sits above the name inside the same bubble, centred on it and clamped to width.
       const nameY = rect.y + rect.h - 4 - fs / 2;
       ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
-      ctx.fillText(plan.text, centerX, nameY);
+      ctx.fillText(plan.text, centerX, nameY, maxTextW);
       ctx.font = `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`;
       ctx.fillStyle = '#44557a';
-      ctx.fillText(plan.kana, centerX, rect.y + 3 + kanaFs / 2);
+      ctx.fillText(plan.kana, centerX, rect.y + 3.5 + kanaFs / 2, maxTextW);
     } else {
       ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
-      ctx.fillText(plan.text, centerX, rect.y + rect.h / 2 + 0.5);
+      ctx.fillText(plan.text, centerX, rect.y + rect.h / 2 + 0.5, maxTextW);
     }
     ctx.restore();
   }
@@ -3821,11 +3875,16 @@ export class MapView {
     mctx.fillStyle = '#000';
     const currentId = this.state?.players[this.state.current]?.nodeId ?? null;
     const current = currentId ? this.nodeById.get(currentId) : null;
+    const board = this.freeBoardBox();
+    const ringMargin = r + 11;
     const candidatePoints: Array<{ x: number; y: number }> = [];
     for (const option of this.moveOptions) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
-      candidatePoints.push({ x: cam.screenX(node.x), y: cam.screenY(node.y) });
+      const px = cam.screenX(node.x);
+      const py = cam.screenY(node.y);
+      if (!isCandidateRingVisible(px, py, board, ringMargin)) continue;
+      candidatePoints.push({ x: px, y: py });
     }
     const holes = spotlightHoles(
       current ? { x: cam.screenX(current.x), y: cam.screenY(current.y) } : null,
@@ -3969,7 +4028,9 @@ export class MapView {
     if (!this.moveOptions || this.moveOptions.length === 0) return;
     const cam = this.camera;
     const r = this.tileRadius();
-    const board = this.boardBox();
+    // Use the HUD-free board box (excluding top ranking and bottom move-options list).
+    const board = this.freeBoardBox();
+    const ringMargin = r + 11;
     const recommended = this.getRecommendedMoveOption();
     const pinEveryCandidate = this.moveOptions.length <= 8;
     // With a big candidate set the glow would wash the board out; thin it so
@@ -3983,8 +4044,9 @@ export class MapView {
       if (!node) return;
       const x = cam.screenX(node.x);
       const y = cam.screenY(node.y);
-      // Markers stay inside the HUD-free board; outside candidates get edge badges.
-      if (x < board.x - 12 || x > board.x + board.w + 12 || y < board.y - 12 || y > board.y + board.h + 12) return;
+      // Only draw an on-board ring when the entire ring fits clear of HUD panels;
+      // anything hidden behind the move list or ranking HUD gets an edge badge below.
+      if (!isCandidateRingVisible(x, y, board, ringMargin)) return;
       const selected = this.selectedOption === option.nodeId;
       const isRecommended = option.nodeId === recommended;
       const hovered = this.hoveredOption === option.nodeId;
@@ -4065,8 +4127,7 @@ export class MapView {
       if (!node) return;
       const x = cam.screenX(node.x);
       const y = cam.screenY(node.y);
-      if (x >= board.x - 24 && x <= board.x + board.w + 24
-        && y >= board.y - 24 && y <= board.y + board.h + 24) return;
+      if (isCandidateRingVisible(x, y, board, ringMargin)) return;
       offBoard.push({ index, node, x, y });
     });
     offBoard.sort((a, b) => {

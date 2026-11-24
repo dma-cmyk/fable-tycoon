@@ -22,6 +22,12 @@ export interface LocalSetup {
   seed?: number;
   /** Presentation and CPU pacing multiplier (1..16). Used by ?speed= automated playtests. */
   speed?: number;
+  /** Live pacing getter (e.g. effectiveFxSpeed) so Settings changes apply to subsequent CPU actions. */
+  getSpeed?: () => number;
+}
+
+function clampSpeed(value: number | undefined): number {
+  return Math.max(1, Math.min(16, Number(value) || 1));
 }
 
 function randomIntFromCrypto(n: number): number {
@@ -193,12 +199,12 @@ export class LocalSession implements Session {
     }
 
     let sessionSink: ((msg: ServerMsg, connId: string | null) => void) | null = null;
-    const speed = Math.max(1, Math.min(16, Number(setup.speed) || 1));
+    const readSpeed = (): number => clampSpeed(setup.getSpeed ? setup.getSpeed() : setup.speed);
     const deps: RoomDeps = {
       roomId: LOCAL_ROOM_ID,
       now: () => Date.now(),
-      fxScale: 1 / speed,
-      cpuDelayMs: Math.round(CPU_MOVE_DELAY_MS / speed),
+      fxScale: () => 1 / readSpeed(),
+      cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
       ...localTimers(),
       randomInt: setup.seed === undefined ? randomIntFromCrypto : seededRandom(setup.seed),
       data: GAME_DATA,
@@ -262,11 +268,12 @@ export class LocalSession implements Session {
     return session;
   }
 
-  static resume(raw: string): LocalSession | null {
+  static resume(raw: string, getSpeed?: () => number): LocalSession | null {
     const parsed = parseSave(raw);
     if (!parsed) return null;
 
     let session: LocalSession | null = null;
+    const readSpeed = (): number => clampSpeed(getSpeed ? getSpeed() : 1);
     let controller: RoomController;
     try {
       controller = RoomController.restore(
@@ -274,6 +281,8 @@ export class LocalSession implements Session {
         {
           roomId: parsed.roomId ?? LOCAL_ROOM_ID,
           now: () => Date.now(),
+          fxScale: () => 1 / readSpeed(),
+          cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
           ...localTimers(),
           randomInt: randomIntFromCrypto,
           data: GAME_DATA,
@@ -470,11 +479,11 @@ export function localSaveIssue(): string | null {
   return saveIssue;
 }
 
-export function resumeLocal(): LocalSession | null {
+export function resumeLocal(getSpeed?: () => number): LocalSession | null {
   const raw = readLocal(LOCAL_SAVE_KEY);
   if (!raw) return null;
   const room = decodeSave(raw);
-  return room ? LocalSession.resume(room) : null;
+  return room ? LocalSession.resume(room, getSpeed) : null;
 }
 
 export function clearLocalSave(): void {

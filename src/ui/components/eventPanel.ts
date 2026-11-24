@@ -2,7 +2,7 @@ import type { PublicState } from '../../core/engine';
 import type { EventChoice, GameEventDef } from '../../core/types';
 import { h } from '../dom';
 import { describeEffect } from '../eventEffects';
-import { eventFootnoteText } from '../eventPanelNote';
+import { eventFootnoteText, splitChoiceDetail } from '../eventPanelNote';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
 import { assetUrl, KIND_ICON, KIND_JA } from '../format';
 
@@ -310,29 +310,17 @@ export class EventPanel {
 }
 
 function choiceDetailParts(detail: string): HTMLElement[] {
-  const lines: HTMLElement[] = [];
-  const sentences = detail
-    .split('。')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  sentences.forEach((sentence, index) => {
-    const collapse = sentence.match(/^(\d+)%でバブル崩壊(?:し|する)?[、,]?(.*)$/);
-    if (collapse) {
-      lines.push(h('span', { class: 'event-choice-risk event-choice-risk-title', text: `崩壊確率 ${collapse[1]}%` }));
-      const loss = collapse[2]?.replace(/^[、,]+/, '').trim();
-      if (loss) lines.push(h('span', { class: 'event-choice-risk', text: `崩壊時の損失 ${loss}` }));
-      return;
-    }
-    const parts = sentence.split(/、/).map((part) => part.trim()).filter(Boolean);
-    const riskSentence = /崩壊|失敗|不足|損失|損|リスク|売却/.test(sentence) && index > 0;
-    for (const part of parts) {
-      lines.push(h('span', {
-        class: riskSentence ? 'event-choice-risk' : 'event-choice-effect',
-        text: `${part}${part === parts[parts.length - 1] ? '。' : ''}`,
-      }));
-    }
+  return splitChoiceDetail(detail).map((part) => {
+    const cls =
+      part.kind === 'risk-title'
+        ? 'event-choice-risk event-choice-risk-title'
+        : part.kind === 'risk-loss'
+          ? 'event-choice-risk event-choice-risk-loss'
+          : part.kind === 'risk'
+            ? 'event-choice-risk'
+            : 'event-choice-effect';
+    return h('span', { class: cls, text: part.text });
   });
-  return lines;
 }
 
 function seasonOf(month: number): { key: string; label: string; emoji: string } {

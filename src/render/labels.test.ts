@@ -179,6 +179,17 @@ describe('pickFreeSlot', () => {
     const tight = (r: { x: number; y: number; w: number; h: number }): boolean => r.x >= 100;
     expect(pickFreeSlot(100, 100, 20, 20, slots, [], tight)).toEqual(slots[1]);
   });
+
+  it('moves city label off the selected move route polyline (#7)', () => {
+    // Horizontal selected gold route running across y = 100 through x = 50..200.
+    const route = [{ ax: 50, ay: 100, bx: 200, by: 100 }];
+    const candidateSlots = [
+      { dx: 0, dy: 0 }, // sits directly on the route
+      { dx: 40, dy: 0 }, // also on the horizontal route
+      { dx: 0, dy: 40 }, // safely below the route
+    ];
+    expect(pickFreeSlot(100, 100, 36, 18, candidateSlots, [], undefined, 2, route, 10)).toEqual(candidateSlots[2]);
+  });
 });
 
 describe('spreadBadges', () => {

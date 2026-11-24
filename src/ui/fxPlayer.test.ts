@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { estimateFxDurationMs, FxPlayer, type FxPlayerHost } from './fxPlayer';
+import { FX_MS } from '../net/session-types';
 import type { PublicState } from '../core/engine';
 import type { UiSettings } from './settings';
 
@@ -63,10 +64,67 @@ describe('FxPlayer watchdog', () => {
     player.enqueue({ seq: 7, fx: [toastFx], state, deadline: null, gen: 1 });
     await vi.advanceTimersByTimeAsync(50);
     expect(h.applied).toEqual([]);
-    const budget = estimateFxDurationMs(toastFx) * 2 + 5000;
+    const budget = estimateFxDurationMs(toastFx) * 2 + 8000;
     await vi.advanceTimersByTimeAsync(budget + 50);
     expect(h.applied).toEqual([7]);
+    expect(h.cleanup).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(player.busy).toBe(false);
+    player.destroy();
+    warn.mockRestore();
+  });
+
+  it('adopts the NEWEST queued update (not the stalled head) when watchdog fires so CPU turns never deadlock', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const h = host(true);
+    const player = new FxPlayer(h.impl);
+    const cpuState = { current: 3, players: [] } as unknown as PublicState;
+    const humanState = { current: 0, players: [] } as unknown as PublicState;
+    const appliedStates: PublicState[] = [];
+    h.impl.applyState = (s, _d, seq) => {
+      h.applied.push(seq);
+      appliedStates.push(s);
+    };
+    player.enqueue({ seq: 47, fx: [toastFx], state: cpuState, deadline: null, gen: 1 });
+    player.enqueue({ seq: 48, fx: [toastFx], state: cpuState, deadline: null, gen: 1 });
+    player.enqueue({ seq: 50, fx: [toastFx], state: humanState, deadline: null, gen: 1 });
+    await vi.advanceTimersByTimeAsync(50);
+    const budget = estimateFxDurationMs(toastFx) * 2 + 8000;
+    await vi.advanceTimersByTimeAsync(budget + 50);
+    expect(h.applied).toEqual([50]);
+    expect(appliedStates).toEqual([humanState]);
+    expect(h.cleanup).toHaveBeenCalledTimes(1);
+    expect(player.busy).toBe(false);
+    player.destroy();
+    warn.mockRestore();
+  });
+
+  it('pauses the watchdog during intentional manual-advance waiting and resumes afterwards', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const applied: number[] = [];
+    let release!: () => void;
+    const player = new FxPlayer({
+      settings: () => ({ ...settings, autoAdvance: false }),
+      handleFx: async (_fx, _state, control) => {
+        control.setManualWait(true);
+        await new Promise<void>((resolve) => { release = resolve; });
+        control.setManualWait(false);
+      },
+      applyState: (_s, _d, seq) => applied.push(seq),
+      setBusy: () => undefined,
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+    });
+    player.enqueue({ seq: 11, fx: [toastFx], state, deadline: null, gen: 1 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(warn).not.toHaveBeenCalled();
+    expect(applied).toEqual([]);
+    expect(player.busy).toBe(true);
+    release();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(applied).toEqual([11]);
     expect(player.busy).toBe(false);
     player.destroy();
     warn.mockRestore();
@@ -90,7 +148,11 @@ describe('FxPlayer backlog pruning', () => {
 
 describe('estimateFxDurationMs', () => {
   it('scales say by text length and move by path length', () => {
-    expect(estimateFxDurationMs({ t: 'say', speaker: 'narrator', text: 'あ'.repeat(10) })).toBe(700 + 95 * 10);
-    expect(estimateFxDurationMs({ t: 'move', playerId: 0, path: ['a', 'b', 'c'], dice: 1 })).toBe(230 * 3);
+    expect(estimateFxDurationMs({ t: 'say', speaker: 'narrator', text: 'あ'.repeat(10) })).toBe(
+      FX_MS.sayBase + FX_MS.sayPerChar * 10,
+    );
+    expect(estimateFxDurationMs({ t: 'move', playerId: 0, path: ['a', 'b', 'c'], dice: 1 })).toBe(
+      FX_MS.moveStep * 3,
+    );
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageCursor } from './messageCursor';
-import { charsPerPage, pageReadMs, paginateText, revealMs } from './messagePages';
+import { charsPerPage, pageReadMs, paginateText, postVoicePauseMs, revealMs, scaledPageReadMs } from './messagePages';
 
 // DOM-free core of the window: queue ordering + paging + bounded timing constants.
 // (The component needs a browser DOM; the gallery/headless shots cover rendering.)
@@ -54,6 +54,20 @@ describe('message window timing bounds', () => {
       // Rendering holds each page for pageReadMs/speed, never indefinitely.
       expect(Math.max(240, Math.round(pageReadMs(p) / 8))).toBeLessThanOrEqual(700);
     }
+  });
+
+  it('scales page read duration and post-voice pause proportionally with fx speed', () => {
+    const line = 'お使いの報酬をもらった。';
+    const d1 = scaledPageReadMs(line, 1);
+    const d2 = scaledPageReadMs(line, 2);
+    const d4 = scaledPageReadMs(line, 4);
+    const d8 = scaledPageReadMs(line, 8);
+    expect(d2).toBe(Math.round(d1 / 2));
+    expect(d4).toBe(Math.round(d1 / 4));
+    expect(d8).toBeLessThan(d4);
+    expect(postVoicePauseMs(1)).toBeLessThanOrEqual(300);
+    expect(postVoicePauseMs(2)).toBe(Math.round(postVoicePauseMs(1) / 2));
+    expect(postVoicePauseMs(4)).toBeLessThan(postVoicePauseMs(2));
   });
 
   it('fits at least one page worth of text for each viewport size', () => {

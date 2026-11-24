@@ -7,6 +7,7 @@
 //     (lower generation) can never displace the authority that replaced it.
 
 import type { PublicState } from './protocol';
+import { publicKeyFingerprint, verifyData } from './p2p/identity';
 
 /** A peer's liveness statement: which host it currently follows. */
 export interface FollowState {
@@ -115,6 +116,126 @@ export function isVerifiedTransfer(
     if (!agreed.has(fingerprint)) return false;
   }
   return true;
+}
+
+/**
+ * Every human seat that can take over as host must acknowledge a replicated report vote —
+ * including the voter itself, since a guest who reports and immediately inherits host would
+ * otherwise lose its own vote if the first broadcast was dropped.
+ */
+export function reportVoteAckTargets(
+  seatKeys: Readonly<Record<string, string>>,
+  hostFp: string,
+): Set<string> {
+  const needed = new Set<string>();
+  for (const key of Object.values(seatKeys)) {
+    if (key && key !== hostFp) needed.add(key);
+  }
+  return needed;
+}
+
+/** Initial host's signed roster of human seat public keys, anchored to the invite URL's host pin. */
+export interface SeatRosterCert {
+  roomId: string;
+  hostFp: string;
+  hostJwk: JsonWebKey;
+  /** seat index -> public JWK of each human seat agreed under the initial host. */
+  seats: Record<string, JsonWebKey>;
+  at: number;
+  sig: string;
+}
+
+/** One signed approval of a host transfer to `newHostFp` at `gen`. */
+export interface TransferApproval {
+  fp: string;
+  jwk: JsonWebKey;
+  sig: string;
+}
+
+/** Cryptographically verifiable proof linking the initial invite key to the current host. */
+export interface TransferProof {
+  roomId: string;
+  roster: SeatRosterCert;
+  gen: number;
+  newHostFp: string;
+  prevHostFp: string;
+  approvals: TransferApproval[];
+}
+
+export function rosterCertPayload(
+  roomId: string,
+  hostFp: string,
+  seats: Readonly<Record<string, JsonWebKey>>,
+): string {
+  const entries = Object.entries(seats)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([seat, jwk]) => `${seat}:${jwk.crv ?? ''}:${jwk.x ?? ''}:${jwk.y ?? ''}`);
+  return `roster\n${roomId.toUpperCase()}\n${hostFp}\n${entries.join('\n')}`;
+}
+
+export function transferApprovalPayload(
+  roomId: string,
+  gen: number,
+  newHostFp: string,
+  prevHostFp: string,
+): string {
+  return `transfer\n${roomId.toUpperCase()}\n${gen}\n${newHostFp}\n${prevHostFp}`;
+}
+
+export async function verifySeatRosterCert(
+  cert: SeatRosterCert,
+  expectedRoomId: string,
+  expectedHostHint?: string | null,
+): Promise<Set<string> | null> {
+  if (!cert || typeof cert !== 'object') return null;
+  if (cert.roomId.toUpperCase() !== expectedRoomId.toUpperCase()) return null;
+  if (!cert.hostJwk || typeof cert.hostFp !== 'string' || typeof cert.sig !== 'string') return null;
+  const computedHostFp = await publicKeyFingerprint(cert.hostJwk);
+  if (computedHostFp !== cert.hostFp) return null;
+  if (expectedHostHint && !cert.hostFp.startsWith(expectedHostHint.toLowerCase())) return null;
+  const payload = rosterCertPayload(cert.roomId, cert.hostFp, cert.seats);
+  const ok = await verifyData(cert.hostJwk, cert.sig, payload);
+  if (!ok) return null;
+  const seatFps = new Set<string>();
+  for (const jwk of Object.values(cert.seats)) {
+    if (!jwk || typeof jwk !== 'object') return null;
+    seatFps.add(await publicKeyFingerprint(jwk));
+  }
+  return seatFps;
+}
+
+/**
+ * Verify that `proof` legitimately transfers authority from a host matching `expectedInitialHint`
+ * (e.g. the invite URL `?k=` prefix) to `proof.newHostFp`.
+ */
+export async function verifyTransferProof(
+  proof: TransferProof,
+  expectedRoomId: string,
+  expectedInitialHint: string,
+): Promise<boolean> {
+  if (!proof || typeof proof !== 'object') return false;
+  if (proof.roomId.toUpperCase() !== expectedRoomId.toUpperCase()) return false;
+  if (!Number.isFinite(proof.gen) || proof.gen < 2) return false;
+  if (!proof.newHostFp || !proof.prevHostFp) return false;
+  const certifiedSeats = await verifySeatRosterCert(proof.roster, expectedRoomId, expectedInitialHint);
+  if (!certifiedSeats || certifiedSeats.size === 0) return false;
+  if (!certifiedSeats.has(proof.newHostFp)) return false;
+
+  const payload = transferApprovalPayload(proof.roomId, proof.gen, proof.newHostFp, proof.prevHostFp);
+  const validApprovers = new Set<string>();
+  for (const approval of proof.approvals ?? []) {
+    if (!approval || !approval.jwk || typeof approval.fp !== 'string' || typeof approval.sig !== 'string') continue;
+    if (!certifiedSeats.has(approval.fp) || validApprovers.has(approval.fp)) continue;
+    const computed = await publicKeyFingerprint(approval.jwk);
+    if (computed !== approval.fp) continue;
+    if (await verifyData(approval.jwk, approval.sig, payload)) {
+      validApprovers.add(approval.fp);
+    }
+  }
+  // In a 2-human room only the surviving seat remains (1 approval); in 3+ human rooms a strict
+  // majority of the certified human roster must have signed the transfer.
+  const required = certifiedSeats.size <= 2 ? 1 : Math.floor(certifiedSeats.size / 2) + 1;
+  return validApprovers.size >= required;
 }
 
 const STATE_HASH_SEED = 'fable-state-v1';

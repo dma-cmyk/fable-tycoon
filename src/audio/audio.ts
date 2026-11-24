@@ -209,11 +209,19 @@ function unlock(): void {
   }
 }
 
+export interface PlayVoiceOptions {
+  /** Playback rate multiplier (1..8) so higher fx speeds shorten voice playback proportionally without cutting it off. */
+  rate?: number;
+  /** Called right before audio playback starts, with the expected scaled duration in ms. */
+  onStart?: (durationMs: number) => void;
+}
+
 /** Plays the manifest voice line for (voiceKey, text); resolves on end, stop or a missing line. */
-async function playVoice(voiceKey: string, text: string): Promise<void> {
+async function playVoice(voiceKey: string, text: string, options?: PlayVoiceOptions): Promise<void> {
   // A suspended/unavailable context never reaches `onended`; do not let the caller await forever.
   if (!ready || !ctx || ctx.state !== 'running') return;
 
+  const rate = Math.max(1, Math.min(8, Number.isFinite(options?.rate) ? (options?.rate as number) : 1));
   const token = ++voiceToken;
   stopActiveVoice();
   stopActiveChatter();
@@ -244,7 +252,7 @@ async function playVoice(voiceKey: string, text: string): Promise<void> {
     }
 
     if (token !== voiceToken || !ready) return;
-    await startVoice(buffer);
+    await startVoice(buffer, rate, options?.onStart);
   } finally {
     if (token === voiceToken) {
       voicePending = false;
@@ -532,13 +540,19 @@ function rememberVoice(hash: string, buffer: AudioBuffer): void {
   }
 }
 
-function startVoice(buffer: AudioBuffer): Promise<void> {
+function startVoice(
+  buffer: AudioBuffer,
+  rate = 1,
+  onStart?: (durationMs: number) => void,
+): Promise<void> {
   const context = ctx;
   const bus = voiceBus;
   if (!context || !bus) return Promise.resolve();
 
+  const clampedRate = Math.max(1, Math.min(8, Number.isFinite(rate) ? rate : 1));
   const source = context.createBufferSource();
   source.buffer = buffer;
+  source.playbackRate.value = clampedRate;
   source.connect(bus);
 
   let resolvePromise!: () => void;
@@ -558,8 +572,12 @@ function startVoice(buffer: AudioBuffer): Promise<void> {
     finishVoice(active);
   };
   // Safari/Chrome may not fire `ended` for a suspended context; never await the line forever.
-  active.timer = globalThis.setTimeout(() => finishVoice(active), voiceBudgetMs(buffer.duration * 1000, ''));
+  active.timer = globalThis.setTimeout(
+    () => finishVoice(active),
+    voiceBudgetMs(buffer.duration * 1000, '', clampedRate),
+  );
   try {
+    onStart?.((buffer.duration * 1000) / clampedRate);
     source.start();
   } catch {
     finishVoice(active);

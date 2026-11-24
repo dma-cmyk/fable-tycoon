@@ -21,7 +21,7 @@ import type { ConnectionState, Session } from './session-types';
 import { GAME_DATA } from '../data/index';
 import { BOARD_VERSION } from './board-version';
 import { MqttTransport, DEFAULT_BROKERS, isP2PControl } from './p2p/transport';
-import { loadIdentity } from './p2p/identity';
+import { loadIdentity, publicJwkFromString, signData } from './p2p/identity';
 import type { ClientIdentity } from './p2p/identity';
 import type { P2PControl, P2PMessage, TransportStatus } from './p2p/transport';
 import {
@@ -30,11 +30,15 @@ import {
   isStaleGeneration,
   isVerifiedTransfer,
   nextGeneration,
+  reportVoteAckTargets,
+  rosterCertPayload,
   rotateBrokers,
   stateHashOf,
+  transferApprovalPayload,
+  verifySeatRosterCert,
+  verifyTransferProof,
 } from './authority';
-import type { KeyLink } from './authority';
-import type { FollowRecord } from './authority';
+import type { FollowRecord, KeyLink, SeatRosterCert, TransferApproval, TransferProof } from './authority';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const REPORTS_KEY = 'fable.reports';
@@ -266,7 +270,41 @@ export function onlineSaveIssue(): string | null {
 }
 
 const HOST_KEY_CHAIN_PREFIX = 'fable.keychain.';
+const TRANSFER_PROOF_PREFIX = 'fable.transfer.';
 const hostKeyChainMemory = new Map<string, HostKeyLink[]>();
+const transferProofMemory = new Map<string, TransferProof>();
+
+function readTransferProof(roomId: string): TransferProof | null {
+  const key = normalizeRoomId(roomId);
+  const memory = transferProofMemory.get(key);
+  if (memory) return memory;
+  const raw = storageGet('local', `${TRANSFER_PROOF_PREFIX}${key}`);
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'roomId' in parsed &&
+      'roster' in parsed &&
+      'newHostFp' in parsed &&
+      'approvals' in parsed
+    ) {
+      const proof = parsed as TransferProof;
+      transferProofMemory.set(key, proof);
+      return proof;
+    }
+  } catch {
+    // ignore corrupt stored proof
+  }
+  return null;
+}
+
+function saveTransferProof(roomId: string, proof: TransferProof): void {
+  const key = normalizeRoomId(roomId);
+  transferProofMemory.set(key, proof);
+  storageSet('local', `${TRANSFER_PROOF_PREFIX}${key}`, JSON.stringify(proof));
+}
 
 interface HostKeyLink extends KeyLink {
   at: number;
@@ -520,6 +558,15 @@ export class OnlineSession implements Session {
   private expectedHostFingerprint: string | null = null;
   private hostBroker: string | null = null;
   private peerKeys = new Map<string, string>();
+  private seatJwks = new Map<string, JsonWebKey>();
+  /** Seat index -> fingerprint agreed before any timeout CPU replacement (used on partition heal). */
+  private agreedSeatKeys: Record<string, string> = {};
+  private rosterCert: SeatRosterCert | null = null;
+  private rosterCertSigKey = '';
+  private transferProof: TransferProof | null = null;
+  private transferApprovals = new Map<string, TransferApproval>();
+  private prevHostFpForTransfer: string | null = null;
+  private verifyingProofKey: string | null = null;
   private hostPeerId: string | null = null;
   private hostSeat: number | null = null;
   private lastHostHeartbeatAt = 0;
@@ -598,13 +645,17 @@ export class OnlineSession implements Session {
   private lastSnapshot: Extract<ServerMsg, { t: 'snapshot' }> | null = null;
   private lastUpdate: Extract<ServerMsg, { t: 'update' }> | null = null;
 
-  private constructor(roomId: string, name: string, role: 'host' | 'guest') {
+  private constructor(roomId: string, name: string, role: 'host' | 'guest', hostKeyHint?: string | null) {
     this.roomId = normalizeRoomId(roomId);
     this.name = name.trim().slice(0, 16) || 'プレイヤー';
     this.role = role;
     this.clientId = clientIdFor(this.name);
     this.hostBroker = discoveredBroker.get(this.roomId) ?? null;
-    this.expectedHostFingerprint = readHostKeyHint(this.roomId);
+    this.expectedHostFingerprint =
+      hostKeyHint !== undefined
+        ? (hostKeyHint ? hostKeyHint.toLowerCase() : null)
+        : readHostKeyHint(this.roomId);
+    this.transferProof = hostKeyHint !== undefined ? null : readTransferProof(this.roomId);
     this.peerSeen.set(this.clientId, Date.now());
     if (typeof document !== 'undefined') {
       this.visibilityHandler = () => {
@@ -717,8 +768,8 @@ export class OnlineSession implements Session {
     };
   }
 
-  static guest(roomId: string, name: string): OnlineSession {
-    const session = new OnlineSession(roomId, name, 'guest');
+  static guest(roomId: string, name: string, hostKeyHint?: string | null): OnlineSession {
+    const session = new OnlineSession(roomId, name, 'guest', hostKeyHint);
     storageSet('local', GUEST_SAVE_KEY, JSON.stringify({ roomId: session.roomId, name: session.name }));
     void session.beginGuest();
     return session;
@@ -958,6 +1009,7 @@ export class OnlineSession implements Session {
     this.quorumMessageShown = false;
     this.hostPeerId = this.clientId;
     this.hostKeyFingerprint = this.identity.fingerprint;
+    this.seatJwks.set(this.identity.fingerprint, this.identity.publicJwk);
     this.promotionConfirmed = true;
     const deps = this.hostDeps();
     try {
@@ -1100,13 +1152,15 @@ export class OnlineSession implements Session {
 
   private createTransport(): MqttTransport {
     if (!this.identity) throw new Error('identity not initialised');
-    const base = networkConfig.brokers ?? DEFAULT_BROKERS;
-    const rotated = base.length > 0
-      ? base.map((_, index) => base[(index + this.brokerAttempt) % base.length])
-      : base;
-    const brokers = this.hostBroker
-      ? [this.hostBroker, ...rotated.filter((broker) => broker !== this.hostBroker)]
-      : rotated;
+    // Respect brokerMisses from brokerCandidates() instead of pinning back to an unresponsive hostBroker.
+    const candidates = this.brokerCandidates();
+    const preferred =
+      this.hostBroker && !this.brokerMisses.has(this.hostBroker) && candidates.includes(this.hostBroker)
+        ? this.hostBroker
+        : null;
+    const brokers = preferred
+      ? [preferred, ...candidates.filter((broker) => broker !== preferred)]
+      : candidates;
     const defaultMirrors = this.role === 'host' ? Math.max(0, brokers.length - 1) : 1;
     const transport = new MqttTransport(this.clientId, {
       identity: this.identity,
@@ -1161,14 +1215,25 @@ export class OnlineSession implements Session {
           return;
         }
         this.peerKeys.set(from, fingerprint);
+        if (message.pub) {
+          void publicJwkFromString(message.pub).then((jwk) => {
+            if (!jwk) return;
+            this.seatJwks.set(fingerprint, jwk);
+            void this.maybeRefreshRosterCert();
+          });
+        }
+        // Immediately deliver transferProof (if any) to a guest rejoining from an older invite URL.
+        if (this.transferProof) this.sendHeartbeatTo(from);
       } else if (pinned === undefined) {
         this.log(`drop ClientMsg from ${from}: hello (public key) missing`);
         return;
       }
       this.guestSeen.set(from, Date.now());
       if (message.t !== 'hello') this.reviveSeatFromPeer(from, fingerprint);
-      const seatedKeys = this.controller.publicSnapshot().seatKeys;
-      const seated = Object.values(seatedKeys).includes(fingerprint);
+      const snapNow = this.controller.publicSnapshot();
+      const seated =
+        Object.values(snapNow.seatKeys).includes(fingerprint) ||
+        Object.values(snapNow.reclaimKeys ?? {}).includes(fingerprint);
       if (seated) {
         this.hostFollowers.add(from);
         const hostFp = this.ownHostFingerprint();
@@ -1201,6 +1266,13 @@ export class OnlineSession implements Session {
     // Authenticate the sender BEFORE acting on any content: an unsigned/hostile peer must not be
     // able to force this client to close the room by claiming a version mismatch.
     if (!this.acceptHostSender(from, fingerprint)) return;
+    // Check generation BEFORE board-version mismatch so a stale-generation message from a catching-up
+    // authority cannot tear down the session.
+    const incomingGen = genOf(message);
+    if (incomingGen !== undefined && this.shadowGeneration > 0 && incomingGen < this.shadowGeneration) {
+      this.log(`drop ${message.t}: old generation ${incomingGen} < ${this.shadowGeneration}`);
+      return;
+    }
     this.lastHostReplyAt = Date.now(); // authenticated host reply: this broker is working
     this.rotationsSinceHostReply = 0;
     if (
@@ -1350,6 +1422,14 @@ export class OnlineSession implements Session {
           gen: this.generation,
         });
         this.ackKeys.add(fingerprint);
+        if (control.transferSig && control.pub) {
+          this.transferApprovals.set(fingerprint, {
+            fp: fingerprint,
+            jwk: control.pub,
+            sig: control.transferSig,
+          });
+          this.rebuildTransferProof();
+        }
         if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
         return;
       }
@@ -1389,8 +1469,7 @@ export class OnlineSession implements Session {
         return;
       case 'gen_bump': {
         if (this.role !== 'host' || control.hostPeerId !== this.clientId) return;
-        const keys = this.controller?.publicSnapshot().seatKeys ?? {};
-        if (!Object.values(keys).includes(fingerprint)) return;
+        if (!this.isKnownSeatKey(fingerprint)) return;
         if (control.gen <= this.generation) return;
         this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
         this.generation = control.gen + 1;
@@ -1425,13 +1504,41 @@ export class OnlineSession implements Session {
     return agreed === fingerprint ? agreed : null;
   }
 
+  private mergeAgreedSeatKeys(
+    seatKeys?: Readonly<Record<string, string>>,
+    reclaimKeys?: Readonly<Record<string, string>>,
+  ): void {
+    if (seatKeys) {
+      for (const [seat, fp] of Object.entries(seatKeys)) {
+        if (fp) this.agreedSeatKeys[seat] = fp;
+      }
+    }
+    if (reclaimKeys) {
+      for (const [seat, fp] of Object.entries(reclaimKeys)) {
+        if (fp) this.agreedSeatKeys[seat] = fp;
+      }
+    }
+  }
+
+  private isKnownSeatKey(fingerprint: string): boolean {
+    const snap = this.role === 'host' && this.controller ? this.controller.publicSnapshot() : null;
+    if (snap) {
+      if (Object.values(snap.seatKeys).includes(fingerprint)) return true;
+      if (snap.reclaimKeys && Object.values(snap.reclaimKeys).includes(fingerprint)) return true;
+    }
+    if (Object.values(this.shadow.seatKeys).includes(fingerprint)) return true;
+    if (Object.values(this.shadow.reclaimKeys).includes(fingerprint)) return true;
+    return Object.values(this.agreedSeatKeys).includes(fingerprint);
+  }
+
   private trustedSeatKey(seat: number): string | null {
-    const fromController =
-      this.role === 'host' && this.controller
-        ? this.controller.publicSnapshot().seatKeys[String(seat)]
-        : undefined;
-    if (fromController) return fromController;
-    return this.shadow.seatKeys[String(seat)] ?? null;
+    const key = String(seat);
+    const snap = this.role === 'host' && this.controller ? this.controller.publicSnapshot() : null;
+    if (snap?.seatKeys[key]) return snap.seatKeys[key];
+    if (snap?.reclaimKeys?.[key]) return snap.reclaimKeys[key];
+    if (this.shadow.seatKeys[key]) return this.shadow.seatKeys[key];
+    if (this.shadow.reclaimKeys[key]) return this.shadow.reclaimKeys[key];
+    return this.agreedSeatKeys[key] ?? null;
   }
 
   private hostHumanSeatCount(): number {
@@ -1464,8 +1571,10 @@ export class OnlineSession implements Session {
    */
   private reviveSeatFromPeer(from: string, fingerprint: string): void {
     if (this.role !== 'host' || !this.controller) return;
-    const keys = this.controller.publicSnapshot().seatKeys;
-    const seatIndex = Object.entries(keys).find(([, key]) => key === fingerprint)?.[0];
+    const snap = this.controller.publicSnapshot();
+    const seatIndex =
+      Object.entries(snap.seatKeys).find(([, key]) => key === fingerprint)?.[0] ??
+      Object.entries(snap.reclaimKeys ?? {}).find(([, key]) => key === fingerprint)?.[0];
     if (seatIndex === undefined) return;
     const info = this.controller.lobbyView().seats[Number(seatIndex)];
     if (!info || info.connected) return;
@@ -1622,38 +1731,41 @@ export class OnlineSession implements Session {
       this.log(`drop competing host ${control.hostPeerId}: seat key not pinned`);
       return;
     }
+    const own = this.ownHostClaim();
+    if (!own) return;
     if (isStaleGeneration(control.gen, this.highestGenerationSeen)) {
-      this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+      // Never ask a *behind* stale host to bump its generation — doing so would let a returning
+      // old host announce a higher generation carrying stale state and roll back guests. Only
+      // request a bump when the stale-gen peer actually has more progress (healed partition).
+      if (control.seq > own.seq) {
+        this.authorityReady = false;
+        this.controller?.setFrozen(true);
+        this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+        this.log(`winner ${control.hostPeerId} is ahead but announces stale gen ${control.gen}`);
+        return;
+      }
+      if (control.seq === own.seq && claimBeats(control, own)) {
+        this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+        this.log(`competing host ${control.hostPeerId} tied with stale gen ${control.gen}; requested bump`);
+        return;
+      }
       this.log(`drop competing host ${control.hostPeerId}: stale gen ${control.gen}`);
+      this.announceHost();
+      this.sendHeartbeat();
       return;
     }
     this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
     this.lastCompeting = { control, fingerprint, at: Date.now() };
-    const own = this.ownHostClaim();
-    if (!own) return;
     // Cross-generation ranking for a HEALED partition: the side with more real progress wins;
     // equal progress falls back to generation, then seq/connected/peer id. The winner's generation
     // is afterwards strictly greater than everything both sides saw, so one order survives.
     if (control.seq > own.seq) {
-      if (isStaleGeneration(control.gen, this.highestGenerationSeen)) {
-        // It is ahead but still on an old generation: freeze and ask it to bump. Never adopt a
-        // lower generation backwards (the UI would discard the newer order).
-        this.authorityReady = false;
-        this.controller?.setFrozen(true);
-        this.requestGenerationBump(control.hostPeerId, control.gen);
-        this.log(`winner ${control.hostPeerId} is ahead but announces stale gen ${control.gen}`);
-        return;
-      }
       this.authorityReady = false; // freeze immediately; the side with progress wins
       this.log(`yielding host role to ${control.hostPeerId} (seq ${control.seq} > ${own.seq})`);
       this.stepDownToGuest(control, fingerprint);
       return;
     }
     if (control.seq === own.seq && claimBeats(control, own)) {
-      if (isStaleGeneration(control.gen, this.highestGenerationSeen)) {
-        this.requestGenerationBump(control.hostPeerId, control.gen);
-        return;
-      }
       this.authorityReady = false;
       this.log(`yielding host role to ${control.hostPeerId} (same seq, higher rank)`);
       this.stepDownToGuest(control, fingerprint);
@@ -1741,6 +1853,17 @@ export class OnlineSession implements Session {
   private handleHostHeartbeat(control: Extract<P2PControl, { k: 'hb' }>, fingerprint: string): void {
     if (control.hostPeerId === this.clientId) return;
     if (control.hostSeat === null) return;
+    // Offline/rejoining guest carrying an older invite URL (?k=<initial host>): verify the
+    // host's transfer proof anchored to that invite pin before pinning the successor key.
+    if (
+      !this.hostPeerId &&
+      this.expectedHostFingerprint &&
+      !fingerprint.startsWith(this.expectedHostFingerprint) &&
+      control.transferProof
+    ) {
+      void this.tryAdoptTransferProof(control, fingerprint);
+      return;
+    }
     const switching = this.hostPeerId !== control.hostPeerId;
     const expected = switching ? this.claimSeatKey(control, fingerprint) : this.trustedSeatKey(control.hostSeat);
     if (switching && expected === null) {
@@ -1756,7 +1879,11 @@ export class OnlineSession implements Session {
     }
     if (switching) {
       if (isStaleGeneration(control.gen, this.highestGenerationSeen)) {
-        this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+        // Only ask a different peer to bump when it actually has newer state than our shadow;
+        // otherwise a returning old host would mint a higher generation with stale state.
+        if (control.seq > this.shadow.seq) {
+          this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+        }
         this.log(`drop stale heartbeat gen ${control.gen} from ${control.hostPeerId}`);
         return;
       }
@@ -1775,6 +1902,11 @@ export class OnlineSession implements Session {
     this.lastHostReplyAt = Date.now();
     this.rotationsSinceHostReply = 0;
     if (this.hostKeyFingerprint === null) this.hostKeyFingerprint = fingerprint;
+    if (control.rosterCert) void this.ingestRosterCert(control.rosterCert);
+    if (control.transferProof) {
+      this.transferProof = control.transferProof;
+      saveTransferProof(this.roomId, control.transferProof);
+    }
     if (control.gen < this.highestGenerationSeen) {
       // Never move the session/UI order backwards: ask the authority to bump above what we saw.
       this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
@@ -1798,6 +1930,7 @@ export class OnlineSession implements Session {
     this.shadow.hostSeat = control.hostSeat;
     this.shadow.seatKeys = { ...control.seatKeys };
     this.shadow.reclaimKeys = { ...(control.reclaimKeys ?? {}) };
+    this.mergeAgreedSeatKeys(control.seatKeys, control.reclaimKeys);
     this.shadow.reportVotes = { ...control.reportVotes };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
@@ -1829,6 +1962,15 @@ export class OnlineSession implements Session {
   private switchHost(control: Extract<P2PControl, { k: 'host' }>, fingerprint: string): void {
     if (control.hostPeerId === this.clientId) return;
     if (control.hostSeat === null) return;
+    if (
+      !this.hostPeerId &&
+      this.expectedHostFingerprint &&
+      !fingerprint.startsWith(this.expectedHostFingerprint) &&
+      control.transferProof
+    ) {
+      void this.tryAdoptTransferProof(control, fingerprint);
+      return;
+    }
     const expected = this.claimSeatKey(control, fingerprint);
     if (expected === null) {
       this.log(`drop host announcement from ${control.hostPeerId}: seat key not pinned`);
@@ -1840,8 +1982,12 @@ export class OnlineSession implements Session {
       return;
     }
     if (isStaleGeneration(control.gen, this.highestGenerationSeen)) {
-      this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
-      this.log(`host announcement gen ${control.gen} is behind seen ${this.highestGenerationSeen}; requested a bump`);
+      if (control.hostPeerId === this.hostPeerId || control.seq > this.shadow.seq) {
+        this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
+        this.log(`host announcement gen ${control.gen} is behind seen ${this.highestGenerationSeen}; requested a bump`);
+      } else {
+        this.log(`drop stale host announcement gen ${control.gen} from ${control.hostPeerId} (seq ${control.seq} <= ${this.shadow.seq})`);
+      }
       return;
     }
     this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
@@ -1873,10 +2019,18 @@ export class OnlineSession implements Session {
     this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
     const previousHostPeerId = this.hostPeerId;
     const previousHostFp = this.hostKeyFingerprint;
+    if (previousHostFp && previousHostFp !== fingerprint) {
+      this.prevHostFpForTransfer = previousHostFp;
+    }
     this.hostPeerId = control.hostPeerId;
     this.hostSeat = control.hostSeat;
     this.hostKeyFingerprint = fingerprint;
     this.expectedHostFingerprint = fingerprint;
+    if (control.rosterCert) void this.ingestRosterCert(control.rosterCert);
+    if (control.transferProof) {
+      this.transferProof = control.transferProof;
+      saveTransferProof(this.roomId, control.transferProof);
+    }
     // The claim key is pinned to an agreed lobby seat (claimSeatKey) and every envelope is signed,
     // so this is an agreed-seat approval. Record it as the room's verified successor.
     rememberHostKey(this.roomId, fingerprint, control.gen, [fingerprint], 1);
@@ -1889,6 +2043,8 @@ export class OnlineSession implements Session {
     this.probeStartedAt = 0;
     this.shadow.hostSeat = control.hostSeat;
     this.shadow.seatKeys = { ...control.seatKeys };
+    this.shadow.reclaimKeys = { ...(control.reclaimKeys ?? {}) };
+    this.mergeAgreedSeatKeys(control.seatKeys, control.reclaimKeys);
     this.shadow.reportVotes = { ...control.reportVotes };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
@@ -1938,14 +2094,121 @@ export class OnlineSession implements Session {
     if (this.lastAckGen === gen && now - this.lastAckAt < 2_000) return;
     this.lastAckGen = gen;
     this.lastAckAt = now;
-    void this.transport?.send(hostPeerId, {
-      k: 'host_ack',
+    const hostFp = this.hostKeyFingerprint ?? '';
+    const baseAck = {
+      k: 'host_ack' as const,
       hostPeerId,
       gen,
       seat: this.seat,
-      hostFp: this.hostKeyFingerprint ?? '',
+      hostFp,
       at: now,
-    });
+    };
+    const identity = this.identity;
+    const prevHostFp = this.rosterCert?.hostFp ?? this.prevHostFpForTransfer ?? '';
+    if (identity && hostFp && prevHostFp && gen >= 2) {
+      const payload = transferApprovalPayload(this.roomId, gen, hostFp, prevHostFp);
+      void signData(identity, payload)
+        .then((transferSig) => {
+          if (this.closed || this.crashed) return;
+          void this.transport?.send(hostPeerId, {
+            ...baseAck,
+            transferSig,
+            pub: identity.publicJwk,
+          });
+        })
+        .catch(() => {
+          void this.transport?.send(hostPeerId, baseAck);
+        });
+      return;
+    }
+    void this.transport?.send(hostPeerId, baseAck);
+  }
+
+  private async ingestRosterCert(cert: SeatRosterCert): Promise<void> {
+    if (this.rosterCert && this.rosterCert.sig === cert.sig) return;
+    const expectedHint = this.rosterCert?.hostFp ?? this.expectedHostFingerprint;
+    const verified = await verifySeatRosterCert(cert, this.roomId, expectedHint);
+    if (!verified) return;
+    this.rosterCert = cert;
+  }
+
+  private async maybeRefreshRosterCert(): Promise<void> {
+    if (this.role !== 'host' || !this.controller || !this.identity) return;
+    // Only the initial authority signs the seat roster (subsequent hosts carry it forward).
+    if (this.rosterCert && this.rosterCert.hostFp !== this.identity.fingerprint) return;
+    const snap = this.controller.publicSnapshot();
+    const seats: Record<string, JsonWebKey> = {};
+    const keys = Object.entries(snap.seatKeys).sort((a, b) => Number(a[0]) - Number(b[0]));
+    if (keys.length === 0) return;
+    for (const [seatIndex, fp] of keys) {
+      const jwk = this.seatJwks.get(fp);
+      if (!jwk) return; // wait until every seated human's JWK is known
+      seats[seatIndex] = jwk;
+    }
+    const sigKey = keys.map(([seat, fp]) => `${seat}=${fp}`).join(',');
+    if (sigKey === this.rosterCertSigKey) return;
+    this.rosterCertSigKey = sigKey;
+    const payload = rosterCertPayload(this.roomId, this.identity.fingerprint, seats);
+    try {
+      const sig = await signData(this.identity, payload);
+      if (this.closed || this.crashed || this.role !== 'host') return;
+      this.rosterCert = {
+        roomId: this.roomId,
+        hostFp: this.identity.fingerprint,
+        hostJwk: this.identity.publicJwk,
+        seats,
+        at: Date.now(),
+        sig,
+      };
+    } catch {
+      this.rosterCertSigKey = '';
+    }
+  }
+
+  private rebuildTransferProof(): void {
+    if (this.role !== 'host' || !this.rosterCert || !this.identity) return;
+    const prevHostFp = this.rosterCert.hostFp;
+    if (!prevHostFp || this.generation < 2) return;
+    const proof: TransferProof = {
+      roomId: this.roomId,
+      roster: this.rosterCert,
+      gen: this.generation,
+      newHostFp: this.identity.fingerprint,
+      prevHostFp,
+      approvals: [...this.transferApprovals.values()],
+    };
+    this.transferProof = proof;
+    saveTransferProof(this.roomId, proof);
+  }
+
+  private async tryAdoptTransferProof(control: HostClaim, fingerprint: string): Promise<void> {
+    const proof = control.transferProof;
+    const hint = this.expectedHostFingerprint;
+    if (!proof || !hint) return;
+    if (proof.newHostFp !== fingerprint) return;
+    const key = `${fingerprint}:${proof.gen}:${proof.approvals.length}`;
+    if (this.verifyingProofKey === key) return;
+    this.verifyingProofKey = key;
+    try {
+      const valid = await verifyTransferProof(proof, this.roomId, hint);
+      if (!valid || this.closed || this.crashed || this.role !== 'guest') return;
+      if (this.hostPeerId === control.hostPeerId && this.hostKeyFingerprint === fingerprint) return;
+      this.rosterCert = proof.roster;
+      this.transferProof = proof;
+      saveTransferProof(this.roomId, proof);
+      this.expectedHostFingerprint = fingerprint;
+      rememberHostKey(
+        this.roomId,
+        fingerprint,
+        proof.gen,
+        proof.approvals.map((approval) => approval.fp),
+        1,
+      );
+      this.mergeAgreedSeatKeys(control.seatKeys, control.reclaimKeys);
+      this.adoptHostClaim(control, fingerprint, false);
+    } finally {
+      if (this.verifyingProofKey === key) this.verifyingProofKey = null;
+    }
   }
 
   private stepDownToGuest(control: HostClaim, fingerprint: string): void {
@@ -2075,17 +2338,10 @@ export class OnlineSession implements Session {
     this.shadow.reportVotes[key] = votes;
   }
 
-  /** Vote receivers whose ack is required: every current human seat plus the would-be successor. */
-  private voteAckTargets(target: number, voter: string): Set<string> {
+  /** Vote receivers whose ack is required: every current human seat (including the voter, who may inherit host). */
+  private voteAckTargets(_target: number, _voter: string): Set<string> {
     const keys = this.controller?.publicSnapshot().seatKeys ?? {};
-    const needed = new Set<string>();
-    for (const key of Object.values(keys)) {
-      if (key !== voter && key !== this.ownHostFingerprint()) needed.add(key);
-    }
-    // The successor is the lowest seat that would take over; if it is the reported target, its own
-    // ack is still required (it is never the voter, which is filtered above).
-    void target;
-    return needed;
+    return reportVoteAckTargets(keys, this.ownHostFingerprint());
   }
 
   /**
@@ -2123,10 +2379,11 @@ export class OnlineSession implements Session {
     void this.transport?.broadcast(control);
   }
 
-  private sendHeartbeat(): void {
-    if (this.role !== 'host' || !this.controller || !this.transport) return;
+  private buildHeartbeat(): Extract<P2PControl, { k: 'hb' }> | null {
+    if (this.role !== 'host' || !this.controller || !this.transport) return null;
     const snapshot = this.controller.publicSnapshot();
-    const heartbeat: P2PControl = {
+    this.mergeAgreedSeatKeys(snapshot.seatKeys, snapshot.reclaimKeys);
+    return {
       k: 'hb',
       hostPeerId: this.clientId,
       seat: this.seat,
@@ -2140,8 +2397,22 @@ export class OnlineSession implements Session {
       connectedHumans: connectedHumans(snapshot.lobby),
       stateHash: stateHashOf(snapshot.state, snapshot.seq),
       broker: this.transport.broker(),
+      ...(this.rosterCert ? { rosterCert: this.rosterCert } : {}),
+      ...(this.transferProof ? { transferProof: this.transferProof } : {}),
       at: Date.now(),
     };
+  }
+
+  private sendHeartbeatTo(peerId: string): void {
+    const heartbeat = this.buildHeartbeat();
+    if (!heartbeat) return;
+    void this.transport?.send(peerId, heartbeat);
+  }
+
+  private sendHeartbeat(): void {
+    void this.maybeRefreshRosterCert();
+    const heartbeat = this.buildHeartbeat();
+    if (!heartbeat || !this.transport) return;
     void this.transport.broadcast(heartbeat);
     const now = Date.now();
     for (const [voteId, pending] of this.pendingVotes) {
@@ -2183,6 +2454,7 @@ export class OnlineSession implements Session {
   private announceHost(): void {
     if (this.role !== 'host' || !this.controller || !this.transport) return;
     const snapshot = this.controller.publicSnapshot();
+    this.mergeAgreedSeatKeys(snapshot.seatKeys, snapshot.reclaimKeys);
     void this.transport.broadcast({
       k: 'host',
       hostPeerId: this.clientId,
@@ -2197,6 +2469,8 @@ export class OnlineSession implements Session {
       connectedHumans: connectedHumans(snapshot.lobby),
       stateHash: stateHashOf(snapshot.state, snapshot.seq),
       broker: this.transport.broker(),
+      ...(this.rosterCert ? { rosterCert: this.rosterCert } : {}),
+      ...(this.transferProof ? { transferProof: this.transferProof } : {}),
       at: Date.now(),
     });
   }
@@ -2458,8 +2732,25 @@ export class OnlineSession implements Session {
       this.authorityReady = this.requiredAcks === 0;
       this.controller.setFrozen(!this.authorityReady);
       this.hostPeerId = this.clientId;
+      this.prevHostFpForTransfer = this.rosterCert?.hostFp ?? this.hostKeyFingerprint ?? '';
       this.hostKeyFingerprint = this.identity?.fingerprint ?? null;
       this.hostSeat = this.seat;
+      this.transferApprovals.clear();
+      this.mergeAgreedSeatKeys(snapshot.seatKeys, snapshot.reclaimKeys);
+      if (this.identity && this.rosterCert) {
+        const ownIdentity = this.identity;
+        const gen = this.generation;
+        const newHostFp = ownIdentity.fingerprint;
+        const prevHostFp = this.rosterCert.hostFp;
+        void signData(ownIdentity, transferApprovalPayload(this.roomId, gen, newHostFp, prevHostFp))
+          .then((sig) => {
+            if (this.closed || this.crashed || this.role !== 'host' || this.generation !== gen) return;
+            this.transferApprovals.set(newHostFp, { fp: newHostFp, jwk: ownIdentity.publicJwk, sig });
+            this.rebuildTransferProof();
+            this.sendHeartbeat();
+          })
+          .catch(() => undefined);
+      }
       for (const peerId of this.peerSeen.keys()) {
         if (peerId !== this.clientId) this.guestSeen.set(peerId, Date.now());
       }
@@ -2525,7 +2816,10 @@ export class OnlineSession implements Session {
           }
         }
         this.shadow.lobby = message.lobby;
-        if (message.seatKeys) this.shadow.seatKeys = { ...message.seatKeys };
+        if (message.seatKeys) {
+          this.shadow.seatKeys = { ...message.seatKeys };
+          this.mergeAgreedSeatKeys(message.seatKeys);
+        }
         this.shadow.chat = [...message.chat].slice(-COMM.historySize);
         if (this.role === 'guest') this.hostSeat = message.lobby.seats.find((seat) => seat.isHost)?.index ?? this.hostSeat;
         break;
@@ -2695,10 +2989,14 @@ export async function createOnlineRoom(name: string): Promise<Session> {
   return OnlineSession.host(name);
 }
 
-export function joinOnlineRoom(roomId: string, name: string): Session {
+export function joinOnlineRoom(
+  roomId: string,
+  name: string,
+  opts?: { hostKeyHint?: string | null },
+): Session {
   const normalized = normalizeRoomId(roomId);
   if (!isValidRoomId(normalized)) throw new Error('ルーム ID は 6 文字＋4 文字の合言葉です');
-  return OnlineSession.guest(normalized, name);
+  return OnlineSession.guest(normalized, name, opts?.hostKeyHint);
 }
 
 export async function roomExists(roomId: string): Promise<boolean> {

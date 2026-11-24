@@ -246,6 +246,14 @@ try {
   /* first run after this change: no sidecar yet */
 }
 
+let previousManifest = {};
+try {
+  const raw = JSON.parse(await readFile(path.join(VOICE_DIR, 'manifest.json'), 'utf8'));
+  if (raw && typeof raw === 'object') previousManifest = raw;
+} catch {
+  /* no manifest yet */
+}
+
 const currentMeta = { ...previousMeta };
 
 function mp3Path(item) {
@@ -712,8 +720,10 @@ await Promise.all(Array.from({ length: Math.min(CONCURRENCY, runnable.length) },
 
 const elapsed = (Date.now() - startedAt) / 1000;
 
-// Manifest: verified files plus failed items whose existing mp3 passes speech QC now.
-// Anything else (missing file, or the old 2026-11-23 noise) stays out of the manifest.
+// Manifest: verified files plus failed items whose existing mp3 passes speech QC now, plus
+// previously-published stale entries that were outside this partial run (--only / --limit).
+// Anything else (missing file, or unverified old noise) stays out of the manifest.
+const attemptedHashes = new Set(runnable.map((item) => item.hash));
 const candidates = [];
 for (const item of items) {
   let hasFile = false;
@@ -723,12 +733,22 @@ for (const item of items) {
     hasFile = false;
   }
   const desired = voiceMeta(item);
+  const prev = currentMeta[item.hash];
+  const wasAttempted = attemptedHashes.has(item.hash);
+  const preservedStale =
+    hasFile &&
+    !wasAttempted &&
+    prev?.stale === true &&
+    typeof previousManifest[item.hash] === 'string' &&
+    previousManifest[item.hash].length > 0;
   candidates.push({
     hash: item.hash,
     desired,
     hasFile,
-    verified: hasFile && metaMatches(currentMeta[item.hash], voiceMeta(item)),
+    verified: hasFile && metaMatches(prev, desired),
     fallbackVerified: hasFile && metaFallback.get(item.hash) === true,
+    preservedStale,
+    previousMeta: prev,
   });
 }
 const { manifest, meta: nextMeta, stale: staleHashes } = buildVoiceManifest(candidates);

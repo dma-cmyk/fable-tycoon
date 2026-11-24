@@ -17,6 +17,7 @@ import {
   authorityInfoForTests,
   bumpGenerationForTests,
   onlineSaveIssue,
+  hostKeyFingerprintForSession,
   resumeOnline,
   verifiedSuccessorForRoom,
   checkpointHostForTests,
@@ -1322,6 +1323,258 @@ async function createSplitRoom(
       else Reflect.deleteProperty(globalThis, 'window');
     }
   });
+
+  it('preserves a reporter guest vote when the reporter immediately inherits host', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    const iso = await startIsolatedBroker();
+    try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 900,
+        peerSilenceMs: 2_000,
+        probeMs: 200,
+        hostGoneMs: 2_000,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 30_000,
+        replaceMs: 60_000,
+        yearEndAckMs: 30_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        clientIds: {
+          rphost: 'rp-host',
+          rp1: 'rp-g1',
+          rp2: 'rp-g2',
+          rp3: 'rp-g3',
+        },
+      });
+      const hostSession = await createOnlineRoom('rphost');
+      const host = new Peer(hostSession, 'rp-host', false);
+      const guest1 = new Peer(joinOnlineRoom(hostSession.roomId, 'rp1'), 'rp1', false);
+      const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'rp2'), 'rp2', false);
+      const guest3 = new Peer(joinOnlineRoom(hostSession.roomId, 'rp3'), 'rp3', false);
+      active.push(host, guest1, guest2, guest3);
+      await Promise.all([guest1, guest2, guest3].map((p) => p.waitFor((m) => m.t === 'welcome')));
+      const hw = host.waitForNew((m) => m.t === 'welcome' && m.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hw;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guest1, guest2, guest3], 1);
+
+      // Guest1 (seat 1, next-in-line successor) reports seat 3. Wait until guest1 itself has the vote.
+      guest1.session.send({ t: 'report', seat: 3, reason: 'spam' });
+      await waitUntil(
+        () => (reportVotesForTests(guest1.session)?.['3']?.length ?? 0) === 1,
+        10_000,
+        'reporter guest1 receives its own replicated vote',
+      );
+
+      // Host crashes and seat 1 (the reporter) inherits host.
+      killSessionForTests(host.session);
+      await guest1.waitFor(
+        (m) => m.t === 'lobby' && m.lobby.seats.find((s) => s.isHost)?.index === 1,
+        20_000,
+        'reporter guest1 becomes host',
+      );
+      await waitUntil(
+        () => authorityInfoForTests(guest1.session)?.ready === true,
+        15_000,
+        'guest1 host confirmed',
+      );
+
+      // Second report from guest2 against seat 3 must immediately trigger auto-mute flag!
+      const flagged = guest2.waitFor((m) => m.t === 'flag' && m.seat === 3, 15_000, 'auto-mute flag');
+      guest2.session.send({ t: 'report', seat: 3, reason: 'abuse' });
+      await flagged;
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 90_000);
+
+  it('reconverges into one match after both sides CPU-replace each other during a partition', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    const iso = await startIsolatedBroker();
+    try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 120,
+        hostSilenceMs: 700,
+        peerSilenceMs: 1_200,
+        probeMs: 200,
+        hostGoneMs: 1_500,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 300,
+        replaceMs: 1_800,
+        yearEndAckMs: 500,
+        cpuDelayMs: 60,
+        fxScale: 0.01,
+        clientIds: {
+          cpuhost: 'cpu-host',
+          cpuguest: 'cpu-guest',
+        },
+      });
+      const hostSession = await createOnlineRoom('cpuhost');
+      const host = new Peer(hostSession, 'cpu-host', true);
+      const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'cpuguest'), 'cpu-guest', true);
+      active.push(host, guest);
+      await guest.waitFor((m) => m.t === 'welcome');
+      const hw = host.waitForNew((m) => m.t === 'welcome' && m.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hw;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guest], 1);
+      hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+      const started = [host, guest].map((p) => p.waitFor((m) => m.t === 'update', 15_000, 'cpu split start'));
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+
+      // Partition the 2 humans long enough for the host to CPU-replace seat 1 and keep advancing,
+      // and for the guest to promote and CPU-replace seat 0 as well.
+      setBlockedPeersForTests(host.session, ['cpu-guest']);
+      setBlockedPeersForTests(guest.session, ['cpu-host']);
+      await waitUntil(
+        () => host.session.lobby()?.seats[1]?.kind === 'cpu' && host.seq >= 6,
+        20_000,
+        'host CPU-replaces guest and advances',
+        pumpActions([host, guest]),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+
+      // Heal partition: both sides must converge onto one host and seat 1 reclaims its human seat.
+      setBlockedPeersForTests(host.session, []);
+      setBlockedPeersForTests(guest.session, []);
+      await waitUntil(
+        () =>
+          everyonesAuthorityIsReady([host, guest]) &&
+          host.session.lobby()?.seats[1]?.kind === 'human' &&
+          host.session.lobby()?.seats[1]?.connected === true,
+        30_000,
+        'reconverged into one room with seat 1 reclaimed',
+        pumpActions([host, guest]),
+      );
+      const seqAfterHeal = Math.max(host.seq, guest.seq);
+      await waitForMsgWithPump(
+        guest,
+        (m) => (m.t === 'update' || m.t === 'snapshot') && m.seq > seqAfterHeal,
+        [host, guest],
+        20_000,
+        'both peers advance together after reconvergence',
+      );
+      expect(Math.abs(host.seq - guest.seq)).toBeLessThanOrEqual(2);
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 120_000);
+
+  it('lets an offline guest rejoin from the old invite URL after a host transfer via signed TransferProof', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    const iso = await startIsolatedBroker();
+    try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 120,
+        hostSilenceMs: 800,
+        peerSilenceMs: 2_000,
+        probeMs: 200,
+        hostGoneMs: 2_000,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 30_000,
+        replaceMs: 60_000,
+        yearEndAckMs: 30_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        clientIds: {
+          tp0: 'tp-host0',
+          tp1: 'tp-guest1',
+          tp2: 'tp-guest2',
+          'tp0-rejoin': 'tp-host0',
+          'tp-spectator': 'tp-spec',
+        },
+      });
+      const hostSession = await createOnlineRoom('tp0');
+      const initialInvitePin = hostKeyFingerprintForSession(hostSession)?.slice(0, 16) ?? '';
+      expect(initialInvitePin).toHaveLength(16);
+
+      const host = new Peer(hostSession, 'tp-host0', false);
+      const guest1 = new Peer(joinOnlineRoom(hostSession.roomId, 'tp1', { hostKeyHint: initialInvitePin }), 'tp1', false);
+      const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'tp2', { hostKeyHint: initialInvitePin }), 'tp2', false);
+      active.push(host, guest1, guest2);
+      await Promise.all([guest1, guest2].map((p) => p.waitFor((m) => m.t === 'welcome')));
+      const hw = host.waitForNew((m) => m.t === 'welcome' && m.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hw;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guest1, guest2], 1);
+      hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
+      const started = [guest1, guest2].map((p) => p.waitFor((m) => m.t === 'update', 15_000, 'tp start'));
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+      // Let the initial host broadcast its signed SeatRosterCert to all guests.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      // Host0 goes down; guest1 + guest2 form a 2/3 majority and confirm the host transfer.
+      killSessionForTests(host.session);
+      await guest1.waitFor(
+        (m) => m.t === 'lobby' && m.lobby.seats.find((s) => s.isHost)?.index === 1,
+        20_000,
+        'guest1 becomes host',
+      );
+      await waitUntil(
+        () => authorityInfoForTests(guest1.session)?.ready === true,
+        15_000,
+        'guest1 host confirmed with majority approvals',
+      );
+      // Give async transfer approval signatures a tick to attach to guest1's TransferProof.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      // A returning client that missed the transfer and only has the OLD invite URL (?k=<initial host>)
+      // must verify guest1's signed TransferProof and rejoin its seat (or spectate) smoothly.
+      const returning = new Peer(
+        joinOnlineRoom(hostSession.roomId, 'tp0-rejoin', { hostKeyHint: initialInvitePin }),
+        'tp0-rejoin',
+        false,
+      );
+      active.push(returning);
+      const welcome = await returning.waitFor(
+        (m) => m.t === 'welcome' && m.seat === 0,
+        20_000,
+        'returning seat 0 rejoins via old invite URL + TransferProof',
+      );
+      expect(welcome.t).toBe('welcome');
+      await returning.waitFor(
+        (m) => m.t === 'snapshot' || m.t === 'update',
+        15_000,
+        'returning peer receives current board snapshot',
+      );
+      expect(returning.session.lobby()?.seats.find((s) => s.isHost)?.index).toBe(1);
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 90_000);
 
   it('orders host state by generation then seq', () => {
     expect(isNewerStateOrder(1, 5, 1, 5)).toBe(false);

@@ -11,6 +11,7 @@ import type { ClientMsg, LobbyView, ServerMsg } from '../protocol';
 import { decryptPayload, deriveRoomKey, encryptPayload, roomHash } from './crypto';
 import { publicKeyFingerprint, signData, verifyData } from './identity';
 import type { ClientIdentity } from './identity';
+import type { SeatRosterCert, TransferProof } from '../authority';
 
 export const DEFAULT_BROKERS = [
   'wss://broker.emqx.io:8084/mqtt',
@@ -51,6 +52,10 @@ export type P2PControl =
       connectedHumans: number;
       stateHash: string;
       broker: string | null;
+      /** Signed roster of human seat keys from the initial host (anchors transfer proofs). */
+      rosterCert?: SeatRosterCert;
+      /** Signed transfer proof so offline guests rejoining from an old invite URL can verify the successor. */
+      transferProof?: TransferProof;
       at: number;
     }
   | {
@@ -68,6 +73,8 @@ export type P2PControl =
       connectedHumans: number;
       stateHash: string;
       broker: string | null;
+      rosterCert?: SeatRosterCert;
+      transferProof?: TransferProof;
       at: number;
     }
   | {
@@ -85,6 +92,9 @@ export type P2PControl =
       gen: number;
       seat: number | null;
       hostFp: string;
+      /** Optional signed transfer approval (for building a verifiable TransferProof). */
+      transferSig?: string;
+      pub?: JsonWebKey;
       at: number;
     }
   | {

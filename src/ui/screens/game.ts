@@ -169,6 +169,8 @@ export class GameScreen implements ScreenHandle {
   private emoteQueue: EmoteEvent[] = [];
   private emotePlaying = false;
   private endedVoicePlayed = false;
+  private transientMsgPending = false;
+  private suppressMapTapUntil = 0;
 
   private readonly yearChip: HTMLElement;
   private readonly turnChip: HTMLElement;
@@ -779,8 +781,12 @@ export class GameScreen implements ScreenHandle {
   private interruptInFlightFx(): void {
     Audio.stopVoice();
     this.dice.cancel();
+    // Cancel in-flight move/warp animations BEFORE fxPlayer.reset() so snapshot adoption
+    // never leaves an old animation running (even when its endpoint matches the snapshot).
+    this.map?.cancelAnimations(false);
     this.fxPlayer.reset();
     this.stopStepsCounter();
+    this.transientMsgPending = false;
     this.msgWindow.clear();
     this.moveSelection = null;
     this.moveOptionsCache = [];
@@ -1021,6 +1027,10 @@ export class GameScreen implements ScreenHandle {
     const steps = destPlayer ? distance(GAME_DATA, destPlayer.nodeId, destNode) : 0;
     const distanceValue = this.destDistance.querySelector('.dest-distance-value');
     if (distanceValue) distanceValue.textContent = Number.isFinite(steps) ? String(steps) : '—';
+    const destFullName = inRealm ? '出口' : destination ? destination.nameJa : state.destination;
+    const stepsLabel = Number.isFinite(steps) ? `あと${steps}マス` : '距離不明';
+    this.destChip.title = `${destFullName}（${stepsLabel}）`;
+    this.destChip.setAttribute('aria-label', `目的地 ${destFullName}、${stepsLabel}。タップでマップ表示`);
     this.updateDestArrow(state, actor, destNode);
     this.statusChip.textContent =
       this.resultScreen !== null
@@ -1276,7 +1286,8 @@ export class GameScreen implements ScreenHandle {
     const options = state.phase.options;
     if (this.moveSelection && !options.some((option) => option.nodeId === this.moveSelection)) this.moveSelection = null;
     const key = `${state.destination}#${this.playerRealm}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
-    if (key !== this.moveOptionsKey) {
+    const freshOptions = key !== this.moveOptionsKey;
+    if (freshOptions) {
       this.moveOptionsKey = key;
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
@@ -1410,6 +1421,12 @@ export class GameScreen implements ScreenHandle {
       scroller,
     );
     this.updateMoveSelectionUi();
+    if (freshOptions) {
+      // Measure the newly visible move-options tray immediately and re-frame so candidates
+      // never sit behind the bottom option bar or top ranking strip on mobile viewports.
+      this.updateMapSafeArea();
+      this.map?.reframeMoveOptions();
+    }
   }
 
   private selectMoveOption(nodeId: string | null, fromMap = false): void {
@@ -2044,6 +2061,10 @@ export class GameScreen implements ScreenHandle {
     const topbar = this.isLayoutVisible(this.topbar) ? this.topbar.getBoundingClientRect() : null;
     const ranking = this.isLayoutVisible(this.rankingHost) ? this.rankingHost.getBoundingClientRect() : null;
     const bottom = this.isLayoutVisible(this.bottomBar) ? this.bottomBar.getBoundingClientRect() : null;
+    const moveOptions =
+      !this.moveOptionsHost.hidden && this.isLayoutVisible(this.moveOptionsHost)
+        ? this.moveOptionsHost.getBoundingClientRect()
+        : null;
     const money = this.isLayoutVisible(this.moneyHost) ? this.moneyHost.getBoundingClientRect() : null;
     const eventPanelVisible = this.eventPanel.isOpen && this.isLayoutVisible(this.eventPanel.el);
     const event = eventPanelVisible ? this.eventPanel.el.getBoundingClientRect() : null;
@@ -2052,6 +2073,7 @@ export class GameScreen implements ScreenHandle {
     let left = 0;
     let right = 0;
     let bottomInset = bottom ? Math.max(0, root.bottom - bottom.top + 6) : 0;
+    if (moveOptions) bottomInset = Math.max(bottomInset, root.bottom - moveOptions.top + 6);
     if (narrow) {
       if (ranking) top = Math.max(top, ranking.bottom - root.top + 6);
       if (money) bottomInset = Math.max(bottomInset, root.bottom - money.top + 6);
@@ -2060,9 +2082,11 @@ export class GameScreen implements ScreenHandle {
       if (event) right = Math.max(0, root.right - event.left + 8);
     }
     if (event && narrow) top = Math.max(top, event.top - root.top + 6);
-    // Never collapse the board: the drawable area must keep at least 40% of each axis.
-    const minKeep = 0.4;
-    const verticalBudget = root.height * (1 - minKeep);
+    // Never collapse the board: keep at least 40% of each axis, or at least 110px vertically
+    // while move-options is open on short landscape screens so bottomInset is not clipped.
+    const minKeepH = 0.4;
+    const minKeepV = moveOptions ? Math.min(0.4, 110 / Math.max(1, root.height)) : 0.4;
+    const verticalBudget = root.height * (1 - minKeepV);
     if (top + bottomInset > verticalBudget) {
       const excess = top + bottomInset - verticalBudget;
       if (bottomInset >= top) bottomInset = Math.max(0, bottomInset - excess);
@@ -2073,7 +2097,7 @@ export class GameScreen implements ScreenHandle {
         bottomInset = Math.max(0, bottomInset - rest / 2);
       }
     }
-    const horizontalBudget = root.width * (1 - minKeep);
+    const horizontalBudget = root.width * (1 - minKeepH);
     if (left + right > horizontalBudget) {
       const excess = left + right - horizontalBudget;
       if (right >= left) right = Math.max(0, right - excess);
@@ -2097,6 +2121,7 @@ export class GameScreen implements ScreenHandle {
     addObstacle(this.portraitHost);
     addObstacle(this.moneyHost);
     addObstacle(this.bottomBar);
+    addObstacle(this.moveOptionsHost, !this.moveOptionsHost.hidden);
     addObstacle(this.eventPanel.el, this.eventPanel.isOpen);
     addObstacle(this.chat.panel, this.chat.isOpen);
     addObstacle(this.emotes.panel, this.emotes.isOpen);
@@ -2451,7 +2476,7 @@ export class GameScreen implements ScreenHandle {
         this.rouletteName.replaceChildren(rubyName(city.nameJa, city.nameKana));
         this.rouletteCountry.textContent = city.countryJa;
       }
-      void Audio.playVoice('narrator', destinationNarration(city?.nameJa ?? cityId));
+      void Audio.playVoice('narrator', destinationNarration(city?.nameJa ?? cityId), { rate: control.speed });
       await control.wait(280);
       return;
     }
@@ -2496,15 +2521,19 @@ export class GameScreen implements ScreenHandle {
         this.rouletteLandmark.src = assetUrl(`assets/landmarks/${city.landmark}.webp`);
       }
       Audio.sfx('stamp');
-      void Audio.playVoice('narrator', destinationNarration(city.nameJa));
-      if (skipped) Audio.stopVoice();
+      if (!skipped) {
+        void Audio.playVoice('narrator', destinationNarration(city.nameJa), { rate: control.speed });
+      } else {
+        Audio.stopVoice();
+      }
       resolve();
     };
     this.rouletteFinish = finish;
     control.onSkip(() => finish(true));
-    this.rouletteTimer = window.setTimeout(() => finish(false), 1400);
+    const spinMs = Math.max(160, Math.round(1050 / control.speed));
+    this.rouletteTimer = window.setTimeout(() => finish(false), spinMs);
     await promise;
-    await control.wait(700);
+    if (!control.skipped) await control.wait(500);
     this.rouletteOverlay.hidden = true;
     this.rouletteOverlay.classList.remove('is-result');
     this.rouletteFinish = null;
@@ -2557,10 +2586,21 @@ export class GameScreen implements ScreenHandle {
     this.map?.fitWorld(450);
   }
 
-  private focusDestination(): void {
-    if (!this.state) return;
-    const nodeId = this.playerRealm !== 'world' ? portalNodeFor(this.playerRealm) : cityNodeId(this.state.destination);
+  private focusDestination(showToast = true): void {
+    const state = this.state;
+    if (!state) return;
+    const inRealm = this.playerRealm !== 'world';
+    const nodeId = inRealm ? portalNodeFor(this.playerRealm) : cityNodeId(state.destination);
     if (nodeId) this.map?.focusNode(nodeId, { zoom: 0.95, ms: 500 });
+    if (showToast && nodeId) {
+      const seat = actorOf(state) ?? this.displaySeat() ?? 0;
+      const player = state.players[seat];
+      const steps = player ? distance(GAME_DATA, player.nodeId, nodeId) : Number.NaN;
+      const stepsText = Number.isFinite(steps) ? `（あと ${steps} マス）` : '';
+      const dest = !inRealm ? citiesById.get(state.destination) : undefined;
+      const name = inRealm ? '出口' : dest ? dest.nameJa : state.destination;
+      this.app.toasts.show(`🎯 目的地：${name}${stepsText}`, 'info', 2600);
+    }
   }
 
   private openDestination(): void {
@@ -2572,7 +2612,7 @@ export class GameScreen implements ScreenHandle {
       const player = actor !== null ? state.players[actor] : undefined;
       const steps = player && portalId ? distance(GAME_DATA, player.nodeId, portalId) : 0;
       this.app.toasts.show(`出口まで ${steps} マス。竪琴…ではなく、出口を目指そう。`, 'info', 3200);
-      this.focusDestination();
+      this.focusDestination(false);
       return;
     }
     const cityId = state.destination;
@@ -2596,6 +2636,7 @@ export class GameScreen implements ScreenHandle {
   }
 
   private onCityTap(cityId: string): void {
+    if (performance.now() < this.suppressMapTapUntil) return;
     const state = this.state;
     if (!state) return;
     if (!citiesById.has(cityId)) {
@@ -2824,19 +2865,24 @@ export class GameScreen implements ScreenHandle {
       case 'dice': {
         Audio.sfx('dice_roll');
         // Cancel() from a resync resolves this show; the extra race also bounds a lost rAF.
-        const diceMs = FX_MS.dice / control.speed + 8000;
+        const ms = FX_MS.dice / control.speed;
+        const diceMs = ms + 6000;
         if (fx.values.length > 1) {
           const vehicle = vehicleForDice(fx.values.length);
           this.showGameBanner(`${vehicle.emoji} ${vehicle.label}で出発！`);
         }
-        const ms = FX_MS.dice / control.speed;
-        control.onSkip(() => this.dice.skip());
+        let cancelled = false;
+        control.onSkip(() => {
+          cancelled = true;
+          this.dice.skip();
+        });
         await raceWithTimeout(this.dice.show(fx.values, ms), diceMs);
-        Audio.sfx('dice_land');
+        if (!cancelled && !control.skipped && !this.destroyed) Audio.sfx('dice_land');
         return;
       }
       case 'move': {
         Audio.sfx('step');
+        control.onSkip(() => this.map?.cancelAnimations(true));
         const move = this.map?.animateMove(fx.playerId, fx.path, FX_MS.moveStep / control.speed, { dice: fx.dice ?? 1 });
         this.startStepsCounter();
         await move;
@@ -2859,7 +2905,8 @@ export class GameScreen implements ScreenHandle {
         } else if (via === 'carpet') {
           this.showGameBanner('🧞 魔法のじゅうたんで移動！');
         }
-        await this.map?.warp(fx.playerId, fx.nodeId, via);
+        control.onSkip(() => this.map?.cancelAnimations(true));
+        await this.map?.warp(fx.playerId, fx.nodeId, via, control.speed);
         return;
       }
       case 'cash': {
@@ -2964,14 +3011,16 @@ export class GameScreen implements ScreenHandle {
         if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 0.8, ms: 700 });
         this.lastDestinationBannerAt = Date.now();
         const destName = city ? city.nameJa : fx.cityId;
-        this.msgWindow.show({
+        this.transientMsgPending = true;
+        void this.msgWindow.show({
           speaker: 'narrator',
           name: 'ナレーター',
           text: `次の目的地は ${destName}！`,
           color: '#ffd23f',
-        });
+          speed: control.speed,
+        }).then(() => { this.transientMsgPending = false; });
         this.addLog(`🎯 目的地が ${city?.nameJa ?? fx.cityId} に決定`);
-        await control.wait(260);
+        await control.wait(220);
         return;
       }
       case 'piper': {
@@ -2982,7 +3031,15 @@ export class GameScreen implements ScreenHandle {
           this.map?.setMood(fx.holder, 'sad', 7000);
           this.map?.shake(0.45);
         }
-        this.msgWindow.show({ speaker: 'npc:piper1', name: '取り立て屋', text: fx.message, sprite: speakerSprite('npc:piper1'), color: '#ff8a8a' });
+        this.transientMsgPending = true;
+        void this.msgWindow.show({
+          speaker: 'npc:piper1',
+          name: '取り立て屋',
+          text: fx.message,
+          sprite: speakerSprite('npc:piper1'),
+          color: '#ff8a8a',
+          speed: control.speed,
+        }).then(() => { this.transientMsgPending = false; });
         if (fx.holder !== null) this.map?.bubble(fx.holder, fx.message, 4200);
         this.addLog(`🎺 ${fx.message}`);
         await control.wait(FX_MS.piper);
@@ -3006,7 +3063,7 @@ export class GameScreen implements ScreenHandle {
       case 'month': {
         this.yearChip.textContent = `${fx.year}年目 ${fx.month}月`;
         this.showMonthFlip(fx.year, fx.month);
-        await control.wait(Math.max(FX_MS.month, 620));
+        await control.wait(FX_MS.month);
         return;
       }
       case 'year_end': {
@@ -3056,10 +3113,12 @@ export class GameScreen implements ScreenHandle {
         ? state.players[speakerSeat ?? state.current]?.name ?? '手番'
         : speakerName(speaker);
     const label = speaker === 'self' ? `${displayName}` : speakerName(speaker);
-    // One message window for every spoken line; the event panel no longer carries a
-    // duplicate narrator card.
-    const windowLine = this.messageLineFor(speaker, label, fx.text, state, speakerSeat);
-    const shown = this.msgWindow.show(windowLine);
+    // Clear any lingering fire-and-forget banner line (destination/piper) so this spoken line
+    // appears immediately instead of queueing behind it.
+    if (this.transientMsgPending) {
+      this.transientMsgPending = false;
+      this.msgWindow.skipLine();
+    }
     if (speakerSeat !== null && speaker !== 'narrator') {
       this.map?.bubble(speakerSeat, fx.text, 4200);
     }
@@ -3079,20 +3138,39 @@ export class GameScreen implements ScreenHandle {
         : voiceKeyOf(speaker);
     const speakerLobbySeat = speakerSeat !== null ? this.seatOfPlayer(speakerSeat) : null;
     const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
-    const duration = FX_MS.sayBase + FX_MS.sayPerChar * [...fx.text].length;
-    const stopVoice = () => Audio.stopVoice();
-    control.onSkip(stopVoice);
-    let voicePromise: Promise<void> = Promise.resolve();
-    if (!muted) {
-      voicePromise = Audio.playVoice(voiceKey, fx.text);
+    const speed = control.speed;
+    const autoAdvance = uiSettings().autoAdvance;
+    let voiceStarted = false;
+    const voicePromise = muted
+      ? Promise.resolve()
+      : Audio.playVoice(voiceKey, fx.text, {
+          rate: speed,
+          onStart: () => {
+            voiceStarted = true;
+          },
+        });
+    const boundedVoice = raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text, speed));
+    // One message window for every spoken line; the event panel no longer carries a
+    // duplicate narrator card. The window stays visible until voice finishes (then advances
+    // after a short pause), or scales by speed when silent.
+    const windowLine = {
+      ...this.messageLineFor(speaker, label, fx.text, state, speakerSeat),
+      speed,
+      autoAdvance,
+      voiceDone: boundedVoice,
+      voiceStarted: () => voiceStarted,
+    };
+    const shown = this.msgWindow.show(windowLine);
+    control.onSkip(() => {
+      Audio.stopVoice();
+      this.msgWindow.skipLine();
+    });
+    if (!autoAdvance) control.setManualWait(true);
+    try {
+      await shown;
+    } finally {
+      if (!autoAdvance) control.setManualWait(false);
     }
-    // The window auto-advances on a bounded timer, so `shown` cannot hang. Voice is still
-    // bounded for the silent-audio case, and the presentation wait keeps the old pacing.
-    // Hold the fx step for the shorter of the old line pacing and the window's own dwell.
-    const advance = uiSettings().autoAdvance
-      ? (voicePromise.then(() => control.wait(Math.min(duration, 900))) as Promise<void>)
-      : control.waitManual();
-    await Promise.all([raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text)), advance, shown]);
   }
 
   /** Speaker portrait / name / accent for the single message window. */
@@ -3129,19 +3207,10 @@ export class GameScreen implements ScreenHandle {
   }
 
   private setPortraitFor(playerId: number, state: PublicState): void {
-    const player = state.players[playerId];
-    const character = player ? charsById.get(player.characterId) : undefined;
-    if (!character) return;
-    const base = characterSprite(character);
-    this.portraitBaseSrc = base;
-    if (!this.portraitImage.classList.contains('is-mood')) this.portraitImage.src = base;
-    this.portraitImage.alt = character.nameJa;
-    this.portraitName.textContent = displayPlayerName(player);
-    this.portraitSub.textContent =
-      character.nameJa === character.origin
-        ? `${character.nameJa} ・ ${character.originRegion}`
-        : `${character.nameJa} ・ ${character.origin}`;
-    this.portraitHost.dataset.seat = String(playerId);
+    if (this.portraitHost.dataset.seat !== String(playerId)) {
+      this.portraitImage.classList.remove('is-mood');
+    }
+    this.renderPortrait(state, playerId);
   }
 
   // ---------------------------------------------------------------- emotes
@@ -3482,8 +3551,9 @@ export class GameScreen implements ScreenHandle {
         if (!this.fxBusy) return;
         const target = event.target instanceof Element ? event.target : null;
         if (!target) return;
-        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab')) return;
+        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab, .msgwin')) return;
         event.stopPropagation();
+        this.suppressMapTapUntil = performance.now() + 300;
         this.fxPlayer.skip();
       },
       true,

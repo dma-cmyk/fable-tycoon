@@ -6,10 +6,15 @@ import {
   isStaleGeneration,
   isVerifiedTransfer,
   nextGeneration,
+  reportVoteAckTargets,
+  rosterCertPayload,
   rotateBrokers,
   stateHashOf,
+  transferApprovalPayload,
+  verifyTransferProof,
 } from './authority';
-import type { FollowRecord, KeyLink } from './authority';
+import type { FollowRecord, KeyLink, SeatRosterCert, TransferProof } from './authority';
+import { generateIdentity, signData } from './p2p/identity';
 
 function follow(hostFp: string, gen: number, at: number): FollowRecord {
   return { hostFp, gen, at };
@@ -112,5 +117,74 @@ describe('state hash', () => {
     );
     expect(stateHashOf(state, 3)).not.toBe(stateHashOf({ ...state, owner: {} }, 3));
     expect(stateHashOf(null, 7)).toBe('e:7');
+  });
+});
+
+describe('reportVoteAckTargets', () => {
+  it('includes the voter itself and every non-host human seat so successor keeps the vote', () => {
+    const seatKeys = { '0': 'host-fp', '1': 'voter-fp', '2': 'target-fp', '3': 'other-fp' };
+    const targets = reportVoteAckTargets(seatKeys, 'host-fp');
+    expect(targets.has('voter-fp')).toBe(true);
+    expect(targets.has('target-fp')).toBe(true);
+    expect(targets.has('other-fp')).toBe(true);
+    expect(targets.has('host-fp')).toBe(false);
+  });
+});
+
+describe('signed host transfer proof', () => {
+  it('verifies a transfer anchored to the initial host invite pin and rejects forged or minority proofs', async () => {
+    const host0 = await generateIdentity();
+    const guest1 = await generateIdentity();
+    const guest2 = await generateIdentity();
+    const attacker = await generateIdentity();
+    const roomId = 'ABCDEF-1234';
+    const seats = {
+      '0': host0.publicJwk,
+      '1': guest1.publicJwk,
+      '2': guest2.publicJwk,
+    };
+    const roster: SeatRosterCert = {
+      roomId,
+      hostFp: host0.fingerprint,
+      hostJwk: host0.publicJwk,
+      seats,
+      at: 1,
+      sig: await signData(host0, rosterCertPayload(roomId, host0.fingerprint, seats)),
+    };
+    const approvalPayload = transferApprovalPayload(roomId, 2, guest1.fingerprint, host0.fingerprint);
+    const sig1 = await signData(guest1, approvalPayload);
+    const sig2 = await signData(guest2, approvalPayload);
+    const validProof: TransferProof = {
+      roomId,
+      roster,
+      gen: 2,
+      newHostFp: guest1.fingerprint,
+      prevHostFp: host0.fingerprint,
+      approvals: [
+        { fp: guest1.fingerprint, jwk: guest1.publicJwk, sig: sig1 },
+        { fp: guest2.fingerprint, jwk: guest2.publicJwk, sig: sig2 },
+      ],
+    };
+
+    const inviteHint = host0.fingerprint.slice(0, 16);
+    expect(await verifyTransferProof(validProof, roomId, inviteHint)).toBe(true);
+    // Minority (1 of 3) must be rejected.
+    expect(
+      await verifyTransferProof({ ...validProof, approvals: [validProof.approvals[0]] }, roomId, inviteHint),
+    ).toBe(false);
+    // Wrong invite pin or wrong room must be rejected.
+    expect(await verifyTransferProof(validProof, roomId, attacker.fingerprint.slice(0, 16))).toBe(false);
+    expect(await verifyTransferProof(validProof, 'ZZZZZZ-9999', inviteHint)).toBe(false);
+    // Attacker claiming to be new host (not in initial host's signed roster) must be rejected.
+    const attackerPayload = transferApprovalPayload(roomId, 2, attacker.fingerprint, host0.fingerprint);
+    const forgedProof: TransferProof = {
+      ...validProof,
+      newHostFp: attacker.fingerprint,
+      approvals: [
+        { fp: attacker.fingerprint, jwk: attacker.publicJwk, sig: await signData(attacker, attackerPayload) },
+        { fp: guest1.fingerprint, jwk: guest1.publicJwk, sig: await signData(guest1, attackerPayload) },
+      ],
+    };
+    expect(await verifyTransferProof(forgedProof, roomId, inviteHint)).toBe(false);
   });
 });

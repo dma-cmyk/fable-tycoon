@@ -8,9 +8,12 @@ export function estimateSpeechMs(text: string): number {
 }
 
 /** Wall-clock budget for one voice line: decoded duration when known, else a text estimate. */
-export function voiceBudgetMs(bufferDurationMs: number, text: string): number {
+export function voiceBudgetMs(bufferDurationMs: number, text: string, speed = 1): number {
+  const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
   const base = bufferDurationMs > 0 ? bufferDurationMs : estimateSpeechMs(text);
-  return Math.max(1200, Math.round(base + VOICE_TAIL_MS));
+  const scaled = (base + VOICE_TAIL_MS) / rate;
+  const floor = Math.max(320, Math.round(1200 / rate));
+  return Math.max(floor, Math.round(scaled));
 }
 
 /** Resolves with `promise`, or after `ms`, whichever comes first. Clears the timer either way. */

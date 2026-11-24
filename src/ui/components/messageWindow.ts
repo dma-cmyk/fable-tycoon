@@ -1,4 +1,11 @@
-import { charsPerPage, pageReadMs, paginateText, revealMs, type WindowMetrics } from '../messagePages';
+import {
+  charsPerPage,
+  paginateText,
+  postVoicePauseMs,
+  revealMs,
+  scaledPageReadMs,
+  type WindowMetrics,
+} from '../messagePages';
 import { MessageCursor } from '../messageCursor';
 import { h } from '../dom';
 import { motionReduced } from '../motion';
@@ -11,6 +18,14 @@ export interface MessageLine {
   sprite?: string;
   /** Accent color for the name plate. */
   color?: string;
+  /** Effective speed multiplier for this line (includes queue catch-up 2x). */
+  speed?: number;
+  /** Override auto-advance for this line (defaults to true). */
+  autoAdvance?: boolean;
+  /** Bounded voice promise: final page stays visible until it settles, then closes after a brief pause. */
+  voiceDone?: Promise<void>;
+  /** True once voice playback actually started; when false, fall back to reading-time dwell. */
+  voiceStarted?: () => boolean;
 }
 
 export interface MessageWindowOptions {
@@ -22,8 +37,8 @@ export interface MessageWindowOptions {
 
 /**
  * One Momotetsu-style message window for every spoken / narrative line. Lines queue and show one
- * at a time; long text is paged. Auto-advance uses a bounded read timer (never voice playback),
- * so a suspended AudioContext cannot wedge the queue.
+ * at a time; long text is paged. When voice plays, the final page stays visible until the voice
+ * finishes and then advances after a brief pause; when silent, a speed-scaled read timer advances.
  */
 export class MessageWindow {
   readonly el: HTMLElement;
@@ -37,6 +52,7 @@ export class MessageWindow {
   private pageIndex = 0;
   private timer = 0;
   private revealing = false;
+  private lineToken = 0;
 
   constructor(private readonly options: MessageWindowOptions) {
     this.portrait = h('span', { class: 'msgwin-portrait' });
@@ -99,6 +115,7 @@ export class MessageWindow {
 
   /** Clears the queue and hides the window (resync / generation change / result screen). */
   clear(): void {
+    this.lineToken += 1;
     window.clearTimeout(this.timer);
     this.timer = 0;
     this.cursor.clear();
@@ -107,6 +124,17 @@ export class MessageWindow {
     this.revealing = false;
     this.el.hidden = true;
     this.el.classList.remove('is-visible');
+  }
+
+  /** Immediately finish the current line (all pages) and move on. Used by fx skip. */
+  skipLine(): void {
+    if (!this.cursor.current) return;
+    this.lineToken += 1;
+    window.clearTimeout(this.timer);
+    this.timer = 0;
+    this.revealing = false;
+    this.cursor.advance();
+    this.render();
   }
 
   /** Finish the reveal, then page, then move to the next line. Bound to tap / Enter / Space. */
@@ -121,6 +149,7 @@ export class MessageWindow {
       this.renderPage();
       return;
     }
+    this.lineToken += 1;
     this.cursor.advance();
     this.render();
   }
@@ -181,60 +210,94 @@ export class MessageWindow {
     };
   }
 
+  private currentSpeed(): number {
+    const lineSpeed = this.cursor.current?.speed;
+    return Math.max(1, lineSpeed ?? this.options.speed());
+  }
+
   private renderPage(): void {
     const page = this.pages[this.pageIndex] ?? '';
+    const token = ++this.lineToken;
     window.clearTimeout(this.timer);
     this.textEl.textContent = '';
     this.pagerEl.textContent = this.pages.length > 1 ? `${this.pageIndex + 1}/${this.pages.length}` : '';
     this.nextEl.classList.remove('is-ready');
-    const speed = Math.max(1, this.options.speed());
+    const speed = this.currentSpeed();
     const reveal = revealMs(page, speed, motionReduced());
     if (reveal <= 0) {
       this.revealing = false;
       this.textEl.textContent = page;
-      this.scheduleAdvance();
+      this.scheduleAdvance(token);
       return;
     }
     this.revealing = true;
     const start = performance.now();
     const total = Math.max(1, page.length);
     const tick = (): void => {
+      if (token !== this.lineToken) return;
       const p = Math.min(1, (performance.now() - start) / reveal);
       this.textEl.textContent = page.slice(0, Math.max(1, Math.ceil(total * p)));
       if (p < 1) {
         this.timer = window.setTimeout(tick, 16);
       } else {
-        // Keep the page on screen for its read time; only then auto-advance.
+        // Keep the page on screen until voice ends (or read time elapses); only then auto-advance.
         this.revealing = false;
         this.nextEl.classList.add('is-ready');
-        this.holdThenAdvance(page);
+        this.holdThenAdvance(page, token);
       }
     };
     this.timer = window.setTimeout(tick, 16);
   }
 
   private finishReveal(): void {
+    const token = ++this.lineToken;
     window.clearTimeout(this.timer);
     this.textEl.textContent = this.pages[this.pageIndex] ?? '';
     this.revealing = false;
-    this.scheduleAdvance();
+    this.scheduleAdvance(token);
   }
 
-  /** ▼ blink and a bounded auto-advance (every page, so CPU / online turns never stall). */
-  private scheduleAdvance(): void {
+  /** ▼ blink and advance once voice / read time finishes (or wait for tap when autoAdvance is off). */
+  private scheduleAdvance(token: number): void {
     this.nextEl.classList.add('is-ready');
-    this.holdThenAdvance(this.pages[this.pageIndex] ?? '');
+    this.holdThenAdvance(this.pages[this.pageIndex] ?? '', token);
   }
 
   /**
-   * Stay visible for the page's read time (fx-speed scaled), then move on. This covers paged
-   * lines too: a line that wraps into 2+ pages used to wait for a tap, which deadlocked any
-   * turn executed by a CPU seat (and online players who were not watching the window).
+   * Hold each page while speaking or reading:
+   * - If `autoAdvance === false`: keep the window visible with ▼ until the user taps / presses Space/Enter.
+   * - On the final page with an active voice: wait for the bounded voice promise, then advance after a brief pause.
+   * - Otherwise (silent / muted / intermediate page): advance after speed-scaled page reading time.
    */
-  private holdThenAdvance(page: string): void {
-    const speed = Math.max(1, this.options.speed());
-    const readMs = Math.max(240, Math.round(pageReadMs(page) / speed));
+  private holdThenAdvance(page: string, token: number): void {
+    const line = this.cursor.current;
+    if (!line || token !== this.lineToken) return;
+    if (line.autoAdvance === false) {
+      // Manual advance mode: stay visible until the player taps or skips.
+      return;
+    }
+    const speed = this.currentSpeed();
+    const isLastPage = this.pageIndex + 1 >= this.pages.length;
+    if (isLastPage && line.voiceDone) {
+      const readMs = scaledPageReadMs(page, speed);
+      const revealedAt = performance.now();
+      void line.voiceDone.then(() => {
+        if (token !== this.lineToken) return;
+        const spoke = line.voiceStarted ? line.voiceStarted() : true;
+        const remaining = spoke
+          ? postVoicePauseMs(speed)
+          : Math.max(40, readMs - Math.round(performance.now() - revealedAt));
+        this.timer = window.setTimeout(() => {
+          if (token !== this.lineToken) return;
+          this.timer = 0;
+          this.advance();
+        }, remaining);
+      });
+      return;
+    }
+    const readMs = scaledPageReadMs(page, speed);
     this.timer = window.setTimeout(() => {
+      if (token !== this.lineToken) return;
       this.timer = 0;
       this.advance();
     }, readMs);

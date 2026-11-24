@@ -63,9 +63,9 @@ export interface RoomDeps {
   graceMs?: number;
   replaceMs?: number;
   yearEndAckMs?: number;
-  cpuDelayMs?: number;
-  /** Multiplies standard fx playback durations (tests set a small value). */
-  fxScale?: number;
+  cpuDelayMs?: number | (() => number);
+  /** Multiplies standard fx playback durations (tests set a small value; LocalSession binds live fxSpeed). */
+  fxScale?: number | (() => number);
 }
 
 /** CPU / autoplay pacing (DESIGN §4). */
@@ -275,7 +275,13 @@ export class RoomController {
   }
 
   private get cpuDelayMs(): number {
-    return this.deps.cpuDelayMs ?? CPU_MOVE_DELAY_MS;
+    const value = this.deps.cpuDelayMs;
+    return typeof value === 'function' ? value() : (value ?? CPU_MOVE_DELAY_MS);
+  }
+
+  private get fxScale(): number {
+    const value = this.deps.fxScale;
+    return typeof value === 'function' ? value() : (value ?? 1);
   }
 
   private status: RoomStatus = 'lobby';
@@ -1196,6 +1202,7 @@ export class RoomController {
     this.clearTask('turn');
     this.clearTask('ack');
     this.clearTask('cpu');
+    for (const seat of this.seats) this.clearTask(`grace:${seat.index}`);
     const actorNow = this.state ? actorOf(this.state) : null;
     const sameDecision = this.deadlineSeq === this.seq && this.deadlineActor === actorNow;
     if (!sameDecision) {
@@ -1204,7 +1211,7 @@ export class RoomController {
       this.deadlineActor = actorNow;
     }
     this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
-    this.turnFxMs = sumFxDuration(fx) * (this.deps.fxScale ?? 1);
+    this.turnFxMs = sumFxDuration(fx) * this.fxScale;
 
     if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
       return;
@@ -1299,6 +1306,8 @@ export class RoomController {
   }
 
   private runTask(key: string): void {
+    // Only disconnect -> CPU replacement may run while the authority is frozen.
+    if (this.frozen && !key.startsWith('replace:')) return;
     if (key === 'turn') {
       this.onTurnTimeout();
       return;
@@ -1324,7 +1333,7 @@ export class RoomController {
   }
 
   private onTurnTimeout(): void {
-    if (this.status !== 'playing' || !this.state) return;
+    if (this.frozen || this.status !== 'playing' || !this.state) return;
     const seat = this.actorSeatData();
     if (!seat || seat.kind !== 'human') return;
     if (this.state.phase.t === 'year_end') {
@@ -1340,7 +1349,7 @@ export class RoomController {
   }
 
   private onGraceTimeout(index: number): void {
-    if (this.status !== 'playing' || !this.state) return;
+    if (this.frozen || this.status !== 'playing' || !this.state) return;
     const seat = this.seats[index];
     if (!seat || seat.kind !== 'human') return;
     const actor = this.actorSeatData();
@@ -1355,14 +1364,14 @@ export class RoomController {
   }
 
   private onYearEndAck(): void {
-    if (this.status !== 'playing' || !this.state || this.state.phase.t !== 'year_end') return;
+    if (this.frozen || this.status !== 'playing' || !this.state || this.state.phase.t !== 'year_end') return;
     const seat = this.actorSeatData();
     if (!seat || seat.kind !== 'human') return;
     this.tryAutoAction(seat, { t: 'ack' });
   }
 
   private onCpuMove(): void {
-    if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') return;
+    if (this.frozen || this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') return;
     const seat = this.actorSeatData();
     if (!seat) return;
     if (seat.kind === 'human' && !seat.autoplay) return;
@@ -1384,7 +1393,7 @@ export class RoomController {
   }
 
   private autoAct(seat: Seat, grace: boolean): void {
-    if (!this.state) return;
+    if (this.frozen || !this.state) return;
     const actor = actorOf(this.state);
     if (actor === null || this.seatByPlayerId[actor] !== seat.index) return;
     let action: Action;
@@ -1805,7 +1814,8 @@ export class RoomController {
     room.deadlineSeq = room.seq;
     room.deadlineActor = null;
     room.turnStartedAt = now;
-    room.turnFxMs = sumFxDuration(snapshot.lastFx) * (deps.fxScale ?? 1);
+    const scale = typeof deps.fxScale === 'function' ? deps.fxScale() : (deps.fxScale ?? 1);
+    room.turnFxMs = sumFxDuration(snapshot.lastFx) * scale;
     room.nextEmoteId = 1;
 
     room.seats = snapshot.lobby.seats.map((info) => {

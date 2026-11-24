@@ -40,13 +40,25 @@ export function paginateText(text: string, maxChars: number): string[] {
   return pages;
 }
 
-/** Read time for one page before auto-advance (before fx-speed scaling). */
+/** Read time for one page before auto-advance (before fx-speed scaling, when no voice plays). */
 export function pageReadMs(text: string): number {
-  return Math.min(5200, Math.max(1100, 700 + [...text].length * 45));
+  return Math.min(2800, Math.max(700, 480 + [...text].length * 42));
+}
+
+/** Short pause after voice playback ends before auto-advancing the message window (scaled by speed). */
+export function postVoicePauseMs(speed: number): number {
+  const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
+  return Math.max(40, Math.round(220 / rate));
+}
+
+/** Scaled read duration for one page when advancing without voice playback. */
+export function scaledPageReadMs(text: string, speed: number): number {
+  const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
+  return Math.max(80, Math.round(pageReadMs(text) / rate));
 }
 
 /** Typewriter reveal duration; 0 means instant. */
 export function revealMs(text: string, speed: number, reducedMotion: boolean): number {
   if (reducedMotion || speed >= 4) return 0;
-  return Math.min(900, Math.max(160, [...text].length * 12)) / Math.max(1, speed);
+  return Math.min(720, Math.max(120, [...text].length * 11)) / Math.max(1, speed);
 }

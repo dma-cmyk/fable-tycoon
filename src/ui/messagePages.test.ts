@@ -26,9 +26,9 @@ describe('message window paging', () => {
   });
 
   it('keeps read time and reveal bounded', () => {
-    expect(pageReadMs('')).toBeGreaterThanOrEqual(1100);
-    expect(pageReadMs('あ'.repeat(500))).toBeLessThanOrEqual(5200);
-    expect(revealMs('あ'.repeat(100), 1, false)).toBeLessThanOrEqual(900);
+    expect(pageReadMs('')).toBeGreaterThanOrEqual(700);
+    expect(pageReadMs('あ'.repeat(500))).toBeLessThanOrEqual(2800);
+    expect(revealMs('あ'.repeat(100), 1, false)).toBeLessThanOrEqual(720);
     expect(revealMs('あ'.repeat(100), 4, false)).toBe(0);
     expect(revealMs('あ', 1, true)).toBe(0);
   });

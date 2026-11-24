@@ -23,6 +23,13 @@ export interface VoiceManifestCandidate {
   verified: boolean;
   /** Existing file passed speech QC in this run (used for failed-regeneration fallback). */
   fallbackVerified: boolean;
+  /**
+   * Item was NOT retried in this partial run (--only / --limit), already has a speech-QC-verified
+   * stale entry published in the previous manifest, and the mp3 still exists on disk.
+   */
+  preservedStale?: boolean;
+  /** Previous voices.json metadata to keep intact while preserving a stale entry. */
+  previousMeta?: VoiceMeta;
 }
 
 export interface VoiceManifestResult {
@@ -57,6 +64,12 @@ export function buildVoiceManifest(candidates: readonly VoiceManifestCandidate[]
     if (candidate.fallbackVerified) {
       manifest[candidate.hash] = `voice/${candidate.hash}.mp3`;
       meta[candidate.hash] = { ...candidate.desired, stale: true };
+      stale.push(candidate.hash);
+      continue;
+    }
+    if (candidate.preservedStale) {
+      manifest[candidate.hash] = `voice/${candidate.hash}.mp3`;
+      meta[candidate.hash] = { ...(candidate.previousMeta ?? candidate.desired), stale: true };
       stale.push(candidate.hash);
     }
   }

@@ -63,4 +63,33 @@ describe('buildVoiceManifest', () => {
     const result = buildVoiceManifest([candidate({ hasFile: false })]);
     expect(result.manifest).toEqual({});
   });
+
+  it('preserves a previously published stale entry during a partial run (--only / --limit)', () => {
+    const previousMeta: VoiceMeta = { ...desired, speaker: 10, stale: true };
+    const result = buildVoiceManifest([
+      candidate({
+        verified: false,
+        fallbackVerified: false,
+        preservedStale: true,
+        previousMeta,
+      }),
+    ]);
+    expect(result.manifest).toEqual({ a1b2c3d4: 'voice/a1b2c3d4.mp3' });
+    expect(result.meta.a1b2c3d4).toEqual({ ...previousMeta, stale: true });
+    expect(result.stale).toEqual(['a1b2c3d4']);
+  });
+
+  it('drops a preserved stale entry if its mp3 file is missing', () => {
+    const result = buildVoiceManifest([
+      candidate({
+        hasFile: false,
+        verified: false,
+        fallbackVerified: false,
+        preservedStale: true,
+      }),
+    ]);
+    expect(result.manifest).toEqual({});
+    expect(result.meta).toEqual({});
+    expect(result.stale).toEqual([]);
+  });
 });

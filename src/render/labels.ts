@@ -372,6 +372,8 @@ export function pickFreeSlot(
   blocked: readonly Rect[],
   inside: (rect: Rect) => boolean = () => true,
   pad = 2,
+  blockedSegments: readonly SceneSegment[] = [],
+  segmentPad = 8,
 ): SlotOffset | null {
   for (const slot of slots) {
     const rect: Rect = { x: anchorX + slot.dx - w / 2, y: anchorY + slot.dy - h / 2, w, h };
@@ -381,6 +383,14 @@ export function pickFreeSlot(
       if (rectsOverlap(rect, b, pad)) {
         hit = true;
         break;
+      }
+    }
+    if (!hit && blockedSegments.length > 0) {
+      for (const seg of blockedSegments) {
+        if (segmentHitsRect(seg, rect, segmentPad)) {
+          hit = true;
+          break;
+        }
       }
     }
     if (!hit) return slot;

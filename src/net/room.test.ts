@@ -5,6 +5,7 @@ import { GAME_DATA } from '../data/index';
 import type { AllowedYears, ChatLine, PublicState, Report, ServerMsg } from './protocol';
 import { COMM, PROTOCOL_VERSION } from './protocol';
 import { fxDuration, RoomController, sumFxDuration } from './room';
+import { FX_MS } from './session-types';
 import type { RoomDeps } from './room';
 
 // ---------------------------------------------------------------- fake clock / harness
@@ -724,6 +725,37 @@ describe('RoomController frozen authority', () => {
     expect(update.by).toBe(0);
   });
 
+  it('cancels and blocks already-armed grace timers while frozen so CPU cannot act', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { years: 20, turnSeconds: 0 });
+    // Advance until it is seat 1 (b)'s turn, then disconnect b to arm grace:1.
+    let state = started.state;
+    let seq = started.seq;
+    for (let i = 0; i < 20 && actorOf(state) !== 1; i += 1) {
+      const update = act(harness, 'a', seq, cpuDecide(GAME_DATA, state as GameState));
+      state = update.state;
+      seq = update.seq;
+    }
+    expect(actorOf(state)).toBe(1);
+    harness.room.disconnect('b');
+    // Freeze the host BEFORE grace:1 fires.
+    harness.room.setFrozen(true);
+    const seqAtFreeze = harness.room.currentSeq;
+    // Advance well past graceMs (15s) but before replaceMs (120s): CPU must NOT act.
+    harness.clock.advance(60_000);
+    expect(harness.room.currentSeq).toBe(seqAtFreeze);
+    expect(harness.room.lobbyView().seats[1].autoplay).toBe(false);
+    expect(harness.room.lobbyView().seats[1].kind).toBe('human');
+    // At 120s replacement still proceeds while frozen, without advancing game seq.
+    harness.clock.advance(65_000);
+    expect(harness.room.currentSeq).toBe(seqAtFreeze);
+    expect(harness.room.lobbyView().seats[1].kind).toBe('cpu');
+    // Once unfrozen, the replaced CPU takes its turn and advances seq.
+    harness.room.setFrozen(false);
+    harness.clock.advance(10_000);
+    expect(harness.room.currentSeq).toBeGreaterThan(seqAtFreeze);
+  });
+
   it('replaces an absent human with CPU while frozen, so a lone player can continue', () => {
     const harness = makeHarness();
     const started = startTwoHumans(harness, { years: 20, turnSeconds: 0 });
@@ -890,8 +922,8 @@ describe('fxDuration', () => {
   it('uses the standard presentation times', () => {
     const dice: Fx = { t: 'dice', values: [1, 2] };
     const say: Fx = { t: 'say', speaker: 'narrator', text: 'あいう' };
-    expect(fxDuration(dice)).toBe(1300);
-    expect(fxDuration(say)).toBe(700 + 3 * 95);
-    expect(fxDuration({ t: 'game_over', ranking: [0] })).toBe(2000);
+    expect(fxDuration(dice)).toBe(FX_MS.dice);
+    expect(fxDuration(say)).toBe(FX_MS.sayBase + 3 * FX_MS.sayPerChar);
+    expect(fxDuration({ t: 'game_over', ranking: [0] })).toBe(FX_MS.game_over);
   });
 });

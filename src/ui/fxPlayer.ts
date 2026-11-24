@@ -50,6 +50,8 @@ export interface PlaybackControl {
   wait(ms: number): Promise<void>;
   /** Waits until the user taps / presses skip (used by 台詞自動送りオフ). */
   waitManual(): Promise<void>;
+  /** Pauses/resumes the watchdog while intentionally waiting on manual user advance. */
+  setManualWait(waiting: boolean): void;
   /** Registers a cleanup/stop callback for the current fx; invoked exactly once on skip. */
   onSkip(callback: () => void): () => void;
   readonly skipped: boolean;
@@ -80,6 +82,8 @@ export class FxPlayer {
   private destroyed = false;
   private epoch = 0;
   private watchdogTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private watchdogPaused = false;
+  private activeUpdate: { update: FxUpdate; epoch: number; budgetMs: number } | null = null;
 
   constructor(private readonly host: FxPlayerHost) {}
 
@@ -105,6 +109,8 @@ export class FxPlayer {
    */
   reset(): void {
     this.clearWatchdog();
+    this.activeUpdate = null;
+    this.watchdogPaused = false;
     this.epoch++;
     this.runSkipCallbacks();
     this.queue = [];
@@ -187,6 +193,42 @@ export class FxPlayer {
     }
   }
 
+  private armWatchdog(update: FxUpdate, epoch: number, budgetMs: number): void {
+    this.activeUpdate = { update, epoch, budgetMs };
+    this.clearWatchdog();
+    if (this.watchdogPaused || this.destroyed) return;
+    this.watchdogTimer = globalThis.setTimeout(() => {
+      if (this.epoch !== epoch || this.destroyed) return;
+      // Apply the NEWEST queued update's authoritative state (not the stalled head), otherwise
+      // dropping later queued updates leaves the UI stuck on an old CPU turn while the room has
+      // already advanced to the human player's turn.
+      const latest = this.queue[this.queue.length - 1] ?? update;
+      console.warn(`[fx] update seq=${update.seq} exceeded ${budgetMs}ms; skipping to its end state`);
+      this.epoch += 1; // make the in-flight pump stop before applying anything else
+      this.activeUpdate = null;
+      this.watchdogPaused = false;
+      this.running = false;
+      this.queue = [];
+      this.runSkipCallbacks();
+      this.finishActive();
+      this.skipRequested = false;
+      this.host.setBusy(false);
+      this.host.setSkippable(false);
+      this.host.onQueueChange(0);
+      this.applyForcedEnd(latest);
+    }, budgetMs);
+  }
+
+  private setManualWait(waiting: boolean): void {
+    if (this.watchdogPaused === waiting) return;
+    this.watchdogPaused = waiting;
+    if (waiting) {
+      this.clearWatchdog();
+    } else if (this.activeUpdate && this.activeUpdate.epoch === this.epoch && !this.destroyed) {
+      this.armWatchdog(this.activeUpdate.update, this.activeUpdate.epoch, this.activeUpdate.budgetMs);
+    }
+  }
+
   private speedFactor(): number {
     const settings = this.host.settings();
     const backlog = this.queue.length;
@@ -222,6 +264,9 @@ export class FxPlayer {
         player.manualResolve = resolve;
         return promise;
       },
+      setManualWait(waiting: boolean) {
+        player.setManualWait(waiting);
+      },
       onSkip(callback: () => void) {
         if (player.skipRequested) {
           callback();
@@ -241,23 +286,10 @@ export class FxPlayer {
     this.host.setSkippable(true);
     while (this.queue.length > 0 && !this.destroyed && this.epoch === epoch) {
       const update = this.queue[0];
-      const watchdogMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0) * 2 + 5000;
-      this.clearWatchdog();
-      this.watchdogTimer = globalThis.setTimeout(() => {
-        if (this.epoch !== epoch || this.destroyed) return;
-        console.warn(`[fx] update seq=${update.seq} exceeded ${watchdogMs}ms; skipping to its end state`);
-        // Force progress even if a presentation promise never settles.
-        this.applyForcedEnd(update);
-        this.epoch += 1; // make the in-flight pump stop before applying anything else
-        this.running = false;
-        this.queue = [];
-        this.finishActive();
-        this.skipCallbacks.clear();
-        this.skipRequested = false;
-        this.host.setBusy(false);
-        this.host.setSkippable(false);
-        this.host.onQueueChange(0);
-      }, watchdogMs);
+      const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
+      const watchdogMs = estimatedMs * 2 + 8000;
+      this.watchdogPaused = false;
+      this.armWatchdog(update, epoch, watchdogMs);
       for (const fx of update.fx) {
         if (this.destroyed || this.epoch !== epoch) break;
         this.skipCallbacks.clear();
@@ -267,10 +299,13 @@ export class FxPlayer {
           await this.host.handleFx(fx, update.state, this.controlFor());
         } catch {
           // A presentation handler must not wedge the game. Continue to the next fx.
+        } finally {
+          this.setManualWait(false);
         }
       }
       if (this.epoch !== epoch) break;
       this.clearWatchdog();
+      this.activeUpdate = null;
       this.finishActive();
       this.skipCallbacks.clear();
       this.queue.shift();
@@ -278,6 +313,8 @@ export class FxPlayer {
       if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq, update.gen);
     }
     this.clearWatchdog();
+    this.activeUpdate = null;
+    this.watchdogPaused = false;
     if (this.epoch !== epoch) return;
     this.running = false;
     this.host.setBusy(false);
