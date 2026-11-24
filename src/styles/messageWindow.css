@@ -1,0 +1,360 @@
+/* ---------------------------------------------------------------- message window */
+
+.msgwin {
+  position: absolute;
+  bottom: calc(96px + var(--safe-bottom));
+  z-index: 34;
+  left: calc(230px + var(--safe-left));
+  right: calc(310px + var(--safe-right));
+  width: auto;
+  transform: none;
+  border-radius: 16px;
+  border: 2px solid var(--gold);
+  background:
+    linear-gradient(180deg, rgba(28, 58, 112, 0.97), rgba(8, 22, 50, 0.98));
+  box-shadow: 0 0 0 3px rgba(4, 12, 30, 0.55), 0 10px 26px rgba(3, 10, 25, 0.55);
+  color: #fff;
+  cursor: pointer;
+  animation: msgwin-in 160ms ease-out;
+}
+
+.msgwin[hidden] {
+  display: none;
+}
+
+/* Animate opacity only: the horizontal transform differs between the centered PC layout and
+   the full-width phone / landscape layouts, so a transform keyframe would shift them. */
+@keyframes msgwin-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.msgwin-body {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 9px 14px 9px 10px;
+  min-height: 92px;
+}
+
+.msgwin-face {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 92px;
+}
+
+.msgwin-portrait {
+  display: grid;
+  place-items: end center;
+  width: 72px;
+  height: 64px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: linear-gradient(180deg, #d8ecff, #8fbfe8);
+  overflow: hidden;
+}
+
+.msgwin-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+}
+
+.msgwin-mic {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 30px;
+  background: linear-gradient(180deg, #2b5698, #122c58);
+}
+
+.msgwin-name {
+  max-width: 90px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  /* Fixed dark plate + white text keeps WCAG AA (≈13:1) for every character accent;
+     the accent itself stays visible as the border. */
+  background: rgba(6, 16, 38, 0.92);
+  border: 1.5px solid var(--msgwin-accent, var(--gold));
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msgwin-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.msgwin-line {
+  display: block;
+  min-height: 3.1em;
+}
+
+.msgwin-text {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  color: #f7fbff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msgwin-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 14px;
+}
+
+.msgwin-pager {
+  color: #c7d6f4;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.msgwin-next {
+  color: var(--gold);
+  font-size: 12px;
+  opacity: 0;
+}
+
+.msgwin-next.is-ready {
+  opacity: 1;
+  animation: msgwin-blink 0.9s ease-in-out infinite;
+}
+
+@keyframes msgwin-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Phones: full width above the command bar, two-line height in landscape. */
+@media (max-width: 899px) {
+  .msgwin {
+    left: calc(6px + var(--safe-left));
+    right: calc(6px + var(--safe-right));
+    width: auto;
+    bottom: calc(132px + var(--safe-bottom));
+    transform: none;
+  }
+
+  .msgwin-body {
+    gap: 8px;
+    padding: 7px 10px 7px 7px;
+    min-height: 82px;
+  }
+
+  .msgwin-face {
+    width: 76px;
+  }
+
+  .msgwin-name {
+    max-width: 76px;
+    padding: 1px 4px;
+    font-size: 9.5px;
+  }
+
+  .msgwin-portrait {
+    width: 56px;
+    height: 54px;
+  }
+
+  .msgwin-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .msgwin-line {
+    min-height: 2.98em;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .msgwin {
+    left: calc(86px + var(--safe-left));
+    right: calc(290px + var(--safe-right));
+    width: auto;
+    bottom: calc(64px + var(--safe-bottom));
+    transform: none;
+  }
+
+  .msgwin-body {
+    min-height: 62px;
+    padding: 5px 9px;
+    gap: 7px;
+  }
+
+  .msgwin-portrait {
+    width: 48px;
+    height: 44px;
+  }
+
+  .msgwin-face {
+    width: 76px;
+  }
+
+  .msgwin-name {
+    max-width: 76px;
+    padding: 1px 4px;
+    font-size: 9.5px;
+  }
+
+  .msgwin-text {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .msgwin-line {
+    min-height: 2.8em;
+  }
+}
+
+/* An open event panel sits above the window on phones / landscape. */
+@media (max-width: 899px) {
+  .event-open .msgwin {
+    bottom: calc(150px + var(--safe-bottom));
+  }
+}
+
+/* While the event panel is open both must stay visible: dock the window to the left of the
+   panel on PC, and lift the panel above the window on phones. */
+@media (min-width: 900px) {
+  .event-open .msgwin {
+    left: calc(230px + var(--safe-left));
+    right: calc(500px + var(--safe-right));
+    width: auto;
+    transform: none;
+  }
+}
+
+@media (max-width: 899px) and (min-height: 521px) {
+  /* Only choice events need the panel lifted off the window; auto events stay content-high. */
+  .game-screen.event-open:has(.event-choice-area:not([hidden])) .event-panel {
+    bottom: calc(236px + var(--safe-bottom));
+    border-radius: 18px 18px 0 0;
+  }
+
+  .event-open .msgwin {
+    bottom: calc(132px + var(--safe-bottom));
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .event-open .msgwin {
+    right: calc(410px + var(--safe-right));
+    bottom: calc(58px + var(--safe-bottom));
+  }
+}
+
+/* Phone portrait: the money panel duplicates the top plate; hide it while a line is showing
+   so the window and the event choices stay fully visible. */
+@media (max-width: 899px) and (min-height: 521px) {
+  .game-screen:has(.msgwin:not([hidden])) .money-panel {
+    display: none;
+  }
+}
+
+/* Event open on phones: keep all choices visible above the message window. */
+@media (max-width: 899px) and (min-height: 521px) {
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel .event-hero {
+    height: 88px;
+    min-height: 88px;
+  }
+
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel .event-byline {
+    margin: 4px 10px 0;
+  }
+
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel .event-choice {
+    min-height: 44px;
+    padding: 4px 8px;
+  }
+
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel .event-choice-detail {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel .event-meta-toggle {
+    min-height: 28px;
+  }
+}
+
+/* Landscape with an open event: narrow the panel so the window and the choices coexist. */
+@media (max-height: 520px) and (min-width: 700px) {
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel {
+    width: min(390px, 46vw);
+  }
+}
+
+/* Keep the cutscene skip affordance (and its E2E selector) above the window instead of
+   stacking on top of the text. Only while a message is showing. */
+.game-screen:has(.msgwin:not([hidden])) .skip-hint {
+  bottom: calc(216px + var(--safe-bottom));
+}
+
+@media (max-width: 899px) {
+  .game-screen:has(.msgwin:not([hidden])) .skip-hint {
+    bottom: calc(302px + var(--safe-bottom));
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .game-screen:has(.msgwin:not([hidden])) .skip-hint {
+    bottom: calc(150px + var(--safe-bottom));
+  }
+}
+
+/* The window carries the speaker's face, so hide the decorative portrait behind it on phones. */
+@media (max-width: 899px) {
+  .game-screen:has(.msgwin:not([hidden])) .portrait-area {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+}
+
+/* Long lines must wrap inside the window, never bleed past the gold frame. */
+.msgwin-line {
+  overflow: hidden;
+}
+
+/* Chat / emote panels are the player-to-player channel: they must never be covered by the
+spoken-line window. On phones those panels sit at the same bottom band, so the window yields
+(fades out, keeps its queue) while either panel is open. */
+@media (max-width: 899px) {
+  .game-screen:has(.chat-panel.is-open) .msgwin,
+  .game-screen:has(.emote-palette.is-open) .msgwin {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  /* Landscape keeps the window docked left of the event panel; chat sits right, so only
+     drop the window when the emote palette (wide) is open. */
+  .game-screen:has(.emote-palette.is-open) .msgwin {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

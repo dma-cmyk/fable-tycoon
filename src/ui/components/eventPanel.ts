@@ -4,13 +4,7 @@ import { h } from '../dom';
 import { describeEffect } from '../eventEffects';
 import { eventFootnoteText } from '../eventPanelNote';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
-import {
-  assetUrl,
-  KIND_ICON,
-  KIND_JA,
-  speakerName,
-  speakerSprite,
-} from '../format';
+import { assetUrl, KIND_ICON, KIND_JA } from '../format';
 
 export interface EventPanelOptions {
   onChoose: (index: number) => void;
@@ -25,9 +19,6 @@ export class EventPanel {
   private readonly hero: HTMLElement;
   private readonly titleEl: HTMLElement;
   private readonly byline: HTMLElement;
-  private readonly speakerAvatar: HTMLElement;
-  private readonly speakerNameEl: HTMLElement;
-  private readonly dialogueText: HTMLElement;
   private readonly choicesHost: HTMLElement;
   private readonly choicesNote: HTMLElement;
   private readonly metaBody: HTMLElement;
@@ -65,9 +56,6 @@ export class EventPanel {
     this.titleEl = h('h2', { class: 'event-title' });
     this.byline = h('p', { class: 'event-byline' });
     this.hero = h('div', { class: 'event-hero no-image' }, this.image, h('div', { class: 'event-hero-shade' }), this.titleEl);
-    this.speakerAvatar = h('span', { class: 'event-speaker-avatar' });
-    this.speakerNameEl = h('span', { class: 'event-speaker-name' });
-    this.dialogueText = h('p', { class: 'event-dialogue-text' });
     this.choicesHost = h('div', { class: 'event-choices' });
     this.choicesNote = h('p', { class: 'event-choices-note' });
     this.metaBody = h('div', { class: 'event-meta-body', attrs: { hidden: 'hidden' } });
@@ -105,17 +93,6 @@ export class EventPanel {
         { class: 'event-panel-scroll scroll-y' },
         this.hero,
         this.byline,
-        h(
-          'div',
-          { class: 'event-speaker' },
-          this.speakerAvatar,
-          h(
-            'div',
-            { class: 'event-speaker-main' },
-            this.speakerNameEl,
-            this.dialogueText,
-          ),
-        ),
         h('div', { class: 'event-meta' }, this.metaToggle, this.metaBody),
         this.effectSummary,
         this.choiceArea,
@@ -152,7 +129,6 @@ export class EventPanel {
     this.renderMeta(event);
     this.renderEffectSummary(event);
     this.renderFootnote(event);
-    this.setSpeaker('narrator', '……世界のどこかで、ニュースが動き出す。');
     this.setState(state, false);
   }
 
@@ -162,18 +138,6 @@ export class EventPanel {
     this.el.classList.remove('is-open');
     this.el.hidden = true;
     this.el.closest('.game-screen')?.classList.remove('event-open');
-  }
-
-  setSpeaker(speaker: string, text: string): void {
-    if (!this.open) return;
-    const sprite = speakerSprite(speaker);
-    this.speakerAvatar.replaceChildren(
-      sprite
-        ? h('img', { attrs: { src: sprite, alt: '', draggable: 'false' } })
-        : h('span', { class: 'event-speaker-emoji', text: speaker === 'narrator' ? '🎙️' : '💬' }),
-    );
-    this.speakerNameEl.textContent = speakerName(speaker);
-    this.dialogueText.textContent = text;
   }
 
   setState(state: PublicState, canAct: boolean): void {
@@ -221,7 +185,10 @@ export class EventPanel {
     } else if (!this.canAct) {
       this.choicesNote.textContent = `${actor?.name ?? '手番のプレイヤー'} が選択しています…`;
     } else {
-      this.choicesNote.textContent = '1〜3 キーでも選べます。';
+      // The panel footnote already advertises the 1–3 keys; repeating it here read as a
+      // duplicated instruction right above the message window.
+      this.choicesNote.hidden = true;
+      this.choicesNote.textContent = '';
     }
   }
 

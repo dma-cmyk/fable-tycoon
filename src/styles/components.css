@@ -2672,59 +2672,6 @@
   font-size: 9.5px;
 }
 
-.event-speaker {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 7px 10px;
-  padding: 8px 9px;
-  border-radius: 12px;
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.event-speaker-avatar {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  background: radial-gradient(circle at 50% 30%, #6cb9ff, #1b4c8c);
-  overflow: hidden;
-}
-
-.event-speaker-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: 50% 100%;
-}
-
-.event-speaker-emoji {
-  font-size: 20px;
-}
-
-.event-speaker-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.event-speaker-name {
-  font-size: 10px;
-  font-weight: 800;
-  color: var(--gold);
-}
-
-.event-dialogue-text {
-  margin: 1px 0 0;
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: #f0f5ff;
-}
-
 .event-meta {
   margin: 6px 10px 10px;
 }
@@ -2925,15 +2872,6 @@
 
   .event-title {
     font-size: 17px;
-  }
-
-  .event-speaker {
-    padding: 5px 7px;
-  }
-
-  .event-dialogue-text {
-    max-height: 38px;
-    overflow: auto;
   }
 
   .event-choice {

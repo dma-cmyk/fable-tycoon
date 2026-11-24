@@ -8,6 +8,7 @@ import './styles/game.css';
 import './styles/effects.css';
 import './styles/layout-fixes.css';
 import './styles/dice.css';
+import './styles/messageWindow.css';
 import { App } from './ui/app';
 
 const root = document.getElementById('app');

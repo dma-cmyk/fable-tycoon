@@ -32,6 +32,7 @@ import {
   REALM_ICON,
   seatColor,
   speakerName,
+  speakerSprite,
 } from '../format';
 import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
 import { rubyName } from '../ruby';
@@ -44,6 +45,7 @@ import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
 import { TurnTimer } from '../components/turnTimer';
 import { EventPanel } from '../components/eventPanel';
+import { MessageWindow } from '../components/messageWindow';
 import { CitySheetHandle, openCitySheet, planBulkPurchase } from '../components/citySheet';
 import { openCardsDialog } from '../components/cardsDialog';
 import { openOwnedDialog } from '../components/ownedDialog';
@@ -161,7 +163,6 @@ export class GameScreen implements ScreenHandle {
   private resultScreen: ResultScreen | null = null;
   private activeEventBgm: BgmName | null = null;
   private currentBgm: BgmName | null = null;
-  private sayTimer = 0;
   private bannerTimer = 0;
   private handoffTimer = 0;
   private overviewTimer = 0;
@@ -179,12 +180,7 @@ export class GameScreen implements ScreenHandle {
   private readonly portraitImage: HTMLImageElement;
   private readonly portraitName: HTMLElement;
   private readonly portraitSub: HTMLElement;
-  private readonly sayBubble: HTMLElement;
-  private readonly sayBubbleName: HTMLElement;
-  private readonly sayBubbleText: HTMLElement;
-  private readonly subtitleBar: HTMLElement;
-  private readonly subtitleName: HTMLElement;
-  private readonly subtitleText: HTMLElement;
+  private readonly msgWindow: MessageWindow;
   private readonly moneyHost: HTMLElement;
   private readonly primary: HTMLButtonElement;
   private readonly primaryIcon: HTMLElement;
@@ -432,30 +428,14 @@ export class GameScreen implements ScreenHandle {
     this.portraitRank = h('span', { class: 'portrait-rank', text: '' });
     this.portraitName = h('span', { class: 'portrait-name', text: '' });
     this.portraitSub = h('span', { class: 'portrait-sub', text: '' });
-    this.sayBubbleName = h('span', { class: 'say-bubble-name', text: '' });
-    this.sayBubbleText = h('span', { class: 'say-bubble-text', text: '' });
-    this.sayBubble = h(
-      'div',
-      { class: 'say-bubble', attrs: { hidden: 'hidden' } },
-      this.sayBubbleName,
-      this.sayBubbleText,
-    );
     this.portraitHost = h(
       'div',
       { class: 'portrait-area', attrs: { 'aria-hidden': 'true' } },
       this.portraitImage,
       this.portraitRank,
       h('div', { class: 'portrait-caption' }, this.portraitName, this.portraitSub),
-      this.sayBubble,
     );
-    this.subtitleName = h('span', { class: 'subtitle-name', text: '' });
-    this.subtitleText = h('span', { class: 'subtitle-text', text: '' });
-    this.subtitleBar = h(
-      'div',
-      { class: 'subtitle-bar', attrs: { hidden: 'hidden', role: 'status' } },
-      this.subtitleName,
-      this.subtitleText,
-    );
+    this.msgWindow = new MessageWindow({ speed: () => effectiveUiSettings().fxSpeed });
 
     this.primaryIcon = h('span', { class: 'primary-icon', text: '▶', attrs: { 'aria-hidden': 'true' } });
     this.primaryLabel = h('span', { class: 'primary-label', text: 'サイコロをふる' });
@@ -615,7 +595,7 @@ export class GameScreen implements ScreenHandle {
       this.miniMapCanvas,
       this.rankingHost,
       this.portraitHost,
-      this.subtitleBar,
+      this.msgWindow.el,
       this.moneyHost,
       this.bottomBar,
       this.eventPanel.el,
@@ -677,6 +657,7 @@ export class GameScreen implements ScreenHandle {
     this.fxPlayer.destroy();
     this.timer.destroy();
     this.dice.destroy();
+    this.msgWindow.destroy();
     this.chat.destroy();
     this.emotes.destroy();
     this.resultScreen?.destroy();
@@ -689,7 +670,6 @@ export class GameScreen implements ScreenHandle {
     this.map?.destroy();
     for (const unsub of this.unsubscribeFns) unsub();
     window.clearTimeout(this.pendingTimer);
-    window.clearTimeout(this.sayTimer);
     window.clearTimeout(this.bannerTimer);
     window.clearTimeout(this.handoffTimer);
     window.clearInterval(this.overviewTimer);
@@ -801,7 +781,7 @@ export class GameScreen implements ScreenHandle {
     this.dice.cancel();
     this.fxPlayer.reset();
     this.stopStepsCounter();
-    this.clearSay();
+    this.msgWindow.clear();
     this.moveSelection = null;
     this.moveOptionsCache = [];
     this.moveOptionsKey = '';
@@ -2319,7 +2299,7 @@ export class GameScreen implements ScreenHandle {
 
   private openOtherMenu(): void {
     let handle: ModalHandle | null = null;
-    const item = (icon: string, label: string, action: () => void): HTMLElement =>
+    const item = (icon: string, label: string, desc: string, action: () => void): HTMLElement =>
       h(
         'button',
         {
@@ -2333,26 +2313,31 @@ export class GameScreen implements ScreenHandle {
           },
         },
         h('span', { class: 'game-menu-icon' }, uiIcon(icon, icon)),
-        h('span', { text: label }),
+        h(
+          'span',
+          { class: 'game-menu-label' },
+          label,
+          h('span', { class: 'game-menu-desc', text: desc }),
+        ),
         h('span', { class: 'game-menu-arrow', text: '▶', attrs: { 'aria-hidden': 'true' } }),
       );
     const body = h(
       'div',
       { class: 'game-menu' },
-      item('property', '持ち物（所有物件）', () => this.openOwned()),
-      item('chart', '情報（業種・ニュース・ログ）', () => this.openInfo()),
-      item('globe', '地上マップを全体表示', () => {
+      item('property', '持ち物', '所有している物件の一覧', () => this.openOwned()),
+      item('chart', '情報', '業種の相場・ニュース・行動ログ', () => this.openInfo()),
+      item('globe', '全体マップ', '地上のマップを引いて見る', () => {
         this.manualView = true;
         this.viewRealm = 'world';
         this.applyMapView();
         this.renderHud();
         this.focusWorld();
       }),
-      item('gear', '設定', () => this.app.openSettings()),
-      item('help', '遊び方', () => this.app.openHelp()),
-      item('trophy', 'クレジット', () => this.app.openCredits()),
+      item('gear', '設定', '演出速度・チャット表示・ミュート', () => this.app.openSettings()),
+      item('help', '遊び方', 'ルールと操作の説明', () => this.app.openHelp()),
+      item('trophy', 'クレジット', 'キャラクターと素材の出典', () => this.app.openCredits()),
     );
-    handle = this.app.modal.open(body, { title: '📜 その他', subtitle: '持ち物・情報・設定' });
+    handle = this.app.modal.open(body, { title: 'その他', subtitle: '持ち物・情報・設定' });
   }
 
 
@@ -2709,7 +2694,7 @@ export class GameScreen implements ScreenHandle {
           },
         },
         h('span', { class: 'game-menu-icon' }, uiIcon(icon, icon)),
-        h('span', { text: label }),
+        h('span', { class: 'game-menu-label', text: label }),
         h('span', { class: 'game-menu-arrow', text: '▶', attrs: { 'aria-hidden': 'true' } }),
       );
     body.append(
@@ -2816,7 +2801,8 @@ export class GameScreen implements ScreenHandle {
   // ---------------------------------------------------------------- fx playback
 
   private async handleFx(fx: Fx, pending: PublicState, control: PlaybackControl): Promise<void> {
-    this.clearSay();
+    // The message window outlives its own fx: it stays up for its bounded read time while
+    // the next step (dice, movement, popups) plays, so lines do not blink out instantly.
     switch (fx.t) {
       case 'turn': {
         this.manualView = false;
@@ -2977,15 +2963,13 @@ export class GameScreen implements ScreenHandle {
         await this.showDestinationRoulette(fx.cityId, control);
         if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 0.8, ms: 700 });
         this.lastDestinationBannerAt = Date.now();
-        this.showGameBanner(
-          h(
-            'span',
-            {},
-            '🎯 次の目的地は ',
-            city ? rubyName(city.nameJa, city.nameKana) : fx.cityId,
-            '！',
-          ),
-        );
+        const destName = city ? city.nameJa : fx.cityId;
+        this.msgWindow.show({
+          speaker: 'narrator',
+          name: 'ナレーター',
+          text: `次の目的地は ${destName}！`,
+          color: '#ffd23f',
+        });
         this.addLog(`🎯 目的地が ${city?.nameJa ?? fx.cityId} に決定`);
         await control.wait(260);
         return;
@@ -2998,7 +2982,7 @@ export class GameScreen implements ScreenHandle {
           this.map?.setMood(fx.holder, 'sad', 7000);
           this.map?.shake(0.45);
         }
-        this.app.toasts.show(fx.message, 'warn', 3800);
+        this.msgWindow.show({ speaker: 'npc:piper1', name: '取り立て屋', text: fx.message, sprite: speakerSprite('npc:piper1'), color: '#ff8a8a' });
         if (fx.holder !== null) this.map?.bubble(fx.holder, fx.message, 4200);
         this.addLog(`🎺 ${fx.message}`);
         await control.wait(FX_MS.piper);
@@ -3072,11 +3056,10 @@ export class GameScreen implements ScreenHandle {
         ? state.players[speakerSeat ?? state.current]?.name ?? '手番'
         : speakerName(speaker);
     const label = speaker === 'self' ? `${displayName}` : speakerName(speaker);
-    // While an event panel is open it owns the dialogue; do not mirror the same line on the
-    // portrait unless the speaker is the acting player ("self").
-    if (!this.eventPanel.isOpen || speaker === 'self') this.showSayBubble(label, fx.text);
-    else this.clearSay();
-    if (this.eventPanel.isOpen) this.eventPanel.setSpeaker(speaker, fx.text);
+    // One message window for every spoken line; the event panel no longer carries a
+    // duplicate narrator card.
+    const windowLine = this.messageLineFor(speaker, label, fx.text, state, speakerSeat);
+    const shown = this.msgWindow.show(windowLine);
     if (speakerSeat !== null && speaker !== 'narrator') {
       this.map?.bubble(speakerSeat, fx.text, 4200);
     }
@@ -3103,10 +3086,37 @@ export class GameScreen implements ScreenHandle {
     if (!muted) {
       voicePromise = Audio.playVoice(voiceKey, fx.text);
     }
-    const advance = uiSettings().autoAdvance ? control.wait(duration) : control.waitManual();
-    // A voice line must never hold the queue: bound it by an estimate even if the audio
-    // context is suspended (background/reopened tab) and `onended` never fires.
-    await Promise.all([raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text)), advance]);
+    // The window auto-advances on a bounded timer, so `shown` cannot hang. Voice is still
+    // bounded for the silent-audio case, and the presentation wait keeps the old pacing.
+    // Hold the fx step for the shorter of the old line pacing and the window's own dwell.
+    const advance = uiSettings().autoAdvance
+      ? (voicePromise.then(() => control.wait(Math.min(duration, 900))) as Promise<void>)
+      : control.waitManual();
+    await Promise.all([raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text)), advance, shown]);
+  }
+
+  /** Speaker portrait / name / accent for the single message window. */
+  private messageLineFor(
+    speaker: SpeakerRef,
+    label: string,
+    text: string,
+    state: PublicState,
+    speakerSeat: number | null,
+  ): { speaker: string; name: string; text: string; sprite?: string; color?: string } {
+    const seatCharacter =
+      speaker === 'self'
+        ? charsById.get(state.players[speakerSeat ?? state.current]?.characterId ?? '')
+        : speaker.startsWith('char:')
+          ? charsById.get(speaker.slice(5))
+          : undefined;
+    const sprite = seatCharacter ? characterSprite(seatCharacter) : speakerSprite(speaker);
+    return {
+      speaker,
+      name: label,
+      text,
+      sprite,
+      color: seatCharacter?.color ?? (speaker === 'narrator' ? '#ffd23f' : undefined),
+    };
   }
 
   private speakerSeat(speaker: SpeakerRef, playerId: number | undefined, state: PublicState): number | null {
@@ -3116,23 +3126,6 @@ export class GameScreen implements ScreenHandle {
       return state.players.find((player) => player.characterId === characterId)?.id ?? null;
     }
     return null;
-  }
-
-  private showSayBubble(name: string, text: string): void {
-    this.sayBubble.hidden = false;
-    this.sayBubbleName.textContent = name;
-    this.sayBubbleText.textContent = text;
-    this.subtitleBar.hidden = false;
-    this.subtitleName.textContent = name;
-    this.subtitleText.textContent = text;
-    window.clearTimeout(this.sayTimer);
-    this.sayTimer = window.setTimeout(() => this.clearSay(), Math.min(9000, 1600 + text.length * 110));
-  }
-
-  private clearSay(): void {
-    window.clearTimeout(this.sayTimer);
-    this.sayBubble.hidden = true;
-    this.subtitleBar.hidden = true;
   }
 
   private setPortraitFor(playerId: number, state: PublicState): void {
@@ -3521,6 +3514,8 @@ export class GameScreen implements ScreenHandle {
       if (this.app.modal.isOpen()) return;
       if (this.fxBusy && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault();
+        // Finish the window reveal / page first; the next press skips the cutscene.
+        if (this.msgWindow.handleKey(event)) return;
         this.fxPlayer.skip();
         return;
       }

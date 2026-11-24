@@ -536,9 +536,6 @@
   font-size: 11px;
 }
 
-.event-dialogue-text {
-  font-size: 13px;
-}
 
 .event-meta-body {
   font-size: 11.5px;
@@ -570,15 +567,7 @@
     margin: 8px 12px 0;
   }
 
-  .event-speaker {
-    margin: 9px 12px;
-    padding: 9px 10px;
-  }
 
-  .event-dialogue-text {
-    font-size: 13px;
-    line-height: 1.55;
-  }
 
   .event-meta {
     margin: 8px 12px 10px;
@@ -1469,6 +1458,69 @@
   box-shadow: var(--panel-shadow);
 }
 
+/* 「その他」「メニュー」の項目は紺地なので、文字・矢印・アイコンを明るくする。 */
+.game-menu-item {
+  min-height: 48px;
+  padding: 8px 12px;
+  color: #eaf2ff;
+  font-size: 15px;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.game-menu-item .game-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.game-menu-item .game-menu-desc {
+  display: block;
+  margin-top: 1px;
+  color: #b8c7e6;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-shadow: none;
+  line-height: 1.25;
+}
+
+.game-menu-item .game-menu-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.game-menu-item .game-menu-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.game-menu-item .game-menu-arrow {
+  color: #cfe0ff;
+}
+
+.game-menu-item:hover {
+  border-color: var(--gold);
+  background: #1d3a70;
+}
+
+.game-menu-item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.game-menu-item.is-danger {
+  color: #ffc9cf;
+  border-color: rgba(255, 130, 150, 0.5);
+}
+
+.game-menu-item.is-danger .game-menu-arrow {
+  color: #ffd3d9;
+}
+
 .map-view-tab {
   border: 1px solid var(--panel-line);
   background: var(--panel-bg);
@@ -1875,10 +1927,6 @@
     min-height: 96px;
   }
 
-  .event-speaker {
-    margin: 6px 10px;
-    padding: 7px 9px;
-  }
 
   .event-meta {
     margin: 4px 10px 0;
@@ -2973,15 +3021,7 @@
     font-size: 10.5px;
   }
 
-  .event-speaker {
-    margin: 4px 10px;
-    padding: 5px 8px;
-  }
 
-  .event-dialogue-text {
-    font-size: 12.5px;
-    line-height: 1.45;
-  }
 
   .event-meta {
     margin: 3px 10px 0;
@@ -3051,17 +3091,7 @@
     font-size: 9.5px;
   }
 
-  .event-speaker {
-    margin: 3px 8px;
-    padding: 4px 7px;
-  }
 
-  .event-dialogue-text {
-    max-height: 34px;
-    overflow: auto;
-    font-size: 11px;
-    line-height: 1.35;
-  }
 
   .event-meta {
     margin: 2px 8px 0;
@@ -3082,7 +3112,8 @@
   }
 
   .event-choice {
-    min-height: 40px;
+    /* Touch target must stay >= 44px even in the compressed landscape panel. */
+    min-height: 44px;
     padding: 3px 8px;
   }
 
@@ -3286,4 +3317,186 @@
   padding: 4px 10px calc(5px + var(--safe-bottom));
   color: rgba(255, 255, 255, 0.62);
   text-align: center;
+}
+
+/* ---------------------------------------------------------------- その他メニューの見やすさ */
+/* 全体マップ切替: 地上タブ（紺地）は明るい文字、異世界タブ（クリーム地）は濃い文字。 */
+.map-view-tab {
+  color: #eaf2ff;
+}
+
+.map-view-tab .map-view-icon,
+.map-view-tab .map-view-name {
+  color: inherit;
+}
+
+.map-view-tab .map-view-count {
+  background: rgba(255, 255, 255, 0.16);
+  color: #eaf2ff;
+  font-weight: 800;
+}
+
+.map-view-tab.is-selected .map-view-name {
+  color: #fff4b8;
+}
+
+.map-view-tab.is-selected .map-view-count {
+  background: rgba(255, 210, 63, 0.22);
+  color: #fff4b8;
+}
+
+/* 異世界タブは明るい背景のままなので、濃色文字へ戻す。 */
+.map-view-tab.realm-heaven,
+.map-view-tab.realm-hell,
+.map-view-tab.realm-space {
+  color: #1c2a44;
+}
+
+.map-view-tab.realm-heaven .map-view-count,
+.map-view-tab.realm-hell .map-view-count,
+.map-view-tab.realm-space .map-view-count {
+  background: #efe6d0;
+  color: #2f3a52;
+}
+
+.map-view-tab.realm-heaven.is-selected .map-view-name,
+.map-view-tab.realm-hell.is-selected .map-view-name,
+.map-view-tab.realm-space.is-selected .map-view-name {
+  color: #1c2a44;
+}
+
+.map-view-tab.realm-heaven.is-selected .map-view-count,
+.map-view-tab.realm-hell.is-selected .map-view-count,
+.map-view-tab.realm-space.is-selected .map-view-count {
+  background: #f3e2b8;
+  color: #2f3a52;
+}
+
+/* ロビーのルームコードは濃紺地に白なので、影だけ残して可読性を保つ。 */
+.lobby-room-left .lobby-room-code {
+  color: #fff;
+}
+
+/* 紺地ボタンの上に残っていた暗色テキスト（btn-ghost 等）を明るく統一。 */
+.btn-ghost,
+.btn-ghost.btn-small {
+  color: #eef5ff;
+}
+
+/* 「+0億」等のプラス値は濃い緑に（クリーム地での 1.2:1 を解消）。 */
+.modal-body .money-positive,
+.owned-dialog .money-positive {
+  color: #0f7a3d;
+}
+
+/* 物件カタログの国名・補助行を読みやすい濃さに。 */
+.catalog-city-country {
+  color: #4a5468;
+}
+
+/* モーダル見出しのサブタイトル（赤帯上の薄赤）を 4.5:1 以上へ。 */
+.modal-subtitle {
+  color: #fff;
+}
+
+/* 設定・プレイヤーメニューの補足文（クリーム地の薄茶）を 4.5:1 以上へ。 */
+.settings-row-desc,
+.settings-note,
+.player-menu-desc,
+.player-menu-note,
+.help-disclaimer {
+  color: #5a5140;
+}
+
+/* 席番号バッジ（1P〜3P）の白文字は 4.5:1 に届かないため、縁取りで実効コントラストを上げる。 */
+.seat-index-1,
+.seat-index-2,
+.seat-index-3 {
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    1px 0 0 rgba(0, 0, 0, 0.3),
+    -1px 0 0 rgba(0, 0, 0, 0.3);
+}
+
+/* 目的地チップの青は上端が明るく白文字が 3.65:1 だったため、全体を一段深くして 5:1 超に。 */
+.dest-chip {
+  background: linear-gradient(180deg, #2b86c9, #1668a8 70%, #135a96);
+  text-shadow: 0 1px 0 rgba(0, 24, 56, 0.55);
+}
+
+/* 赤リボン上の白文字が 4.46:1 と僅かに不足していたため、リボンを少し深くする。 */
+:root {
+  --red-ribbon: linear-gradient(180deg, #f9584f 0%, #d9202f 55%, #a00d24 100%);
+}
+
+/* 季節バッジは白文字が 3.42:1 のため、暗幕を敷いて 5:1 超に。 */
+.event-season-badge {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+/* クリーム地のセグメント未選択：4.41:1 → 5.9:1。 */
+.modal-body .seg-btn {
+  color: #57503f;
+}
+
+/* 情報ダイアログの業種メモ・倍率テキストを 4.5:1 以上へ。 */
+.info-industry-note {
+  color: #6b5310;
+}
+
+.info-industry-mult {
+  color: #8a5200;
+}
+
+/* 年度決算の順位バッジは淡色の円地に濃文字＋白フチで 4.5:1 以上に。 */
+.yearend-bar-rank {
+  color: #1b2947;
+  background: color-mix(in srgb, var(--bar-color, #9fb3d9) 32%, #ffffff);
+  border-width: 1.5px;
+  text-shadow: none;
+}
+
+.yearend-bar-row.is-top .yearend-bar-rank {
+  color: #4a2400;
+  background: #ffe9a8;
+}
+
+/* 物件シートの小見出し・サブ行（クリーム地 4.2:1）を 4.5:1 以上へ。 */
+.property-table-head {
+  color: #5a4c30;
+}
+
+.city-hero-sub {
+  color: #22405f;
+}
+
+/* カード枚数バッジの赤は白文字 3.83:1 のため、深い赤に。 */
+.icon-btn-badge {
+  background: #b8141e;
+}
+
+/* 情報ダイアログの倍率（is-boosted）を 4.5:1 以上へ。 */
+.info-industry-mult.is-boosted {
+  color: #8a5200;
+}
+
+/* ミュート/発言の名前バッジ、席番号バッジは濃色に落として白文字を確保。 */
+.seat-index-1 {
+  background: linear-gradient(#d8403c, #a01a28);
+}
+
+.seat-index-2 {
+  background: linear-gradient(#2f7fc4, #114a84);
+}
+
+.seat-index-3 {
+  background: linear-gradient(#2f9a5c, #0a5230);
+}
+
+/* 物件シートの収益率（クリーム地 4.37:1）を 4.5:1 以上へ。 */
+.property-yield {
+  color: #625a47;
 }
