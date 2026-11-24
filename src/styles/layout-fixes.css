@@ -5070,3 +5070,26 @@
     right: calc(490px + var(--safe-right));
   }
 }
+
+/* Large PC screens: the simplified HUD was sized for ~1280px wide and looked tiny at 1920+.
+   Scale the three HUD zones (status bar, command window, message window) and the comm button
+   together so their proportions stay those of the 1280px layout. */
+@media (min-width: 1600px) and (min-height: 860px) {
+  .game-screen .game-topbar,
+  .game-screen .game-bottom-bar,
+  .game-screen .msgwin,
+  .game-screen .pc-comm-fab,
+  .game-screen .pc-comm-drawer {
+    zoom: 1.25;
+  }
+}
+
+@media (min-width: 2300px) and (min-height: 1250px) {
+  .game-screen .game-topbar,
+  .game-screen .game-bottom-bar,
+  .game-screen .msgwin,
+  .game-screen .pc-comm-fab,
+  .game-screen .pc-comm-drawer {
+    zoom: 1.6;
+  }
+}
