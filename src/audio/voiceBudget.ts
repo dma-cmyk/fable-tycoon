@@ -2,6 +2,14 @@
 
 export const VOICE_TAIL_MS = 1500;
 
+/** Voice lines speed up with the fx speed only this far: beyond it the pitch shift sounds unnatural. */
+export const MAX_VOICE_RATE = 1.2;
+
+/** Playback rate for a voice line at the given fx speed (1 ≤ rate ≤ MAX_VOICE_RATE). */
+export function voicePlaybackRate(speed: number | undefined): number {
+  return Math.max(1, Math.min(MAX_VOICE_RATE, Number.isFinite(speed) ? (speed as number) : 1));
+}
+
 /** Rough spoken length when the buffer duration is unknown (Japanese ~110ms per character). */
 export function estimateSpeechMs(text: string): number {
   return 900 + [...text].length * 110;

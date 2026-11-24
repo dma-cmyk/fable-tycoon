@@ -6,7 +6,7 @@
 
 import type { GameEventDef } from '../core/types';
 import { voiceHash } from './voicekey';
-import { voiceBudgetMs } from './voiceBudget';
+import { voiceBudgetMs, voicePlaybackRate } from './voiceBudget';
 
 export { voiceHash, voiceKeyOf } from './voicekey';
 
@@ -210,7 +210,7 @@ function unlock(): void {
 }
 
 export interface PlayVoiceOptions {
-  /** Playback rate multiplier (1..8) so higher fx speeds shorten voice playback proportionally without cutting it off. */
+  /** Requested speed-up (fx speed); capped by voicePlaybackRate() so voices never sound chipmunked. */
   rate?: number;
   /** Called right before audio playback starts, with the expected scaled duration in ms. */
   onStart?: (durationMs: number) => void;
@@ -221,7 +221,7 @@ async function playVoice(voiceKey: string, text: string, options?: PlayVoiceOpti
   // A suspended/unavailable context never reaches `onended`; do not let the caller await forever.
   if (!ready || !ctx || ctx.state !== 'running') return;
 
-  const rate = Math.max(1, Math.min(8, Number.isFinite(options?.rate) ? (options?.rate as number) : 1));
+  const rate = voicePlaybackRate(options?.rate);
   const token = ++voiceToken;
   stopActiveVoice();
   stopActiveChatter();
@@ -549,7 +549,7 @@ function startVoice(
   const bus = voiceBus;
   if (!context || !bus) return Promise.resolve();
 
-  const clampedRate = Math.max(1, Math.min(8, Number.isFinite(rate) ? rate : 1));
+  const clampedRate = voicePlaybackRate(rate);
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.playbackRate.value = clampedRate;

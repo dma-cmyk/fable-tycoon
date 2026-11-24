@@ -39,7 +39,7 @@ import { rubyName } from '../ruby';
 import { placeDestinationArrow } from '../destArrow';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { isIdenticalResync, type ResyncWatermark } from '../resync';
-import { raceWithTimeout, voiceBudgetMs } from '../../audio/voiceBudget';
+import { raceWithTimeout, voiceBudgetMs, voicePlaybackRate } from '../../audio/voiceBudget';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
@@ -3145,7 +3145,7 @@ export class GameScreen implements ScreenHandle {
             voiceStarted = true;
           },
         });
-    const boundedVoice = raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text, speed));
+    const boundedVoice = raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)));
     // One message window for every spoken line; the event panel no longer carries a
     // duplicate narrator card. The window stays visible until voice finishes (then advances
     // after a short pause), or scales by speed when silent.

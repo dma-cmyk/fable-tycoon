@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { estimateSpeechMs, raceWithTimeout, voiceBudgetMs } from './voiceBudget';
+import { estimateSpeechMs, MAX_VOICE_RATE, raceWithTimeout, voiceBudgetMs, voicePlaybackRate } from './voiceBudget';
 
 describe('voice playback budget', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -25,6 +25,16 @@ describe('voice playback budget', () => {
     expect(fast4).toBe(Math.round(base / 4));
     expect(fast8).toBeLessThan(fast4);
     expect(fast8).toBeGreaterThanOrEqual(320);
+  });
+
+  it('caps voice playback speed-up so fast fx speeds do not raise the pitch much', () => {
+    expect(voicePlaybackRate(1)).toBe(1);
+    expect(voicePlaybackRate(undefined)).toBe(1);
+    expect(voicePlaybackRate(8)).toBe(MAX_VOICE_RATE);
+    expect(MAX_VOICE_RATE).toBeLessThanOrEqual(1.25);
+    // A line budgeted at the capped rate is never shorter than the audio actually takes.
+    const durationMs = 3000;
+    expect(voiceBudgetMs(durationMs, '', voicePlaybackRate(8))).toBeGreaterThan(durationMs / MAX_VOICE_RATE);
   });
 
   it('resolves a never-ending voice promise at the timeout', async () => {
