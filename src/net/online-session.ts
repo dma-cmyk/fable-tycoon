@@ -579,6 +579,12 @@ export class OnlineSession implements Session {
   private pendingSeat: number | null = null;
   private pendingCharacter: string | null = null;
   private pendingAction: { gen: number; seq: number; action: Action; sentAt: number } | null = null;
+  /**
+   * An action dropped only because the authority was being confirmed/switched. It was derived from
+   * the applied state, so it is re-sent once that same (gen, seq) is usable again instead of making
+   * the player tap twice.
+   */
+  private deferredAction: { gen: number; seq: number; action: Action; at: number } | null = null;
   private lastLobbyRetryAt = 0;
 
   private lastWelcome: Extract<ServerMsg, { t: 'welcome' }> | null = null;
@@ -775,6 +781,7 @@ export class OnlineSession implements Session {
       // Stamp the (gen, seq) of the state the UI actually applied. An action built from an old
       // screen can therefore never be promoted into the new authority's generation.
       if (gen !== this.generation || this.switchingAuthority) {
+        this.deferAction(gen, msg.seq, msg.action);
         this.softReject('ホストを切り替えています。少し待ってから操作してください');
         return;
       }
@@ -782,6 +789,7 @@ export class OnlineSession implements Session {
     }
     if (this.role === 'host' && this.controller) {
       if (msg.t === 'action' && (!this.authorityReady || !this.quorumOk)) {
+        this.deferAction(msg.gen ?? this.generation, msg.seq, msg.action);
         this.softReject('通信待ちのため操作できません。再接続を待っています');
         return;
       }
@@ -808,6 +816,31 @@ export class OnlineSession implements Session {
       }
     }
     this.deliverToHost(msg);
+  }
+
+  private deferAction(gen: number, seq: number, action: Action): void {
+    this.deferredAction = { gen, seq, action, at: Date.now() };
+  }
+
+  private flushDeferredAction(): void {
+    const deferred = this.deferredAction;
+    if (!deferred) return;
+    // Authority switches take seconds on a slow device: allow a generous window, but never
+    // resurrect an action once the board has moved past its seq (the seq check below).
+    if (Date.now() - deferred.at > 20_000) {
+      this.deferredAction = null;
+      return;
+    }
+    const applied = this.appliedOrder();
+    if (!applied || applied.seq !== deferred.seq) {
+      this.deferredAction = null;
+      return;
+    }
+    if (this.switchingAuthority) return; // still mid-switch; a later state re-tries
+    // `send` re-derives the generation for this seq from what was actually delivered, so an action
+    // held across a generation bump is resubmitted under the NEW generation, not the old one.
+    this.deferredAction = null;
+    this.send({ t: 'action', seq: deferred.seq, action: deferred.action });
   }
 
   /** UI-facing rejection that never reaches the authority (used during authority switches). */
@@ -1481,6 +1514,7 @@ export class OnlineSession implements Session {
     }
     this.authorityReady = true;
     this.controller?.setFrozen(false);
+    this.flushDeferredAction();
     this.log(`host quorum restored (${visible}/${needed})`);
     const text = '通信が回復しました';
     this.onServerMsg({ t: 'system', text });
@@ -1500,6 +1534,7 @@ export class OnlineSession implements Session {
     this.controller?.setFrozen(false);
     this.log(`host authority confirmed (${this.ackKeys.size}/${this.requiredAcks} acks)`);
     this.sendHeartbeat();
+    this.flushDeferredAction();
   }
 
   private ownHostClaim(): HostClaim | null {
@@ -1656,6 +1691,13 @@ export class OnlineSession implements Session {
     this.lastHostHeartbeatAt = Date.now();
     this.lastLivenessAt = Date.now();
     this.probeStartedAt = 0;
+    if (control.gen === this.generation && this.switchingAuthority) {
+      // The acknowledged host is alive at the new generation; the board may be identical, so no
+      // state message would arrive to clear this. Without clearing it every action would be
+      // deferred forever after a partition heal.
+      this.switchingAuthority = false;
+      this.flushDeferredAction();
+    }
     this.sendHostAck(control.hostPeerId, control.gen);
     this.hostSeat = control.hostSeat;
     this.shadow.hostSeat = control.hostSeat;
@@ -1728,6 +1770,11 @@ export class OnlineSession implements Session {
     // A side that was itself running a branch (authority or self-promoted) loses that branch when
     // it adopts another authority. A frozen/catching-up client needs no scary message.
     const hadOwnProgress = this.shadow.state !== null && (this.promotedAt > 0 || this.role === 'host');
+    // Generation regression is impossible across a real transfer (both sides bump above their
+    // maxima), so if we have seen a HIGHER generation than the winner announces, the winner must
+    // move up before this side can fully trust it - otherwise the two sides would keep yielding
+    // to each other's old generations and the room would never advance.
+    const seenAbove = this.highestGenerationSeen > control.gen;
     this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
     const previousHostPeerId = this.hostPeerId;
     const previousHostFp = this.hostKeyFingerprint;
@@ -1780,6 +1827,7 @@ export class OnlineSession implements Session {
     this.sendHello();
     this.sendHostAck(control.hostPeerId, control.gen);
     this.broadcastPresence();
+    if (seenAbove) this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
     setTimeout(() => this.maybeResync(control.hostPeerId, control.seq), 100);
     if (hadOwnProgress) {
       // A strictly newer authority wins; whatever this side advanced during the partition is void.
@@ -2097,6 +2145,7 @@ export class OnlineSession implements Session {
       return;
     }
     this.retryPendingGuestOps(now);
+    this.flushDeferredAction();
     if (typeof document === 'undefined' || document.visibilityState === 'visible') {
       if (now - this.lastLivenessAt > REAUTH_SILENCE_MS) {
         this.reauthenticate('no server activity while visible');
@@ -2336,6 +2385,10 @@ export class OnlineSession implements Session {
       case 'lobby':
         this.lastLobby = message.lobby;
         this.shadow.lobby = message.lobby;
+        if ((message.gen ?? this.generation) === this.generation && this.switchingAuthority) {
+          this.switchingAuthority = false;
+          this.flushDeferredAction();
+        }
         if (
           this.role === 'guest' &&
           this.seat !== null &&
@@ -2409,6 +2462,7 @@ export class OnlineSession implements Session {
     if (this.role === 'host' && (message.t === 'update' || message.t === 'snapshot' || message.t === 'lobby')) {
       this.scheduleHostSave();
     }
+    if (message.t === 'snapshot' || message.t === 'update') this.flushDeferredAction();
   }
 
   /**

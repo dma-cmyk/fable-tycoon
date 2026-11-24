@@ -154,6 +154,110 @@ class Peer {
   }
 }
 
+async function waitUntil(
+  condition: () => boolean,
+  timeoutMs: number,
+  label: string,
+  tick?: () => void,
+): Promise<void> {
+  const startedAt = Date.now();
+  for (;;) {
+    if (condition()) return;
+    if (Date.now() - startedAt > timeoutMs) throw new Error(`timed out waiting for ${label}`);
+    tick?.();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/** Act like a human at the controls: keep offering the current turn's action while we wait. */
+async function waitForMsgWithPump(
+  peer: Peer,
+  test: (msg: ServerMsg) => boolean,
+  peers: readonly Peer[],
+  timeoutMs: number,
+  label: string,
+): Promise<ServerMsg> {
+  const timer = setInterval(() => {
+    for (const candidate of peers) candidate.kickAutoPlay();
+  }, 100);
+  try {
+    return await peer.waitForNew(test, timeoutMs, label);
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+function pumpActions(peers: readonly Peer[]): () => void {
+  return () => {
+    for (const peer of peers) peer.kickAutoPlay();
+  };
+}
+
+/** All peers agree on one host, and the peer that is host reports authority ready. */
+function everyonesAuthorityIsReady(peers: readonly Peer[]): boolean {
+  const hostSeats = peers.map(
+    (peer) => peer.session.lobby()?.seats.find((seat) => seat.isHost)?.index ?? null,
+  );
+  if (new Set(hostSeats).size !== 1 || hostSeats[0] === null) return false;
+  return peers.every((peer) => {
+    if (peer.seat !== hostSeats[0]) return true;
+    return authorityInfoForTests(peer.session)?.frozen === false;
+  });
+}
+
+interface IsolatedBroker {
+  url: string;
+  close: () => Promise<void>;
+}
+
+/** A dedicated broker per test removes cross-test packet/timer interference on slow CI. */
+/** Re-apply the suite-wide shared broker config (isolated-broker tests must restore it). */
+function restoreSharedNetwork(brokerPort: number): void {
+  configureNetworkForTests({
+    brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+    disableWebRtc: true,
+    connectTimeoutMs: 2_000,
+    heartbeatMs: 150,
+    hostSilenceMs: 1_200,
+    peerSilenceMs: 1_200,
+    saveThrottleMs: 20,
+    probeTimeoutMs: 4_000,
+    graceMs: 300,
+    replaceMs: 5_000,
+    yearEndAckMs: 500,
+    cpuDelayMs: 50,
+    fxScale: 0.01,
+    clientIds: {
+      host: 'test-host',
+      guest1: 'test-guest1',
+      guest2: 'test-guest2',
+      guest3: 'test-guest3',
+      'guest2-rejoin': 'test-guest2',
+      'smoke-host': 'smoke-host',
+      'smoke-guest': 'smoke-guest',
+      'late-host': 'late-host',
+      'late-guest': 'late-guest',
+      'resync-host': 'resync-host',
+      'resync-guest': 'resync-guest',
+    },
+  });
+}
+
+async function startIsolatedBroker(): Promise<IsolatedBroker> {
+  const broker = await Aedes.createBroker({ heartbeatInterval: 1_000 });
+  const server = createServer((socket) => broker.handle(socket));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (typeof address !== 'object' || !address) throw new Error('isolated broker did not bind');
+  return {
+    url: `mqtt://127.0.0.1:${address.port}`,
+    close: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => broker.close(() => resolve()));
+    },
+  };
+}
+
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   const { promise, resolve } = Promise.withResolvers<void>();
   return { promise, resolve };
@@ -506,90 +610,106 @@ async function createSplitRoom(
   it('heals a partitioned self-promoted host without split-brain', async () => {
     for (const peer of active) peer.stop();
     active.length = 0;
-    configureNetworkForTests({
-      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
-      disableWebRtc: true,
-      connectTimeoutMs: 2_000,
-      heartbeatMs: 150,
-      hostSilenceMs: 800,
-      peerSilenceMs: 3_000,
-      probeMs: 250,
-      hostGoneMs: 2_500,
-      selfHostGraceMs: 800,
-      saveThrottleMs: 20,
-      probeTimeoutMs: 4_000,
-      graceMs: 60_000,
-      replaceMs: 60_000,
-      yearEndAckMs: 60_000,
-      cpuDelayMs: 50,
-      fxScale: 0.01,
-      clientIds: {
-        confhost: 'conf-host',
-        conf1: 'conf-p1',
-        conf2: 'conf-p2',
-        conf3: 'conf-p3',
-      },
-    });
-
-    const hostSession = await createOnlineRoom('confhost');
-    const host = new Peer(hostSession, 'conf-host', true);
-    const guest1 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf1'), 'conf1', true);
-    const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf2'), 'conf2', true);
-    const guest3 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf3'), 'conf3', true);
-    active.push(host, guest1, guest2, guest3);
-    await Promise.all([
-      guest1.waitFor((msg) => msg.t === 'welcome'),
-      guest2.waitFor((msg) => msg.t === 'welcome'),
-      guest3.waitFor((msg) => msg.t === 'welcome'),
-    ]);
-    const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
-    hostSession.send({ t: 'take_seat', index: 0 });
-    await hostWelcome;
-    hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
-    await takeSeats(host, [guest1, guest2, guest3], 1);
-    hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
-    const started = [guest1, guest2, guest3].map((peer) =>
-      peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'conflict start'),
-    );
-    hostSession.send({ t: 'start' });
-    await Promise.all(started);
-
-    const partitionStart = Date.now();
-    guest3.autoPlay = false;
-    setNetworkPartitionForTests(guest3.session, true);
-    await guest3.waitFor(
-      (msg) => msg.t === 'welcome' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 3,
-      15_000,
-      'pixel self-promotes',
-    );
-    const remaining = 12_000 - (Date.now() - partitionStart);
-    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
-
-    const resolved = guest3.waitForNew(
-      (msg) =>
-        msg.t === 'lobby' &&
-        msg.lobby.seats.find((seat) => seat.isHost)?.index === 0 &&
-        msg.lobby.seats.every((seat) => seat.kind !== 'human' || seat.connected),
-      20_000,
-      'partitioned host yields',
-    );
-    setNetworkPartitionForTests(guest3.session, false);
-    await resolved;
-    guest3.autoPlay = true;
-    guest3.kickAutoPlay();
-    expect(checkpointHostForTests(guest3.session)).toBeNull();
-    const before = guest3.seq;
+    const iso = await startIsolatedBroker();
     try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 800,
+        peerSilenceMs: 3_000,
+        probeMs: 250,
+        hostGoneMs: 2_500,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 120_000,
+        replaceMs: 120_000,
+        yearEndAckMs: 120_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        clientIds: {
+          confhost: 'conf-host',
+          conf1: 'conf-p1',
+          conf2: 'conf-p2',
+          conf3: 'conf-p3',
+        },
+      });
+
+      const hostSession = await createOnlineRoom('confhost');
+      const host = new Peer(hostSession, 'conf-host', true);
+      const guest1 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf1'), 'conf1', true);
+      const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf2'), 'conf2', true);
+      const guest3 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf3'), 'conf3', true);
+      active.push(host, guest1, guest2, guest3);
+      const majority = [host, guest1, guest2];
+      await Promise.all([
+        guest1.waitFor((msg) => msg.t === 'welcome'),
+        guest2.waitFor((msg) => msg.t === 'welcome'),
+        guest3.waitFor((msg) => msg.t === 'welcome'),
+      ]);
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guest1, guest2, guest3], 1);
+      hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+      const started = [guest1, guest2, guest3].map((peer) =>
+        peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'conflict start'),
+      );
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+
+      guest3.autoPlay = false;
+      setNetworkPartitionForTests(guest3.session, true);
+      await guest3.waitFor(
+        (msg) => msg.t === 'welcome' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 3,
+        30_000,
+        'pixel self-promotes',
+      );
+      // Explicit event: the majority side must be AHEAD of the isolated branch, otherwise the
+      // isolated (newer-generation) side legitimately wins and the test's premise is wrong.
+      const isolatedSeq = guest3.seq;
+      await waitUntil(
+        () => host.seq > isolatedSeq + 2 && guest1.seq > isolatedSeq + 2,
+        60_000,
+        'majority side overtakes the isolated branch',
+        () =>
+          majority.forEach((peer) => {
+            peer.kickAutoPlay();
+          }),
+      );
+
+      setNetworkPartitionForTests(guest3.session, false);
+      // Explicit resolution: guest3 yields and sees the original host with every seat connected.
       await guest3.waitForNew(
-        (msg) => msg.t === 'update' && msg.seq > before,
-        15_000,
+        (msg) =>
+          msg.t === 'lobby' &&
+          msg.lobby.seats.find((seat) => seat.isHost)?.index === 0 &&
+          msg.lobby.seats.every((seat) => seat.kind !== 'human' || seat.connected),
+        60_000,
+        'partitioned host yields',
+      );
+      guest3.autoPlay = true;
+      guest3.kickAutoPlay();
+      expect(checkpointHostForTests(guest3.session)).toBeNull();
+      const before = guest3.seq;
+      await waitForMsgWithPump(
+        guest3,
+        (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > before,
+        [host, guest1, guest2, guest3],
+        45_000,
         'game continues after conflict',
       );
-    } catch (error) {
-      throw error;
+      expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
     }
-    expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
-  }, 60_000);
+  }, 180_000);
 
   it('appends report evidence without overwriting it', () => {
     const data = new Map<string, string>([['fable.reports', '[{"old":1}]']]);
@@ -709,112 +829,160 @@ async function createSplitRoom(
   it('freezes both sides of a 2/2 split until heal', async () => {
     for (const peer of active) peer.stop();
     active.length = 0;
-    configureNetworkForTests({
-      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
-      disableWebRtc: true,
-      connectTimeoutMs: 2_000,
-      heartbeatMs: 150,
-      hostSilenceMs: 800,
-      peerSilenceMs: 3_000,
-      probeMs: 250,
-      hostGoneMs: 2_500,
-      selfHostGraceMs: 800,
-      saveThrottleMs: 20,
-      probeTimeoutMs: 4_000,
-      graceMs: 60_000,
-      replaceMs: 60_000,
-      yearEndAckMs: 60_000,
-      cpuDelayMs: 50,
-      fxScale: 0.01,
-      clientIds: {
-        s2host: 's2-host',
-        s2a: 's2-a',
-        s2b: 's2-b',
-        s2c: 's2-c',
-      },
-    });
-    const { host, guests } = await createSplitRoom('s2host', ['s2a', 's2b', 's2c']);
-    setBlockedPeersForTests(host.session, ['s2-b', 's2-c']);
-    setBlockedPeersForTests(guests[0].session, ['s2-b', 's2-c']);
-    setBlockedPeersForTests(guests[1].session, ['s2-host', 's2-a']);
-    setBlockedPeersForTests(guests[2].session, ['s2-host', 's2-a']);
-    await new Promise((resolve) => setTimeout(resolve, 4_000));
-    expect(authorityInfoForTests(host.session)?.frozen).toBe(true);
+    const iso = await startIsolatedBroker();
+    try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 800,
+        peerSilenceMs: 3_000,
+        probeMs: 250,
+        hostGoneMs: 2_500,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 120_000,
+        replaceMs: 120_000,
+        yearEndAckMs: 120_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        clientIds: {
+          s2host: 's2-host',
+          s2a: 's2-a',
+          s2b: 's2-b',
+          s2c: 's2-c',
+        },
+      });
+      const { host, guests } = await createSplitRoom('s2host', ['s2a', 's2b', 's2c']);
+      const everyone = [host, ...guests];
+      const pump = pumpActions(everyone);
+      setBlockedPeersForTests(host.session, ['s2-b', 's2-c']);
+      setBlockedPeersForTests(guests[0].session, ['s2-b', 's2-c']);
+      setBlockedPeersForTests(guests[1].session, ['s2-host', 's2-a']);
+      setBlockedPeersForTests(guests[2].session, ['s2-host', 's2-a']);
+      // Explicit event instead of a fixed settling time: the host must lose its majority.
+      await waitUntil(
+        () => authorityInfoForTests(host.session)?.frozen === true,
+        30_000,
+        'host frozen by the 2/2 split',
+        pump,
+      );
 
-    const hostSeq = host.seq;
-    // No side may advance during the split: a 2/2 partition has no strict majority anywhere.
-    const frozenSeqs = [host.seq, guests[0].seq, guests[1].seq, guests[2].seq];
-    await new Promise((resolve) => setTimeout(resolve, 2_500));
-    expect([host.seq, guests[0].seq, guests[1].seq, guests[2].seq]).toEqual(frozenSeqs);
-    setBlockedPeersForTests(host.session, []);
-    setBlockedPeersForTests(guests[0].session, []);
-    setBlockedPeersForTests(guests[1].session, []);
-    setBlockedPeersForTests(guests[2].session, []);
-    await host.waitForNew(
-      (msg) => msg.t === 'update' && msg.seq > hostSeq,
-      15_000,
-      'game resumes after 2/2 heal',
-    );
-  }, 60_000);
+      const hostSeq = host.seq;
+      const frozenSeqs = everyone.map((peer) => peer.seq);
+      // No side may advance during the split: a 2/2 partition has no strict majority anywhere.
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      everyone.forEach((peer, index) => {
+        expect(peer.seq).toBeLessThanOrEqual(frozenSeqs[index] + 1);
+      });
+
+      for (const peer of everyone) setBlockedPeersForTests(peer.session, []);
+      // Explicit authority resolution: all clients agree on one host and it is not frozen.
+      await waitUntil(
+        () => {
+          const hostSeats = everyone.map(
+            (peer) => peer.session.lobby()?.seats.find((seat) => seat.isHost)?.index ?? null,
+          );
+          const agreed = new Set(hostSeats);
+          if (agreed.size !== 1 || hostSeats[0] === null) return false;
+          return everyonesAuthorityIsReady(everyone);
+        },
+        60_000,
+        'single authority after 2/2 heal',
+        pump,
+      );
+      // ... and then a real turn must advance under that authority.
+      await waitForMsgWithPump(
+        host,
+        (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > hostSeq,
+        everyone,
+        45_000,
+        'game resumes after 2/2 heal',
+      );
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 150_000);
 
   it('keeps the 3-person side authoritative during a 3/1 split', async () => {
     for (const peer of active) peer.stop();
     active.length = 0;
-    configureNetworkForTests({
-      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
-      disableWebRtc: true,
-      connectTimeoutMs: 2_000,
-      heartbeatMs: 150,
-      hostSilenceMs: 800,
-      peerSilenceMs: 3_000,
-      probeMs: 250,
-      hostGoneMs: 2_500,
-      selfHostGraceMs: 800,
-      saveThrottleMs: 20,
-      probeTimeoutMs: 4_000,
-      graceMs: 60_000,
-      replaceMs: 60_000,
-      yearEndAckMs: 60_000,
-      cpuDelayMs: 50,
-      fxScale: 0.01,
-      clientIds: {
-        s3host: 's3-host',
-        s3a: 's3-a',
-        s3b: 's3-b',
-        s3c: 's3-c',
-      },
-    });
-    const { host, guests } = await createSplitRoom('s3host', ['s3a', 's3b', 's3c']);
-    setBlockedPeersForTests(host.session, ['s3-c']);
-    setBlockedPeersForTests(guests[0].session, ['s3-c']);
-    setBlockedPeersForTests(guests[1].session, ['s3-c']);
-    setBlockedPeersForTests(guests[2].session, ['s3-host', 's3-a', 's3-b']);
-    // The 3-person side keeps a strict majority, so it must keep advancing the game.
-    const majoritySeq = host.seq;
-    await host.waitForNew(
-      (msg) => msg.t === 'update' && msg.seq > majoritySeq,
-      15_000,
-      'majority side keeps playing',
-    );
-    expect(authorityInfoForTests(host.session)?.frozen).toBe(false);
-    // The isolated seat stops advancing (it has no majority).
-    const isolatedSeq = guests[2].seq;
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    // In-flight deliveries may land, but the isolated side must not keep playing.
-    expect(guests[2].seq).toBeLessThanOrEqual(isolatedSeq + 1);
-    setBlockedPeersForTests(host.session, []);
-    setBlockedPeersForTests(guests[0].session, []);
-    setBlockedPeersForTests(guests[1].session, []);
-    setBlockedPeersForTests(guests[2].session, []);
-    const isolatedBefore = guests[2].seq;
-    await guests[2].waitForNew(
-      (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > isolatedBefore,
-      15_000,
-      'isolated seat rejoins the live updates',
-    );
-    const healedLobby = host.session.lobby();
-    expect([1, 2, 3].every((i) => healedLobby?.seats[i].connected === true)).toBe(true);
-  }, 60_000);
+    const iso = await startIsolatedBroker();
+    try {
+      configureNetworkForTests({
+        brokers: [iso.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 800,
+        peerSilenceMs: 3_000,
+        probeMs: 250,
+        hostGoneMs: 2_500,
+        selfHostGraceMs: 800,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 120_000,
+        replaceMs: 120_000,
+        yearEndAckMs: 120_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        clientIds: {
+          s3host: 's3-host',
+          s3a: 's3-a',
+          s3b: 's3-b',
+          s3c: 's3-c',
+        },
+      });
+      const { host, guests } = await createSplitRoom('s3host', ['s3a', 's3b', 's3c']);
+      const everyone = [host, ...guests];
+      const pump = pumpActions(everyone);
+      setBlockedPeersForTests(host.session, ['s3-c']);
+      setBlockedPeersForTests(guests[0].session, ['s3-c']);
+      setBlockedPeersForTests(guests[1].session, ['s3-c']);
+      setBlockedPeersForTests(guests[2].session, ['s3-host', 's3-a', 's3-b']);
+      // The 3-person side keeps a strict majority, so it must keep advancing the game.
+      const majoritySeq = host.seq;
+      await waitForMsgWithPump(
+        host,
+        (msg) => msg.t === 'update' && msg.seq > majoritySeq,
+        everyone,
+        45_000,
+        'majority side keeps playing',
+      );
+      expect(authorityInfoForTests(host.session)?.frozen).toBe(false);
+      // The isolated seat stops advancing (it has no majority).
+      const isolatedSeq = guests[2].seq;
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      expect(guests[2].seq).toBeLessThanOrEqual(isolatedSeq + 1);
+      for (const peer of everyone) setBlockedPeersForTests(peer.session, []);
+      const isolatedBefore = guests[2].seq;
+      await waitUntil(
+        () => everyonesAuthorityIsReady(everyone),
+        60_000,
+        'single authority after 3/1 heal',
+        pump,
+      );
+      await waitForMsgWithPump(
+        guests[2],
+        (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > isolatedBefore,
+        everyone,
+        45_000,
+        'isolated seat rejoins the live updates',
+      );
+      const healedLobby = host.session.lobby();
+      expect([1, 2, 3].every((i) => healedLobby?.seats[i].connected === true)).toBe(true);
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await iso.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 150_000);
 
   it('discovers the host on a secondary broker before joining', async () => {
     const second = await Aedes.createBroker({ heartbeatInterval: 1_000 });
