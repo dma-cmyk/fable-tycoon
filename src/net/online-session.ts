@@ -78,6 +78,8 @@ export interface NetworkConfig {
   /** No authenticated host reply for this long => re-discover the broker (not a resync trigger). */
   hostReplySilenceMs?: number;
   brokerRetryMs?: number;
+  /** Extra broker connections per client (hosts/guests both use mirrors when configured). */
+  redundantBrokers?: number;
 }
 
 let networkConfig: NetworkConfig = {};
@@ -544,6 +546,10 @@ export class OnlineSession implements Session {
   private followers = new Map<string, FollowRecord>();
   private highestGenerationSeen = 0;
   private brokerMisses = new Set<string>();
+  /** Agreed-lobby human seat count; quorum for an UNCONFIRMED promotion must use this. */
+  private agreedHumanSeats = 0;
+  private promotionConfirmed = false;
+  private rotationsSinceHostReply = 0;
   private lastCompeting: { control: HostClaim; fingerprint: string; at: number } | null = null;
   private inboundBlockedForTests = false;
   private authorityReady = true;
@@ -939,6 +945,7 @@ export class OnlineSession implements Session {
     this.quorumMessageShown = false;
     this.hostPeerId = this.clientId;
     this.hostKeyFingerprint = this.identity.fingerprint;
+    this.promotionConfirmed = true;
     const deps = this.hostDeps();
     try {
       this.controller = saved
@@ -1087,11 +1094,13 @@ export class OnlineSession implements Session {
     const brokers = this.hostBroker
       ? [this.hostBroker, ...rotated.filter((broker) => broker !== this.hostBroker)]
       : rotated;
+    const defaultMirrors = this.role === 'host' ? Math.max(0, brokers.length - 1) : 1;
     const transport = new MqttTransport(this.clientId, {
       identity: this.identity,
       brokers,
       disableWebRtc: networkConfig.disableWebRtc,
       connectTimeoutMs: networkConfig.connectTimeoutMs,
+      redundantBrokers: networkConfig.redundantBrokers ?? defaultMirrors,
       log: (message, detail) => this.log(message, detail),
     });
     transportRegistry.set(this, transport);
@@ -1180,6 +1189,7 @@ export class OnlineSession implements Session {
     // able to force this client to close the room by claiming a version mismatch.
     if (!this.acceptHostSender(from, fingerprint)) return;
     this.lastHostReplyAt = Date.now(); // authenticated host reply: this broker is working
+    this.rotationsSinceHostReply = 0;
     if (
       (message.t === 'welcome' || message.t === 'snapshot') &&
       message.boardVersion !== BOARD_VERSION
@@ -1478,8 +1488,18 @@ export class OnlineSession implements Session {
 
   private updateHostQuorum(): void {
     if (this.role !== 'host') return;
-    const total = this.hostHumanSeatCount();
+    // A self-promoted (not yet confirmed) host must keep counting the AGREED lobby's human seats.
+    // The controller would otherwise CPU-replace everyone it cannot hear after 120 s and let the
+    // isolated branch "continue alone", forking the room on a public-broker partition.
+    const currentHumans = this.hostHumanSeatCount();
+    const total = this.promotionConfirmed
+      ? currentHumans
+      : Math.max(currentHumans, this.agreedHumanSeats);
     if (total <= 1) {
+      if (!this.promotionConfirmed) {
+        this.abandonUnconfirmedPromotion('no majority in the agreed lobby');
+        return;
+      }
       // A lone human (or a host whose absent partner was just CPU-replaced) is a majority of one.
       this.quorumMessageShown = false;
       if (!this.quorumOk) {
@@ -1524,6 +1544,8 @@ export class OnlineSession implements Session {
   private becomeAuthorityReady(): void {
     if (this.authorityReady || !this.quorumOk) return;
     this.authorityReady = true;
+    this.promotionConfirmed = true;
+    this.rotationsSinceHostReply = 0;
     rememberHostKey(
       this.roomId,
       this.ownHostFingerprint(),
@@ -1634,6 +1656,62 @@ export class OnlineSession implements Session {
     }
   }
 
+  /**
+   * A guest that promoted itself is a provisional authority. If it cannot confirm a majority (or
+   * the agreed lobby says more humans exist than it can ever hear), it must give the role up and
+   * keep searching for the real room instead of forking it.
+   */
+  private abandonUnconfirmedPromotion(reason: string): void {
+    if (this.role !== 'host' || this.promotionConfirmed) return;
+    this.log(`abandoning unconfirmed promotion: ${reason}`);
+    this.controller?.dispose();
+    this.controller = null;
+    this.role = 'guest';
+    this.promotedAt = 0;
+    this.authorityReady = false;
+    this.quorumOk = false;
+    this.switchingAuthority = false;
+    this.hostPeerId = null;
+    this.hostKeyFingerprint = null;
+    this.hostSeat = null;
+    this.pendingAction = null;
+    this.deferredAction = null;
+    this.setState('reconnecting');
+    this.broadcastPresence();
+    this.sendHello();
+    this.maybeRotateBrokerForMissingHost(Date.now(), true);
+  }
+
+  /**
+   * Only promote where a majority of the AGREED lobby's human seats is actually reachable. A guest
+   * that sees nobody must keep rotating brokers instead of forking the room with a new authority.
+   * Duels (<=2 humans) keep the old behaviour so a killed host can still be replaced.
+   */
+  private mayPromote(now: number): boolean {
+    const lobby = this.shadow.lobby;
+    if (!lobby) return false;
+    const humans = lobby.seats.filter((seat) => seat.kind === 'human');
+    if (humans.length <= 2) return true;
+    const needed = Math.floor(humans.length / 2) + 1;
+    const peerSilence = networkConfig.peerSilenceMs ?? DEFAULT_PEER_SILENCE_MS;
+    const alive = new Set<string>();
+    for (const [peerId, seen] of this.peerSeen) {
+      if (now - seen > peerSilence) continue;
+      const fingerprint = this.peerKeys.get(peerId);
+      if (fingerprint) alive.add(fingerprint);
+    }
+    let visible = 0;
+    for (const seat of humans) {
+      if (seat.index === this.seat) {
+        visible += 1;
+        continue;
+      }
+      const key = this.shadow.seatKeys[String(seat.index)];
+      if (key && alive.has(key)) visible += 1;
+    }
+    return visible >= needed;
+  }
+
   private requestGenerationBump(hostPeerId: string, gen: number): void {
     void this.transport?.send(hostPeerId, {
       k: 'gen_bump',
@@ -1679,6 +1757,7 @@ export class OnlineSession implements Session {
       return;
     }
     this.lastHostReplyAt = Date.now();
+    this.rotationsSinceHostReply = 0;
     if (this.hostKeyFingerprint === null) this.hostKeyFingerprint = fingerprint;
     if (control.gen < this.highestGenerationSeen) {
       // Never move the session/UI order backwards: ask the authority to bump above what we saw.
@@ -2188,6 +2267,12 @@ export class OnlineSession implements Session {
       return;
     }
     this.probeStartedAt = 0;
+    if (!this.mayPromote(now)) {
+      // No majority visible: never fork the room; keep looking for the real authority.
+      this.log('not promoting: no majority of the agreed lobby is reachable');
+      this.maybeRotateBrokerForMissingHost(now, true);
+      return;
+    }
     if (this.isLowestAliveHuman(now)) this.promoteToHost();
   }
 
@@ -2231,30 +2316,44 @@ export class OnlineSession implements Session {
    * status alone therefore cannot decide the broker: rotate when authenticated host replies stop,
    * remembering brokers that did not answer and skipping them on the next attempt.
    */
-  private maybeRotateBrokerForMissingHost(now: number): void {
-    if (this.role !== 'guest' || !this.hostPeerId || !this.transport) return;
-    if (this.transport.status() !== 'open') return;
-    if (this.lastHostReplyAt === 0) return;
-    const silence = networkConfig.hostReplySilenceMs ?? HOST_REPLY_SILENCE_MS;
-    if (now - this.lastHostReplyAt <= silence) return;
+  private maybeRotateBrokerForMissingHost(now: number, force = false): void {
+    if (this.role !== 'guest' || !this.transport) return;
+    if (!force) {
+      if (!this.hostPeerId) return;
+      if (this.transport.status() !== 'open') return;
+      if (this.lastHostReplyAt === 0) return;
+      const silence = networkConfig.hostReplySilenceMs ?? HOST_REPLY_SILENCE_MS;
+      if (now - this.lastHostReplyAt <= silence) return;
+    }
     const retry = networkConfig.brokerRetryMs ?? BROKER_RETRY_MS;
-    if (now - this.lastBrokerRotateAt < retry) return;
-    const candidates = this.brokerCandidates();
-    if (candidates.length < 2) return;
+    // Retry a broker with no host reply on a bounded backoff instead of settling on it forever.
+    const backoff = retry * Math.min(4, Math.max(1, this.rotationsSinceHostReply + 1));
+    if (!force && now - this.lastBrokerRotateAt < backoff) return;
+    const base = this.brokerCandidates();
+    if (base.length < 2) return;
     this.lastBrokerRotateAt = now;
+    this.rotationsSinceHostReply += 1;
     const current = this.transport.broker();
     if (current) this.brokerMisses.add(current);
     this.brokerAttempt += 1;
-    this.log(`no authenticated host reply for ${silence}ms; trying the next broker`);
+    this.log(
+      force
+        ? 'searching for the host on the next broker'
+        : `no authenticated host reply for ${networkConfig.hostReplySilenceMs ?? HOST_REPLY_SILENCE_MS}ms; trying the next broker`,
+    );
     const old = this.transport;
     this.transport = null;
     if (old) void old.close();
-    void this.connectGuestTransport();
+    this.connectGuestTransport();
   }
 
   private brokerCandidates(): string[] {
     const base = networkConfig.brokers ?? DEFAULT_BROKERS;
-    return rotateBrokers(base, this.brokerAttempt, this.brokerMisses);
+    // Brokers that once missed the host come back into rotation after a full pass, because a host
+    // can migrate onto them (public brokers are flaky; nobody stays excluded for good).
+    const misses = this.rotationsSinceHostReply > base.length ? new Set<string>() : this.brokerMisses;
+    if (this.rotationsSinceHostReply > base.length) this.brokerMisses.clear();
+    return rotateBrokers(base, this.brokerAttempt, misses);
   }
 
   private isLowestAliveHuman(now: number): boolean {
@@ -2298,6 +2397,8 @@ export class OnlineSession implements Session {
       const deps = this.hostDeps();
       this.controller = RoomController.adopt(snapshot, deps);
       this.role = 'host';
+      this.promotionConfirmed = false;
+      this.agreedHumanSeats = snapshot.lobby.seats.filter((seat) => seat.kind === 'human').length;
       this.highestGenerationSeen = Math.max(this.highestGenerationSeen, this.generation);
       this.generation = nextGeneration([this.highestGenerationSeen, this.shadowGeneration]);
       this.highestGenerationSeen = this.generation;

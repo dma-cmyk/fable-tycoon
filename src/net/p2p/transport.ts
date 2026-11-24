@@ -160,6 +160,12 @@ export interface MqttTransportOptions {
   brokers?: readonly string[];
   /** Node tests set this: RTCPeerConnection does not exist in Node anyway, but explicit is clearer. */
   disableWebRtc?: boolean;
+  /**
+   * Extra broker connections kept in parallel (hosts use 2 so a guest on ANY public broker can still
+   * hear them). Every publish goes to all connected clients; inbound dedupe by envelope id makes
+   * the overlap harmless.
+   */
+  redundantBrokers?: number;
   connectTimeoutMs?: number;
   log?: (message: string, detail?: unknown) => void;
 }
@@ -218,6 +224,9 @@ export class MqttTransport implements P2PTransport {
   private readonly options: MqttTransportOptions;
   private readonly log: (message: string, detail?: unknown) => void;
   private client: MqttClient | null = null;
+  private mirrors = new Map<string, MqttClient>();
+  private mirrorTimer: unknown = null;
+  private mirrorInFlight = false;
   private brokerUrl: string | null = null;
   private brokerList: readonly string[] = [];
   private brokerIndex = 0;
@@ -309,6 +318,7 @@ export class MqttTransport implements P2PTransport {
         this.setStatus('open');
         this.flushOfflineQueue();
         this.log(`connected to ${broker} as ${this.peerId}`);
+        this.ensureMirrors();
         return;
       } catch (error) {
         lastError = error;
@@ -356,25 +366,124 @@ export class MqttTransport implements P2PTransport {
     return promise;
   }
 
+  /** Extra broker connections for hosts: a guest that landed on another public broker still hears us. */
+  private ensureMirrors(): void {
+    const wanted = this.options.redundantBrokers ?? 0;
+    if (wanted <= 0 || this.closed) return;
+    if (this.mirrorTimer !== null) return;
+    void this.connectMirrors(wanted);
+  }
+
+  private async connectMirrors(wanted: number): Promise<void> {
+    if (this.mirrorInFlight || this.closed) return;
+    this.mirrorInFlight = true;
+    try {
+      const candidates = this.brokerList.filter(
+        (broker) => broker !== this.brokerUrl && !this.mirrors.has(broker),
+      );
+      for (const broker of candidates) {
+        if (this.closed) return;
+        if (this.mirrors.size >= wanted) return;
+        try {
+          const client = await this.openClient(broker);
+          if (this.closed) {
+            client.end(true);
+            return;
+          }
+          this.mirrors.set(broker, client);
+          this.attachMirror(broker, client);
+          await this.subscribe(client);
+          this.log(`mirror connected to ${broker}`);
+        } catch (error) {
+          this.log(`mirror failed: ${broker}`, error);
+        }
+      }
+    } finally {
+      this.mirrorInFlight = false;
+      if (this.closed) return;
+      if (this.mirrors.size < wanted) {
+        // Public brokers are flaky; keep trying the missing mirrors with a bounded backoff.
+        if (this.mirrorTimer !== null) clearTimeout(this.mirrorTimer as number);
+        this.mirrorTimer = setTimeout(() => {
+          this.mirrorTimer = null;
+          this.ensureMirrors();
+        }, 15_000);
+      }
+    }
+  }
+
+  private attachMirror(broker: string, client: MqttClient): void {
+    client.on('message', (_topic: string, payload: Uint8Array) => {
+      this.handleWire(payload.toString());
+    });
+    const drop = (): void => {
+      if (this.mirrors.get(broker) !== client) return;
+      this.mirrors.delete(broker);
+      if (this.closed) return;
+      this.scheduleMirrorRetry();
+      this.recomputeStatus();
+    };
+    client.on('close', drop);
+    client.on('offline', drop);
+    client.on('connect', () => {
+      if (this.closed) return;
+      void this.subscribe(client)
+        .then(() => {
+          this.recomputeStatus();
+          this.flushOfflineQueue();
+        })
+        .catch((error) => this.log(`mirror subscribe failed: ${broker}`, error));
+    });
+    client.on('error', (error: Error) => this.log('mirror mqtt error', error));
+  }
+
+  private scheduleMirrorRetry(): void {
+    if (this.closed || this.mirrorTimer !== null) return;
+    this.mirrorTimer = setTimeout(() => {
+      this.mirrorTimer = null;
+      this.ensureMirrors();
+    }, 15_000);
+  }
+
+  private connectedClients(): MqttClient[] {
+    const clients: MqttClient[] = [];
+    if (this.client?.connected) clients.push(this.client);
+    for (const client of this.mirrors.values()) if (client.connected) clients.push(client);
+    return clients;
+  }
+
+  private recomputeStatus(): void {
+    if (this.closed) return;
+    const connected = this.connectedClients();
+    if (connected.length > 0) {
+      this.setStatus('open');
+      return;
+    }
+    const hasClient = this.client !== null || this.mirrors.size > 0;
+    this.setStatus(hasClient ? 'reconnecting' : 'closed');
+  }
+
   private attachClient(client: MqttClient): void {
     client.on('message', (_topic: string, payload: Uint8Array) => {
       this.handleWire(payload.toString());
     });
     client.on('close', () => {
       if (this.closed) return;
-      this.setStatus('reconnecting');
+      // A live mirror still carries traffic for every room member: only report reconnecting when
+      // NO broker connection is usable.
+      this.recomputeStatus();
       this.scheduleFailover();
     });
     client.on('offline', () => {
       if (this.closed) return;
-      this.setStatus('reconnecting');
+      this.recomputeStatus();
       this.scheduleFailover();
     });
     client.on('connect', () => {
       if (this.closed) return;
       this.clearFailover();
       void this.subscribe(client).then(() => {
-        this.setStatus('open');
+        this.recomputeStatus();
         this.flushOfflineQueue();
       });
     });
@@ -543,26 +652,33 @@ export class MqttTransport implements P2PTransport {
     return chunks;
   }
 
-  private publishChunks(topic: string, chunks: WireEnvelope[]): void {
-    const client = this.client;
-    if (!client || !client.connected) {
+  private publishChunks(topic: string, chunks: WireEnvelope[], alreadyEncoded = false): void {
+    const clients = this.connectedClients();
+    if (clients.length === 0) {
       this.offlineQueue.push({ topic, chunks });
       if (this.offlineQueue.length > 500) this.offlineQueue.shift();
       return;
     }
-    for (const chunk of chunks) {
-      client.publish(topic, JSON.stringify(chunk), { qos: 1 });
+    // Publish to EVERY broker this peer is attached to. Each envelope id is unique per send, so a
+    // receiver on one broker sees it once; a receiver subscribed to two brokers dedupes by id.
+    void alreadyEncoded;
+    for (const client of clients) {
+      for (const chunk of chunks) {
+        client.publish(topic, JSON.stringify(chunk), { qos: 1 });
+      }
     }
   }
 
   private flushOfflineQueue(): void {
-    const client = this.client;
-    if (!client || !client.connected || this.offlineQueue.length === 0) return;
+    const clients = this.connectedClients();
+    if (clients.length === 0 || this.offlineQueue.length === 0) return;
     const queued = this.offlineQueue;
     this.offlineQueue = [];
     for (const entry of queued) {
-      for (const chunk of entry.chunks) {
-        client.publish(entry.topic, JSON.stringify(chunk), { qos: 1 });
+      for (const client of clients) {
+        for (const chunk of entry.chunks) {
+          client.publish(entry.topic, JSON.stringify(chunk), { qos: 1 });
+        }
       }
     }
   }
@@ -874,11 +990,23 @@ export class MqttTransport implements P2PTransport {
     const client = this.client;
     this.client = null;
     this.setStatus('closed');
-    if (client) {
-      const { promise, resolve } = Promise.withResolvers<void>();
-      client.end(false, {}, () => resolve());
-      setTimeout(resolve, 500);
-      await promise;
-    }
+    if (this.mirrorTimer !== null) clearTimeout(this.mirrorTimer as number);
+    this.mirrorTimer = null;
+    const clients = [...this.mirrors.values()];
+    this.mirrors.clear();
+    if (client) clients.push(client);
+    await Promise.all(
+      clients.map(
+        (entry) =>
+          new Promise<void>((resolve) => {
+            try {
+              entry.end(false, {}, () => resolve());
+            } catch {
+              resolve();
+            }
+            setTimeout(resolve, 500);
+          }),
+      ),
+    );
   }
 }

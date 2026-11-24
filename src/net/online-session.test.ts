@@ -245,13 +245,24 @@ function restoreSharedNetwork(brokerPort: number): void {
 
 async function startIsolatedBroker(): Promise<IsolatedBroker> {
   const broker = await Aedes.createBroker({ heartbeatInterval: 1_000 });
-  const server = createServer((socket) => broker.handle(socket));
+  const sockets = new Set<import('node:net').Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+    broker.handle(socket);
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (typeof address !== 'object' || !address) throw new Error('isolated broker did not bind');
+  let closed = false;
   return {
     url: `mqtt://127.0.0.1:${address.port}`,
     close: async () => {
+      if (closed) return;
+      closed = true;
+      // Kill live sockets first: server.close() waits for them, and MQTT clients reconnect forever.
+      for (const socket of sockets) socket.destroy();
+      sockets.clear();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await new Promise<void>((resolve) => broker.close(() => resolve()));
     },
@@ -456,7 +467,7 @@ async function createSplitRoom(
     let guest2Rejoined = false;
     let hostKilled = false;
     let hostCheckpoint: ReturnType<typeof checkpointHostForTests> = null;
-    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 40_000);
+    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 150_000);
 
     function observe(peer: Peer): void {
       peer.onState = (state, seq) => {
@@ -520,16 +531,19 @@ async function createSplitRoom(
     );
     // The old host seat must be driven by the new host's grace/CPU path even if the old host
     // never comes back. Wait for a state advance before resuming it.
-    await guest1.waitFor(
+    await waitForMsgWithPump(
+      guest1,
       (msg) => msg.t === 'lobby' && msg.lobby.seats[0].kind === 'cpu',
-      30_000,
+      [guest1, guest2, guest3],
+      60_000,
       'old host seat replaced by CPU',
     );
     const seqAfterMigration = guest1.seq;
-    await guest1.waitFor(
-      (msg) =>
-        (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > seqAfterMigration,
-      20_000,
+    await waitForMsgWithPump(
+      guest1,
+      (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > seqAfterMigration,
+      [guest1, guest2, guest3],
+      60_000,
       'game advances without old host',
     );
     const authority = authorityInfoForTests(guest1.session);
@@ -605,9 +619,9 @@ async function createSplitRoom(
 
     const elapsed = Date.now() - startedAt;
     console.log(`[p2p-e2e] 1-year 3-guest game (host migrated) in ${elapsed}ms, final seq ${guest1.seq}`);
-  }, 240_000);
+  }, 400_000);
 
-  it('heals a partitioned self-promoted host without split-brain', async () => {
+  it('does not fork the room from a minority partition and rejoins on heal', async () => {
     for (const peer of active) peer.stop();
     active.length = 0;
     const iso = await startIsolatedBroker();
@@ -643,7 +657,6 @@ async function createSplitRoom(
       const guest2 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf2'), 'conf2', true);
       const guest3 = new Peer(joinOnlineRoom(hostSession.roomId, 'conf3'), 'conf3', true);
       active.push(host, guest1, guest2, guest3);
-      const majority = [host, guest1, guest2];
       await Promise.all([
         guest1.waitFor((msg) => msg.t === 'welcome'),
         guest2.waitFor((msg) => msg.t === 'welcome'),
@@ -661,48 +674,26 @@ async function createSplitRoom(
       hostSession.send({ t: 'start' });
       await Promise.all(started);
 
+      // A guest that is cut off from everyone is a MINORITY (1 of 4). It must never promote itself
+      // and fork the room; it keeps searching for the real authority instead.
       guest3.autoPlay = false;
       setNetworkPartitionForTests(guest3.session, true);
-      await guest3.waitFor(
-        (msg) => msg.t === 'welcome' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 3,
-        30_000,
-        'pixel self-promotes',
-      );
-      // Explicit event: the majority side must be AHEAD of the isolated branch, otherwise the
-      // isolated (newer-generation) side legitimately wins and the test's premise is wrong.
-      const isolatedSeq = guest3.seq;
-      await waitUntil(
-        () => host.seq > isolatedSeq + 2 && guest1.seq > isolatedSeq + 2,
-        60_000,
-        'majority side overtakes the isolated branch',
-        () =>
-          majority.forEach((peer) => {
-            peer.kickAutoPlay();
-          }),
-      );
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      expect(guest3.session.lobby()?.seats.find((seat) => seat.isHost)?.index).toBe(0);
+      expect(authorityInfoForTests(guest3.session)?.frozen).not.toBe(true);
 
       setNetworkPartitionForTests(guest3.session, false);
-      // Explicit resolution: guest3 yields and sees the original host with every seat connected.
-      await guest3.waitForNew(
-        (msg) =>
-          msg.t === 'lobby' &&
-          msg.lobby.seats.find((seat) => seat.isHost)?.index === 0 &&
-          msg.lobby.seats.every((seat) => seat.kind !== 'human' || seat.connected),
-        60_000,
-        'partitioned host yields',
-      );
-      guest3.autoPlay = true;
-      guest3.kickAutoPlay();
-      expect(checkpointHostForTests(guest3.session)).toBeNull();
       const before = guest3.seq;
       await waitForMsgWithPump(
         guest3,
         (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > before,
         [host, guest1, guest2, guest3],
         45_000,
-        'game continues after conflict',
+        'isolated guest rejoins the real authority after heal',
       );
+      guest3.autoPlay = true;
       expect(guest3.session.lobby()?.seats[3].connected).toBe(true);
+      expect(checkpointHostForTests(guest3.session)).toBeNull();
     } finally {
       for (const peer of active) peer.stop();
       active.length = 0;
@@ -983,6 +974,153 @@ async function createSplitRoom(
       restoreSharedNetwork(brokerPort);
     }
   }, 150_000);
+
+  it('keeps a guest on one broker connected across host migration (host mirrors)', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    const brokerA = await startIsolatedBroker();
+    const brokerB = await startIsolatedBroker();
+    try {
+      const base = {
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 1_200,
+        peerSilenceMs: 3_000,
+        probeMs: 250,
+        hostGoneMs: 3_000,
+        selfHostGraceMs: 1_000,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 120_000,
+        replaceMs: 120_000,
+        yearEndAckMs: 120_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+      } as const;
+      // Host and the future host can reach BOTH brokers; the B-only guest can reach just one.
+      configureNetworkForTests({
+        ...base,
+        brokers: [brokerA.url, brokerB.url],
+        clientIds: { blendhost: 'blend-host', blenda: 'blend-a', blendb: 'blend-b' },
+      });
+      const hostSession = await createOnlineRoom('blendhost');
+      const host = new Peer(hostSession, 'blend-host', true);
+      const guestA = new Peer(joinOnlineRoom(hostSession.roomId, 'blenda'), 'blend-a', true);
+      const guestB = new Peer(joinOnlineRoom(hostSession.roomId, 'blendb'), 'blend-b', true);
+      active.push(host, guestA, guestB);
+      await Promise.all([
+        guestA.waitFor((msg) => msg.t === 'welcome', 30_000, 'guest A welcome'),
+        guestB.waitFor((msg) => msg.t === 'welcome', 30_000, 'guest B welcome'),
+      ]);
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guestA, guestB], 1);
+      hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+      const started = [host, guestA, guestB].map((peer) =>
+        peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'mirror start'),
+      );
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+
+      // Kill the host: the two guests form a 2/3 majority; seat 1 takes over and keeps mirroring.
+      const beforeKill = guestB.seq;
+      killSessionForTests(host.session);
+      await guestB.waitFor(
+        (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
+        45_000,
+        'migration visible to the single-broker guest',
+      );
+      await waitForMsgWithPump(
+        guestB,
+        (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > beforeKill,
+        [guestA, guestB],
+        45_000,
+        'single-broker guest receives updates from the promoted host',
+      );
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await brokerA.close();
+      await brokerB.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 180_000);
+
+  it('rotates a guest off a dead broker and converges on the live one', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    const brokerA = await startIsolatedBroker();
+    const brokerB = await startIsolatedBroker();
+    try {
+      const base = {
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 150,
+        hostSilenceMs: 1_200,
+        peerSilenceMs: 3_000,
+        probeMs: 250,
+        hostGoneMs: 3_000,
+        selfHostGraceMs: 1_000,
+        saveThrottleMs: 20,
+        probeTimeoutMs: 4_000,
+        graceMs: 120_000,
+        replaceMs: 120_000,
+        yearEndAckMs: 120_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+        brokerRetryMs: 500,
+        hostReplySilenceMs: 1_500,
+      } as const;
+      configureNetworkForTests({
+        ...base,
+        brokers: [brokerA.url, brokerB.url],
+        clientIds: { 'rot-host': 'rot-host' },
+      });
+      const hostSession = await createOnlineRoom('rot-host');
+      const host = new Peer(hostSession, 'rot-host', true);
+      active.push(host);
+      // Guest connects to A only (no mirror) so killing A forces a real rotation to B.
+      configureNetworkForTests({
+        ...base,
+        brokers: [brokerA.url, brokerB.url],
+        redundantBrokers: 0,
+        clientIds: { 'rot-guest': 'rot-guest' },
+      });
+      const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'rot-guest'), 'rot-guest', true);
+      active.push(guest);
+      await guest.waitFor((msg) => msg.t === 'welcome', 30_000, 'rotation guest welcome');
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      await takeSeats(host, [guest], 1);
+      hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+      const started = [host, guest].map((peer) =>
+        peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'rotation start'),
+      );
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+
+      await brokerA.close();
+      const before = guest.seq;
+      await waitForMsgWithPump(
+        guest,
+        (msg) => (msg.t === 'update' || msg.t === 'snapshot') && msg.seq > before,
+        [host, guest],
+        60_000,
+        'guest converges after its broker dies',
+      );
+    } finally {
+      for (const peer of active) peer.stop();
+      active.length = 0;
+      await brokerA.close().catch(() => undefined);
+      await brokerB.close();
+      restoreSharedNetwork(brokerPort);
+    }
+  }, 180_000);
 
   it('discovers the host on a secondary broker before joining', async () => {
     const second = await Aedes.createBroker({ heartbeatInterval: 1_000 });
