@@ -1,5 +1,6 @@
 import type { PublicState } from '../core/engine';
 import type {Fx} from '../core/types';
+import { FX_MS } from '../net/session-types';
 import type { UiSettings } from './settings';
 
 /**
@@ -14,6 +15,34 @@ export interface FxUpdate {
   state: PublicState;
   deadline: number | null;
   gen?: number;
+}
+
+/** Nominal 1x duration of one fx; used for the watchdog (2x + 5s). */
+export function estimateFxDurationMs(fx: Fx): number {
+  switch (fx.t) {
+    case 'turn': return FX_MS.turn;
+    case 'dice': return FX_MS.dice;
+    case 'move': return Math.max(300, FX_MS.moveStep * Math.max(1, fx.path.length));
+    case 'warp': return FX_MS.warp;
+    case 'cash': return FX_MS.cash;
+    case 'buy': return FX_MS.buy;
+    case 'sell': return FX_MS.sell;
+    case 'card_get': return FX_MS.card_get;
+    case 'card_use': return FX_MS.card_use;
+    case 'say': return FX_MS.sayBase + FX_MS.sayPerChar * [...fx.text].length;
+    case 'event_open': return FX_MS.event_open;
+    case 'event_close': return FX_MS.event_close;
+    case 'goal': return FX_MS.goal;
+    case 'destination': return FX_MS.destination;
+    case 'piper': return FX_MS.piper;
+    case 'industry': return FX_MS.industry;
+    case 'skip': return FX_MS.skip;
+    case 'month': return FX_MS.month;
+    case 'year_end': return FX_MS.year_end;
+    case 'game_over': return FX_MS.game_over;
+    case 'toast': return FX_MS.toast;
+    default: return 800;
+  }
 }
 
 export interface PlaybackControl {
@@ -50,6 +79,7 @@ export class FxPlayer {
   private skipRequested = false;
   private destroyed = false;
   private epoch = 0;
+  private watchdogTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   constructor(private readonly host: FxPlayerHost) {}
 
@@ -74,6 +104,7 @@ export class FxPlayer {
    * dice overlay or similar does not outlive the state it belonged to.
    */
   reset(): void {
+    this.clearWatchdog();
     this.epoch++;
     this.runSkipCallbacks();
     this.queue = [];
@@ -83,6 +114,23 @@ export class FxPlayer {
     this.host.setBusy(false);
     this.host.setSkippable(false);
     this.host.onQueueChange(0);
+  }
+
+  /**
+   * Snapshot adoption: drop queued updates that the snapshot already covers so a reconnect
+   * cannot replay a backlog of stale fx.
+   */
+  dropThrough(gen: number, seq: number): number {
+    const before = this.queue.length;
+    this.queue = this.queue.filter((update) => {
+      const updateGen = update.gen ?? gen;
+      if (updateGen < gen) return false;
+      if (updateGen === gen && update.seq <= seq) return false;
+      return true;
+    });
+    const dropped = before - this.queue.length;
+    if (dropped > 0) this.host.onQueueChange(this.queue.length);
+    return dropped;
   }
 
   skip(): boolean {
@@ -121,6 +169,21 @@ export class FxPlayer {
       const resolve = this.manualResolve;
       this.manualResolve = null;
       resolve();
+    }
+  }
+
+  private applyForcedEnd(update: FxUpdate): void {
+    try {
+      this.host.applyState(update.state, update.deadline, update.seq, update.gen);
+    } catch {
+      /* the watchdog must never throw out of the timer */
+    }
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdogTimer !== null) {
+      globalThis.clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
   }
 
@@ -178,6 +241,23 @@ export class FxPlayer {
     this.host.setSkippable(true);
     while (this.queue.length > 0 && !this.destroyed && this.epoch === epoch) {
       const update = this.queue[0];
+      const watchdogMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0) * 2 + 5000;
+      this.clearWatchdog();
+      this.watchdogTimer = globalThis.setTimeout(() => {
+        if (this.epoch !== epoch || this.destroyed) return;
+        console.warn(`[fx] update seq=${update.seq} exceeded ${watchdogMs}ms; skipping to its end state`);
+        // Force progress even if a presentation promise never settles.
+        this.applyForcedEnd(update);
+        this.epoch += 1; // make the in-flight pump stop before applying anything else
+        this.running = false;
+        this.queue = [];
+        this.finishActive();
+        this.skipCallbacks.clear();
+        this.skipRequested = false;
+        this.host.setBusy(false);
+        this.host.setSkippable(false);
+        this.host.onQueueChange(0);
+      }, watchdogMs);
       for (const fx of update.fx) {
         if (this.destroyed || this.epoch !== epoch) break;
         this.skipCallbacks.clear();
@@ -190,12 +270,14 @@ export class FxPlayer {
         }
       }
       if (this.epoch !== epoch) break;
+      this.clearWatchdog();
       this.finishActive();
       this.skipCallbacks.clear();
       this.queue.shift();
       this.host.onQueueChange(this.queue.length);
       if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq, update.gen);
     }
+    this.clearWatchdog();
     if (this.epoch !== epoch) return;
     this.running = false;
     this.host.setBusy(false);

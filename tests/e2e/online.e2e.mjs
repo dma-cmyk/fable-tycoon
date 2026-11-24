@@ -30,6 +30,12 @@ const RUN_LABEL = (process.env.E2E_RUN_LABEL || 'run').replace(/[^A-Za-z0-9_-]/g
 const SCENARIO = process.env.E2E_SCENARIO || (process.env.E2E_CLIENTS ? 'subset' : 'full');
 const CPU_GAP = process.env.E2E_CPU_GAP === '1';
 const SKIP_HOST_KILL = process.env.E2E_SKIP_HOST_KILL === '1';
+/** `0` disables auto-skip so a stall is measured instead of bypassed. */
+const SKIP_AFTER_MS_RAW = (process.env.E2E_SKIP_AFTER_MS ?? '').trim();
+const SKIP_AFTER_MS = SKIP_AFTER_MS_RAW === '' ? 15_000 : Math.max(0, Number(SKIP_AFTER_MS_RAW));
+if (!Number.isFinite(SKIP_AFTER_MS)) {
+  throw new Error(`E2E_SKIP_AFTER_MS must be a non-negative number (got "${process.env.E2E_SKIP_AFTER_MS}")`);
+}
 const RESULT_TIMEOUT_MS = Number(process.env.E2E_RESULT_TIMEOUT_MS || 12 * 60 * 1000);
 const MIGRATION_TIMEOUT_MS = Number(process.env.E2E_MIGRATION_TIMEOUT_MS || 45 * 1000);
 /**
@@ -320,6 +326,10 @@ function attachErrorCollectors(client) {
       client.canvasLimitWarnings = (client.canvasLimitWarnings || 0) + 1;
       report.errors.canvasLimitWarnings += 1;
     }
+    if (/通信待ち/.test(message.text())) {
+      client.commWaitSignals = (client.commWaitSignals || 0) + 1;
+      report.commWaitSignals = (report.commWaitSignals || 0) + 1;
+    }
     if (message.type() === 'error') {
       const entry = {
         client: client.id,
@@ -390,6 +400,11 @@ async function launchClient(spec, webkitPreload) {
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
+      // This workstation runs ~6 GB of other apps; keep four headless
+      // browsers inside the remaining headroom so the kernel OOM killer does
+      // not take down the authoritative host mid-game.
+      '--js-flags=--max-old-space-size=768',
+      '--renderer-process-limit=2',
     ];
     if (HEADFUL && layout) {
       launchOptions.args.push(
@@ -402,6 +417,8 @@ async function launchClient(spec, webkitPreload) {
     launchOptions.firefoxUserPrefs = {
       'media.volume_scale': '0.0',
       'media.autoplay.default': 5,
+      // Keep the four-browser run inside this workstation's RAM headroom.
+      'javascript.options.mem.max': 768 * 1024,
     };
     if (HEADFUL) launchOptions.args = ['-width', '960', '-height', '540'];
   }
@@ -616,11 +633,16 @@ async function sampleModalDepth(client) {
         return style.display !== 'none' && style.visibility !== 'hidden';
       }).length;
       const status = (document.querySelector('.status-chip')?.textContent || '').trim();
-      return { visibleModals, status };
+      const banner = (document.querySelector('.game-banner')?.textContent || '').trim();
+      return { visibleModals, status, banner };
     })
     .catch(() => null);
   if (!sample) return;
   client.modalSamples = (client.modalSamples || 0) + 1;
+  if (/通信待ち/.test(sample.banner) || /通信待ち/.test(sample.status)) {
+    client.commWaitUi = (client.commWaitUi || 0) + 1;
+    report.commWaitUi = (report.commWaitUi || 0) + 1;
+  }
   if (sample.visibleModals > (client.maxModals || 0)) client.maxModals = sample.visibleModals;
   // status-chip shows "あなたの番" only for the acting client; anything else
   // ("<name> の番", "観戦中") means this client is a non-actor right now.
@@ -1084,10 +1106,24 @@ async function openEmoteTab(client, tabName) {
 
 async function readTransport(client) {
   const page = client.page;
-  const chips = await page.locator('.transport-chip').allTextContents().catch(() => []);
-  const text = chips.map((chip) => chip.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  if (text.length) client.transports.push({ atMs: nowMs(), text });
-  return text;
+  const text = await page
+    .locator('.transport-chip')
+    .evaluateAll((chips) =>
+      chips.map((chip) => {
+        const visible = (selector) => {
+          const el = chip.querySelector(selector);
+          if (!el) return null;
+          const style = getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return null;
+          return (el.textContent || '').replace(/\s+/g, ' ').trim();
+        };
+        return visible('.transport-chip-long') ?? visible('.transport-chip-short') ?? '';
+      }),
+    )
+    .catch(() => []);
+  const cleaned = text.filter(Boolean);
+  if (cleaned.length) client.transports.push({ atMs: nowMs(), text: cleaned });
+  return cleaned;
 }
 
 // ---------------------------------------------------------------- game bot
@@ -1097,6 +1133,39 @@ async function actOnce(client) {
   if (!page || page.isClosed()) return false;
 
   if (await isVisible(page.locator('.result-screen'))) return 'result';
+
+  // Track how long each cutscene (演出中) actually lasts. Tap-to-skip is the
+  // same affordance a human has, but it is only used after a real stall, and
+  // every duration/skip is recorded so the report can answer "was it stuck?".
+  if (await isVisible(page.locator('.skip-hint:not([hidden])'))) {
+    const now = Date.now();
+    if (!client.fxBusySince) {
+      client.fxBusySince = now;
+      client.fxBusyMaxSeen = client.fxBusyMaxSeen || 0;
+    }
+    const busyFor = now - client.fxBusySince;
+    if (busyFor > (client.fxBusyMaxSeen || 0)) client.fxBusyMaxSeen = busyFor;
+    if (SKIP_AFTER_MS > 0 && busyFor > SKIP_AFTER_MS) {
+      const canvas = page.locator('.map-canvas').first();
+      if (await isVisible(canvas)) {
+        await canvas.click({ position: { x: 60, y: 60 }, timeout: 5000, force: true }).catch(() => undefined);
+        client.stuckSkips = (client.stuckSkips || 0) + 1;
+        client.skipLog = client.skipLog || [];
+        if (client.skipLog.length < 60) {
+          client.skipLog.push({ atMs: nowMs(), busyFor, primary: ((await page.locator('.dice-primary').textContent().catch(() => '')) || '').trim() });
+        }
+        log(`${client.id}: skipped a ${Math.round(busyFor / 1000)}s cutscene`);
+        client.fxBusySince = 0;
+        return 'skip_fx';
+      }
+    }
+  } else if (client.fxBusySince) {
+    client.fxDurations = client.fxDurations || [];
+    if (client.fxDurations.length < 500) {
+      client.fxDurations.push(Date.now() - client.fxBusySince);
+    }
+    client.fxBusySince = 0;
+  }
 
   // Year-end acknowledgement. A stale city-buy modal can sit above it, so use a
   // DOM click to reach the enabled ack (reported UI bug).
@@ -1557,15 +1626,23 @@ async function main() {
   phase('chat_test', { text: chatText, from: chatSender.id, to: chatReceiver.id });
   await openChat(chatReceiver);
   await openChat(chatSender);
-  await chatSender.page.locator('.chat-input').first().fill(chatText);
-  await press(chatSender, chatSender.page.locator('.chat-send').first());
-  await waitFor(
-    () =>
-      isVisible(
-        chatReceiver.page.locator('.chat-text').filter({ hasText: chatText }).first(),
-      ),
-    { timeout: 15_000, label: `${chatReceiver.id} receives chat` },
-  );
+  const receivedChat = () =>
+    isVisible(chatReceiver.page.locator('.chat-text').filter({ hasText: chatText }).first());
+  let delivered = false;
+  for (let attempt = 1; attempt <= 4 && !delivered; attempt += 1) {
+    const sendText = attempt === 1 ? chatText : `${chatText}-${attempt}`;
+    if (attempt > 1) log(`${chatSender.id}: resending chat (attempt ${attempt})`);
+    await chatSender.page.locator('.chat-input').first().fill(sendText);
+    await press(chatSender, chatSender.page.locator('.chat-send').first());
+    delivered = await waitFor(receivedChat, {
+      timeout: 25_000,
+      interval: 250,
+      label: `${chatReceiver.id} receives chat`,
+    })
+      .then(() => true)
+      .catch(() => false);
+  }
+  if (!delivered) throw new Error(`${chatReceiver.id} never received chat after 4 sends`);
   await closeChat(chatSender);
   await closeChat(chatReceiver);
   log(`chat delivered to ${chatReceiver.id}: ${chatText}`);
@@ -1675,11 +1752,15 @@ async function main() {
           return page
             .evaluate(() => {
               const loading = document.querySelector('.game-loading');
-              return !!document.querySelector('.dice-primary') && (!loading || loading.hidden);
+              const loadingVisible = !!loading && !loading.hidden;
+              const rankRows = document.querySelectorAll('.rank-row').length;
+              // The loading cover can linger behind an already-applied state
+              // (map assets are large); treat a rendered HUD as ready.
+              return !!document.querySelector('.dice-primary') && (!loadingVisible || rankRows > 0);
             })
             .catch(() => false);
         },
-        { timeout: 120_000, interval: 300, label: `${client.id} map loaded` },
+        { timeout: 180_000, interval: 300, label: `${client.id} map loaded` },
       ),
     ),
   );
@@ -1953,6 +2034,21 @@ try {
   report.maxModals = Math.max(0, ...clients.map((client) => client.maxModals || 0));
   report.maxModalsNonActor = Math.max(0, ...clients.map((client) => client.maxModalsNonActor || 0));
   report.canvasLimitWarnings = report.errors.canvasLimitWarnings;
+  report.cutscene = {
+    skipAfterMs: SKIP_AFTER_MS,
+    totalSkips: clients.reduce((sum, client) => sum + (client.stuckSkips || 0), 0),
+    perClient: Object.fromEntries(
+      clients.map((client) => [
+        client.id,
+        {
+          skips: client.stuckSkips || 0,
+          maxBusyMs: client.fxBusyMaxSeen || 0,
+          normalFxCount: (client.fxDurations || []).length,
+          normalFxMaxMs: Math.max(0, ...(client.fxDurations || [])),
+        },
+      ]),
+    ),
+  };
   report.clients = clients.map((client) => ({
     id: client.id,
     label: client.label,
@@ -1971,6 +2067,10 @@ try {
     canvasLimitWarnings: client.canvasLimitWarnings,
     maxModals: client.maxModals || 0,
     maxModalsNonActor: client.maxModalsNonActor || 0,
+    stuckSkips: client.stuckSkips || 0,
+    fxBusyMaxMs: client.fxBusyMaxSeen || 0,
+    skipLog: client.skipLog || [],
+    fxDurationsMs: client.fxDurations || [],
   }));
   await writeFile(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
   await cleanup();

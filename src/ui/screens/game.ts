@@ -38,6 +38,7 @@ import { rubyName } from '../ruby';
 import { placeDestinationArrow } from '../destArrow';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { isIdenticalResync, type ResyncWatermark } from '../resync';
+import { raceWithTimeout, voiceBudgetMs } from '../../audio/voiceBudget';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
@@ -847,6 +848,7 @@ export class GameScreen implements ScreenHandle {
           !this.fxPlayer.busy &&
           isIdenticalResync(this.appliedWatermark, { gen, seq: msg.seq, state: msg.state })
         ) {
+          this.fxPlayer.dropThrough(gen, msg.seq);
           this.deadline = msg.deadline;
           this.lobby = msg.lobby;
           this.syncFlaggedSeats();
@@ -854,6 +856,8 @@ export class GameScreen implements ScreenHandle {
           break;
         }
         this.interruptInFlightFx();
+        // The snapshot supersedes every queued update: never replay a reconnect backlog.
+        this.fxPlayer.dropThrough(gen, msg.seq);
         this.latestGen = gen;
         this.latestSeq = Math.max(this.latestSeq, msg.seq);
         this.lobby = msg.lobby;
@@ -2833,13 +2837,15 @@ export class GameScreen implements ScreenHandle {
       }
       case 'dice': {
         Audio.sfx('dice_roll');
+        // Cancel() from a resync resolves this show; the extra race also bounds a lost rAF.
+        const diceMs = FX_MS.dice / control.speed + 8000;
         if (fx.values.length > 1) {
           const vehicle = vehicleForDice(fx.values.length);
           this.showGameBanner(`${vehicle.emoji} ${vehicle.label}で出発！`);
         }
         const ms = FX_MS.dice / control.speed;
         control.onSkip(() => this.dice.skip());
-        await this.dice.show(fx.values, ms);
+        await raceWithTimeout(this.dice.show(fx.values, ms), diceMs);
         Audio.sfx('dice_land');
         return;
       }
@@ -3098,7 +3104,9 @@ export class GameScreen implements ScreenHandle {
       voicePromise = Audio.playVoice(voiceKey, fx.text);
     }
     const advance = uiSettings().autoAdvance ? control.wait(duration) : control.waitManual();
-    await Promise.all([voicePromise, advance]);
+    // A voice line must never hold the queue: bound it by an estimate even if the audio
+    // context is suspended (background/reopened tab) and `onended` never fires.
+    await Promise.all([raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text)), advance]);
   }
 
   private speakerSeat(speaker: SpeakerRef, playerId: number | undefined, state: PublicState): number | null {

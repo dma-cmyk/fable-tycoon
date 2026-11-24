@@ -61,6 +61,10 @@ Everything is written under `.tmp/e2e/`:
   `E2E_RUN_LABEL` prefixes screenshots/reports; `E2E_SCENARIO` tags the report.
 - `E2E_SKIP_HOST_KILL=1` plays the full game with the host alive (no migration);
   default `0` kills the host mid-game and requires migration evidence.
+- `E2E_SKIP_AFTER_MS` (default `15000`) taps the map when a cutscene stays in
+  `演出中` longer than this, mirroring the in-game “タップでスキップ”. Set `0`
+  to disable auto-skip and measure stalls; `report.cutscene` records skips and
+  the max continuous cutscene per client either way.
 - `E2E_MOBILE_DPR` selects mobile emulation DPR: `native` (**default**, real
   device descriptor: iPhone 13 = 3, Pixel 7 = 2.625) or `1`. Use `1` only as a
   temporary workaround for the map-canvas over-allocation crash

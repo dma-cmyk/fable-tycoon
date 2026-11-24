@@ -6,6 +6,7 @@
 
 import type { GameEventDef } from '../core/types';
 import { voiceHash } from './voicekey';
+import { voiceBudgetMs } from './voiceBudget';
 
 export { voiceHash, voiceKeyOf } from './voicekey';
 
@@ -100,6 +101,7 @@ interface ActiveVoice {
   source: AudioBufferSourceNode;
   resolve: () => void;
   done: boolean;
+  timer: ReturnType<typeof globalThis.setTimeout> | null;
 }
 
 let activeVoice: ActiveVoice | null = null;
@@ -115,6 +117,7 @@ interface ActiveChatter {
   source: AudioBufferSourceNode;
   resolve: () => void;
   done: boolean;
+  timer: ReturnType<typeof globalThis.setTimeout> | null;
 }
 
 let activeChatter: ActiveChatter | null = null;
@@ -208,7 +211,8 @@ function unlock(): void {
 
 /** Plays the manifest voice line for (voiceKey, text); resolves on end, stop or a missing line. */
 async function playVoice(voiceKey: string, text: string): Promise<void> {
-  if (!ready || !ctx) return;
+  // A suspended/unavailable context never reaches `onended`; do not let the caller await forever.
+  if (!ready || !ctx || ctx.state !== 'running') return;
 
   const token = ++voiceToken;
   stopActiveVoice();
@@ -263,7 +267,7 @@ function stopVoice(): void {
  * is ducked to 40% while a game voice line is speaking. Resolves on end, skip or missing line.
  */
 async function playChatter(voiceKey: string, text: string): Promise<void> {
-  if (!ready || !ctx || chatterBusy || activeVoice || voicePending) return;
+  if (!ready || !ctx || ctx.state !== 'running' || chatterBusy || activeVoice || voicePending) return;
   chatterBusy = true;
   const hash = voiceHash(voiceKey, text);
   try {
@@ -541,7 +545,7 @@ function startVoice(buffer: AudioBuffer): Promise<void> {
   const promise = new Promise<void>((resolve) => {
     resolvePromise = resolve;
   });
-  const active: ActiveVoice = { source, resolve: resolvePromise, done: false };
+  const active: ActiveVoice = { source, resolve: resolvePromise, done: false, timer: null };
   activeVoice = active;
   updateChatterDuck();
   updateBgmDuck();
@@ -553,6 +557,8 @@ function startVoice(buffer: AudioBuffer): Promise<void> {
     }
     finishVoice(active);
   };
+  // Safari/Chrome may not fire `ended` for a suspended context; never await the line forever.
+  active.timer = globalThis.setTimeout(() => finishVoice(active), voiceBudgetMs(buffer.duration * 1000, ''));
   try {
     source.start();
   } catch {
@@ -564,6 +570,10 @@ function startVoice(buffer: AudioBuffer): Promise<void> {
 function finishVoice(voice: ActiveVoice): void {
   if (voice.done) return;
   voice.done = true;
+  if (voice.timer !== null) {
+    globalThis.clearTimeout(voice.timer);
+    voice.timer = null;
+  }
   if (activeVoice === voice) activeVoice = null;
   updateChatterDuck();
   updateBgmDuck();
@@ -607,7 +617,7 @@ function startChatter(buffer: AudioBuffer): Promise<void> {
   const promise = new Promise<void>((resolve) => {
     resolvePromise = resolve;
   });
-  const active: ActiveChatter = { source, resolve: resolvePromise, done: false };
+  const active: ActiveChatter = { source, resolve: resolvePromise, done: false, timer: null };
   activeChatter = active;
   updateChatterDuck();
   source.onended = () => {
@@ -618,6 +628,7 @@ function startChatter(buffer: AudioBuffer): Promise<void> {
     }
     finishChatter(active);
   };
+  active.timer = globalThis.setTimeout(() => finishChatter(active), voiceBudgetMs(buffer.duration * 1000, ''));
   try {
     source.start();
   } catch {
@@ -629,6 +640,10 @@ function startChatter(buffer: AudioBuffer): Promise<void> {
 function finishChatter(chatter: ActiveChatter): void {
   if (chatter.done) return;
   chatter.done = true;
+  if (chatter.timer !== null) {
+    globalThis.clearTimeout(chatter.timer);
+    chatter.timer = null;
+  }
   if (activeChatter === chatter) activeChatter = null;
   chatter.resolve();
 }

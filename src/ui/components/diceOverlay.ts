@@ -1,5 +1,6 @@
 import { h } from '../dom';
 import { motionReduced } from '../motion';
+import { ShowGate } from '../showGate';
 import {
   DICE_FACES,
   faceTransform,
@@ -20,6 +21,7 @@ export class DiceOverlay {
   private readonly diceHost: HTMLElement;
   private readonly totalEl: HTMLElement;
   private settle: (() => void) | null = null;
+  private readonly gate = new ShowGate();
   private timers: number[] = [];
   private spins: Animation[] = [];
 
@@ -58,7 +60,7 @@ export class DiceOverlay {
     const holdMs = Math.max(24, schedule - rollMs);
     this.el.style.setProperty('--dice-fade', `${fadeMs}ms`);
     this.el.style.setProperty('--dice-land', `${Math.max(40, Math.min(320, holdMs))}ms`);
-    const { promise, resolve } = Promise.withResolvers<void>();
+    const promise = this.gate.begin();
     let done = false;
 
     const land = (): void => {
@@ -78,7 +80,7 @@ export class DiceOverlay {
       this.clearTimers();
       this.el.classList.remove('is-visible');
       this.el.setAttribute('aria-hidden', 'true');
-      this.timers.push(window.setTimeout(() => resolve(), fadeMs));
+      this.timers.push(window.setTimeout(() => this.gate.settle(), fadeMs));
     };
 
     if (reduced) {
@@ -115,6 +117,8 @@ export class DiceOverlay {
     for (const animation of this.spins) animation.cancel();
     this.spins = [];
     this.settle = null;
+    // A cancelled show must resolve; otherwise the fx that awaited it never advances.
+    this.gate.settle();
     this.el.classList.remove('is-visible', 'is-rolling', 'is-settled');
     this.el.setAttribute('aria-hidden', 'true');
     this.diceHost.replaceChildren();
