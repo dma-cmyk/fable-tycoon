@@ -33,7 +33,7 @@ export function estimateFxDurationMs(fx: Fx): number {
     case 'event_open': return FX_MS.event_open;
     case 'event_close': return FX_MS.event_close;
     case 'goal': return FX_MS.goal;
-    case 'destination': return FX_MS.destination;
+    case 'destination': return Math.max(FX_MS.destination, 3200);
     case 'piper': return FX_MS.piper;
     case 'industry': return FX_MS.industry;
     case 'skip': return FX_MS.skip;
@@ -79,6 +79,7 @@ export class FxPlayer {
   private manualResolve: (() => void) | null = null;
   private skipCallbacks = new Set<() => void>();
   private skipRequested = false;
+  private skipUpdateRequested = false;
   private destroyed = false;
   private epoch = 0;
   private watchdogTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -116,6 +117,7 @@ export class FxPlayer {
     this.queue = [];
     this.finishActive();
     this.skipRequested = false;
+    this.skipUpdateRequested = false;
     this.running = false;
     this.host.setBusy(false);
     this.host.setSkippable(false);
@@ -141,6 +143,16 @@ export class FxPlayer {
 
   skip(): boolean {
     if (!this.running) return false;
+    this.skipRequested = true;
+    this.runSkipCallbacks();
+    this.finishActive();
+    return true;
+  }
+
+  /** Skip every remaining fx in the currently playing update and immediately adopt its state. */
+  skipUpdate(): boolean {
+    if (!this.running) return false;
+    this.skipUpdateRequested = true;
     this.skipRequested = true;
     this.runSkipCallbacks();
     this.finishActive();
@@ -289,9 +301,10 @@ export class FxPlayer {
       const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
       const watchdogMs = estimatedMs * 2 + 8000;
       this.watchdogPaused = false;
+      this.skipUpdateRequested = false;
       this.armWatchdog(update, epoch, watchdogMs);
       for (const fx of update.fx) {
-        if (this.destroyed || this.epoch !== epoch) break;
+        if (this.destroyed || this.epoch !== epoch || this.skipUpdateRequested) break;
         this.skipCallbacks.clear();
         this.skipRequested = false;
         this.host.setSkippable(true);
@@ -303,6 +316,7 @@ export class FxPlayer {
           this.setManualWait(false);
         }
       }
+      this.skipUpdateRequested = false;
       if (this.epoch !== epoch) break;
       this.clearWatchdog();
       this.activeUpdate = null;

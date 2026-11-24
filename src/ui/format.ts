@@ -163,6 +163,19 @@ export function formatTurnLabel(round: number, years: number): string {
   return `${Math.min(round + 1, total)} / ${total}`;
 }
 
+/**
+ * Total turn count shown on the result screen, aligned with the HUD's `formatTurnLabel`.
+ * At `year_end` and `game_over`, `settleYear` has already incremented `round` once past the
+ * final played month (so a 1-year / 12-month match ends with `round === 12`).
+ */
+export function formatCompletedTurns(round: number, years: number, phaseType?: string): number {
+  const total = Math.max(1, years * 12);
+  if (phaseType === 'game_over' || phaseType === 'year_end') {
+    return Math.max(1, Math.min(round, total));
+  }
+  return Math.max(1, Math.min(round + 1, total));
+}
+
 /** 2026-11-23 12:34 style timestamp for chat. */
 export function formatClock(ms: number): string {
   const d = new Date(ms);

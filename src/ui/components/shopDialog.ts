@@ -29,11 +29,17 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
   let state = options.state;
   let canAct = options.canAct;
   let modalHandle: ModalHandle | null = null;
-  const body = h('div', { class: 'shop-dialog' });
+  let renderedOnce = false;
+  const scroll = h('div', { class: 'shop-scroll scroll-y' });
+  const footer = h('footer', { class: 'shop-footer' });
+  const body = h('div', { class: 'shop-dialog' }, scroll, footer);
 
   const render = (): void => {
     const player = state.players[state.current];
     if (!player) return;
+    const savedScrollTop = scroll.scrollTop;
+    const savedScrollLeft = scroll.scrollLeft;
+    if (renderedOnce) body.classList.add('is-updated');
     const character = charsById.get(player.characterId);
     const shopkeeper = npcsById.get('midas');
     const shopkeeperSprite = shopkeeper?.sprite ? assetUrl(shopkeeper.sprite) : '';
@@ -44,6 +50,7 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
 
     const stockHost = h('div', { class: 'shop-stock' });
     const stock = state.phase.t === 'shop' ? state.phase.stock : [];
+    const stockCount = stock.length;
     stock.forEach((cardId, index) => {
       const card = cardsById.get(cardId);
       if (!card) return;
@@ -75,7 +82,7 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
         ),
       );
     });
-    if (stock.length === 0) {
+    if (stockCount === 0) {
       stockHost.append(h('p', { class: 'shop-empty', text: '棚は空っぽだ。また来たまえ。' }));
     }
 
@@ -116,78 +123,85 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
     }
 
     const speech = canAct
-      ? '5枚の在庫だ。買うも売るも、金次第。気に入ったら札束を置いていきな。'
+      ? stockCount > 0
+        ? `残り${stockCount}枚の在庫だ。買うも売るも、金次第。気に入ったら札束を置いていきな。`
+        : '棚は売り切れだ。手持ちカードを売るか、また来たまえ。'
       : `${player.name} が品定め中だ。ゆっくり待とう。`;
 
-    body.replaceChildren(
+    scroll.replaceChildren(
       h(
-        'div',
-        { class: 'shop-scroll scroll-y' },
+        'header',
+        { class: 'shop-head' },
         h(
-          'header',
-          { class: 'shop-head' },
-          h(
-            'span',
-            { class: 'shopkeeper' },
-            shopkeeperSprite
-              ? h('img', { attrs: { src: shopkeeperSprite, alt: 'ミダス商会の店主', draggable: 'false' } })
-              : h('span', { class: 'shopkeeper-fallback', text: '👑' }),
-          ),
-          h(
-            'div',
-            { class: 'shop-head-text' },
-            h('span', { class: 'shop-name', text: 'ミダス商会 カード売り場' }),
-            h('p', { class: 'shop-speech', text: speech }),
-          ),
-          h(
-            'div',
-            { class: 'shop-cash' },
-            h('span', { class: 'muted', text: '所持金' }),
-            h('strong', { class: player.cash < 0 ? 'money-negative' : '', text: formatOku(player.cash) }),
-          ),
+          'span',
+          { class: 'shopkeeper' },
+          shopkeeperSprite
+            ? h('img', { attrs: { src: shopkeeperSprite, alt: 'ミダス商会の店主', draggable: 'false' } })
+            : h('span', { class: 'shopkeeper-fallback', text: '👑' }),
         ),
         h(
-          'section',
-          { class: 'shop-section' },
-          h(
-            'div',
-            { class: 'shop-section-head' },
-            h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), '棚のカード（5枚）'),
-            h('span', { class: 'muted', text: '価格は年数で変動' }),
-          ),
-          stockHost,
+          'div',
+          { class: 'shop-head-text' },
+          h('span', { class: 'shop-name', text: 'ミダス商会 カード売り場' }),
+          h('p', { class: 'shop-speech', text: speech }),
         ),
         h(
-          'section',
-          { class: 'shop-section' },
-          h(
-            'div',
-            { class: 'shop-section-head' },
-            h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), '手持ちのカード'),
-            h('span', { class: 'badge', text: `手札 ${player.cards.length} / ${handLimit}` }),
-          ),
-          handHost,
+          'div',
+          { class: 'shop-cash' },
+          h('span', { class: 'muted', text: '所持金' }),
+          h('strong', { class: player.cash < 0 ? 'money-negative' : '', text: formatOku(player.cash) }),
         ),
       ),
       h(
-        'footer',
-        { class: 'shop-footer' },
-        h('span', { class: 'muted shop-footer-note', text: '売却は半額。買い物のあと「店を出る」で手番を続けます。' }),
-        canAct
-          ? h('button', {
-              class: 'btn btn-gold shop-leave',
-              text: '店を出る',
-              attrs: { type: 'button' },
-              on: {
-                click: (event) => {
-                  (event.currentTarget as HTMLButtonElement).disabled = true;
-                  options.onEnd();
-                },
-              },
-            })
-          : h('span', { class: 'muted', text: '手番の人が買い物中…' }),
+        'section',
+        { class: 'shop-section' },
+        h(
+          'div',
+          { class: 'shop-section-head' },
+          h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), `棚のカード（残り ${stockCount}枚）`),
+          h('span', { class: 'muted', text: '価格は年数で変動' }),
+        ),
+        stockHost,
+      ),
+      h(
+        'section',
+        { class: 'shop-section' },
+        h(
+          'div',
+          { class: 'shop-section-head' },
+          h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), '手持ちのカード'),
+          h('span', { class: 'badge', text: `手札 ${player.cards.length} / ${handLimit}` }),
+        ),
+        handHost,
       ),
     );
+    footer.replaceChildren(
+      h('span', { class: 'muted shop-footer-note', text: '売却は半額。買い物のあと「店を出る」で手番を続けます。' }),
+      h(
+        'span',
+        { class: 'shop-footer-cash' },
+        h('span', { class: 'muted', text: '所持金 ' }),
+        h('strong', { class: player.cash < 0 ? 'money-negative' : '', text: formatOku(player.cash) }),
+      ),
+      canAct
+        ? h('button', {
+            class: 'btn btn-ghost shop-leave',
+            text: '店を出る',
+            attrs: { type: 'button' },
+            on: {
+              click: (event) => {
+                (event.currentTarget as HTMLButtonElement).disabled = true;
+                options.onEnd();
+              },
+            },
+          })
+        : h('span', { class: 'muted', text: '手番の人が買い物中…' }),
+    );
+    if (renderedOnce) {
+      scroll.scrollTop = savedScrollTop;
+      scroll.scrollLeft = savedScrollLeft;
+    }
+    renderedOnce = true;
   };
 
   render();

@@ -186,6 +186,7 @@ interface ModalEntry {
 export class ModalHost {
   readonly el: HTMLElement;
   private readonly stack: ModalEntry[] = [];
+  private readonly listeners = new Set<(open: boolean) => void>();
 
   constructor() {
     this.el = h('div', { class: 'modal-host', attrs: { 'aria-live': 'polite' } });
@@ -193,6 +194,18 @@ export class ModalHost {
 
   isOpen(): boolean {
     return this.stack.length > 0;
+  }
+
+  onChange(listener: (open: boolean) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notifyChange(): void {
+    const open = this.stack.length > 0;
+    for (const listener of this.listeners) listener(open);
   }
 
   open(content: HTMLElement, options: ModalOptions = {}): ModalHandle {
@@ -270,6 +283,7 @@ export class ModalHost {
       entry.closed = true;
       options.onClose?.();
       this.syncBackgroundInert();
+      this.notifyChange();
       if (this.stack.length === 0 && previousFocus?.isConnected) {
         window.setTimeout(() => previousFocus.focus({ preventScroll: true }), 0);
       } else if (this.stack.length > 0) {
@@ -296,6 +310,7 @@ export class ModalHost {
       (panel.querySelector('button') as HTMLElement | null) ??
       panel;
     this.syncBackgroundInert();
+    this.notifyChange();
     requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
     return {
       root: backdrop,

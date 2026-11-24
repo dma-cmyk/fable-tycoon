@@ -1,7 +1,8 @@
 import type { PublicState } from '../../core/engine';
 import type {} from '../../core/types';
 import { h } from '../dom';
-import { displayPlayerName, formatOkuShort, playerColor } from '../format';
+import { displayPlayerName, formatOkuShort } from '../format';
+import { resolvePlayerChartColors } from '../playerChartColors';
 
 export interface AssetChartOptions {
   canvas: HTMLCanvasElement;
@@ -105,10 +106,11 @@ export function drawAssetChart(options: AssetChartOptions): void {
   ctx.fillText('現在', cssWidth - padRight, cssHeight - padBottom + 6);
 
   // Lines
-  state.players.forEach((player, index) => {
+  const colors = resolvePlayerChartColors(state.players);
+  state.players.forEach((_player, index) => {
     const values = series[index];
     if (values.length === 0) return;
-    const color = playerColor(player);
+    const color = colors[index];
     ctx.strokeStyle = color;
     ctx.lineWidth = 3.4;
     ctx.lineJoin = 'round';
@@ -146,15 +148,16 @@ function niceStep(raw: number): number {
 
 export function assetLegend(state: PublicState): HTMLElement {
   const legend = h('div', { class: 'asset-legend' });
-  for (const player of state.players) {
+  const colors = resolvePlayerChartColors(state.players);
+  state.players.forEach((player, index) => {
     legend.append(
       h(
         'span',
         { class: 'asset-legend-item' },
-        h('span', { class: 'asset-legend-dot', attrs: { style: `background:${playerColor(player)}` } }),
+        h('span', { class: 'asset-legend-dot', attrs: { style: `background:${colors[index]}` } }),
         h('span', { text: displayPlayerName(player) }),
       ),
     );
-  }
+  });
   return legend;
 }

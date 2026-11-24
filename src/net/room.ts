@@ -1246,7 +1246,7 @@ export class RoomController {
       this.deadline = this.turnStartedAt + this.turnFxMs + this.settings.turnSeconds * 1000;
     }
 
-    if (this.state.phase.t === 'year_end') {
+    if (this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs)) {
       this.setTask('ack', now + this.turnFxMs + this.yearEndAckMs);
     }
     if (seat.autoplay) {

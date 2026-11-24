@@ -349,7 +349,7 @@ textarea {
   width: 100%;
 }
 
-.btn:pressed {
+.btn:active {
   transform: translateY(1px);
 }
 

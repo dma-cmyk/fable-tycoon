@@ -51,6 +51,47 @@ describe('FxPlayer reset', () => {
     expect(h.cleanup).toHaveBeenCalledTimes(1);
     player.destroy();
   });
+
+  it('skips all remaining fx in the current update on skipUpdate() and applies state immediately', async () => {
+    const seen: string[] = [];
+    const applied: number[] = [];
+    let release!: () => void;
+    const player = new FxPlayer({
+      settings: () => settings,
+      handleFx: (fx, _state, control) => {
+        seen.push(fx.t);
+        const { promise, resolve } = Promise.withResolvers<void>();
+        release = resolve;
+        control.onSkip(resolve);
+        return promise;
+      },
+      applyState: (_s, _d, seq) => applied.push(seq),
+      setBusy: () => undefined,
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+    });
+    player.enqueue({
+      seq: 9,
+      fx: [
+        { t: 'event_open', eventId: 'e1', playerId: 0 },
+        { t: 'say', speaker: 'narrator', text: 'line1' },
+        { t: 'say', speaker: 'narrator', text: 'line2' },
+      ],
+      state,
+      deadline: null,
+      gen: 1,
+    });
+    await Promise.resolve();
+    expect(seen).toEqual(['event_open']);
+    expect(player.skipUpdate()).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual(['event_open']);
+    expect(applied).toEqual([9]);
+    expect(player.busy).toBe(false);
+    release();
+    player.destroy();
+  });
 });
 
 describe('FxPlayer watchdog', () => {
@@ -147,12 +188,13 @@ describe('FxPlayer backlog pruning', () => {
 });
 
 describe('estimateFxDurationMs', () => {
-  it('scales say by text length and move by path length', () => {
+  it('scales say by text length and move by path length, and budgets destination voice playback', () => {
     expect(estimateFxDurationMs({ t: 'say', speaker: 'narrator', text: 'あ'.repeat(10) })).toBe(
       FX_MS.sayBase + FX_MS.sayPerChar * 10,
     );
     expect(estimateFxDurationMs({ t: 'move', playerId: 0, path: ['a', 'b', 'c'], dice: 1 })).toBe(
       FX_MS.moveStep * 3,
     );
+    expect(estimateFxDurationMs({ t: 'destination', cityId: 'tokyo' })).toBeGreaterThanOrEqual(3200);
   });
 });

@@ -33,6 +33,8 @@ export interface MessageWindowOptions {
   speed: () => number;
   /** Extra class for layout variants (e.g. above an open event panel). */
   className?: string;
+  /** Notified whenever visibility or manual-advance waiting state changes. */
+  onStateChange?: () => void;
 }
 
 /**
@@ -102,6 +104,10 @@ export class MessageWindow {
     return !this.el.hidden;
   }
 
+  get isManualWaiting(): boolean {
+    return this.visible && this.cursor.current?.autoAdvance === false;
+  }
+
   get currentText(): string {
     return this.textEl.textContent ?? '';
   }
@@ -123,7 +129,9 @@ export class MessageWindow {
     this.pageIndex = 0;
     this.revealing = false;
     this.el.hidden = true;
-    this.el.classList.remove('is-visible');
+    this.el.classList.remove('is-visible', 'is-manual-wait');
+    this.nextEl.textContent = '▼';
+    this.options.onStateChange?.();
   }
 
   /** Immediately finish the current line (all pages) and move on. Used by fx skip. */
@@ -175,14 +183,20 @@ export class MessageWindow {
       this.pages = [];
       this.pageIndex = 0;
       this.el.hidden = true;
-      this.el.classList.remove('is-visible');
+      this.el.classList.remove('is-visible', 'is-manual-wait');
+      this.nextEl.textContent = '▼';
       this.pagerEl.textContent = '';
+      this.options.onStateChange?.();
       return;
     }
     // Show first so the box has a layout, then paginate against its real text width
     // (the CSS width differs a lot between PC, phone portrait and landscape).
     this.el.hidden = false;
     this.el.classList.add('is-visible');
+    const manual = line.autoAdvance === false;
+    this.el.classList.toggle('is-manual-wait', manual);
+    this.nextEl.textContent = manual ? 'タップで次へ ▼' : '▼';
+    this.options.onStateChange?.();
     this.pages = paginateText(line.text, charsPerPage(this.metrics()));
     this.pageIndex = 0;
     this.portrait.replaceChildren(

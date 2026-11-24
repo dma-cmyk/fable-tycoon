@@ -1243,7 +1243,8 @@ function settleYear(data: GameData, state: GameState, fx: Fx[]): void {
   const report: YearReport = { year, income, assets, headline };
   state.assetHistory.push(assets.map((a) => a.total));
   state.round += 1;
-  state.current = 0;
+  // Let a human player confirm the year-end settlement when any human is in the match.
+  state.current = state.players.find((p) => !p.isCpu)?.id ?? 0;
   state.phase = { t: 'year_end', report };
   fx.push({ t: 'year_end', report });
 }

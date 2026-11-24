@@ -205,6 +205,8 @@ export class LocalSession implements Session {
       now: () => Date.now(),
       fxScale: () => 1 / readSpeed(),
       cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
+      // Local matches wait for human confirmation on year-end settlement even at 4x/8x fast-forward.
+      yearEndAckMs: 0,
       ...localTimers(),
       randomInt: setup.seed === undefined ? randomIntFromCrypto : seededRandom(setup.seed),
       data: GAME_DATA,
@@ -283,6 +285,7 @@ export class LocalSession implements Session {
           now: () => Date.now(),
           fxScale: () => 1 / readSpeed(),
           cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
+          yearEndAckMs: 0,
           ...localTimers(),
           randomInt: randomIntFromCrypto,
           data: GAME_DATA,

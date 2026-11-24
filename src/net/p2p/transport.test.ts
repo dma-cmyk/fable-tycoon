@@ -3,7 +3,7 @@ import { createServer } from 'node:net';
 import type { Server as NetServer } from 'node:net';
 import { Aedes } from 'aedes';
 import type { P2PMessage } from './transport';
-import { MqttTransport } from './transport';
+import { countUniquePeers, MqttTransport } from './transport';
 import { generateIdentity } from './identity';
 
 function randomHex(byteLength: number): string {
@@ -80,6 +80,92 @@ describe('MqttTransport chunking and encryption', () => {
     } finally {
       await host.close();
       await guest.close();
+    }
+  }, 20_000);
+
+  it('ignores ephemeral probe peers, deduplicates by fingerprint, and removes peers on bye (#10)', async () => {
+    const now = 100_000;
+    expect(
+      countUniquePeers(
+        [
+          { peerId: 'self-1', lastSeen: now, dcOpen: false, fingerprint: 'fp-self' },
+          { peerId: 'probe_aaa', lastSeen: now, dcOpen: false, fingerprint: 'fp-probe' },
+          { peerId: 'probe_bbb', lastSeen: now, dcOpen: false, fingerprint: 'fp-probe' },
+          { peerId: 'guest-old', lastSeen: now - 1000, dcOpen: false, fingerprint: 'fp-guest' },
+          { peerId: 'guest-new', lastSeen: now, dcOpen: true, fingerprint: 'fp-guest' },
+          { peerId: 'stale-peer', lastSeen: now - 40_000, dcOpen: false, fingerprint: 'fp-stale' },
+          { peerId: 'guest-2', lastSeen: now, dcOpen: false, fingerprint: 'fp-guest-2' },
+        ],
+        now,
+        'self-1',
+      ),
+    ).toEqual({ p2p: 1, relay: 1 });
+
+    const host = new MqttTransport('lobby-host', {
+      identity: await generateIdentity(),
+      brokers: [url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    const guest = new MqttTransport('lobby-guest', {
+      identity: await generateIdentity(),
+      brokers: [url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    const probe1 = new MqttTransport('probe_1111111111', {
+      identity: await generateIdentity(),
+      brokers: [url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    const probe2 = new MqttTransport('probe_2222222222', {
+      identity: await generateIdentity(),
+      brokers: [url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    try {
+      await Promise.all([
+        host.connect('PEER10'),
+        guest.connect('PEER10'),
+        probe1.connect('PEER10'),
+        probe2.connect('PEER10'),
+      ]);
+      const probeCount = Promise.withResolvers<void>();
+      let seenProbes = 0;
+      const guestSeen = Promise.withResolvers<void>();
+      const byeSeen = Promise.withResolvers<void>();
+      const unsub = host.onMessage((from, msg) => {
+        if ('k' in msg && msg.k === 'probe') {
+          void host.send(from, { k: 'probeAck', at: Date.now() });
+          seenProbes += 1;
+          if (seenProbes >= 2) probeCount.resolve();
+        }
+        if ('t' in msg && msg.t === 'chat') guestSeen.resolve();
+        if ('k' in msg && msg.k === 'bye') byeSeen.resolve();
+      });
+
+      await probe1.broadcast({ k: 'probe', at: Date.now() });
+      await probe2.broadcast({ k: 'probe', at: Date.now() });
+      await probeCount.promise;
+      // Probes must never inflate the lobby's relay peer count.
+      expect(host.relayPeers()).toBe(0);
+
+      await guest.send('lobby-host', { t: 'chat', text: 'hello' });
+      await guestSeen.promise;
+      expect(host.relayPeers()).toBe(1);
+
+      await guest.broadcast({ k: 'bye' });
+      await byeSeen.promise;
+      expect(host.relayPeers()).toBe(0);
+      unsub();
+    } finally {
+      await Promise.all([host.close(), guest.close(), probe1.close(), probe2.close()]);
     }
   }, 20_000);
 });

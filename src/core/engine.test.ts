@@ -239,6 +239,7 @@ describe('step rejection and immutability', () => {
     expect(() => step(data, state, 1, { t: 'ack' })).toThrowError(EngineError);
     const acked = step(data, state, 0, { t: 'ack' });
     expect(acked.state.phase.t).toBe('game_over');
+    expect(acked.state.round).toBe(12);
     expect(actorOf(acked.state)).toBeNull();
     expect(acked.fx.some((f) => f.t === 'game_over')).toBe(true);
     expect(allFx).toContain('year_end');
@@ -249,6 +250,40 @@ describe('step rejection and immutability', () => {
     expect(allFx).toContain('cash');
     expect(allFx).toContain('say');
     expect(allFx).toContain('destination');
+  });
+
+  it('express2 lets the player choose among reachable destinations (#5)', () => {
+    const state = createGame(data, config([1, 2], 1, 101)).state;
+    state.players[0].isCpu = false;
+    state.players[0].cards = ['express2'];
+    const rolled = step(data, state, 0, { t: 'use_card', cardId: 'express2' });
+    expect(rolled.state.phase.t).toBe('choose_dest');
+    const diceFx = rolled.fx.find((f) => f.t === 'dice');
+    expect(diceFx && diceFx.t === 'dice' ? diceFx.values.length : 0).toBe(2);
+    if (rolled.state.phase.t === 'choose_dest') {
+      expect(rolled.state.phase.options.length).toBeGreaterThan(1);
+      const picked = rolled.state.phase.options[rolled.state.phase.options.length - 1];
+      const moved = step(data, rolled.state, 0, { t: 'move', nodeId: picked.nodeId });
+      expect(moved.state.players[0].nodeId).toBe(picked.nodeId);
+    }
+  });
+
+  it('assigns year_end confirmation to a human seat even when seat 0 is a CPU', () => {
+    let state = createGame(data, {
+      years: 1,
+      seed: 33,
+      players: [
+        { name: 'CPU1', characterId: data.characters[0].id, isCpu: true, cpuLevel: 2 },
+        { name: 'Human', characterId: data.characters[1].id, isCpu: false },
+      ],
+    }).state;
+    let guard = 0;
+    while (state.phase.t !== 'year_end') {
+      const actor = actorOf(state)!;
+      state = step(data, state, actor, cpuDecide(data, state)).state;
+      if (++guard > 10000) throw new Error('year did not end');
+    }
+    expect(actorOf(state)).toBe(1);
   });
 
   it('sanitizeState removes rng and seed without touching the original', () => {

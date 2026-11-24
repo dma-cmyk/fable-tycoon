@@ -3,6 +3,7 @@ import type {YearReport} from '../../core/types';
 import { avatar, h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
 import { animateCounter, confettiBurst, motionReduced } from '../motion';
 import { characterSprite, charsById, displayPlayerName, formatDelta, formatOku, playerColor } from '../format';
+import { resolvePlayerChartColors } from '../playerChartColors';
 import { assetLegend, drawAssetChart } from './assetChart';
 
 export interface YearEndOptions {
@@ -38,10 +39,12 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
     const finalYear = report.year >= state.config.years;
 
     const maxAssets = Math.max(1, ...report.assets.map((asset) => asset.total));
+    const chartColors = resolvePlayerChartColors(state.players);
     const raceHost = h('div', { class: 'yearend-bars' });
     rows.forEach((asset, index) => {
       const player = state.players[asset.playerId];
       if (!player) return;
+      const barColor = chartColors[asset.playerId] ?? playerColor(player);
       const character = charsById.get(player.characterId);
       const fill = h('span');
       const valueEl = h('strong', { class: 'yearend-bar-value', text: '' });
@@ -51,10 +54,10 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
           'div',
           {
             class: `yearend-bar-row ${index === 0 ? 'is-top' : ''}`.trim(),
-            attrs: { style: `--bar-color:${playerColor(player)}` },
+            attrs: { style: `--bar-color:${barColor}` },
           },
           h('span', { class: 'yearend-bar-rank', text: String(index + 1), attrs: { 'aria-label': `${index + 1}位` } }),
-          h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), character?.color ?? playerColor(player), 30)),
+          h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), barColor, 30)),
           h('span', { class: 'yearend-bar-name', text: displayPlayerName(player) }),
           h('span', { class: 'yearend-bar-track' }, fill),
           h(

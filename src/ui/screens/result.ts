@@ -7,6 +7,7 @@ import {
   characterSprite,
   charsById,
   displayPlayerName,
+  formatCompletedTurns,
   formatOku,
   playerColor,
 } from '../format';
@@ -109,7 +110,7 @@ export class ResultScreen {
       {
         class: 'btn btn-ghost result-btn',
         attrs: { type: 'button' },
-        on: { click: () => options.onTitle },
+        on: { click: () => options.onTitle() },
       },
       uiIcon('logo', '🏠', 'btn-icon'),
       'タイトルへ',
@@ -119,7 +120,7 @@ export class ResultScreen {
       {
         class: 'btn btn-gold result-btn',
         attrs: { type: 'button' },
-        on: { click: () => options.onRematch },
+        on: { click: () => options.onRematch() },
       },
       options.mode === 'online' ? uiIcon('globe', '🌐', 'btn-icon') : null,
       options.mode === 'online' ? '別のルームへ' : 'もう一度',
@@ -163,7 +164,7 @@ export class ResultScreen {
           ),
           h('p', {
             class: 'result-badge-line',
-            text: `${state.config.years} 年 ・ ${state.players.length} 人 ・ 全 ${state.round + 1} ターン`,
+            text: `${state.config.years} 年 ・ ${state.players.length} 人 ・ 全 ${formatCompletedTurns(state.round, state.config.years, state.phase.t)} ターン`,
           }),
         ),
         h('section', { class: 'result-panel panel' }, h('h2', { class: 'section-title', text: '最終順位' }), podium),

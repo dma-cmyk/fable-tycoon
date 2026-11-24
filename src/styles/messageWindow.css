@@ -143,7 +143,7 @@
 
 @keyframes msgwin-blink {
   50% {
-    opacity: 0.25;
+    opacity: 0.62;
   }
 }
 
@@ -356,5 +356,46 @@ spoken-line window. On phones those panels sit at the same bottom band, so the w
   .game-screen:has(.emote-palette.is-open) .msgwin {
     opacity: 0;
     pointer-events: none;
+  }
+}
+
+/* Manual-advance message lifted above an open modal (e.g. full-screen property purchase on phone):
+   sits outside the inert screen-host so tapping or pressing Space/Enter always advances. */
+.msgwin.is-over-modal {
+  position: fixed;
+  z-index: 96;
+  left: 50%;
+  right: auto;
+  bottom: calc(16px + var(--safe-bottom));
+  width: min(680px, calc(100vw - 20px));
+  transform: translateX(-50%);
+  pointer-events: auto;
+  box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.5), 0 14px 36px rgba(0, 0, 0, 0.72);
+}
+
+.msgwin.is-manual-wait .msgwin-next {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffe27a;
+  opacity: 0.92;
+}
+
+@media (max-width: 899px) {
+  .msgwin.is-over-modal {
+    left: calc(8px + var(--safe-left));
+    right: calc(8px + var(--safe-right));
+    width: auto;
+    transform: none;
+    bottom: calc(14px + var(--safe-bottom));
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .msgwin.is-over-modal {
+    left: 50%;
+    right: auto;
+    width: min(620px, calc(100vw - 24px));
+    transform: translateX(-50%);
+    bottom: calc(10px + var(--safe-bottom));
   }
 }

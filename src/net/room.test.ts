@@ -75,7 +75,7 @@ interface Harness {
   deps: RoomDeps;
 }
 
-function makeHarness(): Harness {
+function makeHarness(overrides: Partial<RoomDeps> = {}): Harness {
   const clock = new FakeClock();
   let randomCounter = 0;
   const sent: Sent[] = [];
@@ -96,6 +96,7 @@ function makeHarness(): Harness {
     broadcast: (msg) => broadcasts.push(msg),
     report: (report) => reports.push(report),
     reportAccepted: (target, reporter) => accepted.push({ target, reporter }),
+    ...overrides,
   };
   const room = new RoomController(deps);
   return { clock, room, sent, broadcasts, reports, accepted, deps };
@@ -915,6 +916,39 @@ describe('RoomController timer coalescing', () => {
     expect(updates[0].state.phase.t).not.toBe('year_end');
     const nextDeadline = harness.room.currentDeadline;
     if (nextDeadline !== null) expect(nextDeadline).toBeGreaterThan(harness.clock.now());
+  });
+
+  it('waits indefinitely for human confirmation at year_end when yearEndAckMs is 0 (local mode)', () => {
+    const harness = makeHarness({ yearEndAckMs: 0 });
+    const started = startTwoHumans(harness, { years: 1, turnSeconds: 0 });
+    let state = started.state;
+    let seq = started.seq;
+    for (let i = 0; i < 5_000; i += 1) {
+      if (state.phase.t === 'year_end') break;
+      const actor = actorOf(state);
+      if (actor === null) throw new Error('actor missing');
+      const update = act(
+        harness,
+        actor === 0 ? 'a' : 'b',
+        seq,
+        cpuDecide(GAME_DATA, state as GameState),
+      );
+      state = update.state;
+      seq = update.seq;
+    }
+    expect(state.phase.t).toBe('year_end');
+    const before = seq;
+    // Even after 2 minutes at fast speed, local year-end must not auto-ack.
+    harness.clock.advance(120_000);
+    const autoUpdates = harness.broadcasts.filter(
+      (msg): msg is Extract<ServerMsg, { t: 'update' }> => msg.t === 'update' && msg.seq > before,
+    );
+    expect(autoUpdates).toHaveLength(0);
+    expect(harness.room.publicState()?.phase.t).toBe('year_end');
+
+    // Explicit human ack advances to game_over.
+    const acked = act(harness, 'a', seq, { t: 'ack' });
+    expect(acked.state.phase.t).toBe('game_over');
   });
 });
 

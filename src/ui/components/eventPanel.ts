@@ -8,6 +8,14 @@ import { assetUrl, KIND_ICON, KIND_JA } from '../format';
 
 export interface EventPanelOptions {
   onChoose: (index: number) => void;
+  onSkipFx?: () => void;
+}
+
+export interface EventPanelStateMeta {
+  /** True while introductory narration/voice fx are still playing before choices unlock. */
+  fxPlaying?: boolean;
+  /** True when the current event belongs to a human seat controlled by this client. */
+  isMine?: boolean;
 }
 
 export class EventPanel {
@@ -31,8 +39,12 @@ export class EventPanel {
   get eventId(): string | null { return this.event?.id ?? null; }
   private state: PublicState | null = null;
   private canAct = false;
+  private fxPlaying = false;
+  private isMine = false;
   private chosen = false;
   private open = false;
+  private readonly choicesSkipBtn: HTMLButtonElement;
+  private readonly choicesBanner: HTMLElement;
 
   constructor(private readonly options: EventPanelOptions) {
     this.ribbonTitle = h('span', { class: 'event-ribbon-title', text: '世界ニュースイベント！' });
@@ -58,10 +70,27 @@ export class EventPanel {
     this.hero = h('div', { class: 'event-hero no-image' }, this.image, h('div', { class: 'event-hero-shade' }), this.titleEl);
     this.choicesHost = h('div', { class: 'event-choices' });
     this.choicesNote = h('p', { class: 'event-choices-note' });
+    this.choicesSkipBtn = h('button', {
+      class: 'btn btn-ghost btn-small event-skip-btn',
+      text: '演出をスキップして選ぶ ▶▶',
+      attrs: { type: 'button', hidden: 'hidden' },
+      on: {
+        click: (event) => {
+          event.stopPropagation();
+          this.options.onSkipFx?.();
+        },
+      },
+    });
+    this.choicesBanner = h(
+      'div',
+      { class: 'event-choices-banner', attrs: { hidden: 'hidden', role: 'status', 'aria-live': 'polite' } },
+      this.choicesNote,
+      this.choicesSkipBtn,
+    );
     this.metaBody = h('div', { class: 'event-meta-body', attrs: { hidden: 'hidden' } });
     this.effectSummary = h('section', { class: 'event-effect-summary', attrs: { hidden: 'hidden' } });
     this.footnote = h('p', { class: 'event-footnote' });
-    this.choiceArea = h('div', { class: 'event-choice-area' }, this.choicesHost, this.choicesNote);
+    this.choiceArea = h('div', { class: 'event-choice-area' }, this.choicesBanner, this.choicesHost);
     this.metaToggle = h('button', {
       class: 'event-meta-toggle',
       text: '📚 元ネタ',
@@ -140,9 +169,13 @@ export class EventPanel {
     this.el.closest('.game-screen')?.classList.remove('event-open');
   }
 
-  setState(state: PublicState, canAct: boolean): void {
+  setState(state: PublicState, canAct: boolean, meta?: EventPanelStateMeta): void {
     this.state = state;
     this.canAct = canAct;
+    if (meta) {
+      if (meta.fxPlaying !== undefined) this.fxPlaying = meta.fxPlaying;
+      if (meta.isMine !== undefined) this.isMine = meta.isMine;
+    }
     this.refreshChoices();
   }
 
@@ -166,29 +199,48 @@ export class EventPanel {
     if (choices.length === 0) {
       // The effect summary card + footnote already explain auto-application; a third
       // line here only padded the panel.
+      this.choiceArea.classList.remove('is-fx-waiting');
+      this.choicesBanner.hidden = true;
       this.choicesNote.hidden = true;
       this.choicesNote.textContent = '';
+      this.choicesSkipBtn.hidden = true;
       return;
     }
-    this.choicesNote.hidden = false;
     const phaseActive = state.phase.t === 'event';
-    const enabled = phaseActive && this.canAct && !this.chosen;
+    const waitingFx = this.fxPlaying && !this.chosen;
+    const enabled = phaseActive && this.canAct && !this.chosen && !waitingFx;
     const actor = state.players[state.current];
+    this.choiceArea.classList.toggle('is-fx-waiting', waitingFx || !phaseActive);
     for (let index = 0; index < choices.length; index++) {
       const choice = choices[index];
       this.choicesHost.append(this.choiceButton(choice, index, enabled));
     }
-    if (!phaseActive) {
-      this.choicesNote.textContent = '導入の掛け合いを再生中…';
+    if (waitingFx && (this.isMine || !phaseActive)) {
+      this.choicesBanner.hidden = false;
+      this.choicesNote.hidden = false;
+      this.choicesNote.textContent = '演出のあとで選べます';
+      this.choicesSkipBtn.hidden = !this.options.onSkipFx;
+    } else if (!phaseActive) {
+      this.choicesBanner.hidden = false;
+      this.choicesNote.hidden = false;
+      this.choicesNote.textContent = '演出のあとで選べます';
+      this.choicesSkipBtn.hidden = true;
     } else if (this.chosen) {
+      this.choicesBanner.hidden = false;
+      this.choicesNote.hidden = false;
       this.choicesNote.textContent = '選択を送信しました…';
+      this.choicesSkipBtn.hidden = true;
     } else if (!this.canAct) {
+      this.choicesBanner.hidden = false;
+      this.choicesNote.hidden = false;
       this.choicesNote.textContent = `${actor?.name ?? '手番のプレイヤー'} が選択しています…`;
+      this.choicesSkipBtn.hidden = true;
     } else {
-      // The panel footnote already advertises the 1–3 keys; repeating it here read as a
-      // duplicated instruction right above the message window.
+      // Ready to pick: hide the waiting banner so choices stand out cleanly.
+      this.choicesBanner.hidden = true;
       this.choicesNote.hidden = true;
       this.choicesNote.textContent = '';
+      this.choicesSkipBtn.hidden = true;
     }
   }
 

@@ -16,6 +16,7 @@ import {
   displayPlayerName,
   citiesById,
   cityNodeId,
+  cityOfNode,
   countryFlag,
   emotesById,
   eventsById,
@@ -171,6 +172,9 @@ export class GameScreen implements ScreenHandle {
   private endedVoicePlayed = false;
   private transientMsgPending = false;
   private suppressMapTapUntil = 0;
+  private pendingPhaseEnd: 'end_buy' | 'end_shop' | null = null;
+  private handoffResolve: (() => void) | null = null;
+  private moveOnlyCities = false;
 
   private readonly yearChip: HTMLElement;
   private readonly turnChip: HTMLElement;
@@ -212,9 +216,11 @@ export class GameScreen implements ScreenHandle {
   private readonly connText: HTMLElement;
   private readonly connAction: HTMLButtonElement;
   private readonly gameBanner: HTMLElement;
+  private readonly handoffBackdrop: HTMLElement;
   private readonly handoff: HTMLElement;
   private readonly handoffName: HTMLElement;
   private readonly handoffAvatar: HTMLElement;
+  private readonly handoffStartBtn: HTMLButtonElement;
   private readonly skipHint: HTMLElement;
   private readonly commDock: HTMLElement;
   private readonly hudIcons: HTMLElement;
@@ -437,7 +443,10 @@ export class GameScreen implements ScreenHandle {
       this.portraitRank,
       h('div', { class: 'portrait-caption' }, this.portraitName, this.portraitSub),
     );
-    this.msgWindow = new MessageWindow({ speed: () => effectiveUiSettings().fxSpeed });
+    this.msgWindow = new MessageWindow({
+      speed: () => effectiveUiSettings().fxSpeed,
+      onStateChange: () => this.syncMessageWindowLayer(),
+    });
 
     this.primaryIcon = h('span', { class: 'primary-icon', text: '▶', attrs: { 'aria-hidden': 'true' } });
     this.primaryLabel = h('span', { class: 'primary-label', text: 'サイコロをふる' });
@@ -520,6 +529,7 @@ export class GameScreen implements ScreenHandle {
         this.eventPanel.markChosen();
         this.sendAction({ t: 'choose', index });
       },
+      onSkipFx: () => this.skipEventIntro(),
     });
 
     this.dice = new DiceOverlay();
@@ -570,16 +580,39 @@ export class GameScreen implements ScreenHandle {
 
     this.handoffAvatar = h('span', { class: 'handoff-avatar' });
     this.handoffName = h('span', { class: 'handoff-name', text: '' });
+    this.handoffStartBtn = h('button', {
+      class: 'btn btn-gold handoff-start-btn',
+      text: '▶ タップしてはじめる',
+      attrs: { type: 'button' },
+      on: {
+        click: (event) => {
+          event.stopPropagation();
+          this.resolveHandoff();
+        },
+      },
+    });
     this.handoff = h(
       'div',
-      { class: 'handoff-banner', attrs: { hidden: 'hidden', 'aria-live': 'assertive' } },
+      { class: 'handoff-banner', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-live': 'assertive' } },
       this.handoffAvatar,
       h(
         'div',
         { class: 'handoff-text' },
         this.handoffName,
-        h('span', { class: 'handoff-sub', text: '端末を渡してください' }),
+        h('span', { class: 'handoff-sub', text: '端末を渡して、準備ができたらタップしてください' }),
       ),
+      this.handoffStartBtn,
+    );
+    this.handoffBackdrop = h(
+      'div',
+      {
+        class: 'handoff-backdrop',
+        attrs: { hidden: 'hidden' },
+        on: {
+          click: () => this.resolveHandoff(),
+        },
+      },
+      this.handoff,
     );
     this.skipHint = h('div', { class: 'skip-hint', attrs: { hidden: 'hidden' }, text: 'タップでスキップ ▶▶' });
     this.chat.fab.classList.add('hud-comm-button');
@@ -605,7 +638,7 @@ export class GameScreen implements ScreenHandle {
       this.dice.el,
       this.connBanner,
       this.gameBanner,
-      this.handoff,
+      this.handoffBackdrop,
       this.turnBanner,
       this.monthFlip,
       this.rouletteOverlay,
@@ -627,8 +660,10 @@ export class GameScreen implements ScreenHandle {
         if (busy) this.destArrow.hidden = true;
         this.updateHud();
         if (!busy) {
-          this.updateAutoDialogs();
-          this.advanceBulkBuy();
+          if (!this.flushPendingPhaseEnd()) {
+            this.updateAutoDialogs();
+            this.advanceBulkBuy();
+          }
         }
       },
       setSkippable: (skippable) => {
@@ -641,6 +676,7 @@ export class GameScreen implements ScreenHandle {
     this.bindClickToSkip();
     const onConn = this.session.onConnection((state) => this.renderConnection(state));
     this.unsubscribeFns.push(onConn);
+    this.unsubscribeFns.push(this.app.modal.onChange(() => this.syncMessageWindowLayer()));
     this.renderConnection(this.session.connection());
 
     const onUnlocked = () => this.updateBgm();
@@ -656,6 +692,8 @@ export class GameScreen implements ScreenHandle {
 
   destroy(): void {
     this.destroyed = true;
+    this.resolveHandoff();
+    this.pendingPhaseEnd = null;
     this.fxPlayer.destroy();
     this.timer.destroy();
     this.dice.destroy();
@@ -769,6 +807,7 @@ export class GameScreen implements ScreenHandle {
     this.appliedSeq = -1;
     this.seq = 0;
     this.actionPending = false;
+    this.pendingPhaseEnd = null;
     this.clearPendingTimer();
     this.eventPanel.resetChosen();
   }
@@ -781,6 +820,8 @@ export class GameScreen implements ScreenHandle {
   private interruptInFlightFx(): void {
     Audio.stopVoice();
     this.dice.cancel();
+    this.resolveHandoff();
+    this.pendingPhaseEnd = null;
     // Cancel in-flight move/warp animations BEFORE fxPlayer.reset() so snapshot adoption
     // never leaves an old animation running (even when its endpoint matches the snapshot).
     this.map?.cancelAnimations(false);
@@ -788,9 +829,11 @@ export class GameScreen implements ScreenHandle {
     this.stopStepsCounter();
     this.transientMsgPending = false;
     this.msgWindow.clear();
+    this.syncMessageWindowLayer();
     this.moveSelection = null;
     this.moveOptionsCache = [];
     this.moveOptionsKey = '';
+    this.moveOnlyCities = false;
     this.moveRemain.clear();
     this.moveRemainTarget = 'destination';
     this.recommendedMoveNodeId = null;
@@ -911,6 +954,7 @@ export class GameScreen implements ScreenHandle {
 
   private onServerError(code: string, message: string): void {
     this.actionPending = false;
+    this.pendingPhaseEnd = null;
     if (code !== 'rate_limited') this.eventPanel.resetChosen();
     this.clearPendingTimer();
     if (code === 'rate_limited') {
@@ -984,16 +1028,58 @@ export class GameScreen implements ScreenHandle {
 
   private updateHud(): void {
     // While fx play, do not repaint the portrait / move picker from the (older) adopted state.
-    // Only the primary button and timer react to busy/pending changes during a cutscene.
+    // Only the primary button, timer and event choice lock react to busy/pending changes.
     if (this.fxBusy) {
       if (this.state) {
         const actor = actorOf(this.state);
         this.updatePrimary(this.state, actor);
         this.updateTimer(this.state, actor);
+        if (this.eventPanel.isOpen) {
+          this.eventPanel.setState(this.state, false, {
+            fxPlaying: true,
+            isMine: this.isActorMine(this.state),
+          });
+        }
       }
       return;
     }
     this.renderHud();
+  }
+
+  private isActorMine(state: PublicState): boolean {
+    const actor = actorOf(state);
+    return actor !== null && this.myPlayerIds().includes(actor);
+  }
+
+  private updateStatusChip(state: PublicState, actor: number | null): void {
+    const mine = actor !== null && this.myPlayerIds().includes(actor);
+    const hotseat = this.session.mode === 'local' && this.myPlayerIds().length > 1;
+    this.statusChip.textContent =
+      this.resultScreen !== null
+        ? 'ゲーム終了'
+        : state.phase.t === 'game_over'
+          ? 'ゲーム終了'
+          : actor === null
+            ? '観戦中'
+            : mine && !hotseat
+              ? 'あなたの番'
+              : `${this.actorLabel(actor)} の番`;
+    this.statusChip.classList.toggle(
+      'is-mine',
+      mine && state.phase.t !== 'game_over',
+    );
+  }
+
+  /** Keep top turn badge, plate, wallet, ranking and portrait aligned with the speaker on turn handoff. */
+  private syncTurnPresentation(playerId: number, state: PublicState): void {
+    this.hideGameBanner();
+    this.app.toasts.el.replaceChildren();
+    this.updateStatusChip(state, playerId);
+    const displaySeat = this.session.mode === 'online' ? (this.myPlayerIds()[0] ?? playerId) : playerId;
+    this.renderPlayerPlate(state, displaySeat, playerId);
+    this.renderMoney(state, displaySeat, playerId);
+    this.renderRanking(state, playerId);
+    this.setPortraitFor(playerId, state);
   }
 
   private renderHud(): void {
@@ -1032,20 +1118,7 @@ export class GameScreen implements ScreenHandle {
     this.destChip.title = `${destFullName}（${stepsLabel}）`;
     this.destChip.setAttribute('aria-label', `目的地 ${destFullName}、${stepsLabel}。タップでマップ表示`);
     this.updateDestArrow(state, actor, destNode);
-    this.statusChip.textContent =
-      this.resultScreen !== null
-        ? 'ゲーム終了'
-        : state.phase.t === 'game_over'
-          ? 'ゲーム終了'
-          : actor === null
-            ? '観戦中'
-            : this.myPlayerIds().includes(actor)
-              ? 'あなたの番'
-              : `${this.actorLabel(actor)} の番`;
-    this.statusChip.classList.toggle(
-      'is-mine',
-      actor !== null && this.myPlayerIds().includes(actor) && state.phase.t !== 'game_over',
-    );
+    this.updateStatusChip(state, actor);
 
     const choosing = state.phase.t === 'choose_dest' && actor !== null && this.myPlayerIds().includes(actor);
     this.el.classList.toggle('choosing-dest', choosing);
@@ -1055,7 +1128,12 @@ export class GameScreen implements ScreenHandle {
     this.renderMoveOptions(state, actor);
     this.updatePrimary(state, actor);
     this.updateTimer(state, actor);
-    if (this.eventPanel.isOpen) this.eventPanel.setState(state, this.interactiveNow());
+    if (this.eventPanel.isOpen) {
+      this.eventPanel.setState(state, this.interactiveNow(), {
+        fxPlaying: this.fxBusy,
+        isMine: this.isActorMine(state),
+      });
+    }
     const hand = privateSeat !== null ? state.players[privateSeat]?.cards.length ?? 0 : 0;
     this.cardBadge.textContent = String(hand);
     this.cardBadge.hidden = hand === 0;
@@ -1275,10 +1353,12 @@ export class GameScreen implements ScreenHandle {
       this.moveSelection = null;
       this.moveOptionsCache = [];
       this.moveOptionsKey = '';
+      this.moveOnlyCities = false;
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
       this.recommendedMoveNodeId = null;
       this.moveOptionsHost.hidden = true;
+      this.moveOptionsHost.classList.remove('is-many', 'is-very-many');
       this.moveOptionsHost.replaceChildren();
       this.map?.setMoveOptions(null, () => undefined);
       return;
@@ -1289,6 +1369,7 @@ export class GameScreen implements ScreenHandle {
     const freshOptions = key !== this.moveOptionsKey;
     if (freshOptions) {
       this.moveOptionsKey = key;
+      this.moveOnlyCities = false;
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
       for (const option of options) {
@@ -1329,9 +1410,20 @@ export class GameScreen implements ScreenHandle {
       }
     }
     this.moveOptionsHost.hidden = false;
+    const many = this.moveOptionsCache.length >= 7;
+    const veryMany = this.moveOptionsCache.length >= 12;
+    this.moveOptionsHost.classList.toggle('is-many', many);
+    this.moveOptionsHost.classList.toggle('is-very-many', veryMany);
+    const cityOptionsCount = this.moveOptionsCache.filter((option) => nodesById.get(option.nodeId)?.kind === 'city').length;
+    if (this.moveOnlyCities && cityOptionsCount === 0) this.moveOnlyCities = false;
+
     const actorNode = actor !== null ? state.players[actor]?.nodeId : undefined;
-    const scroller = h('div', { class: 'move-chip-scroll' });
-    this.moveOptionsCache.forEach((option, index) => {
+    const scroller = h('div', { class: `move-chip-scroll ${many ? 'is-two-row' : ''}`.trim() });
+    const visibleEntries = this.moveOptionsCache
+      .map((option, index) => ({ option, index }))
+      .filter(({ option }) => !this.moveOnlyCities || nodesById.get(option.nodeId)?.kind === 'city');
+
+    visibleEntries.forEach(({ option, index }) => {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
       const kind = moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue');
       const remain = this.moveRemain.get(option.nodeId) ?? null;
@@ -1341,11 +1433,15 @@ export class GameScreen implements ScreenHandle {
       const remainLabel = remainTarget === 'exit' ? '出口' : '目的地';
       const remainText = remain === null ? `${remainLabel}まで —` : `${remainLabel}まで あと${remain}マス`;
       const recommended = option.nodeId === this.recommendedMoveNodeId;
+      const topNear = many && !recommended && index < 3;
       const selected = this.moveSelection === option.nodeId;
+      const city = cityOfNode(option.nodeId);
+      const nameContent = city ? rubyName(city.nameJa, city.nameKana) : nodeLabel(option.nodeId);
       const chip = h(
         'button',
         {
-          class: `move-chip ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''}`.trim(),
+          class: `move-chip ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''} ${topNear ? 'is-top-near' : ''}`.trim(),
+          dataset: { nodeId: option.nodeId },
           attrs: {
             type: 'button',
             'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ。${remainText}`,
@@ -1367,7 +1463,7 @@ export class GameScreen implements ScreenHandle {
         h(
           'span',
           { class: 'move-chip-main' },
-          h('span', { class: 'move-chip-name', text: nodeLabel(option.nodeId) }),
+          h('span', { class: 'move-chip-name' }, nameContent),
           h(
             'span',
             { class: 'move-chip-vehicle' },
@@ -1379,7 +1475,11 @@ export class GameScreen implements ScreenHandle {
         h(
           'span',
           { class: 'move-chip-meta' },
-          recommended ? h('span', { class: 'move-chip-tag', text: 'おすすめ' }) : null,
+          recommended
+            ? h('span', { class: 'move-chip-tag', text: 'おすすめ' })
+            : topNear
+              ? h('span', { class: 'move-chip-tag is-near', text: `近い #${index + 1}` })
+              : null,
           h(
             'span',
             { class: 'move-chip-dest' },
@@ -1392,7 +1492,7 @@ export class GameScreen implements ScreenHandle {
       scroller.append(chip);
     });
     const page = (direction: number): void => {
-      scroller.scrollBy({ left: direction * Math.max(180, scroller.clientWidth * 0.7), behavior: 'smooth' });
+      scroller.scrollBy({ left: direction * Math.max(240, scroller.clientWidth * 0.88), behavior: 'smooth' });
     };
     const prev = h('button', {
       class: 'move-scroll-btn',
@@ -1406,6 +1506,40 @@ export class GameScreen implements ScreenHandle {
       attrs: { type: 'button', 'aria-label': '次の行き先' },
       on: { click: (event) => { event.stopPropagation(); page(1); } },
     });
+    const jumpTopBtn = veryMany
+      ? h('button', {
+          class: 'move-filter-btn',
+          text: '🎯 近い順',
+          attrs: { type: 'button', title: '目的地に近い上位へ戻る' },
+          on: {
+            click: (event) => {
+              event.stopPropagation();
+              scroller.scrollTo({ left: 0, behavior: 'smooth' });
+              const topNode = this.recommendedMoveNodeId ?? visibleEntries[0]?.option.nodeId;
+              if (topNode) this.selectMoveOption(topNode);
+            },
+          },
+        })
+      : null;
+    const cityFilterBtn =
+      many && cityOptionsCount > 0 && cityOptionsCount < this.moveOptionsCache.length
+        ? h('button', {
+            class: `move-filter-btn ${this.moveOnlyCities ? 'is-active' : ''}`.trim(),
+            text: this.moveOnlyCities ? `すべて (${this.moveOptionsCache.length})` : `駅のみ (${cityOptionsCount})`,
+            attrs: { type: 'button', 'aria-pressed': String(this.moveOnlyCities) },
+            on: {
+              click: (event) => {
+                event.stopPropagation();
+                this.moveOnlyCities = !this.moveOnlyCities;
+                if (this.state) this.renderMoveOptions(this.state, actorOf(this.state));
+              },
+            },
+          })
+        : null;
+    const targetName = this.moveRemainTarget === 'exit' ? '出口' : '目的地';
+    const promptText = many
+      ? `${targetName}に近い順（${visibleEntries.length}${this.moveOnlyCities ? `駅 / 全${options.length}` : 'か所'}）`
+      : `光っているマスから行き先をえらぼう（${options.length}か所）`;
     this.moveOptionsHost.replaceChildren(
       h(
         'div',
@@ -1413,8 +1547,10 @@ export class GameScreen implements ScreenHandle {
         h('span', { class: 'move-options-label', text: `出目 ${state.phase.roll}` }),
         h('span', {
           class: 'move-options-prompt',
-          text: `光っているマスから行き先をえらぼう（${options.length}か所）`,
+          text: promptText,
         }),
+        jumpTopBtn,
+        cityFilterBtn,
         prev,
         next,
       ),
@@ -1456,9 +1592,9 @@ export class GameScreen implements ScreenHandle {
   }
 
   private updateMoveSelectionUi(): void {
-    this.moveOptionsHost.querySelectorAll<HTMLElement>('.move-chip').forEach((chip, index) => {
-      const option = this.moveOptionsCache[index];
-      const selected = !!option && option.nodeId === this.moveSelection;
+    this.moveOptionsHost.querySelectorAll<HTMLElement>('.move-chip').forEach((chip) => {
+      const nodeId = chip.dataset.nodeId;
+      const selected = !!nodeId && nodeId === this.moveSelection;
       chip.classList.toggle('is-selected', selected);
       chip.setAttribute('aria-pressed', String(selected));
     });
@@ -1612,6 +1748,10 @@ export class GameScreen implements ScreenHandle {
     const canAct = this.interactiveNow();
 
     if (state.phase.t === 'buy') {
+      if (this.pendingPhaseEnd === 'end_buy') {
+        this.flushPendingPhaseEnd();
+        return;
+      }
       const actor = actorOf(state);
       const actorIsMine = actor !== null && this.myPlayerIds().includes(actor);
       if (!actorIsMine) {
@@ -1649,15 +1789,7 @@ export class GameScreen implements ScreenHandle {
               : fallback?.items.map((entry) => entry.property.id) ?? [];
             this.advanceBulkBuy();
           },
-          onEndBuy: () => {
-            this.bulkBuyCityId = null;
-            this.bulkBuyQueue = [];
-            this.citySheet?.close();
-            this.citySheet = null;
-            this.citySheetCityId = null;
-            this.citySheetBuyMode = false;
-            this.sendAction({ t: 'end_buy' });
-          },
+          onEndBuy: () => this.requestPhaseEnd('end_buy'),
           onClose: () => {
             this.citySheet = null;
             this.citySheetCityId = null;
@@ -1668,6 +1800,7 @@ export class GameScreen implements ScreenHandle {
         this.citySheet.update(state, canAct);
       }
     } else if (this.citySheet) {
+      if (this.pendingPhaseEnd === 'end_buy') this.pendingPhaseEnd = null;
       this.bulkBuyCityId = null;
       this.bulkBuyQueue = [];
       if (this.citySheetBuyMode) {
@@ -1683,6 +1816,10 @@ export class GameScreen implements ScreenHandle {
     this.updateTransientDialog(state, canAct);
 
     if (state.phase.t === 'shop') {
+      if (this.pendingPhaseEnd === 'end_shop') {
+        this.flushPendingPhaseEnd();
+        return;
+      }
       const actor = actorOf(state);
       if (actor === null || !this.myPlayerIds().includes(actor)) {
         this.shop?.close();
@@ -1696,16 +1833,13 @@ export class GameScreen implements ScreenHandle {
           canAct,
           onBuy: (cardId) => this.sendAction({ t: 'buy_card', cardId }),
           onSell: (cardId) => this.sendAction({ t: 'sell_card', cardId }),
-          onEnd: () => {
-            this.shop?.close();
-            this.shop = null;
-            this.sendAction({ t: 'end_shop' });
-          },
+          onEnd: () => this.requestPhaseEnd('end_shop'),
         });
       } else {
         this.shop.update(state, canAct);
       }
     } else if (this.shop) {
+      if (this.pendingPhaseEnd === 'end_shop') this.pendingPhaseEnd = null;
       this.shop.close();
       this.shop = null;
     }
@@ -1739,7 +1873,10 @@ export class GameScreen implements ScreenHandle {
         if (!this.eventPanel.isOpen) {
           this.openEventPanel(event.id, state);
         } else {
-          this.eventPanel.setState(state, canAct);
+          this.eventPanel.setState(state, canAct, {
+            fxPlaying: this.fxBusy,
+            isMine: this.isActorMine(state),
+          });
         }
       }
     } else if (this.eventPanel.isOpen) {
@@ -1812,6 +1949,73 @@ export class GameScreen implements ScreenHandle {
         onSell: (propertyId) => this.sendAction({ t: 'sell', propertyId }),
       });
       if (handle) this.transient = { kind: 'sell', cardId: null, handle };
+    }
+  }
+
+  /**
+   * Finish buy/shop reliably with a single tap even if a purchase fx or prior request is still
+   * in flight: close the dialog immediately, fast-forward the purchase fx if playing, and queue
+   * the end action so the dialog never pops back open.
+   */
+  private requestPhaseEnd(kind: 'end_buy' | 'end_shop'): void {
+    if (kind === 'end_buy') {
+      this.closeCitySheet();
+    } else {
+      this.shop?.close();
+      this.shop = null;
+    }
+    if (this.interactiveNow()) {
+      this.pendingPhaseEnd = null;
+      this.sendAction({ t: kind });
+      return;
+    }
+    this.pendingPhaseEnd = kind;
+    if (this.fxBusy) {
+      Audio.stopVoice();
+      this.msgWindow.clear();
+      this.fxPlayer.skipUpdate();
+    }
+  }
+
+  private flushPendingPhaseEnd(): boolean {
+    const pending = this.pendingPhaseEnd;
+    if (!pending) return false;
+    const state = this.state;
+    const expectedPhase = pending === 'end_buy' ? 'buy' : 'shop';
+    if (!state || state.phase.t !== expectedPhase) {
+      this.pendingPhaseEnd = null;
+      return false;
+    }
+    if (!this.interactiveNow()) return true;
+    this.pendingPhaseEnd = null;
+    this.sendAction({ t: pending });
+    return true;
+  }
+
+  private skipEventIntro(): void {
+    if (!this.fxBusy) return;
+    Audio.stopVoice();
+    this.msgWindow.clear();
+    this.fxPlayer.skipUpdate();
+  }
+
+  /**
+   * When manual text advance is active while a modal (such as the full-screen property purchase
+   * sheet on mobile) is open, lift the message window out of the `inert` screen-host above the
+   * modal layer so the player can read and tap to advance without getting blocked.
+   */
+  private syncMessageWindowLayer(): void {
+    const overModal = !this.destroyed && this.msgWindow.isManualWaiting && this.app.modal.isOpen();
+    if (overModal) {
+      if (this.msgWindow.el.parentElement !== this.app.root) {
+        this.app.root.append(this.msgWindow.el);
+      }
+      this.msgWindow.el.classList.add('is-over-modal');
+    } else {
+      this.msgWindow.el.classList.remove('is-over-modal');
+      if (!this.destroyed && this.msgWindow.el.parentElement !== this.el && this.portraitHost.isConnected) {
+        this.portraitHost.after(this.msgWindow.el);
+      }
     }
   }
 
@@ -2471,13 +2675,57 @@ export class GameScreen implements ScreenHandle {
 
   private async showDestinationRoulette(cityId: string, control: PlaybackControl): Promise<void> {
     const city = citiesById.get(cityId);
+    const destName = city ? city.nameJa : cityId;
+    const announceDestination = async (): Promise<void> => {
+      if (control.skipped || this.destroyed) return;
+      if (this.transientMsgPending) {
+        this.transientMsgPending = false;
+        this.msgWindow.skipLine();
+      }
+      const narrationText = destinationNarration(destName);
+      const speed = control.speed;
+      const autoAdvance = uiSettings().autoAdvance;
+      let voiceStarted = false;
+      const voicePromise = Audio.playVoice('narrator', narrationText, {
+        rate: speed,
+        onStart: () => {
+          voiceStarted = true;
+        },
+      });
+      const boundedVoice = raceWithTimeout(
+        voicePromise,
+        voiceBudgetMs(0, narrationText, voicePlaybackRate(speed)) + 3000,
+      );
+      const shown = this.msgWindow.show({
+        speaker: 'narrator',
+        name: 'ナレーター',
+        text: `次の目的地は ${destName}！`,
+        color: '#ffd23f',
+        speed,
+        autoAdvance,
+        voiceDone: boundedVoice,
+        voiceStarted: () => voiceStarted,
+      });
+      control.onSkip(() => {
+        Audio.stopVoice();
+        this.msgWindow.skipLine();
+      });
+      if (!autoAdvance) control.setManualWait(true);
+      try {
+        await shown;
+      } finally {
+        if (!autoAdvance) control.setManualWait(false);
+      }
+    };
+
     if (!city || motionReduced()) {
       if (city) {
         this.rouletteName.replaceChildren(rubyName(city.nameJa, city.nameKana));
         this.rouletteCountry.textContent = city.countryJa;
       }
-      void Audio.playVoice('narrator', destinationNarration(city?.nameJa ?? cityId), { rate: control.speed });
-      await control.wait(280);
+      if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(cityId), { zoom: 0.8, ms: 700 });
+      this.lastDestinationBannerAt = Date.now();
+      await announceDestination();
       return;
     }
     const candidates = GAME_DATA.cities
@@ -2512,7 +2760,7 @@ export class GameScreen implements ScreenHandle {
       stopped = true;
       window.clearInterval(interval);
       window.clearTimeout(this.rouletteTimer);
-    this.clearCityPick();
+      this.clearCityPick();
       this.rouletteOverlay.classList.remove('is-spinning');
       this.rouletteOverlay.classList.add('is-result');
       paint(city);
@@ -2521,11 +2769,7 @@ export class GameScreen implements ScreenHandle {
         this.rouletteLandmark.src = assetUrl(`assets/landmarks/${city.landmark}.webp`);
       }
       Audio.sfx('stamp');
-      if (!skipped) {
-        void Audio.playVoice('narrator', destinationNarration(city.nameJa), { rate: control.speed });
-      } else {
-        Audio.stopVoice();
-      }
+      if (skipped) Audio.stopVoice();
       resolve();
     };
     this.rouletteFinish = finish;
@@ -2533,10 +2777,30 @@ export class GameScreen implements ScreenHandle {
     const spinMs = Math.max(160, Math.round(1050 / control.speed));
     this.rouletteTimer = window.setTimeout(() => finish(false), spinMs);
     await promise;
-    if (!control.skipped) await control.wait(500);
-    this.rouletteOverlay.hidden = true;
-    this.rouletteOverlay.classList.remove('is-result');
-    this.rouletteFinish = null;
+    this.lastDestinationBannerAt = Date.now();
+    if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(cityId), { zoom: 0.8, ms: 700 });
+    if (control.skipped || this.destroyed) {
+      this.rouletteOverlay.hidden = true;
+      this.rouletteOverlay.classList.remove('is-result');
+      this.rouletteFinish = null;
+      return;
+    }
+    // Start voice + caption together as soon as the roulette locks onto the city; dismiss the
+    // roulette panel after its short reveal hold while keeping the caption alive until voice ends.
+    const announcement = announceDestination();
+    const holdMs = Math.max(80, Math.round(500 / control.speed));
+    const hideTimer = window.setTimeout(() => {
+      this.rouletteOverlay.hidden = true;
+      this.rouletteOverlay.classList.remove('is-result');
+    }, holdMs);
+    try {
+      await announcement;
+    } finally {
+      window.clearTimeout(hideTimer);
+      this.rouletteOverlay.hidden = true;
+      this.rouletteOverlay.classList.remove('is-result');
+      this.rouletteFinish = null;
+    }
   }
 
   private clearCityPick(): void {
@@ -2800,7 +3064,10 @@ export class GameScreen implements ScreenHandle {
     const playerName = displayPlayerName(currentPlayer);
     this.eventPanel.show(event, state, playerName);
     requestAnimationFrame(() => this.updateMapSafeArea());
-    this.eventPanel.setState(state, this.interactiveNow());
+    this.eventPanel.setState(state, this.interactiveNow(), {
+      fxPlaying: this.fxBusy,
+      isMine: this.isActorMine(state),
+    });
     this.activeEventBgm = bgmForEvent(event);
     this.setBgm(this.activeEventBgm);
     this.recordNews(eventId, state);
@@ -2847,19 +3114,22 @@ export class GameScreen implements ScreenHandle {
     switch (fx.t) {
       case 'turn': {
         this.manualView = false;
+        this.syncTurnPresentation(fx.playerId, pending);
+        this.map?.follow(fx.playerId);
+        this.addLog(`▶ ${this.actorLabel(fx.playerId)} の番`);
         let handoff = false;
         if (this.session.mode === 'local' && this.myPlayerIds().length > 1 && this.myPlayerIds().includes(fx.playerId)) {
           if (this.lastHumanTurn !== null && this.lastHumanTurn !== fx.playerId) {
-            this.showHandoff(fx.playerId);
             handoff = true;
           }
           this.lastHumanTurn = fx.playerId;
         }
-        if (!handoff) this.showTurnBanner(fx.playerId, pending);
-        this.setPortraitFor(fx.playerId, pending);
-        this.map?.follow(fx.playerId);
-        this.addLog(`▶ ${this.actorLabel(fx.playerId)} の番`);
-        await control.wait(FX_MS.turn);
+        if (handoff) {
+          await this.awaitHandoff(fx.playerId, pending, control);
+        } else {
+          this.showTurnBanner(fx.playerId, pending);
+          await control.wait(FX_MS.turn);
+        }
         return;
       }
       case 'dice': {
@@ -2978,6 +3248,7 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'event_open': {
+        this.updateStatusChip(pending, actorOf(pending));
         this.openEventPanel(fx.eventId, pending);
         await control.wait(FX_MS.event_open);
         return;
@@ -3007,20 +3278,8 @@ export class GameScreen implements ScreenHandle {
       }
       case 'destination': {
         const city = citiesById.get(fx.cityId);
-        await this.showDestinationRoulette(fx.cityId, control);
-        if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 0.8, ms: 700 });
-        this.lastDestinationBannerAt = Date.now();
-        const destName = city ? city.nameJa : fx.cityId;
-        this.transientMsgPending = true;
-        void this.msgWindow.show({
-          speaker: 'narrator',
-          name: 'ナレーター',
-          text: `次の目的地は ${destName}！`,
-          color: '#ffd23f',
-          speed: control.speed,
-        }).then(() => { this.transientMsgPending = false; });
         this.addLog(`🎯 目的地が ${city?.nameJa ?? fx.cityId} に決定`);
-        await control.wait(220);
+        await this.showDestinationRoulette(fx.cityId, control);
         return;
       }
       case 'piper': {
@@ -3060,6 +3319,7 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'month': {
+        this.app.toasts.el.replaceChildren();
         this.yearChip.textContent = `${fx.year}年目 ${fx.month}月`;
         this.showMonthFlip(fx.year, fx.month);
         await control.wait(FX_MS.month);
@@ -3109,7 +3369,7 @@ export class GameScreen implements ScreenHandle {
           : null;
     const displayName =
       speaker === 'self'
-        ? state.players[speakerSeat ?? state.current]?.name ?? '手番'
+        ? displayPlayerName(state.players[speakerSeat ?? state.current])
         : speakerName(speaker);
     const label = speaker === 'self' ? `${displayName}` : speakerName(speaker);
     // Clear any lingering fire-and-forget banner line (destination/piper) so this spoken line
@@ -3145,7 +3405,10 @@ export class GameScreen implements ScreenHandle {
             voiceStarted = true;
           },
         });
-    const boundedVoice = raceWithTimeout(voicePromise, voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)));
+    const boundedVoice = raceWithTimeout(
+      voicePromise,
+      voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000,
+    );
     // One message window for every spoken line; the event panel no longer carries a
     // duplicate narrator card. The window stays visible until voice finishes (then advances
     // after a short pause), or scales by speed when silent.
@@ -3286,6 +3549,13 @@ export class GameScreen implements ScreenHandle {
     }, 4200);
   }
 
+  private hideGameBanner(): void {
+    window.clearTimeout(this.bannerTimer);
+    this.bannerTimer = 0;
+    this.gameBanner.hidden = true;
+    this.gameBanner.classList.remove('is-visible');
+  }
+
   private showTurnBanner(playerId: number, state: PublicState): void {
     const player = state.players[playerId];
     const character = player ? charsById.get(player.characterId) : undefined;
@@ -3334,28 +3604,42 @@ export class GameScreen implements ScreenHandle {
     this.el.classList.remove('is-moving');
   }
 
-  private showHandoff(playerId: number): void {
-    const state = this.state;
-    const player = state?.players[playerId];
+  private resolveHandoff(): void {
+    window.clearTimeout(this.handoffTimer);
+    this.handoffTimer = 0;
+    this.handoffBackdrop.hidden = true;
+    const resolve = this.handoffResolve;
+    this.handoffResolve = null;
+    resolve?.();
+  }
+
+  private async awaitHandoff(
+    playerId: number,
+    state: PublicState,
+    control: PlaybackControl,
+  ): Promise<void> {
+    const player = state.players[playerId];
     const character = player ? charsById.get(player.characterId) : undefined;
     if (!player || !character) return;
-    this.handoffName.textContent = `${displayPlayerName(player)} の番です`;
+    const name = displayPlayerName(player);
+    this.handoffName.textContent = `${name} さんの番です`;
+    this.handoffStartBtn.textContent = `▶ ${name} の番をはじめる`;
     this.handoffAvatar.replaceChildren(
       h('img', { attrs: { src: characterSprite(character), alt: '', draggable: 'false' } }),
     );
-    this.handoff.hidden = false;
-    window.clearTimeout(this.handoffTimer);
-    window.clearTimeout(this.portraitVariantTimer);
-    window.clearTimeout(this.turnBannerTimer);
-    window.clearTimeout(this.monthFlipTimer);
-    if (this.stepsTimer) cancelAnimationFrame(this.stepsTimer);
-    window.clearTimeout(this.rouletteTimer);
-    this.clearCityPick();
-    window.clearInterval(this.rouletteInterval);
-    this.rouletteFinish?.(true);
-    this.handoffTimer = window.setTimeout(() => {
-      this.handoff.hidden = true;
-    }, 2200);
+    this.handoffBackdrop.hidden = false;
+    requestAnimationFrame(() => this.handoffStartBtn.focus({ preventScroll: true }));
+
+    const { promise, resolve } = Promise.withResolvers<void>();
+    this.handoffResolve = resolve;
+    control.setManualWait(true);
+    try {
+      await promise;
+    } finally {
+      this.handoffBackdrop.hidden = true;
+      if (this.handoffResolve === resolve) this.handoffResolve = null;
+      control.setManualWait(false);
+    }
   }
 
   private addLog(text: string): void {
@@ -3547,9 +3831,13 @@ export class GameScreen implements ScreenHandle {
         if (!this.fxBusy) return;
         const target = event.target instanceof Element ? event.target : null;
         if (!target) return;
-        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab, .msgwin')) return;
+        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab, .msgwin, .handoff-backdrop')) return;
         event.stopPropagation();
         this.suppressMapTapUntil = performance.now() + 300;
+        if (this.eventPanel.isOpen) {
+          this.skipEventIntro();
+          return;
+        }
         this.fxPlayer.skip();
       },
       true,
@@ -3575,6 +3863,14 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       if (inText) return;
+      if (this.handoffResolve && (event.key === ' ' || event.key === 'Enter')) {
+        event.preventDefault();
+        this.resolveHandoff();
+        return;
+      }
+      if (this.msgWindow.isManualWaiting && (event.key === ' ' || event.key === 'Enter')) {
+        if (this.msgWindow.handleKey(event)) return;
+      }
       const active = document.activeElement;
       if (active instanceof HTMLElement && active.closest('button, a, [role="button"], input, textarea, select, .modal-panel, .chat-panel, .emote-palette')) return;
       if (this.app.modal.isOpen()) return;
@@ -3582,6 +3878,10 @@ export class GameScreen implements ScreenHandle {
         event.preventDefault();
         // Finish the window reveal / page first; the next press skips the cutscene.
         if (this.msgWindow.handleKey(event)) return;
+        if (this.eventPanel.isOpen) {
+          this.skipEventIntro();
+          return;
+        }
         this.fxPlayer.skip();
         return;
       }

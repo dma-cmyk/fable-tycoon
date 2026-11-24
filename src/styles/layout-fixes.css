@@ -1784,8 +1784,20 @@
 }
 
 @media (max-height: 520px) and (min-width: 700px) {
+  /* Phone landscape (e.g. 844x390): keep the logo compact on the left, well clear of the
+     right-side menu buttons and bottom secondary buttons. */
+  .title-mobile-sky,
+  .title-logo-mobile {
+    display: none !important;
+  }
+
   .title-logo-desktop {
-    width: clamp(260px, 32vw, 420px);
+    display: block !important;
+    top: clamp(8px, 2.5vh, 20px);
+    left: clamp(14px, 2.5vw, 32px);
+    width: clamp(230px, 42vw, 370px);
+    max-height: calc(100dvh - 112px);
+    object-fit: contain;
   }
 
   .title-parade {
@@ -3181,7 +3193,7 @@
   }
 
   .event-choices-note {
-    display: none;
+    font-size: 10.5px;
   }
 }
 
@@ -3552,4 +3564,397 @@
 /* 物件シートの収益率（クリーム地 4.37:1）を 4.5:1 以上へ。 */
 .property-yield {
   color: #625a47;
+}
+
+/* ================================================================ 第2回修正 (バグ・遊びにくさ改善) */
+
+/* 1. ニュース演出中の選択待機バナー＆無効表示（PC・縦・横すべてで明示） */
+.event-choices-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 210, 63, 0.48);
+  background: rgba(255, 210, 63, 0.14);
+}
+
+.event-choices-banner[hidden] {
+  display: none !important;
+}
+
+.event-choices-banner .event-choices-note {
+  display: block;
+  margin: 0;
+  color: #fff1b8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.event-skip-btn {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 3px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  border-color: rgba(255, 210, 63, 0.72);
+  color: #fff6d6;
+}
+
+.event-choice-area.is-fx-waiting .event-choice:disabled {
+  animation: none !important;
+  opacity: 0.44;
+  filter: grayscale(0.5);
+  background: linear-gradient(180deg, #c9d2e2, #aebad0);
+  color: #2f3b52;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.45);
+  cursor: not-allowed;
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .event-choices-banner {
+    margin-bottom: 4px;
+    padding: 3px 7px;
+    gap: 6px;
+  }
+
+  .event-choices-banner .event-choices-note {
+    font-size: 10px;
+  }
+
+  .event-skip-btn {
+    min-height: 28px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+}
+
+/* 2. 行き先が多いときの 2 段グリッド・ふりがな・上位強調・大きめページ送り */
+.move-options.is-many {
+  max-width: min(940px, calc(100vw - 260px));
+}
+
+.move-chip-scroll.is-two-row {
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(276px, max-content);
+  gap: 6px;
+  align-items: stretch;
+}
+
+.move-chip {
+  overflow: hidden;
+}
+
+.move-chip-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.move-chip-name {
+  display: block;
+  max-width: 100%;
+  padding-top: 1px;
+  line-height: 1.38;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-chip-name ruby {
+  ruby-position: over;
+}
+
+.move-chip-name rt {
+  font-size: 8px;
+  font-weight: 700;
+  color: #cfe6ff;
+  line-height: 1;
+}
+
+.move-chip.is-selected .move-chip-name rt {
+  color: #6c4700;
+}
+
+.move-chip.is-top-near:not(.is-selected) {
+  border-color: rgba(125, 211, 252, 0.85);
+  background: linear-gradient(180deg, #1f4888, #16376b);
+}
+
+.move-chip-tag.is-near {
+  background: linear-gradient(180deg, #e0f2fe, #7dd3fc);
+  color: #0c3b5e;
+}
+
+.move-scroll-btn {
+  width: 48px;
+  min-height: 44px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.move-filter-btn {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: #eef5ff;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.move-filter-btn.is-active {
+  border-color: var(--gold);
+  background: rgba(255, 210, 63, 0.25);
+  color: #fff3b0;
+}
+
+@media (max-width: 899px) {
+  .move-options.is-many {
+    max-width: calc(100vw - 12px);
+  }
+
+  .move-chip-scroll.is-two-row {
+    grid-auto-columns: minmax(206px, max-content);
+    gap: 5px;
+  }
+
+  .move-chip-name {
+    max-width: 100%;
+    line-height: 1.32;
+  }
+
+  .move-chip-name rt {
+    font-size: 7.5px;
+  }
+
+  .move-filter-btn {
+    min-height: 32px;
+    padding: 2px 7px;
+    font-size: 9.5px;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  /* Phone landscape keeps a single compact row so the map keeps enough vertical room. */
+  .move-chip-scroll.is-two-row {
+    display: flex;
+  }
+
+  .move-options.is-many {
+    max-width: calc(100vw - 16px);
+  }
+}
+
+/* 3. カード売り場: 更新時のカード再アニメ抑止・控えめな「店を出る」・スマホ横で即商品表示 */
+.shop-dialog.is-updated .shop-card {
+  animation: none;
+}
+
+.shop-footer-cash {
+  display: none;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+  color: #4a2b00;
+}
+
+.shop-footer-cash strong {
+  font-size: 15px;
+  color: #7a4e00;
+}
+
+.shop-dialog .shop-leave {
+  background: rgba(14, 34, 70, 0.9);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #eaf2ff;
+  box-shadow: 0 2px 0 rgba(4, 12, 30, 0.35);
+  font-weight: 700;
+}
+
+@media (max-width: 899px) {
+  .shop-footer-cash {
+    display: inline-flex;
+  }
+
+  .shop-dialog .shop-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px calc(8px + var(--safe-bottom));
+  }
+
+  .shop-leave {
+    width: auto;
+    min-width: 118px;
+    min-height: 44px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .modal-backdrop:has(.shop-modal) {
+    padding: 4px 10px;
+  }
+
+  .modal-panel.shop-modal {
+    height: 98dvh;
+    max-height: 98dvh;
+    border-radius: 16px;
+  }
+
+  .modal-panel.shop-modal .modal-head {
+    padding: 5px 12px;
+    border-bottom-width: 2px;
+  }
+
+  .modal-panel.shop-modal .modal-title {
+    font-size: 15px;
+  }
+
+  .modal-panel.shop-modal .modal-subtitle {
+    display: none;
+  }
+
+  .shop-scroll {
+    padding: 6px 10px 8px;
+    gap: 6px;
+  }
+
+  .shop-head {
+    padding: 4px 10px;
+    gap: 8px;
+    border-radius: 10px;
+  }
+
+  .shopkeeper {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .shop-name {
+    font-size: 12.5px;
+  }
+
+  .shop-speech {
+    font-size: 10px;
+    line-height: 1.25;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shop-cash {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .shop-cash strong {
+    font-size: 14px;
+  }
+
+  .shop-section-head {
+    margin-bottom: 2px;
+  }
+
+  .shop-section-head h3 {
+    font-size: 12px;
+  }
+
+  .shop-stock {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .shop-card {
+    min-height: 0;
+    padding: 6px;
+    gap: 3px;
+  }
+
+  .shop-card-art {
+    height: 30px;
+  }
+
+  .shop-card-vehicle .vehicle-badge {
+    --vsize: 26px;
+  }
+
+  .shop-card-name {
+    font-size: 11.5px;
+    line-height: 1.2;
+  }
+
+  .shop-card-desc {
+    font-size: 9.5px;
+    line-height: 1.25;
+    -webkit-line-clamp: 2;
+  }
+
+  .shop-price-tag {
+    font-size: 10px;
+    padding: 1px 7px;
+  }
+
+  .shop-buy {
+    min-height: 36px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .shop-dialog .shop-footer {
+    padding: 5px 10px calc(5px + var(--safe-bottom));
+  }
+
+  .shop-leave {
+    min-height: 38px;
+    min-width: 108px;
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+}
+
+/* 4. 受け渡し確認画面のスマホ横対応 */
+@media (max-height: 520px) and (min-width: 700px) {
+  .handoff-banner {
+    flex-direction: row;
+    text-align: left;
+    width: min(520px, calc(100vw - 32px));
+    padding: 14px 18px;
+    gap: 14px;
+  }
+
+  .handoff-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .handoff-text {
+    align-items: flex-start;
+    flex: 1 1 auto;
+  }
+
+  .handoff-name {
+    font-size: 18px;
+  }
+
+  .handoff-start-btn {
+    width: auto;
+    min-width: 170px;
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
 }
