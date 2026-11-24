@@ -121,44 +121,53 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
 
     body.replaceChildren(
       h(
-        'header',
-        { class: 'shop-head' },
+        'div',
+        { class: 'shop-scroll scroll-y' },
         h(
-          'span',
-          { class: 'shopkeeper' },
-          shopkeeperSprite
-            ? h('img', { attrs: { src: shopkeeperSprite, alt: 'ミダス商会の店主', draggable: 'false' } })
-            : h('span', { class: 'shopkeeper-fallback', text: '👑' }),
+          'header',
+          { class: 'shop-head' },
+          h(
+            'span',
+            { class: 'shopkeeper' },
+            shopkeeperSprite
+              ? h('img', { attrs: { src: shopkeeperSprite, alt: 'ミダス商会の店主', draggable: 'false' } })
+              : h('span', { class: 'shopkeeper-fallback', text: '👑' }),
+          ),
+          h(
+            'div',
+            { class: 'shop-head-text' },
+            h('span', { class: 'shop-name', text: 'ミダス商会 カード売り場' }),
+            h('p', { class: 'shop-speech', text: speech }),
+          ),
+          h(
+            'div',
+            { class: 'shop-cash' },
+            h('span', { class: 'muted', text: '所持金' }),
+            h('strong', { class: player.cash < 0 ? 'money-negative' : '', text: formatOku(player.cash) }),
+          ),
         ),
         h(
-          'div',
-          { class: 'shop-head-text' },
-          h('span', { class: 'shop-name', text: 'ミダス商会 カード売り場' }),
-          h('p', { class: 'shop-speech', text: speech }),
+          'section',
+          { class: 'shop-section' },
+          h(
+            'div',
+            { class: 'shop-section-head' },
+            h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), '棚のカード（5枚）'),
+            h('span', { class: 'muted', text: '価格は年数で変動' }),
+          ),
+          stockHost,
         ),
         h(
-          'div',
-          { class: 'shop-cash' },
-          h('span', { class: 'muted', text: '所持金' }),
-          h('strong', { class: player.cash < 0 ? 'money-negative' : '', text: formatOku(player.cash) }),
+          'section',
+          { class: 'shop-section' },
+          h(
+            'div',
+            { class: 'shop-section-head' },
+            h('h3', { class: 'shop-section-title' }, uiIcon('cards', '🃏', 'shop-section-icon'), '手持ちのカード'),
+            h('span', { class: 'badge', text: `手札 ${player.cards.length} / ${handLimit}` }),
+          ),
+          handHost,
         ),
-      ),
-      h(
-        'section',
-        { class: 'shop-section' },
-        h('div', { class: 'shop-section-head' }, h('h3', { text: '🛒 棚のカード（5枚）' }), h('span', { class: 'muted', text: '価格は年数で変動' })),
-        stockHost,
-      ),
-      h(
-        'section',
-        { class: 'shop-section' },
-        h(
-          'div',
-          { class: 'shop-section-head' },
-          h('h3', { text: '🎒 手持ちのカード' }),
-          h('span', { class: 'badge', text: `手札 ${player.cards.length} / ${handLimit}` }),
-        ),
-        handHost,
       ),
       h(
         'footer',
@@ -167,7 +176,7 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
         canAct
           ? h('button', {
               class: 'btn btn-gold shop-leave',
-              text: '🚪 店を出る',
+              text: '店を出る',
               attrs: { type: 'button' },
               on: {
                 click: (event) => {

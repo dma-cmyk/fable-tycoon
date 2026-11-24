@@ -38,6 +38,7 @@ import {
   chooseRecommended,
   hopDistances,
   lanePointAt,
+  multiSourceHopDistances,
   routeModeOf,
   vehicleForStep,
   type GraphEdge,
@@ -310,11 +311,16 @@ interface CityLabelPlan {
   w: number;
   h: number;
   fs: number;
+  /** Larger size used by current / destination / candidate labels. */
+  fsPriority: number;
   kana: string | null;
   kanaFs: number;
   text: string;
   /** Chosen slot for this bucket; -1 = crowded, drawn only when it is a priority label. */
   slot: number;
+  /** Every slot offset in px for this bucket, so a priority label can dodge
+   *  a fixed occluder (own token, HUD panel) without leaving its static set. */
+  slots: Array<{ dx: number; dy: number }>;
 }
 
 /** A label box drawn this frame, with the anchor it hangs off (QA sampling). */
@@ -405,6 +411,7 @@ export class MapView {
   private readonly airNodes = new Set<string>();
   private readonly graphEdges: GraphEdge[] = [];
   private destinationNodeIdCache: { nodeId: string; distances: Map<string, number> } | null = null;
+  private realmExitCache: { realm: RealmId; distances: Map<string, number> } | null = null;
   private readonly warpNodes: BoardNode[] = [];
   private readonly ambient: AmbientWorld;
 
@@ -471,6 +478,8 @@ export class MapView {
   private artLabelDrawn: DrawnLabel[] = [];
   private readonly labelFade = new LabelFade();
   private overviewMode = false;
+  private overviewCallback: ((overview: boolean) => void) | null = null;
+  private lastOverviewFlag = false;
   private cityTap: ((cityId: string) => void) | null = null;
 
   private cityHits: Array<{ cityId: string; x: number; y: number; r: number }> = [];
@@ -917,12 +926,13 @@ export class MapView {
   }
 
   /** List-driven selection: highlight and frame the same route a map pin tap would. */
-  selectMoveOption(nodeId: string): void {
+  selectMoveOption(nodeId: string, opts?: { frame?: boolean }): void {
     if (!this.moveOptions?.some((o) => o.nodeId === nodeId)) return;
     this.selectedOption = nodeId;
     this.hoveredOption = nodeId;
     this.overviewMode = false;
-    this.frameSelectedPath(nodeId);
+    // `frame: false` keeps the fitted candidate view (initial preselection).
+    if (opts?.frame !== false) this.frameSelectedPath(nodeId);
     this.moveHooks?.onSelect?.(nodeId);
     this.requestRender();
   }
@@ -1387,35 +1397,75 @@ export class MapView {
   }
 
   /**
-   * Remaining board hops from `nodeId` to the current destination.
-   * Works before `setMoveOptions`; returns null for unknown or unreachable nodes.
+   * Remaining board hops from `nodeId` to whatever the move should head for:
+   * the world destination on the world map, or the nearest realm exit
+   * (portal back to the world) inside heaven/hell/space.
+   * Works before `setMoveOptions`; null for unknown or unreachable nodes.
    */
-  getMoveOptionDistance(nodeId: string): number | null {
+  getMoveOptionDistanceInfo(nodeId: string): { hops: number; target: 'destination' | 'exit' } | null {
     if (!this.nodeById.has(nodeId)) return null;
-    const distances = this.destinationDistances();
-    if (!distances) return null;
-    return distances.get(nodeId) ?? null;
+    const resolved = this.moveTargetDistances();
+    if (!resolved) return null;
+    const hops = resolved.distances.get(nodeId);
+    if (hops === undefined) return null;
+    return { hops, target: resolved.target };
   }
 
-  /** Candidate closest to the destination (ties: stations first), or null. */
+  /** Convenience wrapper; null when {@link getMoveOptionDistanceInfo} is null. */
+  getMoveOptionDistance(nodeId: string): number | null {
+    return this.getMoveOptionDistanceInfo(nodeId)?.hops ?? null;
+  }
+
+  /** Candidate closest to the destination / nearest exit (ties: stations first). */
   getRecommendedMoveOption(): string | null {
     if (!this.moveOptions || this.moveOptions.length === 0) return null;
-    const distances = this.destinationDistances();
-    if (!distances) return null;
+    const resolved = this.moveTargetDistances();
+    if (!resolved) return null;
     const candidates = this.moveOptions.map((option) => ({
       id: option.nodeId,
       kind: this.nodeById.get(option.nodeId)?.kind ?? 'blue',
     }));
-    return chooseRecommended(candidates, distances)?.id ?? null;
+    return chooseRecommended(candidates, resolved.distances)?.id ?? null;
   }
 
-  private destinationDistances(): Map<string, number> | null {
+  /** Board node the move should head for: the destination, or the nearest realm exit. */
+  private moveTargetNode(): BoardNode | null {
+    if (this.view === 'world') {
+      return this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) ?? null : null;
+    }
+    const playerNodeId = this.state ? this.state.players[this.state.current]?.nodeId : null;
+    const player = playerNodeId ? this.nodeById.get(playerNodeId) : null;
+    let best: BoardNode | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const node of this.realmNodes.get(this.view) ?? []) {
+      if (node.kind !== 'portal') continue;
+      const distance = player ? Math.hypot(node.x - player.x, node.y - player.y) : 0;
+      if (distance < bestDistance) {
+        best = node;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  private moveTargetDistances(): { distances: Map<string, number>; target: 'destination' | 'exit' } | null {
+    if (this.view !== 'world') {
+      const realm = this.view;
+      if (this.realmExitCache?.realm !== realm) {
+        const exits = (this.realmNodes.get(realm) ?? [])
+          .filter((node) => node.kind === 'portal')
+          .map((node) => node.id);
+        if (exits.length === 0) return null;
+        this.realmExitCache = { realm, distances: multiSourceHopDistances(exits, this.graphEdges) };
+      }
+      return { distances: this.realmExitCache.distances, target: 'exit' };
+    }
     const destination = this.destinationNodeId;
     if (!destination) return null;
-    if (this.destinationNodeIdCache?.nodeId === destination) return this.destinationNodeIdCache.distances;
-    const distances = hopDistances(destination, this.graphEdges);
-    this.destinationNodeIdCache = { nodeId: destination, distances };
-    return distances;
+    if (this.destinationNodeIdCache?.nodeId !== destination) {
+      this.destinationNodeIdCache = { nodeId: destination, distances: hopDistances(destination, this.graphEdges) };
+    }
+    return { distances: this.destinationNodeIdCache.distances, target: 'destination' };
   }
 
   getMoveProgress(): MoveProgress | null {
@@ -1543,13 +1593,19 @@ export class MapView {
   }
 
   private boardBox(): { x: number; y: number; w: number; h: number } {
-    const x = Math.min(this.cssW - 1, Math.max(0, this.safeArea.left));
-    const y = Math.min(this.cssH - 1, Math.max(0, this.safeArea.top));
+    // A HUD measurement glitch must never collapse the board to a 1px strip:
+    // inset panels are clamped so the usable box keeps a sane minimum.
+    const minW = Math.min(this.cssW, 220);
+    const minH = Math.min(this.cssH, 180);
+    const insetLeft = Math.min(Math.max(0, this.cssW - minW), Math.max(0, this.safeArea.left));
+    const insetTop = Math.min(Math.max(0, this.cssH - minH), Math.max(0, this.safeArea.top));
+    const x = Math.min(this.cssW - 1, insetLeft);
+    const y = Math.min(this.cssH - 1, insetTop);
     return {
       x,
       y,
-      w: Math.max(1, this.cssW - x - Math.max(0, this.safeArea.right)),
-      h: Math.max(1, this.cssH - y - Math.max(0, this.safeArea.bottom)),
+      w: Math.max(minW, this.cssW - x - Math.max(0, this.safeArea.right)),
+      h: Math.max(minH, this.cssH - y - Math.max(0, this.safeArea.bottom)),
     };
   }
 
@@ -1742,6 +1798,30 @@ export class MapView {
       && (this.overviewMode || this.camera.zoom <= this.camera.minZoom() * 1.18);
   }
 
+  /** True while the HUD should present the whole-world overview (全体地図). */
+  isOverviewMode(): boolean {
+    return this.isOverview();
+  }
+
+  /**
+   * Subscribe to overview-mode flips. Returns an unsubscribe function; pass
+   * null to clear. The current state is not pushed on subscribe.
+   */
+  setOverviewCallback(cb: ((overview: boolean) => void) | null): () => void {
+    this.overviewCallback = cb;
+    return () => {
+      if (this.overviewCallback === cb) this.overviewCallback = null;
+    };
+  }
+
+  /** Emit the callback only when the observable flag actually flips. */
+  private syncOverviewFlag(): void {
+    const now = this.isOverview();
+    if (now === this.lastOverviewFlag) return;
+    this.lastOverviewFlag = now;
+    this.overviewCallback?.(now);
+  }
+
   private detailLevel(zoom = this.camera.zoom): number {
     if (this.view !== 'world') return zoom < 0.8 ? 1 : 2;
     return zoom < 0.6 ? 0 : zoom < 1.45 ? 1 : 2;
@@ -1752,7 +1832,9 @@ export class MapView {
   }
 
   private cityRadius(zoom = this.camera.zoom): number {
-    return Math.min(38, Math.max(5.5, (4.5 + zoom * 4.2) * this.viewScale()));
+    // Stations lead the board: keep the pedestal ~20% wider than the old
+    // baseline so names do not dominate at play zoom.
+    return Math.min(44, Math.max(6.4, (5.4 + zoom * 5.04) * this.viewScale()));
   }
 
   private tokenHeight(): number {
@@ -1984,6 +2066,13 @@ export class MapView {
       const a = this.nodeById.get(full[idx]);
       const b = this.nodeById.get(full[idx + 1]);
       if (a && b) {
+        const mode = this.edgeModes.get(edgeKey(a.id, b.id)) ?? 'rail';
+        if (mode === 'air') {
+          const dx = wrapDx(a.x, b.x);
+          const arc = airLaneControl(a.x, a.y, a.x + dx, b.y, 0.16, 66 / Math.max(0.02, this.camera.zoom));
+          const p = lanePointAt(frac, a.x, a.y, arc.qx, arc.qy, a.x + dx, b.y);
+          return { x: p.x, y: p.y };
+        }
         return { x: a.x + wrapDx(a.x, b.x) * frac, y: a.y + (b.y - a.y) * frac };
       }
     }
@@ -2042,6 +2131,7 @@ export class MapView {
     if (document.hidden) return;
     const animating = this.updateAnimations(now);
     this.draw(now);
+    this.syncOverviewFlag();
     this.lastDrawAt = now;
     if (animating || this.dragging) this.requestRender();
     else this.scheduleAmbient();
@@ -2085,6 +2175,11 @@ export class MapView {
       this.drawRealmAmbient(ctx, now);
     }
     if (this.isOverview()) {
+      // Overview draws its own markers instead of city labels; drop the stale
+      // hit boxes so QA snapshots and taps never see last frame's names.
+      this.cityLabelHits = [];
+      this.cityLabelGrid.clear();
+      this.cityLabelDrawn = [];
       this.drawOverviewMarkers(ctx);
     } else {
       const layouts = this.computeLayouts(now);
@@ -2174,6 +2269,33 @@ export class MapView {
     const playZoom = this.playZoom();
     const ctx = this.ctx;
 
+    // Static marker discs (stations, squares, landmark towns) are shared by
+    // both passes: terrain names must not sit on a station, and station names
+    // must not sit on a square or landmark.
+    const staticEntries = this.cityEntriesForView();
+    const staticDetail = detail;
+    const staticTileR = this.tileRadius(refZoom);
+    const staticCityR = this.cityRadius(refZoom);
+    const staticDiscs: SceneDisc[] = [];
+    for (const node of this.nodesForView()) {
+      if (node.kind === 'city') continue;
+      staticDiscs.push({ x: node.x, y: node.y, r: staticTileR * 1.25 * invZoom });
+    }
+    for (const entry of staticEntries) {
+      staticDiscs.push({ x: entry.node.x, y: entry.node.y, r: staticCityR * 1.05 * invZoom });
+      if (!entry.city.landmark) continue;
+      if (staticDetail === 0 && entry.city.tier !== 1) continue;
+      if (!this.assets.landmarks.has(entry.city.landmark)) continue;
+      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
+      const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192);
+      const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
+      staticDiscs.push({
+        x: entry.node.x + dir * (staticCityR * invZoom + sz * 0.85),
+        y: entry.node.y + staticCityR * invZoom * 1.35 + sz * 0.55,
+        r: sz * 0.55,
+      });
+    }
+
     // ---- map-art terrain names -------------------------------------------
     const source = this.assets.mapArt?.labels;
     const labels = Array.isArray(source) ? [...source] : [];
@@ -2258,7 +2380,7 @@ export class MapView {
       worldW: MAP_W,
       wrap: true,
       occupied: [],
-      discs: [],
+      discs: staticDiscs,
       segments: [],
       clearance: 3 * invZoom,
       reach: 900 * invZoom,
@@ -2274,29 +2396,8 @@ export class MapView {
       if (pa !== pb) return pb - pa;
       return a.city.id < b.city.id ? -1 : 1;
     });
-    const tileR = this.tileRadius(refZoom);
-    const cityR = this.cityRadius(refZoom);
-    const discs: SceneDisc[] = [];
-    for (const node of this.nodesForView()) {
-      if (node.kind === 'city') continue;
-      discs.push({ x: node.x, y: node.y, r: tileR * 1.25 * invZoom });
-    }
-    for (const entry of entries) {
-      discs.push({ x: entry.node.x, y: entry.node.y, r: cityR * 1.05 * invZoom });
-      if (!entry.city.landmark) continue;
-      if (detail === 0 && entry.city.tier !== 1) continue;
-      if (!this.assets.landmarks.has(entry.city.landmark)) continue;
-      const kind = entry.city.tier === 1 ? 'metropolis' : entry.city.tier === 2 && entry.city.port ? 'port_town' : 'town';
-      // Label reservation used a square of this screen size; as world units the
-      // zoom cancels out, which keeps the landmark disc stable across buckets.
-      const sz = (kind === 'metropolis' ? 34 : kind === 'port_town' ? 26 : 22) * (MAP_W / 8192);
-      const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
-      discs.push({
-        x: entry.node.x + dir * (cityR * invZoom + sz * 0.85),
-        y: entry.node.y + cityR * invZoom * 1.35 + sz * 0.55,
-        r: sz * 0.55,
-      });
-    }
+    const cityR = staticCityR;
+    const discs = staticDiscs;
     const segments: SceneSegment[] = (this.view === 'world' ? this.edges : this.realmEdges.get(this.view) ?? [])
       .map((e) => ({ ax: e.ax, ay: e.ay, bx: e.ax + e.dx, by: e.ay + e.dy }));
     const cityItems: LabelItem[] = [];
@@ -2304,15 +2405,22 @@ export class MapView {
     const showKana = detail >= 1;
     for (const entry of sorted) {
       const text = entry.city.nameJa;
+      // General station names stay small (11–11.5px); priority labels use the
+      // 13–14px tier so the board reads station-first instead of name-first.
       const fs = this.view === 'world'
-        ? Math.min(14, Math.max(12, 10.5 + refZoom * 1.3))
-        : Math.min(28, 12 * this.viewScale());
+        ? Math.min(11.5, Math.max(11, 9.6 + refZoom * 0.9))
+        : Math.min(25, 11 * this.viewScale());
+      const fsPriority = this.view === 'world'
+        ? Math.min(14, Math.max(13, 10.5 + refZoom * 1.1))
+        : Math.min(28, 12.5 * this.viewScale());
       const kana = showKana ? cityKana(entry.city) : null;
       const kanaFs = kana ? Math.max(8, fs * 0.5) : 0;
-      const nameWidth = this.measureText(this.ctx, text, `800 ${fs.toFixed(1)}px ${LABEL_FONT}`);
+      const priorityFont = `800 ${fsPriority.toFixed(1)}px ${LABEL_FONT}`;
+      const nameWidth = this.measureText(this.ctx, text, priorityFont);
       const kanaWidth = kana ? this.measureText(this.ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
-      const w = Math.max(nameWidth, kanaWidth) + 13;
-      const h = fs + 8 + (kana ? kanaFs + 2 : 0);
+      // Sized for the priority tier + a slimmer 9px gutter (was 13px).
+      const w = Math.max(nameWidth, kanaWidth) + 9;
+      const h = fsPriority + 7 + (kana ? kanaFs + 2 : 0);
       const slotPx: Array<{ dx: number; dy: number }> = [
         { dx: cityR + 6 + w / 2, dy: -h * 0.12 },
         { dx: -(cityR + 6 + w / 2), dy: -h * 0.12 },
@@ -2325,7 +2433,19 @@ export class MapView {
           slotPx.push({ dx: Math.cos(ang) * (rr + w / 2), dy: Math.sin(ang) * (rr * 0.85 + h / 2) });
         }
       }
-      plans.set(entry.city.id, { dx: slotPx[0].dx, dy: slotPx[0].dy, w, h, fs, kana, kanaFs, text, slot: -1 });
+      plans.set(entry.city.id, {
+        dx: slotPx[0].dx,
+        dy: slotPx[0].dy,
+        w,
+        h,
+        fs,
+        fsPriority,
+        kana,
+        kanaFs,
+        text,
+        slot: -1,
+        slots: slotPx,
+      });
       // At overview zoom only tier-1 names can be drawn, so skip the costly
       // slot search for the rest; priority labels still fall back to slot 0.
       if (detail === 0 && entry.city.tier !== 1) continue;
@@ -2376,9 +2496,50 @@ export class MapView {
   }
 
   /** Screen boxes that may temporarily cover a label. They only fade it, never move it. */
+  /** True when a blocker rect is a token sprite box (as opposed to HUD chrome). */
+  private isTokenBlocker(rect: Rect, now: number): boolean {
+    const th = this.tokenHeight();
+    for (const token of this.tokens) {
+      const world = this.tokenWorldPosition(token.playerId, now);
+      if (!world) continue;
+      const x = this.camera.screenX(world.x) - 30;
+      const y = this.camera.screenY(world.y) - th - 16;
+      if (Math.abs(rect.x - x) < 0.5 && Math.abs(rect.y - y) < 0.5 && Math.abs(rect.h - (th + 24)) < 0.5) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private dynamicLabelBlockers(now: number): Rect[] {
     const cam = this.camera;
     const out: Rect[] = [...this.labelObstacles];
+    // In overview the only markers are the current-position dot and the
+    // destination flag; terrain names must never cover them.
+    if (this.isOverview() && this.state) {
+      const current = this.nodeById.get(this.state.players[this.state.current]?.nodeId ?? '');
+      if (current) {
+        out.push({ x: cam.screenX(current.x) - 34, y: cam.screenY(current.y) - 30, w: 68, h: 58 });
+      }
+      const dest = this.cityEntries.find((entry) => entry.city.id === this.state?.destination);
+      if (dest) {
+        out.push({ x: cam.screenX(dest.node.x) - 40, y: cam.screenY(dest.node.y) - 46, w: 80, h: 60 });
+      }
+    }
+    // The minimap is renderer-owned chrome; labels must never sit under it
+    // even when the HUD forgets to list it as an obstacle.
+    if (!this.isOverview() && this.miniMapEl) {
+      const canvasRect = this.canvas.getBoundingClientRect();
+      const mini = this.miniMapEl.getBoundingClientRect();
+      if (mini.width > 4 && mini.height > 4) {
+        out.push({
+          x: mini.left - canvasRect.left - 2,
+          y: mini.top - canvasRect.top - 2,
+          w: mini.width + 4,
+          h: mini.height + 4,
+        });
+      }
+    }
     const th = this.tokenHeight();
     for (const token of this.tokens) {
       const world = this.tokenWorldPosition(token.playerId, now);
@@ -2421,6 +2582,8 @@ export class MapView {
       if (rect.x < board.x + 2 || rect.y < board.y + 2
         || rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) continue;
       const occluded = blockers.some((o) => rectsOverlap(rect, o, 2));
+      // In overview the markers are the whole point: hide at once, no latch.
+      if (occluded && this.isOverview()) continue;
       const alpha = this.labelFade.update(plan.id, !occluded, now);
       if (alpha <= 0.02) continue;
       ctx.save();
@@ -2768,14 +2931,31 @@ export class MapView {
         airPath.moveTo(x1, y1);
         airPath.quadraticCurveTo(qx, qy, x2, y2);
         if (!overview) {
-          const sc = Math.max(2.6, 3.2 * dpr);
-          for (let t = 0.28; t < 0.95; t += 0.32) {
+          const sc = Math.max(4.6, 5.6 * dpr);
+          for (let t = 0.2; t < 0.95; t += 0.24) {
             const p = lanePointAt(t, x1, y1, qx, qy, x2, y2);
-            // small swept-wing plane glyph pointing along the lane
-            airGlyphPath.moveTo(p.x + p.hx * sc, p.y + p.hy * sc);
-            airGlyphPath.lineTo(p.x - p.hx * sc * 0.5 - p.hy * sc, p.y - p.hy * sc * 0.5 + p.hx * sc);
-            airGlyphPath.lineTo(p.x - p.hx * sc * 0.15, p.y - p.hy * sc * 0.15);
-            airGlyphPath.lineTo(p.x - p.hx * sc * 0.5 + p.hy * sc, p.y - p.hy * sc * 0.5 - p.hx * sc);
+            // Airliner silhouette pointing along the lane: nose, swept wings,
+            // tailplane. Tip-to-tail is 2.4*sc, so it reads at play zoom.
+            const fx = p.hx;
+            const fy = p.hy;
+            const nx = -fy;
+            const ny = fx;
+            const pt = (ahead: number, side: number): [number, number] => [
+              p.x + fx * ahead * sc + nx * side * sc,
+              p.y + fy * ahead * sc + ny * side * sc,
+            ];
+            const [n1x, n1y] = pt(1.05, 0);
+            const [w1x, w1y] = pt(0.2, 1.0);
+            const [t1x, t1y] = pt(-0.35, 0.34);
+            const [e1x, e1y] = pt(-1.35, 0);
+            const [t2x, t2y] = pt(-0.35, -0.34);
+            const [w2x, w2y] = pt(0.2, -1.0);
+            airGlyphPath.moveTo(n1x, n1y);
+            airGlyphPath.lineTo(w1x, w1y);
+            airGlyphPath.lineTo(t1x, t1y);
+            airGlyphPath.lineTo(e1x, e1y);
+            airGlyphPath.lineTo(t2x, t2y);
+            airGlyphPath.lineTo(w2x, w2y);
             airGlyphPath.closePath();
           }
         }
@@ -2853,21 +3033,21 @@ export class MapView {
       ctx.lineWidth = railW * dpr;
       ctx.stroke(railPath);
     }
-    // Sky lanes: a soft white underlay, a dotted blue line and plane glyphs.
-    // Kept faint at play zoom so the lanes never compete with the squares.
+    // Sky lanes: white halo + saturated sky-blue dotted arc + plane glyphs.
+    // Strong enough to read at play zoom without competing with the squares.
     if (!overview) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
-      ctx.lineWidth = 3.4 * dpr;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.82)';
+      ctx.lineWidth = 4.2 * dpr;
       ctx.stroke(airPath);
-      ctx.strokeStyle = zoom >= 0.8 ? 'rgba(104, 190, 255, 0.38)' : 'rgba(104, 190, 255, 0.62)';
-      ctx.lineWidth = Math.max(1, 1.25 * dpr);
-      ctx.setLineDash([Math.max(1.5, 1.2 * dpr), Math.max(5, 6.5 * dpr)]);
+      ctx.strokeStyle = 'rgba(14, 108, 200, 0.95)';
+      ctx.lineWidth = 2.8 * dpr;
+      ctx.setLineDash([5.5 * dpr, 5.5 * dpr]);
       ctx.stroke(airPath);
       ctx.setLineDash([]);
-      ctx.fillStyle = zoom >= 0.8 ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.92)';
+      ctx.fillStyle = 'rgba(14, 108, 200, 0.98)';
       ctx.fill(airGlyphPath);
-      ctx.strokeStyle = 'rgba(40, 110, 160, 0.32)';
-      ctx.lineWidth = 0.8 * dpr;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = 1.1 * dpr;
       ctx.stroke(airGlyphPath);
     }
     ctx.restore();
@@ -3296,6 +3476,26 @@ export class MapView {
       || tokenNodeIds.has(v.entry.node.id)
       || optionCities.has(v.entry.node.id);
     const blockers = this.dynamicLabelBlockers(now);
+    // Slot dodging only reacts to fixed chrome (HUD panels, portrait, minimap,
+    // overview markers), never to a walking token that would make a priority
+    // name jump between slots.
+    // Own token counts as fixed chrome when it is parked (no move animation):
+    // priority names dodge it, but a walking token never drags names around.
+    const movingPlayer = this.moveAnim?.playerId ?? this.warpAnim?.playerId ?? null;
+    const ownToken = movingPlayer === null && this.state
+      ? this.tokenWorldPosition(this.state.current, now)
+      : null;
+    const ownTokenBlocker: Rect | null = ownToken
+      ? {
+        x: this.camera.screenX(ownToken.x) - 30,
+        y: this.camera.screenY(ownToken.y) - this.tokenHeight() - 16,
+        w: 60,
+        h: this.tokenHeight() + 24,
+      }
+      : null;
+    const fixedBlockers = this.labelObstacles
+      .concat(ownTokenBlocker ? [ownTokenBlocker] : [])
+      .concat(blockers.filter((b) => !this.isTokenBlocker(b, now)));
     const ratio = this.camera.zoom / this.labelLayoutRefZoom;
     for (const v of visible) {
       const city = v.entry.city;
@@ -3307,14 +3507,33 @@ export class MapView {
       if (plan.slot < 0 && !isPriority) continue;
       const w = plan.w * ratio;
       const h = plan.h * ratio;
-      const rect = {
-        x: v.x + plan.dx * ratio - w / 2,
-        y: v.y + plan.dy * ratio - h / 2,
-        w,
-        h,
-      };
-      if (rect.x < board.x + 3 || rect.y < board.y + 3
-        || rect.x + rect.w > board.x + board.w - 3 || rect.y + rect.h > board.y + board.h - 3) continue;
+      const inside = (r: Rect): boolean => r.x >= board.x + 3 && r.y >= board.y + 3
+        && r.x + r.w <= board.x + board.w - 3 && r.y + r.h <= board.y + board.h - 3;
+      let dx = plan.dx;
+      let dy = plan.dy;
+      let rect = { x: v.x + dx * ratio - w / 2, y: v.y + dy * ratio - h / 2, w, h };
+      if (isPriority) {
+        // Priority names must never sit on a fixed occluder (own token, HUD
+        // panel, minimap, portrait). Reuse the same static slot set — only the
+        // order changes — so placement stays stable and never drifts frame to
+        // frame. Slot 0 is kept whenever it is clear.
+        const startSlot = Math.max(0, plan.slot);
+        const ordered = plan.slots.slice(startSlot).concat(plan.slots.slice(0, startSlot));
+        for (const slot of ordered) {
+          const trial: Rect = { x: v.x + slot.dx * ratio - w / 2, y: v.y + slot.dy * ratio - h / 2, w, h };
+          if (!inside(trial)) continue;
+          if (fixedBlockers.some((b) => rectsOverlap(trial, b, 2))) continue;
+          dx = slot.dx;
+          dy = slot.dy;
+          rect = trial;
+          break;
+        }
+        if (blockers.some((b) => rectsOverlap(rect, b, 2))) {
+          // Every slot is covered: hide rather than draw over the HUD.
+          continue;
+        }
+      }
+      if (!inside(rect)) continue;
       let alpha = 1;
       if (!isPriority) {
         alpha = this.labelFade.update(
@@ -3338,6 +3557,7 @@ export class MapView {
         v.entry.node.id === this.destinationNodeId,
         this.ownership.get(city.id),
         alpha,
+        isPriority,
       );
     }
   }
@@ -3360,9 +3580,10 @@ export class MapView {
     isDestination: boolean,
     owner: { counts: number[]; total: number; monopoly: number } | undefined,
     alpha: number,
+    priority = false,
   ): void {
-    const fs = plan.fs * ratio;
-    const kanaFs = plan.kanaFs * ratio;
+    const fs = (priority ? plan.fsPriority : plan.fs) * ratio;
+    const kanaFs = Math.max(8, plan.kanaFs * ratio);
     ctx.save();
     if (alpha < 1) ctx.globalAlpha = alpha;
     // leader/tail
@@ -3501,19 +3722,8 @@ export class MapView {
       ctx.arc(x, y, radius, 0, TAU, true);
     };
     if (current) hole(cam.screenX(current.x), cam.screenY(current.y), r + 44);
-    for (const option of this.moveOptions) {
-      const points = this.optionScreenPath(option);
-      if (!points) continue;
-      for (let i = 1; i < points.length; i++) {
-        const [x1, y1] = points[i - 1];
-        const [x2, y2] = points[i];
-        const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 12));
-        for (let s = 0; s <= steps; s++) {
-          const t = s / steps;
-          hole(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 15);
-        }
-      }
-    }
+    // Candidate squares get clean circular holes; routes are not punched out
+    // (a chain of small holes left jagged bright scallops across the dim).
     for (const option of this.moveOptions) {
       const node = this.nodeById.get(option.nodeId);
       if (!node) continue;
@@ -3527,13 +3737,32 @@ export class MapView {
   /** Gold route for every candidate; the current pick is thicker, the rest fade back. */
   private drawMoveRoutes(ctx: CanvasRenderingContext2D, now: number): void {
     if (!this.moveOptions || this.moveOptions.length === 0) return;
-    const shown = this.selectedOption ?? this.hoveredOption ?? this.getRecommendedMoveOption();
+    // The thick gold line means "this is the selection". Only draw it when the
+    // map really has a selection, so the route and the UI list cannot disagree.
+    const shown = this.selectedOption ?? this.hoveredOption;
     for (const option of this.moveOptions) {
       if (option.nodeId === shown) continue;
       this.strokeOptionRoute(ctx, option, false, now);
     }
     const picked = shown ? this.moveOptions.find((o) => o.nodeId === shown) : null;
-    if (picked) this.strokeOptionRoute(ctx, picked, true, now);
+    if (picked) {
+      const points = this.optionScreenPath(picked);
+      if (points) {
+        // Soft corridor glow under the gold line: reads as a lit path without
+        // punching holes in the spotlight mask.
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+        ctx.strokeStyle = 'rgba(255, 226, 120, 0.2)';
+        ctx.lineWidth = 22;
+        ctx.stroke();
+        ctx.restore();
+      }
+      this.strokeOptionRoute(ctx, picked, true, now);
+    }
   }
 
   private strokeOptionRoute(
@@ -3633,6 +3862,9 @@ export class MapView {
     const board = this.boardBox();
     const recommended = this.getRecommendedMoveOption();
     const pinEveryCandidate = this.moveOptions.length <= 8;
+    // With a big candidate set the glow would wash the board out; thin it so
+    // the lit squares read as a field of lights instead of one bright blob.
+    const glowScale = this.moveOptions.length <= 8 ? 1 : this.moveOptions.length <= 20 ? 0.7 : 0.5;
     const chipRadius = Math.min(12, Math.max(7, r * 0.72));
     const pinBoxes: Rect[] = [];
     const chips: Array<{ x: number; y: number; r: number }> = [];
@@ -3656,7 +3888,7 @@ export class MapView {
       glow.addColorStop(0, chip.color);
       glow.addColorStop(0.5, chip.color);
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.globalAlpha = selected ? 0.52 : isRecommended ? 0.44 : 0.34;
+      ctx.globalAlpha = (selected ? 0.52 : isRecommended ? 0.44 : 0.34) * glowScale;
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(x, y, ring + 14, 0, TAU);
@@ -3849,7 +4081,9 @@ export class MapView {
     ctx.beginPath();
     ctx.moveTo(pinX, pinY + 14);
     ctx.lineTo(x, y - r - 2);
-    ctx.strokeStyle = selected || isRecommended ? '#ffd83d' : '#f6efe0';
+    // Gold means "selected"; the recommended pin keeps its kind colour and is
+    // identified by the おすすめ flag instead.
+    ctx.strokeStyle = selected ? '#ffd83d' : '#f6efe0';
     ctx.lineWidth = 2.8;
     ctx.stroke();
     ctx.beginPath();
@@ -3859,7 +4093,7 @@ export class MapView {
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
     ctx.stroke();
-    ctx.strokeStyle = selected || isRecommended ? '#ffd83d' : '#23385c';
+    ctx.strokeStyle = selected ? '#ffd83d' : isRecommended ? '#ffe46b' : '#23385c';
     ctx.lineWidth = selected ? 3.2 : 1.6;
     ctx.stroke();
     ctx.beginPath();
@@ -3890,7 +4124,7 @@ export class MapView {
     const x0 = Math.max(board.x + 2, Math.min(board.x + board.w - w - 2, x - w / 2));
     const y0 = Math.max(board.y + 2, pinY - 16 - h - 6);
     const cx = x0 + w / 2;
-    const dest = this.destinationNodeId ? this.nodeById.get(this.destinationNodeId) : null;
+    const dest = this.moveTargetNode();
     const toward = dest
       ? Math.atan2(this.camera.screenY(dest.y) - (y0 + h / 2), this.camera.screenX(dest.x) - x)
       : -Math.PI / 4;
@@ -4002,8 +4236,15 @@ export class MapView {
           const vehicle = vehicleForStep(mode, move.dice);
           const prevNode = idx > 0 ? this.nodeById.get(full[idx - 1]) : null;
           const prevMode = prevNode ? this.edgeModes.get(edgeKey(prevNode.id, a.id)) ?? 'rail' : null;
-          const wx = a.x + dx * frac;
-          const wy = a.y + (b.y - a.y) * frac;
+          let wx = a.x + dx * frac;
+          let wy = a.y + (b.y - a.y) * frac;
+          if (mode === 'air') {
+            // Fly the arc, not the chord: match the lane drawn on the map.
+            const arc = airLaneControl(a.x, a.y, a.x + dx, b.y, 0.16, 66 / Math.max(0.02, this.camera.zoom));
+            const p = lanePointAt(frac, a.x, a.y, arc.qx, arc.qy, a.x + dx, b.y);
+            wx = p.x;
+            wy = p.y;
+          }
           const sx = this.camera.screenX(wx);
           const sy = this.camera.screenY(wy);
           entries.push({
@@ -4617,7 +4858,7 @@ export class MapView {
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = '#23385c';
       ctx.lineWidth = 3;
-      const icon = kind === 'ferry' || kind === 'sailboat' ? '⛴' : '🚆';
+      const icon = kind === 'plane' ? '✈' : kind === 'ferry' || kind === 'sailboat' ? '⛴' : '🚆';
       ctx.strokeText(icon, baseX, vehY - metrics.h - 16);
       ctx.fillText(icon, baseX, vehY - metrics.h - 16);
       ctx.restore();
@@ -4839,6 +5080,17 @@ export class MapView {
     if (!state) return;
     const board = this.boardBox();
     const used: Rect[] = [];
+    // Marker dots must stay visible: name plates may not sit on any of them.
+    const dots: Rect[] = [];
+    const dotRect = (x: number, y: number, r: number): Rect => ({ x: x - r, y: y - r - 16, w: r * 2, h: r * 2 + 20 });
+    for (const token of this.tokens) {
+      if (this.tokenRealm(token.playerId) !== 'world') continue;
+      const node = this.nodeById.get(token.nodeId);
+      if (!node) continue;
+      dots.push(dotRect(cam.screenX(node.x), cam.screenY(node.y), 10));
+    }
+    const destEntry = this.cityEntries.find((e) => e.city.id === state.destination);
+    if (destEntry) dots.push(dotRect(cam.screenX(destEntry.node.x), cam.screenY(destEntry.node.y), 12));
     const markerName = (
       x: number,
       y: number,
@@ -4882,15 +5134,24 @@ export class MapView {
       ];
       let bx = raw[0].x;
       let by = raw[0].y;
+      let placed = false;
       for (const cand of raw) {
         const rx = Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, cand.x));
         const ry = Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, cand.y));
         const rect = { x: rx, y: ry, w: tw, h: th };
+        if (dots.some((d) => rectsOverlap(rect, d, 2))) continue;
         if (!used.some((r) => rectsOverlap(rect, r, 4))) {
           bx = rx;
           by = ry;
+          placed = true;
           break;
         }
+      }
+      if (!placed) {
+        // Every candidate collides with a dot: keep the plate clear of dots by
+        // pushing it upward as far as the board allows.
+        bx = Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, raw[0].x));
+        by = Math.max(board.y + 3, raw[0].y - 26);
       }
       const labelRect = {
         x: Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, bx)),

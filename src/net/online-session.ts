@@ -19,6 +19,7 @@ import type {
 import { COMM, PROTOCOL_VERSION } from './protocol';
 import type { ConnectionState, Session } from './session-types';
 import { GAME_DATA } from '../data/index';
+import { BOARD_VERSION } from './board-version';
 import { MqttTransport, DEFAULT_BROKERS, isP2PControl } from './p2p/transport';
 import { loadIdentity } from './p2p/identity';
 import type { ClientIdentity } from './p2p/identity';
@@ -36,6 +37,7 @@ const PROBE_TIMEOUT_MS = 5_000;
 const HOST_PROBE_MS = 3_000;
 const HOST_GONE_MS = 15_000;
 const SELF_HOST_GRACE_MS = 10_000;
+const REAUTH_SILENCE_MS = 10_000;
 
 const data: GameData = GAME_DATA;
 
@@ -70,6 +72,25 @@ export function configureNetworkForTests(config: NetworkConfig = {}): void {
 }
 
 const transportRegistry = new WeakMap<Session, MqttTransport>();
+const discoveredBroker = new Map<string, string>();
+
+/** Current pinned/own host public-key fingerprint (full SHA-256 hex). */
+export function hostKeyFingerprintForSession(session: Session): string | null {
+  return session instanceof OnlineSession ? session.hostKeyForInvite() : null;
+}
+
+/** Invite URL carrying the host fingerprint prefix so guests can pin it before joining. */
+export function inviteUrl(session: Session): string | null {
+  if (!(session instanceof OnlineSession) || session.mode !== 'online') return null;
+  const fingerprint = hostKeyFingerprintForSession(session);
+  if (!fingerprint || typeof location === 'undefined') return null;
+  const base = new URL(location.href);
+  base.search = '';
+  base.hash = '';
+  base.searchParams.set('room', session.roomId);
+  base.searchParams.set('k', fingerprint.slice(0, 16));
+  return base.toString();
+}
 
 export function transportInfo(session: Session): {
   broker: string | null;
@@ -298,6 +319,25 @@ function parseGuestSave(raw: string | null): GuestSave | null {
   return { roomId: parsed.roomId, name: parsed.name };
 }
 
+function readHostKeyHint(roomId: string): string | null {
+  try {
+    if (typeof location !== 'undefined') {
+      const url = new URL(location.href);
+      const query = url.searchParams.get('k');
+      const hash = new URLSearchParams(url.hash.replace(/^#/, '')).get('k');
+      const hint = query ?? hash;
+      if (hint && /^[0-9a-f]{8,64}$/i.test(hint)) return hint.toLowerCase();
+    }
+  } catch {
+    // ignore malformed URL
+  }
+  return storageGet('local', `fable.hostkey.${roomId}`);
+}
+
+function rememberHostKey(roomId: string, fingerprint: string): void {
+  storageSet('local', `fable.hostkey.${roomId}`, fingerprint);
+}
+
 function readReports(): unknown[] {
   const raw = storageGet('local', REPORTS_KEY);
   if (!raw) return [];
@@ -330,6 +370,7 @@ export class OnlineSession implements Session {
   private generation = 0;
   private shadowGeneration = 0;
   private hostKeyFingerprint: string | null = null;
+  private expectedHostFingerprint: string | null = null;
   private hostBroker: string | null = null;
   private peerKeys = new Map<string, string>();
   private hostPeerId: string | null = null;
@@ -363,13 +404,18 @@ export class OnlineSession implements Session {
   private frozenLocalActions: ClientMsg[] = [];
   private lastAckGen = -1;
   private lastAckAt = 0;
+  private quorumOk = true;
+  private quorumMessageShown = false;
+  private reportVoteSeq = 0;
+  private pendingVotes = new Map<string, { control: Extract<P2PControl, { k: 'report_vote' }>; sentAt: number; attempts: number }>();
   private lastServerAt = Date.now();
+  private lastLivenessAt = Date.now();
   private lastReauthAt = 0;
   private visibilityHandler: (() => void) | null = null;
   private lastResyncAt = 0;
   private pendingSeat: number | null = null;
   private pendingCharacter: string | null = null;
-  private pendingAction: { seq: number; action: Action; sentAt: number } | null = null;
+  private pendingAction: { gen: number; seq: number; action: Action; sentAt: number } | null = null;
   private lastLobbyRetryAt = 0;
 
   private lastWelcome: Extract<ServerMsg, { t: 'welcome' }> | null = null;
@@ -382,28 +428,43 @@ export class OnlineSession implements Session {
     this.name = name.trim().slice(0, 16) || 'プレイヤー';
     this.role = role;
     this.clientId = clientIdFor(this.name);
+    this.hostBroker = discoveredBroker.get(this.roomId) ?? null;
+    this.expectedHostFingerprint = readHostKeyHint(this.roomId);
     this.peerSeen.set(this.clientId, Date.now());
     if (typeof document !== 'undefined') {
       this.visibilityHandler = () => {
         if (document.visibilityState !== 'visible' || this.closed || this.crashed) return;
-        this.reauthenticate('visible');
+        this.reauthenticate('visible', true);
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
     }
   }
 
-  private reauthenticate(reason: string): void {
+  /**
+   * Liveness and state sync are separate: heartbeats already prove the host is alive, so only a
+   * genuine silence (no heartbeat/state for REAUTH_SILENCE_MS) re-hellos. A hello on the same
+   * connection must not be sent just because the board has not changed for a while.
+   */
+  private reauthenticate(reason: string, force = false): void {
     const now = Date.now();
-    if (now - this.lastReauthAt < 2_000) return;
+    if (!force && now - this.lastLivenessAt < REAUTH_SILENCE_MS) return;
+    if (now - this.lastReauthAt < 3_000) return;
     this.lastReauthAt = now;
+    this.lastLivenessAt = now;
     this.lastServerAt = now;
     this.log(`re-authenticating (${reason})`);
     if (this.role === 'guest') {
       this.sendHello();
-      if (this.hostPeerId) void this.transport?.send(this.hostPeerId, { k: 'resync' });
     } else {
       this.sendHeartbeat();
       if (this.controller) this.controller.resync(this.loopbackId);
+    }
+  }
+
+  /** Ask the host for a fresh snapshot without a new hello (does not disturb presence). */
+  requestResync(): void {
+    if (this.role === 'guest' && this.hostPeerId) {
+      void this.transport?.send(this.hostPeerId, { k: 'resync' });
     }
   }
 
@@ -438,6 +499,14 @@ export class OnlineSession implements Session {
     this.inboundBlockedForTests = blocked;
   }
 
+  setBlockedPeersForTests(peerIds: readonly string[]): void {
+    this.transport?.setBlockedPeersForTests(peerIds);
+  }
+
+  reportVotes(): Record<string, string[]> {
+    return { ...this.shadow.reportVotes };
+  }
+
   authorityInfo(): { ready: boolean; requiredAcks: number; acks: number; frozen: boolean } {
     return {
       ready: this.authorityReady,
@@ -445,6 +514,10 @@ export class OnlineSession implements Session {
       acks: this.ackKeys.size,
       frozen: !this.authorityReady && this.role === 'host',
     };
+  }
+
+  hostKeyForInvite(): string | null {
+    return this.hostKeyFingerprint ?? this.identity?.fingerprint ?? null;
   }
 
   hostCheckpoint(): HostCheckpoint | null {
@@ -517,12 +590,16 @@ export class OnlineSession implements Session {
   send(msg: ClientMsg): void {
     if (this.closed || this.crashed) return;
     if (msg.t === 'ping') return;
+    if (msg.t === 'action') msg = { ...msg, gen: this.generation };
     if (this.role === 'host' && this.controller) {
       if (msg.t === 'action' && !this.authorityReady) {
         if (this.frozenLocalActions.length < 50) this.frozenLocalActions.push(msg);
         return;
       }
       this.controller.message(this.loopbackId, msg);
+      if (msg.t === 'report') {
+        this.replicateReport(msg.seat, this.identity?.fingerprint ?? this.clientId);
+      }
       return;
     }
     if (this.role === 'guest') {
@@ -532,7 +609,12 @@ export class OnlineSession implements Session {
       } else if (msg.t === 'pick_character') {
         this.pendingCharacter = msg.characterId;
       } else if (msg.t === 'action') {
-        this.pendingAction = { seq: msg.seq, action: msg.action, sentAt: Date.now() };
+        this.pendingAction = {
+          gen: this.generation,
+          seq: msg.seq,
+          action: msg.action,
+          sentAt: Date.now(),
+        };
       } else if (msg.t === 'leave_seat' || msg.t === 'leave') {
         this.pendingSeat = null;
         this.pendingCharacter = null;
@@ -629,6 +711,8 @@ export class OnlineSession implements Session {
     this.authorityReady = true;
     this.requiredAcks = 0;
     this.ackKeys.clear();
+    this.quorumOk = true;
+    this.quorumMessageShown = false;
     this.hostPeerId = this.clientId;
     this.hostKeyFingerprint = this.identity.fingerprint;
     const deps = this.hostDeps();
@@ -649,6 +733,7 @@ export class OnlineSession implements Session {
       name: this.name,
       token: this.identity.fingerprint,
       pub: JSON.stringify(this.identity.publicJwk),
+      boardVersion: BOARD_VERSION,
     });
     this.hostSeat = this.controller.publicSnapshot().hostSeat;
 
@@ -659,6 +744,10 @@ export class OnlineSession implements Session {
     );
     transport.onStatus((status) => this.onTransportStatus(status));
     await transport.connect(this.roomId);
+    if (transport.broker()) {
+      this.hostBroker = transport.broker();
+      discoveredBroker.set(this.roomId, transport.broker() as string);
+    }
     this.setState('open');
     this.startTimers();
     this.sendHeartbeat();
@@ -794,6 +883,22 @@ export class OnlineSession implements Session {
     }
     if (this.role === 'host') {
       if (!this.controller || !isClientMsg(message)) return;
+      if (message.t === 'hello' && message.boardVersion !== BOARD_VERSION) {
+        void this.transport?.send(from, {
+          t: 'error',
+          code: 'bad_version',
+          message: 'ゲームのバージョンが違います。ページを再読み込みしてください',
+        });
+        return;
+      }
+      if (message.t === 'action' && message.gen !== this.generation) {
+        void this.transport?.send(from, {
+          t: 'error',
+          code: 'stale',
+          message: 'ホスト世代が変わりました。最新の状態から操作してください',
+        });
+        return;
+      }
       const pinned = this.peerKeys.get(from);
       if (pinned !== undefined && pinned !== fingerprint) {
         this.log(`drop ClientMsg from ${from}: signing key does not match pinned key`);
@@ -823,10 +928,24 @@ export class OnlineSession implements Session {
       }
       this.controller.connect(from);
       this.controller.message(from, message);
+      if (message.t === 'report') this.replicateReport(message.seat, fingerprint);
       this.afterHostMessage(message);
       return;
     }
     if (!isServerMsg(message)) return;
+    if (
+      (message.t === 'welcome' || message.t === 'snapshot') &&
+      message.boardVersion !== BOARD_VERSION
+    ) {
+      this.onServerMsg({
+        t: 'error',
+        code: 'bad_version',
+        message: 'ゲームのバージョンが違います。ページを再読み込みしてください',
+      });
+      this.setState('closed');
+      void this.transport?.close();
+      return;
+    }
     if (!this.acceptHostSender(from, fingerprint)) return;
     if (message.t === 'welcome') {
       this.lastHostHeartbeatAt = Date.now();
@@ -841,13 +960,24 @@ export class OnlineSession implements Session {
   }
 
   private acceptHostSender(from: string, fingerprint: string): boolean {
+    if (!this.hostPeerId) {
+      const hint = this.expectedHostFingerprint;
+      if (hint && !fingerprint.startsWith(hint)) {
+        this.log('drop host welcome: invite/keychain fingerprint mismatch');
+        return false;
+      }
+    }
     if (this.hostPeerId && this.hostPeerId !== from) return false;
     if (this.hostKeyFingerprint && this.hostKeyFingerprint !== fingerprint) {
       this.log(`drop host message from ${from}: signing key changed without a generation bump`);
       return false;
     }
     if (!this.hostPeerId) this.hostPeerId = from;
-    if (!this.hostKeyFingerprint) this.hostKeyFingerprint = fingerprint;
+    if (!this.hostKeyFingerprint) {
+      this.hostKeyFingerprint = fingerprint;
+      this.expectedHostFingerprint = fingerprint;
+      rememberHostKey(this.roomId, fingerprint);
+    }
     return true;
   }
 
@@ -882,6 +1012,22 @@ export class OnlineSession implements Session {
       case 'host_probe':
         if (this.role === 'host') this.sendHeartbeat();
         else this.broadcastPresence();
+        return;
+      case 'report_vote': {
+        if (this.role === 'guest') {
+          this.updateShadowVote(control.target, control.voter);
+          if (this.hostPeerId) {
+            void this.transport?.send(this.hostPeerId, {
+              k: 'report_vote_ack',
+              voteId: control.voteId,
+              gen: control.gen,
+            });
+          }
+        }
+        return;
+      }
+      case 'report_vote_ack':
+        if (this.role === 'host') this.pendingVotes.delete(control.voteId);
         return;
       case 'host_ack': {
         if (this.role !== 'host' || control.hostPeerId !== this.clientId) {
@@ -960,29 +1106,84 @@ export class OnlineSession implements Session {
     return this.shadow.seatKeys[String(seat)] ?? null;
   }
 
-  private requiredAckCount(): number {
-    const lobby = this.shadow.lobby;
-    if (!lobby) return 0;
+  private hostHumanSeatCount(): number {
+    const lobby = this.controller?.lobbyView() ?? this.shadow.lobby;
+    return lobby?.seats.filter((seat) => seat.kind === 'human').length ?? 0;
+  }
+
+  private strictMajority(totalHumans: number): number {
+    if (totalHumans <= 1) return 1;
+    return Math.floor(totalHumans / 2) + 1;
+  }
+
+  /** Self plus pinned human peers seen recently; CPU/open seats do not count. */
+  private visibleHumanConfirmations(): number {
+    const keys = this.controller?.publicSnapshot().seatKeys ?? this.shadow.seatKeys;
     const peerSilence = networkConfig.peerSilenceMs ?? DEFAULT_PEER_SILENCE_MS;
     const now = Date.now();
-    const alivePeerKeys = new Set<string>();
+    const alive = new Set<string>();
     for (const [peerId, seen] of this.peerSeen) {
       if (now - seen > peerSilence) continue;
       const fingerprint = this.peerKeys.get(peerId);
-      if (fingerprint) alivePeerKeys.add(fingerprint);
+      if (fingerprint) alive.add(fingerprint);
     }
-    const aliveHumans = lobby.seats.filter((seat) => {
-      if (seat.kind !== 'human') return false;
-      if (seat.index === this.seat) return true;
-      const key = this.shadow.seatKeys[String(seat.index)];
-      return !!key && alivePeerKeys.has(key);
-    }).length;
-    if (aliveHumans <= 2) return Math.max(0, aliveHumans - 1);
-    return Math.floor(aliveHumans / 2);
+    let count = 1; // the host itself
+    for (const key of Object.values(keys)) {
+      if (alive.has(key)) count += 1;
+    }
+    return count;
+  }
+
+  private requiredAckCount(): number {
+    const total = this.hostHumanSeatCount();
+    if (total <= 1) return 0;
+    // Acks exclude the host, so a strict majority of seats means floor(total/2) acks.
+    return Math.floor(total / 2);
+  }
+
+  private updateHostQuorum(): void {
+    if (this.role !== 'host') return;
+    const total = this.hostHumanSeatCount();
+    if (total <= 1) {
+      if (!this.quorumOk) {
+        this.quorumOk = true;
+        this.authorityReady = true;
+        this.controller?.setFrozen(false);
+      }
+      return;
+    }
+    const needed = this.strictMajority(total);
+    const visible = this.visibleHumanConfirmations();
+    const ok = visible >= needed;
+    if (ok === this.quorumOk) return;
+    this.quorumOk = ok;
+    if (!ok) {
+      this.authorityReady = false;
+      this.controller?.setFrozen(true);
+      if (!this.quorumMessageShown) {
+        this.quorumMessageShown = true;
+        const text = `通信待ち：${needed} 人中 ${visible} 人しか接続できていません。再接続を待っています`;
+        this.onServerMsg({ t: 'system', text });
+        void this.transport?.broadcast({ t: 'system', text });
+      }
+      this.log(`host quorum lost (${visible}/${needed})`);
+      return;
+    }
+    this.quorumMessageShown = false;
+    if (this.promotedAt > 0 && this.ackKeys.size < this.requiredAcks) {
+      // Wait for explicit acks on a promoted host; heartbeat re-announcement solicits them.
+      return;
+    }
+    this.authorityReady = true;
+    this.controller?.setFrozen(false);
+    this.log(`host quorum restored (${visible}/${needed})`);
+    const text = '通信が回復しました';
+    this.onServerMsg({ t: 'system', text });
+    void this.transport?.broadcast({ t: 'system', text });
   }
 
   private becomeAuthorityReady(): void {
-    if (this.authorityReady) return;
+    if (this.authorityReady || !this.quorumOk) return;
     this.authorityReady = true;
     this.controller?.setFrozen(false);
     this.log(`host authority confirmed (${this.ackKeys.size}/${this.requiredAcks} acks)`);
@@ -1099,6 +1300,7 @@ export class OnlineSession implements Session {
       }
     }
     this.lastHostHeartbeatAt = Date.now();
+    this.lastLivenessAt = Date.now();
     this.probeStartedAt = 0;
     this.sendHostAck(control.hostPeerId, control.gen);
     this.hostSeat = control.hostSeat;
@@ -1107,7 +1309,10 @@ export class OnlineSession implements Session {
     this.shadow.reportVotes = { ...control.reportVotes };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
-    if (control.broker) this.hostBroker = control.broker;
+    if (control.broker) {
+      this.hostBroker = control.broker;
+      discoveredBroker.set(this.roomId, control.broker);
+    }
     const ownSeat = Object.keys(control.seatKeys).find(
       (seatIndex) => control.seatKeys[seatIndex] === this.identity?.fingerprint,
     );
@@ -1145,6 +1350,10 @@ export class OnlineSession implements Session {
     this.hostPeerId = control.hostPeerId;
     this.hostSeat = control.hostSeat;
     this.hostKeyFingerprint = fingerprint;
+    this.expectedHostFingerprint = fingerprint;
+    rememberHostKey(this.roomId, fingerprint);
+    this.lastLivenessAt = Date.now();
+    this.pendingAction = null;
     this.generation = control.gen;
     this.lastHostHeartbeatAt = Date.now();
     this.probeStartedAt = 0;
@@ -1153,7 +1362,10 @@ export class OnlineSession implements Session {
     this.shadow.reportVotes = { ...control.reportVotes };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
-    if (control.broker) this.hostBroker = control.broker;
+    if (control.broker) {
+      this.hostBroker = control.broker;
+      discoveredBroker.set(this.roomId, control.broker);
+    }
     if (
       forceReset ||
       control.gen < this.shadowGeneration ||
@@ -1203,6 +1415,9 @@ export class OnlineSession implements Session {
       message.t === 'snapshot' ||
       message.t === 'update'
     ) {
+      if (message.t === 'welcome' || message.t === 'snapshot') {
+        return { ...message, gen: this.generation, boardVersion: BOARD_VERSION };
+      }
       return { ...message, gen: this.generation };
     }
     return message;
@@ -1250,6 +1465,7 @@ export class OnlineSession implements Session {
       name: this.name,
       token: this.identity?.fingerprint ?? this.clientId,
       pub: this.identity ? JSON.stringify(this.identity.publicJwk) : undefined,
+      boardVersion: BOARD_VERSION,
     };
     if (this.hostPeerId) void transport.send(this.hostPeerId, hello);
     else void transport.broadcast(hello);
@@ -1262,6 +1478,35 @@ export class OnlineSession implements Session {
     const queued = this.queue;
     this.queue = [];
     for (const message of queued) void transport.send(this.hostPeerId, message);
+  }
+
+  private updateShadowVote(target: number, voter: string): void {
+    const key = String(target);
+    const votes = this.shadow.reportVotes[key] ?? [];
+    if (!votes.includes(voter)) votes.push(voter);
+    this.shadow.reportVotes[key] = votes;
+  }
+
+  private replicateReport(target: number, voter: string): void {
+    if (this.role !== 'host') return;
+    const lobby = this.controller?.lobbyView();
+    const seat = lobby?.seats[target];
+    if (!seat || seat.kind === 'open') return;
+    const seatKeys = this.controller?.publicSnapshot().seatKeys ?? {};
+    const voterSeat = Object.entries(seatKeys).find(([, key]) => key === voter)?.[0];
+    if (voterSeat !== undefined && Number(voterSeat) === target) return;
+    this.updateShadowVote(target, voter);
+    this.reportVoteSeq += 1;
+    const control: Extract<P2PControl, { k: 'report_vote' }> = {
+      k: 'report_vote',
+      voteId: `${this.clientId.slice(0, 6)}-${Date.now().toString(36)}-${this.reportVoteSeq}`,
+      target,
+      voter,
+      gen: this.generation,
+      at: Date.now(),
+    };
+    this.pendingVotes.set(control.voteId, { control, sentAt: Date.now(), attempts: 1 });
+    void this.transport?.broadcast(control);
   }
 
   private sendHeartbeat(): void {
@@ -1282,6 +1527,17 @@ export class OnlineSession implements Session {
       at: Date.now(),
     };
     void this.transport.broadcast(heartbeat);
+    const now = Date.now();
+    for (const [voteId, pending] of this.pendingVotes) {
+      if (now - pending.sentAt < 2_000) continue;
+      if (pending.attempts >= 3) {
+        this.pendingVotes.delete(voteId);
+        continue;
+      }
+      pending.sentAt = now;
+      pending.attempts += 1;
+      void this.transport?.broadcast(pending.control);
+    }
   }
 
   private broadcastPresence(): void {
@@ -1355,10 +1611,8 @@ export class OnlineSession implements Session {
     if (this.closed || this.crashed) return;
     const now = Date.now();
     if (this.role === 'host') {
+      this.updateHostQuorum();
       if (!this.authorityReady && this.promotedAt > 0) {
-        // A peer that vanished lowers the quorum; re-announce so reachable guests re-send acks.
-        const needed = this.requiredAckCount();
-        if (needed < this.requiredAcks) this.requiredAcks = needed;
         if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
         if (!this.authorityReady && now - this.promotedAt > 1_500) this.sendHeartbeat();
       }
@@ -1384,7 +1638,12 @@ export class OnlineSession implements Session {
     }
     this.retryPendingGuestOps(now);
     if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-      if (now - this.lastServerAt > 8_000) this.reauthenticate('no updates while visible');
+      if (now - this.lastLivenessAt > REAUTH_SILENCE_MS) {
+        this.reauthenticate('no server activity while visible');
+      } else if (now - this.lastServerAt > 15_000) {
+        // Host is alive but state has not moved (CPU thinking, long fx): resync only.
+        this.requestResync();
+      }
     }
     const hostSilence = networkConfig.hostSilenceMs ?? DEFAULT_HOST_SILENCE_MS;
     if (!this.hostPeerId || !this.shadow.lobby) return;
@@ -1446,11 +1705,17 @@ export class OnlineSession implements Session {
     }
     if (
       this.pendingAction &&
+      this.pendingAction.gen === this.generation &&
       this.shadow.seq === this.pendingAction.seq &&
       now - this.pendingAction.sentAt >= 1_000
     ) {
       this.pendingAction.sentAt = now;
-      this.deliverToHost({ t: 'action', seq: this.pendingAction.seq, action: this.pendingAction.action });
+      this.deliverToHost({
+        t: 'action',
+        gen: this.pendingAction.gen,
+        seq: this.pendingAction.seq,
+        action: this.pendingAction.action,
+      });
     }
   }
 
@@ -1500,6 +1765,8 @@ export class OnlineSession implements Session {
       this.lastCompeting = null;
       this.probeStartedAt = 0;
       this.ackKeys.clear();
+      this.quorumOk = true;
+      this.quorumMessageShown = false;
       this.requiredAcks = this.requiredAckCount();
       this.authorityReady = this.requiredAcks === 0;
       this.controller.setFrozen(!this.authorityReady);
@@ -1517,6 +1784,7 @@ export class OnlineSession implements Session {
         name: this.name,
         token: this.identity?.fingerprint ?? this.clientId,
         pub: this.identity ? JSON.stringify(this.identity.publicJwk) : undefined,
+        boardVersion: BOARD_VERSION,
       });
       this.setState('open');
       this.announceHost();
@@ -1537,6 +1805,7 @@ export class OnlineSession implements Session {
 
   private onServerMsg(message: ServerMsg): void {
     this.lastServerAt = Date.now();
+    this.lastLivenessAt = Date.now();
     this.record(message);
     for (const listener of this.listeners) listener(message);
     if (this.role === 'host') {
@@ -1573,7 +1842,7 @@ export class OnlineSession implements Session {
           message.lobby.seats[this.seat]?.kind === 'human' &&
           message.lobby.seats[this.seat]?.connected === false
         ) {
-          this.reauthenticate('own seat marked disconnected');
+          this.reauthenticate('own seat marked disconnected', true);
         }
         if (this.pendingCharacter && this.seat !== null) {
           const own = message.lobby.seats[this.seat];
@@ -1632,14 +1901,27 @@ export class OnlineSession implements Session {
 
   private replay(listener: (msg: ServerMsg) => void): void {
     if (this.lastWelcome) listener(this.lastWelcome);
-    if (!this.lastSnapshot && !this.lastUpdate && this.lastLobby) {
+    const snapshot = this.lastSnapshot;
+    const update = this.lastUpdate;
+    if (!snapshot && !update && this.lastLobby) {
       listener({ t: 'lobby', lobby: this.lastLobby });
       return;
     }
-    if (this.lastSnapshot) listener(this.lastSnapshot);
-    if (this.lastUpdate && (!this.lastSnapshot || this.lastUpdate.seq > this.lastSnapshot.seq)) {
-      listener(this.lastUpdate);
+    if (update && snapshot) {
+      const newer =
+        update.gen !== undefined &&
+        snapshot.gen !== undefined &&
+        isNewerStateOrder(snapshot.gen, snapshot.seq, update.gen, update.seq);
+      if (newer) {
+        listener(update);
+        return;
+      }
+      listener(snapshot);
+      if (update.seq > snapshot.seq && update.gen === snapshot.gen) listener(update);
+      return;
     }
+    if (snapshot) listener(snapshot);
+    if (update) listener(update);
   }
 
   // ---------------------------------------------------------------- persistence
@@ -1697,40 +1979,57 @@ export function joinOnlineRoom(roomId: string, name: string): Session {
 export async function roomExists(roomId: string): Promise<boolean> {
   const normalized = normalizeRoomId(roomId);
   if (!isValidRoomId(normalized)) return false;
-  const peerId = `probe_${randomToken(10)}`;
-  // Load (or create once) the persistent identity. Generating a fresh one here
-  // overwrote `fable.identity`, so the subsequent real join/rejoin used a new
-  // fingerprint and could not reclaim its seat.
   const identity = await loadIdentity('room-probe');
-  const transport = new MqttTransport(peerId, {
-    identity,
-    brokers: networkConfig.brokers ?? DEFAULT_BROKERS,
-    disableWebRtc: true,
-    connectTimeoutMs: networkConfig.connectTimeoutMs,
-    log: () => {},
-  });
-  const found = Promise.withResolvers<boolean>();
-  const timer = setTimeout(() => found.resolve(false), networkConfig.probeTimeoutMs ?? PROBE_TIMEOUT_MS);
-  const unsubscribe = transport.onMessage((_from, message) => {
-    if (isP2PControl(message) && message.k === 'probeAck') found.resolve(true);
-  });
-  const probeWork = (async (): Promise<boolean> => {
-    try {
-      await transport.connect(normalized);
-      await transport.broadcast({ k: 'probe', at: Date.now() });
-      return await found.promise;
-    } catch {
-      return false;
-    }
-  })();
+  const brokers = networkConfig.brokers ?? DEFAULT_BROKERS;
+  const transports: MqttTransport[] = [];
+  const found = Promise.withResolvers<string | null>();
+  let pending = brokers.length;
+  const timer = setTimeout(
+    () => found.resolve(null),
+    networkConfig.probeTimeoutMs ?? PROBE_TIMEOUT_MS,
+  );
+  for (const broker of brokers) {
+    const peerId = `probe_${randomToken(10)}`;
+    const transport = new MqttTransport(peerId, {
+      identity,
+      brokers: [broker],
+      disableWebRtc: true,
+      connectTimeoutMs: networkConfig.connectTimeoutMs,
+      log: () => {},
+    });
+    transports.push(transport);
+    void (async () => {
+      const ack = Promise.withResolvers<boolean>();
+      const unsubscribe = transport.onMessage((_from, message) => {
+        if (isP2PControl(message) && message.k === 'probeAck') ack.resolve(true);
+      });
+      try {
+        await transport.connect(normalized);
+        await transport.broadcast({ k: 'probe', at: Date.now() });
+        const received = await Promise.race([
+          ack.promise,
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 4_000)),
+        ]);
+        if (received) found.resolve(broker);
+      } catch {
+        // broker unavailable
+      } finally {
+        unsubscribe();
+        pending -= 1;
+        if (pending === 0) found.resolve(null);
+      }
+    })();
+  }
   try {
-    return await Promise.race([probeWork, found.promise]);
+    const broker = await found.promise;
+    if (broker) discoveredBroker.set(normalized, broker);
+    return broker !== null;
   } finally {
     clearTimeout(timer);
-    unsubscribe();
-    await transport.close();
+    await Promise.all(transports.map((transport) => transport.close()));
   }
 }
+
 
 export function resumeOnline(): Session | null {
   try {
@@ -1753,6 +2052,10 @@ export function resumeOnline(): Session | null {
 }
 
 /** Test hook: current full host state for a migration/old-host-return scenario. */
+export function reportVotesForTests(session: Session): Record<string, string[]> | null {
+  return session instanceof OnlineSession ? session.reportVotes() : null;
+}
+
 export function authorityInfoForTests(session: Session): {
   ready: boolean;
   requiredAcks: number;
@@ -1774,6 +2077,10 @@ export function resumeHostForTests(checkpoint: HostCheckpoint): Session {
 /** Test hook: make the host resend welcome + snapshot to a guest connection id. */
 export function resyncPeerForTests(session: Session, connId: string): void {
   if (session instanceof OnlineSession) session.resyncPeerForTests(connId);
+}
+
+export function setBlockedPeersForTests(session: Session, peerIds: readonly string[]): void {
+  if (session instanceof OnlineSession) session.setBlockedPeersForTests(peerIds);
 }
 
 export function setNetworkPartitionForTests(session: Session, blocked: boolean): void {

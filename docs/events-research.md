@@ -166,7 +166,7 @@
 ## 9. Codex review round 1 対応（2026-11-23）
 
 - `season-hanami` の事実を修正: 気象庁は2010年春以降、さくらの開花予想を発表しておらず、開花観測のみ継続している。民間気象事業者が予想を提供する。一次資料として気象庁の2009年12月25日報道発表を追加。
-- news 23件・history 14件のすべてに、Wikipedia 以外の一次資料または主要メディアを1件以上追加した。source 総数73、ユニークURL 71。
+- news 23件・history 14件のすべてに、Wikipedia 以外の一次資料または主要メディアを1件以上追加した。source 総数76、ユニークURL 74。
 - 追加した主な資料: AP News、CNBC、SEC、FRB（金融安定報告・FRB History）、BLS、GAO、NASA（ODPO・NTRS）、UNOOSA、NPR、NOAA、気象庁、欧州議会（EPRS）、IMF、日本銀行、Harvard CURIOSity、FRB New York、Britannica、Cambridge Core。
 - `zimbabwe-hyperinflation` は IMF の推計（2008年9月の12か月CPI約5000億%）に合わせて事実を修正。
 - `rare-earth-controls` は EPRS の「分離・精製の約9割」に合わせて表現を修正。
@@ -174,4 +174,5 @@
 - 台詞（`lines` / `reply`）は変更していない。音声再生成は不要。
 - 検証: `JSON.parse` exit 0、独自イベント検証0エラー、`node tools/validate-data.mjs` exit 0（warning 1件: board.json の world node 間隔が目標範囲外、イベントとは無関係）。
 - 追加レビュー: `meme-stock-squeeze` の空売り比率を SEC 報告の **122.97%（浮動株比、2021年1月）** に修正。空売り筋の買い戻しが寄与した時期を **1月22日〜27日の上昇局面** と明記し、買い戻しは全体の買い量の一部にとどまったという SEC の留保も追記した。
-- 2026-11-24 の最終再実行では `node tools/validate-data.mjs` は exit 0（`validation OK: 9 data file(s), 2 warning(s)`）。warning は board.json の world node 間隔2件で、イベントとは無関係。
+- 新レビュー第1回: `rare-earth-controls` を「2025年10月9日発表、11月8日施行予定、11月7日に実施停止（2026年11月10日まで有効）」に修正。香港工業貿易署の2025年10月14日・11月10日付サーキュラーと、中国商務省公告2025年第61号を追加。
+- 2026-11-24 の最終再実行では `node tools/validate-data.mjs` は exit 0（`validation OK: 9 data file(s), 1 warning(s)`）。warning は board.json の近接駅ペアで、イベントとは無関係。

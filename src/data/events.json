@@ -1454,7 +1454,7 @@
     "id": "rare-earth-controls",
     "title": "レアアースの首輪",
     "kind": "news",
-    "fact": "中国は2025年、レアアース5元素を新たに輸出管理の対象に加え、規制対象を12元素に広げた。中国は世界の分離・精製の約9割を担っており、供給網の集中リスクが改めて問題となった。",
+    "fact": "2025年10月9日、中国はレアアース5元素を含む追加の輸出管理を発表し、規制対象を12元素に広げた。措置は11月8日の施行予定だったが、中国当局は11月7日に当該措置を含む告示の実施を停止し、停止は2026年11月10日まで有効とした。中国は世界の分離・精製の約9割を担っており、供給網の集中リスクが改めて問題となった。",
     "sources": [
       {
         "title": "Rare-earth industry in China - Wikipedia",
@@ -1465,6 +1465,21 @@
         "title": "China's rare-earth export restrictions - European Parliament",
         "url": "https://www.europarl.europa.eu/RegData/etudes/ATAG/2025/779220/EPRS_ATA%282025%29779220_EN.pdf",
         "date": "2025"
+      },
+      {
+        "title": "中国: 特定中重希土類関連品目の輸出管理実施の決定（2025年10月9日公告） - 香港工業貿易署",
+        "url": "https://www.tid.gov.hk/en/tradecircular/2025/ci8942025.html",
+        "date": "2025-10-14"
+      },
+      {
+        "title": "中国: 輸出管理告示の実施停止の決定（2025年11月7日） - 香港工業貿易署",
+        "url": "https://www.tid.gov.hk/en/tradecircular/2025/ci9772025.html",
+        "date": "2025-11-10"
+      },
+      {
+        "title": "商务部公告2025年第61号（レアアース関連輸出管理） - 中国商務省",
+        "url": "https://www.mofcom.gov.cn/zcfb/blgg/gg/2025/art/2025/art_e2587592fd774f23a62925ee51641071.html",
+        "date": "2025-10-09"
       }
     ],
     "satireNote": "輸出管理は実在。「首輪」という表現と、ゲーム内の備蓄・価格転嫁の効果は風刺的な創作。",

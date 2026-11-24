@@ -1,6 +1,7 @@
 import { Audio } from '../../audio/audio';
 import { ALLOWED_YEARS } from '../../core/engine';
 import type { EmoteEvent, LobbyView, RoomSettings, SeatInfo, ServerMsg } from '../../net/protocol';
+import { hostKeyFingerprintForSession, inviteUrl as inviteUrlForSession } from '../../net/online-session';
 import type { ConnectionState, Session } from '../../net/session-types';
 import { avatar, clear, h, iconButton, type ModalHost, type ToastHost } from '../dom';
 import { characterSprite, charsById, displayPlayerName, emotesById } from '../format';
@@ -275,7 +276,17 @@ export class LobbyScreen implements ScreenHandle {
     const humansReady = humans.every((seat) => !!seat.characterId);
     const canStart = isHost && humans.length >= 1 && occupied.length >= 2 && humansReady;
 
-    const inviteUrl = `${location.origin}${location.pathname}?room=${lobby.roomId}`;
+    const fingerprint = hostKeyFingerprintForSession(this.options.session);
+    const fallbackUrl = new URL(location.href);
+    fallbackUrl.search = '';
+    fallbackUrl.hash = '';
+    fallbackUrl.searchParams.set('room', lobby.roomId);
+    if (fingerprint) fallbackUrl.searchParams.set('k', fingerprint.slice(0, 16));
+    const fallbackInvite = fallbackUrl.toString();
+    const inviteUrl = inviteUrlForSession(this.options.session) ?? fallbackInvite;
+    const hostCheckCode = fingerprint
+      ? fingerprint.slice(0, 16).replace(/(.{4})(?=.)/g, '$1-')
+      : null;
     const roomCard = h(
       'section',
       { class: 'lobby-room panel' },
@@ -285,6 +296,13 @@ export class LobbyScreen implements ScreenHandle {
         h('span', { class: 'lobby-room-label', text: 'あいことば' }),
         h('div', { class: 'lobby-room-code', text: lobby.roomId }),
         h('span', { class: 'muted', text: '6文字＋4文字。招待URLをひらくと自動で入ります。' }),
+        hostCheckCode
+          ? h('span', {
+              class: 'muted lobby-host-key',
+              text: `ホスト確認コード: ${hostCheckCode}`,
+              attrs: { title: fingerprint ?? '' },
+            })
+          : null,
       ),
       h(
         'div',
@@ -474,8 +492,6 @@ export class LobbyScreen implements ScreenHandle {
             }),
           );
         }
-      } else {
-        actions.append(h('span', { class: 'muted', text: '空き席' }));
       }
     } else if (seat.kind === 'cpu') {
       if (isHost) {
@@ -573,7 +589,9 @@ export class LobbyScreen implements ScreenHandle {
               ? `${character.nameJa} ・ ${character.origin}`
               : seat.kind === 'cpu'
                 ? 'キャラクターはおまかせ'
-                : 'キャラクター未選択',
+                : seat.kind === 'open'
+                  ? '参加できます'
+                  : 'キャラクター未選択',
           }),
           character ? h('span', { class: 'lobby-seat-perk', text: `${perkInfo(character.perk).icon} ${perkInfo(character.perk).label}` }) : null,
         ),

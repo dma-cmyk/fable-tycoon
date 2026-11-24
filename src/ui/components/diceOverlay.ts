@@ -47,7 +47,17 @@ export class DiceOverlay {
     this.el.setAttribute('aria-hidden', 'false');
 
     const total = values.reduce((sum, value) => sum + value, 0);
-    const revealAt = reduced ? 0 : Math.max(240, totalMs - 520);
+    // totalMs は再生速度で割られた「この演出の予算」。予算 = 転がり + 着地の見せ場 + 退場。
+    // タイマー連鎖の遅れ（実測 20〜40ms）を reserve として先に引き、残りを配分するので、
+    // 8倍速（約163ms）でも予算内に resolve し、等倍では従来どおり約1.3秒見せられる。
+    const budget = Math.max(64, Math.round(totalMs));
+    const fadeMs = Math.max(16, Math.round(budget * 0.1));
+    const reserve = Math.min(80, Math.max(16, Math.round(budget * 0.2)));
+    const schedule = Math.max(40, budget - fadeMs - reserve);
+    const rollMs = Math.round(schedule * 0.62);
+    const holdMs = Math.max(24, schedule - rollMs);
+    this.el.style.setProperty('--dice-fade', `${fadeMs}ms`);
+    this.el.style.setProperty('--dice-land', `${Math.max(40, Math.min(320, holdMs))}ms`);
     const { promise, resolve } = Promise.withResolvers<void>();
     let done = false;
 
@@ -61,18 +71,14 @@ export class DiceOverlay {
       this.totalEl.textContent = values.length > 1 ? `合計 ${total}` : String(total);
     };
 
-    const finish = (): void => {
+    const dismiss = (): void => {
       if (done) return;
       done = true;
       this.settle = null;
       this.clearTimers();
-      this.timers.push(
-        window.setTimeout(() => {
-          this.el.classList.remove('is-visible');
-          this.el.setAttribute('aria-hidden', 'true');
-          this.timers.push(window.setTimeout(() => resolve(), 140));
-        }, 320),
-      );
+      this.el.classList.remove('is-visible');
+      this.el.setAttribute('aria-hidden', 'true');
+      this.timers.push(window.setTimeout(() => resolve(), fadeMs));
     };
 
     if (reduced) {
@@ -84,24 +90,19 @@ export class DiceOverlay {
         const spinsY = 2 + Math.random() * 2;
         this.spins.push(
           die.cube.animate(tumbleKeyframes(die.value, spinsX, spinsY), {
-            duration: revealAt,
+            duration: rollMs,
             easing: 'cubic-bezier(0.18, 0.62, 0.32, 1)',
             fill: 'forwards',
           }),
         );
       }
-      this.timers.push(window.setTimeout(land, revealAt));
+      this.timers.push(window.setTimeout(land, rollMs));
     }
     this.settle = () => {
       land();
-      finish();
+      this.timers.push(window.setTimeout(dismiss, holdMs));
     };
-    this.timers.push(
-      window.setTimeout(() => {
-        land();
-        finish();
-      }, Math.max(revealAt + 260, totalMs)),
-    );
+    this.timers.push(window.setTimeout(dismiss, rollMs + holdMs));
     return promise;
   }
 

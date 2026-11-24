@@ -78,7 +78,16 @@ export interface Report {
 // ---------------------------------------------------------------- client -> server
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; roomId: string; name: string; token?: string; pub?: string } // token = public-key fingerprint; pub = public JWK
+  | {
+      t: 'hello';
+      v: number;
+      roomId: string;
+      name: string;
+      token?: string;
+      pub?: string;
+      boardVersion?: string;
+      hostKey?: string;
+    } // token = public-key fingerprint; pub = public JWK
   | { t: 'take_seat'; index: number }
   | { t: 'leave_seat' }
   // `seat` is an additive extension: the host may pick a character for a CPU seat in the lobby.
@@ -86,7 +95,7 @@ export type ClientMsg =
   | { t: 'set_seat'; index: number; kind: 'cpu' | 'open'; cpuLevel?: 1 | 2 | 3 } // host only
   | { t: 'settings'; settings: Partial<RoomSettings> } // host only
   | { t: 'start' } // host only
-  | { t: 'action'; seq: number; action: Action }
+  | { t: 'action'; seq: number; action: Action; gen?: number }
   | { t: 'chat'; text: string }
   | { t: 'emote'; emoteId: string; target?: number } // usable any time during lobby/game, by own seat
   | { t: 'report'; seat: number; reason: Report['reason'] } // stored server-side with last chat lines
@@ -110,6 +119,7 @@ export type ServerMsg =
       gen?: number;
       /** Public-key fingerprints per seat, so a reconnecting guest can validate host claims. */
       seatKeys?: Record<string, string>;
+      boardVersion?: string;
     }
   | { t: 'lobby'; lobby: LobbyView; gen?: number }
   // full state, sent on game start / reconnect; client renders it without animation
@@ -122,6 +132,7 @@ export type ServerMsg =
       gen?: number;
       /** Re-sent on explicit resync: same (gen, seq) must be delivered, not dropped. */
       resync?: boolean;
+      boardVersion?: string;
     }
   // incremental: apply fx animations then adopt state
   | { t: 'update'; seq: number; by: number; fx: Fx[]; state: PublicState; deadline: number | null; gen?: number }

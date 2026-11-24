@@ -64,7 +64,7 @@ export class MapView {
   setState(state: PublicState): void; // tokens, ownership tint on city badges, destination flag, piper on holder
   setMoveOptions(options: MoveOption[] | null, onPickOrHooks: ((nodeId: string) => void) | MoveOptionHooks | null): void;
   /** 一覧から同じ選択状態にする（選択のみ。経路をセーフエリア内にフィットする）。 */
-  selectMoveOption(nodeId: string): void;
+  selectMoveOption(nodeId: string, opts?: { frame?: boolean }): void; // frame:false = 選択だけ（カメラは動かさない）
   /** UI の確定ボタンからのみ呼ぶ。nodeId 省略時は選択中。 */
   confirmMoveOption(nodeId?: string): void;
   /** HUD の「残りマス」表示用。移動中以外は null。 */
@@ -107,6 +107,13 @@ export class MapView {
   setMiniMap(el: HTMLCanvasElement | null): void;
   /** QA 用: 有効 DPR・予算・最大確保キャンバスを返す。 */
   getCanvasBudgetInfo(): { dpr: number; budget: CanvasBudget; largest: CanvasAllocation | null };
+  /** 全体地図モード中は true（fitWorld / 最小ズーム付近）。HUD のモード表示・復帰ボタン用。 */
+  isOverviewMode(): boolean;
+  /** 全体地図モードの変化だけを通知。戻り値は解除関数、null で解除。購読時に現在値は push しない。 */
+  setOverviewCallback(cb: ((overview: boolean) => void) | null): () => void;
+  /** 目的地（地上）/最寄りの異世界出口（天国・地獄・宇宙）までの残りホップ数。到達不能は null。 */
+  getMoveOptionDistanceInfo(nodeId: string): { hops: number; target: 'destination' | 'exit' } | null;
+  getMoveOptionDistance(nodeId: string): number | null; // getMoveOptionDistanceInfo()?.hops
   /** QA 用: 直近フレームで描いたラベル矩形とアンカー（ラベルが動かないことの検証用）。 */
   getLabelLayoutSnapshot(): { zoom: number; layoutMs: { art: number; city: number; total: number }; city: Array<{ id: string; rect: { x: number; y: number; w: number; h: number }; anchor: { x: number; y: number } }>; art: Array<{ id: string; rect: { x: number; y: number; w: number; h: number }; anchor: { x: number; y: number } }> };
 }
@@ -116,9 +123,10 @@ export class MapView {
 // 空マップのタップは onSelect(null)。ピン/一覧の再タップは選択のみで、onConfirm は明示的な confirmMoveOption だけ。
 ```
 - 描画: devicePixelRatio 対応（モバイル/WebKit は実効 DPR ≤1.5、デスクトップは ≤2。さらに 1 キャンバスあたり最大辺 4096/8192・面積 16MP/32MP にクランプ）、変更が無ければ再描画しない（ダーティフラグ）、アニメ中のみ rAF。ランド/季節フェード/海背景/ミニマップは予算内ラスタへ縮小し、ズームバケット切替やフェード終了時に旧 backing store を 0×0 で解放する。`canvasBudget.ts` が最大確保キャンバスを debug ログし、`getCanvasBudgetInfo()` で QA から確認できる。ズームに応じた詳細度（概要: 世界一周を横1回・主要都市ドット・現在地/目的地マーカー、通常: マス・駅・ラベル）、画面外カリング。移動中は補間位置に乗り物+乗員を描き、次のマスを金リングで強調する。移動候補はUI一覧と同じ番号・色・記号のピン（44px 判定）で表示し、ピン/一覧のタップは選択のみ、確定は `confirmMoveOption` だけ。
-- 行き先の強調: 候補表示中は盤面全体を57%暗くし、現在地・候補マス・経路コリドーだけを穴あき（非ゼロ巻き数）で残すスポットライト。各候補マスは種類色のグロー+リング（=光っているマス）で示し、番号は「選択中」「おすすめ」「候補8件以下」のときだけ大きなピン、それ以外（9件以上）はリング内の小さな番号チップで、重なる番号は描かない（ピンは絶対に重ねない）。経路は選択中（未選択ならおすすめ）だけ太い金+シェブロン、他は細い薄線。おすすめは目的地までの残りホップ数が最小の候補（同数は駅優先）で、金の「おすすめ」旗+目的地方向の矢印を付ける。`getRecommendedMoveOption()` と `getMoveOptionDistance(nodeId)` を UI と共有する。カメラは `setSafeArea` と `setLabelObstacles` から求めた空き領域（`freeBoardBox`）に現在地+全候補を余白付き（ピン/リング分を含む）でフィットし、最小ズームで入り切らない場合は現在地+近い候補だけを残して残りを画面端の番号バッジ（矢印付き・タップ可）で示す。リサイズやHUD障害物の変化でも再フィットする。振動/パルスは `setReducedMotion` で停止。
+- 行き先の強調: 候補表示中は盤面全体を57%暗くし、現在地・候補マス・経路コリドーだけを穴あき（非ゼロ巻き数）で残すスポットライト。各候補マスは種類色のグロー+リング（=光っているマス）で示し、番号は「選択中」「おすすめ」「候補8件以下」のときだけ大きなピン、それ以外（9件以上）はリング内の小さな番号チップで、重なる番号は描かない（ピンは絶対に重ねない）。経路は選択中（未選択ならおすすめ）だけ太い金+シェブロン、他は細い薄線。おすすめは目的地までの残りホップ数が最小の候補（同数は駅優先）で、金の「おすすめ」旗+目的地方向の矢印を付ける。異世界（天国・地獄・宇宙）では目的地ではなく**最寄りの出口（`portal`）** までのホップ数で並べ、UI は `getMoveOptionDistanceInfo()` の `target: 'exit'` を見て「出口まで」と表記する。`getRecommendedMoveOption()` / `getMoveOptionDistance(nodeId)` は従来どおり動く。カメラは `setSafeArea` と `setLabelObstacles` から求めた空き領域（`freeBoardBox`）に現在地+全候補を余白付き（ピン/リング分を含む）でフィットし、最小ズームで入り切らない場合は現在地+近い候補だけを残して残りを画面端の番号バッジ（矢印付き・タップ可）で示す。リサイズやHUD障害物の変化でも再フィットする。振動/パルスは `setReducedMotion` で停止。
 - ラベル: 都市名・地形名のスロットは静的データ（マーカー円・線路/航路・先に置いたラベル）だけでズームバケット単位に決定し、`labels.ts` がカメラ非依存で計算する（`placeLabels`）。トークン・ピン・HUD の遮蔽では位置を変えず、`LabelFade` が 300ms 保持 + 160ms フェードで隠すだけなので、パン中や移動中にラベルが飛ばない・明滅しない。現在地/目的地/候補のラベルは固定スロットで常時表示。ラベル矩形にはふりがなを含め、衝突判定にも含める。
 - ふりがな: 漢字を含む都市名は `City.nameKana`、地形名は `MapArtLabel.kana` を名前の上に小さく（名前の約50%・最小8px）同じ縁取りで描く。都市名は詳細度1以上、地形名はフォント14px以上のとき表示し、データが無い場合は従来どおり。
+- 安全領域: `boardBox()` は HUD 計測の異常で 220×180px 未満に潰れないようインセットをクランプする（zoom が minZoom 未満へ暴走しない）。
 - 見た目: 海は青のグラデーション + 波の模様、大陸は明るい緑に濃い緑の縁と影、所々に木のスタンプ（決定的な疑似乱数で配置）。鉄道は通常倍率で太い灰色の塊を避け、白い1〜1.5pxの芯 + 薄いバラスト、航路は白の点線。空路（`mode: 'air'`）は弦から膨らむ二次曲線の水色点線+小さな飛行機グリフで、地上の鉄道/航路より上・駒やラベルより下に描き、プレイズームでは薄くする。空路に乗るマスは雲の台座付きで描く。マスは18〜22pxの天面 + 2〜3pxの側面を持つ宝石風タイル（青=円/＋、赤=角丸四角/−、黄=菱形/？、ニュース=八角形/！、売り場=角丸四角/店）。都市は白い台座の駅 + 名前ラベル（吹き出し風、所有色帯、独占で金縁）、ランドマークがある都市は画像と足元の街クラスタを描く。駒はキャラ画像（影・色リング、複数は顔バッジ）。乗り物は辺の種別で決まり、空路=飛行機、海路=船、鉄道=列車/急行/超特急（`routes.ts` の `vehicleForStep`）。目的地はチェッカーフラッグ + 脈動、取り立て屋は holder の後ろに NPC 画像。
 
 ### `src/audio/audio.ts` — `Audio`

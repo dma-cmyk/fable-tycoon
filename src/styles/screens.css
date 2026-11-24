@@ -1949,3 +1949,19 @@
     height: 130px;
   }
 }
+/* 1位の王冠は名前の行内に置き、右端の幅を奪わない（スマホの金額折り返し防止）。 */
+@media (max-width: 899px) {
+  .result-crown {
+    font-size: 18px;
+    flex: 0 0 auto;
+  }
+
+  .result-row-stats {
+    font-size: 11px;
+  }
+
+  .result-row-stats strong {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}

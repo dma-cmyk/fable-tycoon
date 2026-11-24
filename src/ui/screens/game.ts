@@ -35,6 +35,7 @@ import {
 } from '../format';
 import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
 import { rubyName } from '../ruby';
+import { placeDestinationArrow } from '../destArrow';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
@@ -91,6 +92,9 @@ const ERROR_JA: Record<string, string> = {
   already_started: 'すでにゲームが始まっています。',
   character_taken: 'そのキャラクターは選ばれています。',
 };
+
+/** 背景色が明るいマス種（番号の文字を濃色にする）。moveKindChip の色と対応。 */
+const LIGHT_KIND_COLORS = new Set(['#ffc72f', '#ffa63d', '#ffd84a']);
 
 export class GameScreen implements ScreenHandle {
   readonly el: HTMLElement;
@@ -156,6 +160,7 @@ export class GameScreen implements ScreenHandle {
   private sayTimer = 0;
   private bannerTimer = 0;
   private handoffTimer = 0;
+  private overviewTimer = 0;
   private emoteQueue: EmoteEvent[] = [];
   private emotePlaying = false;
   private endedVoicePlayed = false;
@@ -185,11 +190,15 @@ export class GameScreen implements ScreenHandle {
   private readonly statusChip: HTMLElement;
   private readonly miniMapCanvas: HTMLCanvasElement;
   private readonly recenterButton: HTMLButtonElement;
+  private readonly overviewBanner: HTMLButtonElement;
+  private readonly mapButton: HTMLButtonElement;
   private moveSelection: string | null = null;
   private moveOptionsKey = '';
   private moveOptionsCache: MoveOption[] = [];
-  /** 目的地までの残りホップ数（候補ノードID → 距離、不明は null）。 */
+  /** 目的地（異世界では出口）までの残りホップ数（候補ノードID → 距離、不明は null）。 */
   private moveRemain = new Map<string, number | null>();
+  /** 距離の向き先。異世界では最寄りの出口。 */
+  private moveRemainTarget: 'destination' | 'exit' = 'destination';
   private recommendedMoveNodeId: string | null = null;
   private readonly loading: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -364,7 +373,21 @@ export class GameScreen implements ScreenHandle {
         on: { click: () => this.recenterOnActor() },
       },
       uiIcon('flag', '🎯', 'map-recenter-icon'),
-      h('span', { text: '手番へ戻る' }),
+      h('span', { text: '手番のコマへ戻る' }),
+    );
+    this.overviewBanner = h(
+      'button',
+      {
+        class: 'map-overview-banner',
+        attrs: {
+          type: 'button',
+          hidden: 'hidden',
+          'aria-label': '全体地図を表示中。タップで手番のコマへ拡大',
+        },
+        on: { click: () => this.recenterOnActor() },
+      },
+      h('span', { class: 'map-overview-banner-icon', text: '🌍', attrs: { 'aria-hidden': 'true' } }),
+      h('span', { text: '全体地図 ・ タップで拡大' }),
     );
 
     this.topbar = h(
@@ -445,6 +468,9 @@ export class GameScreen implements ScreenHandle {
     this.cardBadge = h('span', { class: 'icon-btn-badge', text: '0', attrs: { hidden: 'hidden' } });
     const cardButton = iconButton('cards', 'カード', () => this.openHand(), { class: 'hud-icon' });
     cardButton.append(this.cardBadge);
+    const mapButton = iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary' });
+    mapButton.setAttribute('aria-pressed', 'false');
+    this.mapButton = mapButton;
     this.commDock = h('div', { class: 'hud-comm' });
     const iconRow = h(
       'div',
@@ -452,7 +478,7 @@ export class GameScreen implements ScreenHandle {
       cardButton,
       iconButton('property', '物件', () => this.openCatalog(), { class: 'hud-icon hud-secondary' }),
       iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon hud-secondary' }),
-      iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary' }),
+      mapButton,
       iconButton('treasure', 'その他', () => this.openOtherMenu(), { class: 'hud-icon' }),
       this.commDock,
     );
@@ -581,6 +607,7 @@ export class GameScreen implements ScreenHandle {
       h('div', { class: 'map-vignette', attrs: { 'aria-hidden': 'true' } }),
       this.topbar,
       this.recenterButton,
+      this.overviewBanner,
       this.miniMapCanvas,
       this.rankingHost,
       this.portraitHost,
@@ -611,6 +638,7 @@ export class GameScreen implements ScreenHandle {
       applyState: (state, deadline, seq, gen) => this.applyState(state, deadline, seq, false, gen),
       setBusy: (busy) => {
         this.fxBusy = busy;
+        if (busy) this.destArrow.hidden = true;
         this.updateHud();
         if (!busy) {
           this.updateAutoDialogs();
@@ -652,6 +680,7 @@ export class GameScreen implements ScreenHandle {
     this.shop?.close();
     this.transient?.handle.close();
     this.citySheet?.close();
+    this.map?.setOverviewCallback(null);
     this.map?.setMiniMap(null);
     this.map?.destroy();
     for (const unsub of this.unsubscribeFns) unsub();
@@ -659,6 +688,7 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.sayTimer);
     window.clearTimeout(this.bannerTimer);
     window.clearTimeout(this.handoffTimer);
+    window.clearInterval(this.overviewTimer);
     window.clearTimeout(this.portraitVariantTimer);
     window.clearTimeout(this.turnBannerTimer);
     window.clearTimeout(this.monthFlipTimer);
@@ -699,6 +729,14 @@ export class GameScreen implements ScreenHandle {
       this.map.onCityTap((cityId) => this.onCityTap(cityId));
       this.map.setMiniMap(this.miniMapCanvas);
       this.map.resize();
+      this.map.setOverviewCallback(() => this.syncOverviewUi());
+      this.syncOverviewUi();
+      // The renderer only flips its overview flag on drawn frames; poll lightly so the
+      // banner/recenter button still appear if the final tween frame is coalesced.
+      window.clearInterval(this.overviewTimer);
+      this.overviewTimer = window.setInterval(() => {
+        if (!this.destroyed) this.syncOverviewUi();
+      }, 350);
       this.canvas.addEventListener('pointerdown', this.onMapInteract, { passive: true });
       this.canvas.addEventListener('pointerup', this.onMapInteract, { passive: true });
       this.canvas.addEventListener('wheel', this.onMapInteract, { passive: true });
@@ -988,7 +1026,10 @@ export class GameScreen implements ScreenHandle {
     const hand = privateSeat !== null ? state.players[privateSeat]?.cards.length ?? 0 : 0;
     this.cardBadge.textContent = String(hand);
     this.cardBadge.hidden = hand === 0;
-    requestAnimationFrame(() => this.updateMapSafeArea());
+    requestAnimationFrame(() => {
+      this.updateMapSafeArea();
+      this.syncOverviewUi();
+    });
   }
 
   private renderRanking(state: PublicState, actor: number | null): void {
@@ -1126,7 +1167,10 @@ export class GameScreen implements ScreenHandle {
       this.portraitImage.alt = character.nameJa;
     }
     this.portraitName.textContent = displayPlayerName(player);
-    this.portraitSub.textContent = `${character.nameJa} ・ ${character.origin}`;
+    this.portraitSub.textContent =
+      character.nameJa === character.origin
+        ? `${character.nameJa} ・ ${character.originRegion}`
+        : `${character.nameJa} ・ ${character.origin}`;
     this.portraitHost.dataset.seat = String(player.id);
     const rank = [...state.players]
       .sort((a, b) => netWorth(GAME_DATA, state, b.id) - netWorth(GAME_DATA, state, a.id))
@@ -1199,6 +1243,7 @@ export class GameScreen implements ScreenHandle {
       this.moveOptionsCache = [];
       this.moveOptionsKey = '';
       this.moveRemain.clear();
+      this.moveRemainTarget = 'destination';
       this.recommendedMoveNodeId = null;
       this.moveOptionsHost.hidden = true;
       this.moveOptionsHost.replaceChildren();
@@ -1211,8 +1256,11 @@ export class GameScreen implements ScreenHandle {
     if (key !== this.moveOptionsKey) {
       this.moveOptionsKey = key;
       this.moveRemain.clear();
+      this.moveRemainTarget = 'destination';
       for (const option of options) {
-        this.moveRemain.set(option.nodeId, this.map?.getMoveOptionDistance(option.nodeId) ?? null);
+        const info = this.map?.getMoveOptionDistanceInfo(option.nodeId) ?? null;
+        this.moveRemain.set(option.nodeId, info?.hops ?? null);
+        if (info) this.moveRemainTarget = info.target;
       }
       const anyKnown = options.some((option) => typeof this.moveRemain.get(option.nodeId) === 'number');
       const ranked = options.map((option, index) => ({
@@ -1239,6 +1287,12 @@ export class GameScreen implements ScreenHandle {
         onSelect,
       });
       this.recommendedMoveNodeId = this.map?.getRecommendedMoveOption() ?? null;
+      // 候補が出た時点で「おすすめ」を選択済みにし、主ボタンを即有効化する（未選択の金枠で迷わせない）。
+      const preferred = this.recommendedMoveNodeId ?? this.moveOptionsCache[0]?.nodeId ?? null;
+      if (preferred && this.moveOptionsCache.some((option) => option.nodeId === preferred)) {
+        this.moveSelection = preferred;
+        this.map?.selectMoveOption(preferred, { frame: false });
+      }
     }
     this.moveOptionsHost.hidden = false;
     const actorNode = actor !== null ? state.players[actor]?.nodeId : undefined;
@@ -1247,7 +1301,11 @@ export class GameScreen implements ScreenHandle {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
       const kind = moveKindChip(nodesById.get(option.nodeId)?.kind ?? 'blue');
       const remain = this.moveRemain.get(option.nodeId) ?? null;
-      const remainText = remain === null ? '目的地まで —' : `目的地まで あと${remain}マス`;
+      // 距離が取れたときはマップが見ている対象（目的地/出口）に合わせ、
+      // 取れないときは手番プレイヤーのいる盤面で言い分ける。
+      const remainTarget = remain !== null ? this.moveRemainTarget : this.playerRealm === 'world' ? 'destination' : 'exit';
+      const remainLabel = remainTarget === 'exit' ? '出口' : '目的地';
+      const remainText = remain === null ? `${remainLabel}まで —` : `${remainLabel}まで あと${remain}マス`;
       const recommended = option.nodeId === this.recommendedMoveNodeId;
       const selected = this.moveSelection === option.nodeId;
       const chip = h(
@@ -1258,10 +1316,15 @@ export class GameScreen implements ScreenHandle {
             type: 'button',
             'aria-label': `${index + 1}: ${nodeLabel(option.nodeId)} を選ぶ。${remainText}`,
             'aria-pressed': String(selected),
+            style: `--kind-color:${kind.color}`,
           },
           on: { click: () => this.selectMoveOption(option.nodeId) },
         },
-        h('span', { class: 'move-chip-num', text: String(index + 1) }),
+        h(
+          'span',
+          { class: `move-chip-num ${LIGHT_KIND_COLORS.has(kind.color.toLowerCase()) ? 'is-light' : ''}`.trim() },
+          String(index + 1),
+        ),
         h(
           'span',
           { class: 'move-chip-kind', attrs: { style: `--kind-color:${kind.color}`, title: kind.label, 'aria-hidden': 'true' } },
@@ -1286,7 +1349,7 @@ export class GameScreen implements ScreenHandle {
           h(
             'span',
             { class: 'move-chip-dest' },
-            h('span', { class: 'move-chip-dest-prefix', text: '目的地まで ' }),
+            h('span', { class: 'move-chip-dest-prefix', text: `${remainLabel}まで ` }),
             remain === null ? '—' : `あと${remain}マス`,
           ),
           h('span', { class: 'move-chip-steps', text: `${option.path.length}歩` }),
@@ -1850,7 +1913,7 @@ export class GameScreen implements ScreenHandle {
     this.realmChip.className = `chip realm-chip realm-${viewing}`;
     this.realmChip.replaceChildren(
       h('span', { text: REALM_ICON[viewing], attrs: { 'aria-hidden': 'true' } }),
-      h('span', { text: realmLabel(viewing) }),
+      h('span', { class: 'realm-chip-name', text: realmLabel(viewing) }),
       h('span', { class: 'realm-chip-tag', text: '表示中' }),
     );
     this.realmChip.setAttribute('aria-label', `${realmLabel(viewing)}を表示中。マップ切替を開く`);
@@ -1871,12 +1934,23 @@ export class GameScreen implements ScreenHandle {
   }
 
   private readonly onMapInteract = (): void => {
-    const state = this.state;
-    const actor = state ? actorOf(state) : null;
-    const node = actor !== null ? state?.players[actor]?.nodeId : undefined;
-    if (!node || this.viewRealm !== 'world') return;
-    this.recenterButton.hidden = this.map?.isNodeVisible(node) === true;
+    this.syncOverviewUi();
+    // ドラッグやホイールの直後に矢印の位置を合わせ直す（次フレームの描画後）。
+    if (this.state) {
+      const state = this.state;
+      const actor = actorOf(state);
+      const nodeId = this.destArrowNodeId(state, actor);
+      if (nodeId) requestAnimationFrame(() => this.updateDestArrow(state, actor, nodeId));
+    }
   };
+
+  /** いま矢印が向くべきノード（異世界では出口）。 */
+  private destArrowNodeId(state: PublicState, actor: number | null): string | null {
+    if (actor === null) return null;
+    const realm = realmOfNode(state.players[actor]?.nodeId);
+    if (realm === 'world') return cityNodeId(state.destination) ?? null;
+    return portalNodeFor(realm) ?? null;
+  }
 
   private readonly onWindowResize = (): void => {
     this.map?.resize();
@@ -1904,40 +1978,90 @@ export class GameScreen implements ScreenHandle {
     this.viewRealm = realmOfNode(node.id);
     this.map?.setView?.(this.viewRealm);
     this.map?.follow(actor);
-    void this.map?.focusNode(node.id, { zoom: realmOfNode(node.id) === 'world' ? 0.92 : 0.9, ms: 420 });
-    this.recenterButton.hidden = true;
+    void this.map
+      ?.focusNode(node.id, { zoom: realmOfNode(node.id) === 'world' ? 0.92 : 0.9, ms: 420 })
+      .then(() => this.syncOverviewUi());
     this.renderHud();
+  }
+
+  private syncOverviewUi(): void {
+    const map = this.map;
+    if (!map) return;
+    const overview = map.isOverviewMode();
+    this.overviewBanner.hidden = !overview;
+    this.el.classList.toggle('overview-mode', overview);
+    this.mapButton.classList.toggle('is-active', overview);
+    this.mapButton.setAttribute('aria-pressed', String(overview));
+    const state = this.state;
+    const actor = state ? actorOf(state) : null;
+    const node = actor !== null ? state?.players[actor]?.nodeId : undefined;
+    if (!node || this.viewRealm !== 'world') {
+      this.recenterButton.hidden = !overview;
+      return;
+    }
+    const actorVisible = map.isNodeVisible(node) === true;
+    this.recenterButton.hidden = !(overview || !actorVisible);
+    this.recenterButton.classList.toggle('is-overview', overview);
+  }
+
+  /** CSS-hidden elements (display:none, visibility:hidden, no boxes) must not shape the map viewport. */
+  private isLayoutVisible(el: HTMLElement | null | undefined): el is HTMLElement {
+    if (!el || !el.isConnected || el.hidden) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (el.getClientRects().length === 0) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width >= 1 && rect.height >= 1;
   }
 
   private updateMapSafeArea(): void {
     const map = this.map;
     if (!map) return;
     const root = this.el.getBoundingClientRect();
-    const topbar = this.topbar.getBoundingClientRect();
-    const ranking = this.rankingHost.getBoundingClientRect();
-    const bottom = this.bottomBar.getBoundingClientRect();
-    const money = this.moneyHost.getBoundingClientRect();
-    const event = this.eventPanel.el.getBoundingClientRect();
+    const topbar = this.isLayoutVisible(this.topbar) ? this.topbar.getBoundingClientRect() : null;
+    const ranking = this.isLayoutVisible(this.rankingHost) ? this.rankingHost.getBoundingClientRect() : null;
+    const bottom = this.isLayoutVisible(this.bottomBar) ? this.bottomBar.getBoundingClientRect() : null;
+    const money = this.isLayoutVisible(this.moneyHost) ? this.moneyHost.getBoundingClientRect() : null;
+    const eventPanelVisible = this.eventPanel.isOpen && this.isLayoutVisible(this.eventPanel.el);
+    const event = eventPanelVisible ? this.eventPanel.el.getBoundingClientRect() : null;
     const narrow = window.matchMedia('(max-width: 899px)').matches;
-    let top = Math.max(0, topbar.bottom - root.top + 6);
+    let top = topbar ? Math.max(0, topbar.bottom - root.top + 6) : 0;
     let left = 0;
     let right = 0;
-    let bottomInset = Math.max(0, root.bottom - bottom.top + 6);
+    let bottomInset = bottom ? Math.max(0, root.bottom - bottom.top + 6) : 0;
     if (narrow) {
-      if (this.rankingHost.offsetParent !== null) top = Math.max(top, ranking.bottom - root.top + 6);
-      if (!this.moneyHost.hidden) bottomInset = Math.max(bottomInset, root.bottom - money.top + 6);
+      if (ranking) top = Math.max(top, ranking.bottom - root.top + 6);
+      if (money) bottomInset = Math.max(bottomInset, root.bottom - money.top + 6);
     } else {
-      left = Math.max(0, ranking.right - root.left + 8);
-      if (this.eventPanel.isOpen) right = Math.max(0, root.right - event.left + 8);
+      if (ranking) left = Math.max(0, ranking.right - root.left + 8);
+      if (event) right = Math.max(0, root.right - event.left + 8);
     }
-    if (this.eventPanel.isOpen && narrow) top = Math.max(top, event.top - root.top + 6);
+    if (event && narrow) top = Math.max(top, event.top - root.top + 6);
+    // Never collapse the board: the drawable area must keep at least 40% of each axis.
+    const minKeep = 0.4;
+    const verticalBudget = root.height * (1 - minKeep);
+    if (top + bottomInset > verticalBudget) {
+      const excess = top + bottomInset - verticalBudget;
+      if (bottomInset >= top) bottomInset = Math.max(0, bottomInset - excess);
+      else top = Math.max(0, top - excess);
+      const rest = top + bottomInset - verticalBudget;
+      if (rest > 0) {
+        top = Math.max(0, top - rest / 2);
+        bottomInset = Math.max(0, bottomInset - rest / 2);
+      }
+    }
+    const horizontalBudget = root.width * (1 - minKeep);
+    if (left + right > horizontalBudget) {
+      const excess = left + right - horizontalBudget;
+      if (right >= left) right = Math.max(0, right - excess);
+      else left = Math.max(0, left - excess);
+    }
     map.setSafeArea({ top, right, bottom: bottomInset, left });
     const canvasRect = this.canvas.getBoundingClientRect();
     const obstacles: Array<{ x: number; y: number; w: number; h: number }> = [];
     const addObstacle = (el: HTMLElement | null | undefined, visible = true): void => {
-      if (!el || !visible || el.hidden) return;
+      if (!visible || !this.isLayoutVisible(el)) return;
       const rect = el.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return;
       obstacles.push({
         x: rect.left - canvasRect.left,
         y: rect.top - canvasRect.top,
@@ -1948,17 +2072,20 @@ export class GameScreen implements ScreenHandle {
     addObstacle(this.topbar);
     addObstacle(this.rankingHost);
     addObstacle(this.portraitHost);
-    addObstacle(this.moneyHost, !this.moneyHost.hidden);
+    addObstacle(this.moneyHost);
     addObstacle(this.bottomBar);
     addObstacle(this.eventPanel.el, this.eventPanel.isOpen);
     addObstacle(this.chat.panel, this.chat.isOpen);
     addObstacle(this.emotes.panel, this.emotes.isOpen);
     addObstacle(this.recenterButton, !this.recenterButton.hidden);
+    addObstacle(this.overviewBanner, !this.overviewBanner.hidden);
     map.setLabelObstacles(obstacles);
   }
 
   private updateDestArrow(state: PublicState, actor: number | null, nodeId: string): void {
-    if (actor === null || !this.state) {
+    // サイコロ後（行き先選択中）と演出中は、下部ボタンや候補の邪魔になるので出さない。
+    const choosing = state.phase.t === 'choose_dest';
+    if (actor === null || !this.state || choosing || this.fxBusy) {
       this.destArrow.hidden = true;
       return;
     }
@@ -1968,7 +2095,7 @@ export class GameScreen implements ScreenHandle {
       return;
     }
     const extra = extraMapView(this.map);
-    let point = extra?.screenPositionOfNode?.(nodeId) ?? null;
+    const point = extra?.screenPositionOfNode?.(nodeId) ?? null;
     if (point && point.visible !== false && point.x > 24 && point.x < rect.width - 24 && point.y > 24 && point.y < rect.height - 24) {
       this.destArrow.hidden = true;
       return;
@@ -1992,19 +2119,64 @@ export class GameScreen implements ScreenHandle {
       this.destArrow.hidden = true;
       return;
     }
-    const angle = Math.atan2(dy, dx);
-    const radiusX = rect.width * 0.42;
-    const radiusY = rect.height * 0.4;
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    const scale = 1 / Math.max(Math.abs(Math.cos(angle)) / radiusX, Math.abs(Math.sin(angle)) / radiusY);
-    const x = cx + Math.cos(angle) * scale;
-    const y = cy + Math.sin(angle) * scale;
+    const placement = placeDestinationArrow({
+      width: rect.width,
+      height: rect.height,
+      box: this.destArrowBox(rect),
+      blockers: this.destArrowBlockers(rect),
+      dx,
+      dy,
+    });
+    if (!placement) {
+      this.destArrow.hidden = true;
+      return;
+    }
     this.destArrow.hidden = false;
-    this.destArrow.style.left = `${Math.round(x)}px`;
-    this.destArrow.style.top = `${Math.round(y)}px`;
-    this.destArrow.querySelector('.dest-arrow-icon')?.setAttribute('style', `transform:rotate(${angle}rad)`);
+    this.destArrow.style.left = `${Math.round(placement.x)}px`;
+    this.destArrow.style.top = `${Math.round(placement.y)}px`;
+    this.destArrow.querySelector('.dest-arrow-icon')?.setAttribute('style', `transform:rotate(${placement.angle}rad)`);
     this.destArrow.querySelector('.dest-arrow-label')!.textContent = this.playerRealm !== 'world' ? '出口' : '目的地';
+  }
+
+  /** 目的地矢印を置いてよい盤面の矩形（HUD を避けた内側）。canvas ローカル座標。 */
+  private destArrowBox(rect: DOMRect): { left: number; top: number; right: number; bottom: number } | null {
+    const toLocal = (el: HTMLElement | null | undefined): DOMRect | null => {
+      if (!el || el.hidden) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return null;
+      return r;
+    };
+    const topbar = toLocal(this.topbar);
+    const bottomBar = toLocal(this.bottomBar);
+    const ranking = toLocal(this.rankingHost);
+    const event = this.eventPanel.isOpen ? toLocal(this.eventPanel.el) : null;
+    // 狭い画面では順位表が横一列（上部）なので、左ではなく上を詰める。
+    const narrow = window.matchMedia('(max-width: 899px)').matches;
+    let left = narrow ? 6 : Math.max(6, ranking ? ranking.right - rect.left + 10 : 6);
+    let right = rect.width - 6;
+    let top = Math.max(6, topbar ? topbar.bottom - rect.top + 8 : 6);
+    if (narrow && ranking) top = Math.max(top, ranking.bottom - rect.top + 8);
+    let bottom = Math.min(rect.height - 6, bottomBar ? bottomBar.top - rect.top - 8 : rect.height - 6);
+    if (event) right = Math.min(right, event.left - rect.left - 10);
+    if (right - left < 120 || bottom - top < 120) return null;
+    return { left, top, right, bottom };
+  }
+
+  /** 矢印を避けたい HUD 矩形（canvas ローカル座標）。 */
+  private destArrowBlockers(rect: DOMRect): Array<{ left: number; top: number; right: number; bottom: number }> {
+    const out: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+    const add = (el: HTMLElement | null | undefined, visible = true): void => {
+      if (!el || !visible || el.hidden) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      out.push({ left: r.left - rect.left, top: r.top - rect.top, right: r.right - rect.left, bottom: r.bottom - rect.top });
+    };
+    add(this.portraitHost);
+    add(this.moneyHost, !this.moneyHost.hidden);
+    add(this.miniMapCanvas);
+    add(this.rankingHost);
+    add(this.recenterButton, !this.recenterButton.hidden);
+    return out;
   }
 
   private openMapViewDialog(): void {
@@ -2915,7 +3087,10 @@ export class GameScreen implements ScreenHandle {
     if (!this.portraitImage.classList.contains('is-mood')) this.portraitImage.src = base;
     this.portraitImage.alt = character.nameJa;
     this.portraitName.textContent = displayPlayerName(player);
-    this.portraitSub.textContent = `${character.nameJa} ・ ${character.origin}`;
+    this.portraitSub.textContent =
+      character.nameJa === character.origin
+        ? `${character.nameJa} ・ ${character.originRegion}`
+        : `${character.nameJa} ・ ${character.origin}`;
     this.portraitHost.dataset.seat = String(playerId);
   }
 

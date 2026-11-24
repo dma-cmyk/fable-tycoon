@@ -722,7 +722,32 @@ async function readInviteFromLobby(client) {
       .then((handle) => handle.jsonValue())
       .catch(() => null);
   }
-  if (!inviteUrl) inviteUrl = `${BASE}/?room=${roomCode}`;
+  if (inviteUrl) {
+    // The invite must carry the host-key prefix; guests pin it on load. A URL
+    // without `k` would silently downgrade the check to TOFU.
+    try {
+      const parsed = new URL(inviteUrl);
+      const room = (parsed.searchParams.get('room') || '').replace(/\s+/g, '');
+      if (room !== roomCode) {
+        throw new Error(`invite room "${room}" does not match lobby code "${roomCode}"`);
+      }
+      if (!/^[0-9a-f]{16}$/i.test(parsed.searchParams.get('k') || '')) {
+        throw new Error(`invite URL is missing a 16-hex host key: ${inviteUrl}`);
+      }
+    } catch (error) {
+      throw new Error(`unusable invite URL from lobby: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (!inviteUrl) {
+    // Clipboard unavailable in this browser: rebuild the URL from the lobby's
+    // visible host-check code so the invite still pins the host key.
+    const checkCode = ((await page.locator('.lobby-host-key').first().textContent().catch(() => '')) || '')
+      .replace(/[^0-9a-f]/gi, '')
+      .slice(0, 16);
+    const query = new URLSearchParams({ room: roomCode });
+    if (/^[0-9a-f]{16}$/i.test(checkCode)) query.set('k', checkCode.toLowerCase());
+    inviteUrl = `${BASE}/?${query.toString()}`;
+  }
   return { roomCode, inviteUrl: withSpeed(inviteUrl) };
 }
 

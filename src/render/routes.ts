@@ -80,6 +80,17 @@ export interface GraphEdge {
  * undirected. Unreachable nodes are absent from the map (no Infinity values).
  */
 export function hopDistances(start: string, edges: readonly GraphEdge[]): Map<string, number> {
+  return multiSourceHopDistances([start], edges);
+}
+
+/**
+ * Hop distance to the nearest of several starts (e.g. every realm exit).
+ * Unreachable nodes are absent from the map.
+ */
+export function multiSourceHopDistances(
+  starts: readonly string[],
+  edges: readonly GraphEdge[],
+): Map<string, number> {
   const adjacency = new Map<string, string[]>();
   for (const edge of edges) {
     if (edge.a === edge.b) continue;
@@ -91,8 +102,12 @@ export function hopDistances(start: string, edges: readonly GraphEdge[]): Map<st
     else adjacency.set(edge.b, [edge.a]);
   }
   const distances = new Map<string, number>();
-  distances.set(start, 0);
-  const queue: string[] = [start];
+  const queue: string[] = [];
+  for (const start of starts) {
+    if (distances.has(start)) continue;
+    distances.set(start, 0);
+    queue.push(start);
+  }
   for (let head = 0; head < queue.length; head++) {
     const id = queue[head];
     const distance = distances.get(id) ?? 0;

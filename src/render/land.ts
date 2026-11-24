@@ -558,6 +558,16 @@ export class LandLayer {
         if (treeAvoid?.(t.x, t.y)) continue;
         const tx = t.x + shift;
         if (tx < x0 || tx > x1 || t.y < y0 || t.y > y1) continue;
+        if (t.lat === undefined) {
+          const geo = geoAt?.(t.x, t.y) ?? { lat: 0, lon: 0 };
+          t.lat = geo.lat;
+          t.lon = geo.lon;
+        }
+        const lat = t.lat;
+        const lon = t.lon ?? 0;
+        // Barren ground (ice sheet, desert) must hide the whole tree, trunk
+        // included: drawing the trunk first left brown sticks on Greenland.
+        if (isDesertBox(lat, lon) || this.isBarrenAt(t.x, t.y)) continue;
         const [cx, cy] = toCanvas(tx, t.y);
         const s = t.size * this.scale;
         // trunk
@@ -568,14 +578,6 @@ export class LandLayer {
         // crown: two overlapping circles plus a highlight
         const crown = s * (0.72 + t.tint * 0.16);
         const eq = project(0, 0)[1];
-        if (t.lat === undefined) {
-          const geo = geoAt?.(t.x, t.y) ?? { lat: 0, lon: 0 };
-          t.lat = geo.lat;
-          t.lon = geo.lon;
-        }
-        const lat = t.lat;
-        const lon = t.lon ?? 0;
-        if (isDesertBox(lat, lon) || this.isBarrenAt(t.x, t.y)) continue;
         const tropical = Math.abs(lat) < 23;
         const hemi = tropical ? 'summer' : t.y < eq ? season : oppositeSeason(season);
         const colors = SEASON_TREES[hemi];

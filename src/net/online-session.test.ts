@@ -23,8 +23,10 @@ import {
   joinOnlineRoom,
   killSessionForTests,
   resumeHostForTests,
+  reportVotesForTests,
   resyncPeerForTests,
   roomExists,
+  setBlockedPeersForTests,
   setNetworkPartitionForTests,
   transportInfo,
 } from './online-session';
@@ -164,6 +166,34 @@ describe('online P2P over an in-process MQTT broker', () => {
   let brokerPort = 0;
   const active: Peer[] = [];
 
+async function createSplitRoom(
+  hostName: string,
+  guestNames: [string, string, string],
+): Promise<{ host: Peer; guests: [Peer, Peer, Peer]; roomId: string }> {
+  const hostSession = await createOnlineRoom(hostName);
+  const host = new Peer(hostSession, hostName, true);
+  const guests = [
+    new Peer(joinOnlineRoom(hostSession.roomId, guestNames[0]), guestNames[0], true),
+    new Peer(joinOnlineRoom(hostSession.roomId, guestNames[1]), guestNames[1], true),
+    new Peer(joinOnlineRoom(hostSession.roomId, guestNames[2]), guestNames[2], true),
+  ] as [Peer, Peer, Peer];
+  active.push(host, ...guests);
+  await Promise.all(guests.map((peer) => peer.waitFor((msg) => msg.t === 'welcome')));
+  const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+  hostSession.send({ t: 'take_seat', index: 0 });
+  await hostWelcome;
+  hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+  await takeSeats(host, guests, 1);
+  hostSession.send({ t: 'settings', settings: { years: 10, turnSeconds: 0 } });
+  const started = [host, ...guests].map((peer) =>
+    peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'split start'),
+  );
+  hostSession.send({ t: 'start' });
+  await Promise.all(started);
+  return { host, guests, roomId: hostSession.roomId };
+}
+
+
   beforeAll(async () => {
     broker = await Aedes.createBroker({ heartbeatInterval: 1_000 });
     netServer = createServer((socket) => broker.handle(socket));
@@ -300,7 +330,7 @@ describe('online P2P over an in-process MQTT broker', () => {
     let guest2Rejoined = false;
     let hostKilled = false;
     let hostCheckpoint: ReturnType<typeof checkpointHostForTests> = null;
-    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 150_000);
+    const gameTimeout = setTimeout(() => settled.reject(new Error('P2P game did not finish')), 40_000);
 
     function observe(peer: Peer): void {
       peer.onState = (state, seq) => {
@@ -364,6 +394,11 @@ describe('online P2P over an in-process MQTT broker', () => {
     );
     // The old host seat must be driven by the new host's grace/CPU path even if the old host
     // never comes back. Wait for a state advance before resuming it.
+    await guest1.waitFor(
+      (msg) => msg.t === 'lobby' && msg.lobby.seats[0].kind === 'cpu',
+      30_000,
+      'old host seat replaced by CPU',
+    );
     const seqAfterMigration = guest1.seq;
     await guest1.waitFor(
       (msg) =>
@@ -388,7 +423,9 @@ describe('online P2P over an in-process MQTT broker', () => {
       returned = new Peer(returnedSession, 'returned-host', false);
       active.push(returned);
       await returned.waitFor(
-        (msg) => msg.t === 'lobby' && msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
+        (msg) =>
+          (msg.t === 'welcome' || msg.t === 'lobby' || msg.t === 'snapshot') &&
+          msg.lobby.seats.find((seat) => seat.isHost)?.index === 1,
         20_000,
         'returned host sees generation 2',
       );
@@ -570,6 +607,12 @@ describe('online P2P over an in-process MQTT broker', () => {
       guest.session.send({ t: 'take_seat', index: 1 });
       await guestWelcome;
       guest.session.send({ t: 'pick_character', characterId: 'alice' });
+      guest.session.send({ t: 'report', seat: 0, reason: 'spam' });
+      for (let i = 0; i < 40; i += 1) {
+        if ((reportVotesForTests(guest.session)?.['0']?.length ?? 0) > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(reportVotesForTests(guest.session)?.['0']?.length).toBeGreaterThan(0);
       hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
       const started = guest.waitFor((msg) => msg.t === 'update', 15_000, 'start update');
       hostSession.send({ t: 'start' });
@@ -591,6 +634,141 @@ describe('online P2P over an in-process MQTT broker', () => {
     } finally {
       host.stop();
       guest.stop();
+    }
+  }, 30_000);
+
+  it('freezes both sides of a 2/2 split until heal', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    configureNetworkForTests({
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 150,
+      hostSilenceMs: 800,
+      peerSilenceMs: 3_000,
+      probeMs: 250,
+      hostGoneMs: 2_500,
+      selfHostGraceMs: 800,
+      saveThrottleMs: 20,
+      probeTimeoutMs: 4_000,
+      graceMs: 60_000,
+      replaceMs: 60_000,
+      yearEndAckMs: 60_000,
+      cpuDelayMs: 50,
+      fxScale: 0.01,
+      clientIds: {
+        s2host: 's2-host',
+        s2a: 's2-a',
+        s2b: 's2-b',
+        s2c: 's2-c',
+      },
+    });
+    const { host, guests } = await createSplitRoom('s2host', ['s2a', 's2b', 's2c']);
+    setBlockedPeersForTests(host.session, ['s2-b', 's2-c']);
+    setBlockedPeersForTests(guests[0].session, ['s2-b', 's2-c']);
+    setBlockedPeersForTests(guests[1].session, ['s2-host', 's2-a']);
+    setBlockedPeersForTests(guests[2].session, ['s2-host', 's2-a']);
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    expect(authorityInfoForTests(host.session)?.frozen).toBe(true);
+
+    const hostSeq = host.seq;
+    setBlockedPeersForTests(host.session, []);
+    setBlockedPeersForTests(guests[0].session, []);
+    setBlockedPeersForTests(guests[1].session, []);
+    setBlockedPeersForTests(guests[2].session, []);
+    await host.waitFor(
+      (msg) => msg.t === 'update' && msg.seq > hostSeq,
+      15_000,
+      'game resumes after 2/2 heal',
+    );
+  }, 60_000);
+
+  it('keeps the 3-person side authoritative during a 3/1 split', async () => {
+    for (const peer of active) peer.stop();
+    active.length = 0;
+    configureNetworkForTests({
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 150,
+      hostSilenceMs: 800,
+      peerSilenceMs: 3_000,
+      probeMs: 250,
+      hostGoneMs: 2_500,
+      selfHostGraceMs: 800,
+      saveThrottleMs: 20,
+      probeTimeoutMs: 4_000,
+      graceMs: 60_000,
+      replaceMs: 60_000,
+      yearEndAckMs: 60_000,
+      cpuDelayMs: 50,
+      fxScale: 0.01,
+      clientIds: {
+        s3host: 's3-host',
+        s3a: 's3-a',
+        s3b: 's3-b',
+        s3c: 's3-c',
+      },
+    });
+    const { host, guests } = await createSplitRoom('s3host', ['s3a', 's3b', 's3c']);
+    setBlockedPeersForTests(host.session, ['s3-c']);
+    setBlockedPeersForTests(guests[0].session, ['s3-c']);
+    setBlockedPeersForTests(guests[1].session, ['s3-c']);
+    setBlockedPeersForTests(guests[2].session, ['s3-host', 's3-a', 's3-b']);
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    expect(authorityInfoForTests(host.session)?.frozen).toBe(false);
+    setBlockedPeersForTests(host.session, []);
+    setBlockedPeersForTests(guests[0].session, []);
+    setBlockedPeersForTests(guests[1].session, []);
+    setBlockedPeersForTests(guests[2].session, []);
+    await host.waitFor(
+      (msg) => msg.t === 'lobby' && [1, 2, 3].every((i) => msg.lobby.seats[i].connected),
+      15_000,
+      '3/1 heal reconnects all seats',
+    );
+  }, 60_000);
+
+  it('discovers the host on a secondary broker before joining', async () => {
+    const second = await Aedes.createBroker({ heartbeatInterval: 1_000 });
+    const secondServer = createServer((socket) => second.handle(socket));
+    await new Promise<void>((resolve) => secondServer.listen(0, '127.0.0.1', resolve));
+    const address = secondServer.address();
+    if (typeof address !== 'object' || !address) throw new Error('second broker did not bind');
+    const secondUrl = `mqtt://127.0.0.1:${address.port}`;
+    const common = {
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 150,
+      hostSilenceMs: 1_200,
+      peerSilenceMs: 3_000,
+      saveThrottleMs: 20,
+      probeTimeoutMs: 5_000,
+      graceMs: 300,
+      replaceMs: 5_000,
+      yearEndAckMs: 500,
+      cpuDelayMs: 50,
+      fxScale: 0.01,
+      clientIds: { bhost: 'b-host', bguest: 'b-guest' },
+    } as const;
+    configureNetworkForTests({ ...common, brokers: [secondUrl] });
+    const hostSession = await createOnlineRoom('bhost');
+    const host = new Peer(hostSession, 'b-host', false);
+    configureNetworkForTests({
+      ...common,
+      brokers: [`mqtt://127.0.0.1:${brokerPort}`, secondUrl],
+    });
+    expect(await roomExists(hostSession.roomId)).toBe(true);
+    const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'bguest'), 'b-guest', false);
+    active.push(host, guest);
+    try {
+      await guest.waitFor((msg) => msg.t === 'welcome', 12_000, 'welcome via discovered broker');
+      expect(guest.seat).toBeNull();
+    } finally {
+      host.stop();
+      guest.stop();
+      await new Promise<void>((resolve) => secondServer.close(() => resolve()));
+      await new Promise<void>((resolve) => second.close(() => resolve()));
     }
   }, 30_000);
 

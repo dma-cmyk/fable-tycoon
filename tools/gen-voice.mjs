@@ -20,7 +20,9 @@ const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA_DIR = path.join(ROOT, 'src/data');
-const VOICE_DIR = path.join(ROOT, 'public/assets/voice');
+const VOICE_DIR = process.env.VOICE_OUT_DIR
+  ? path.resolve(process.env.VOICE_OUT_DIR)
+  : path.join(ROOT, 'public/assets/voice');
 const VOICE_META_PATH = path.join(VOICE_DIR, 'voices.json');
 const CANARY_PATH = path.join(ROOT, 'tools/voice-canary.json');
 const DEFAULT_ENGINE = 'http://127.0.0.1:50021';
@@ -566,7 +568,6 @@ async function synthesize(item) {
   const wavPath = path.join(tmpDir, `${item.hash}.wav`);
   let lastError;
   try {
-    await rm(outPath, { force: true });
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
         const wav = await synthesizeToWav(item.text, meta.speaker, meta);
@@ -596,6 +597,10 @@ async function synthesize(item) {
         ]);
         const info = await stat(tempPath);
         if (info.size < 100) throw new Error(`ffmpeg produced an empty mp3 (${info.size} bytes)`);
+        const mp3Check = await analyzeSpeech(tempPath);
+        if (!mp3Check.ok) {
+          throw new Error(`speech check failed (mp3): ${mp3Check.reasons.join('; ')}`);
+        }
         await rename(tempPath, outPath);
         currentMeta[item.hash] = meta;
         return info.size;

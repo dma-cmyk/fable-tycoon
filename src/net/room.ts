@@ -187,7 +187,7 @@ interface SerializedRoom {
   playerIdBySeat: number[];
   seatByPlayerId: number[];
   reporters: Record<string, number[]>;
-  tasks: { key: string; at: number }[];
+  tasks: { key: string; at: number; token?: number }[];
   savedAt: number;
 }
 
@@ -299,7 +299,8 @@ export class RoomController {
   private reporters = new Map<number, Set<number>>();
   private tokenCounter = 0;
 
-  private tasks = new Map<string, { at: number }>();
+  private tasks = new Map<string, { at: number; token: number }>();
+  private taskSeq = 0;
   private alarm: { at: number; handle: TimerHandle } | null = null;
   private ticking = false;
   private disposed = false;
@@ -575,6 +576,12 @@ export class RoomController {
         (candidate) => candidate.kind === 'human' && candidate.token === msg.token,
       );
       if (seat) {
+        if (seat.connId === conn.id && seatConnected(seat)) {
+          // Same connection re-authenticating: idempotent. No 「戻りました」, no autoplay reset
+          // and no snapshot (which could cancel in-flight fx). Explicit resync requests snapshots.
+          this.sendWelcome(conn, false, false);
+          return;
+        }
         this.bindReconnect(conn, seat);
         return;
       }
@@ -617,7 +624,7 @@ export class RoomController {
     }
   }
 
-  private sendWelcome(conn: Conn, resync = false): void {
+  private sendWelcome(conn: Conn, resync = false, includeSnapshot = true): void {
     const seatKeys: Record<string, string> = {};
     for (const seat of this.seats) {
       if (seat.kind === 'human' && seat.token) seatKeys[String(seat.index)] = seat.token;
@@ -631,7 +638,7 @@ export class RoomController {
       chat: [...this.chat],
       seatKeys,
     });
-    if (this.state && (this.status === 'playing' || this.status === 'finished')) {
+    if (includeSnapshot && this.state && (this.status === 'playing' || this.status === 'finished')) {
       this.deps.send(conn.id, {
         t: 'snapshot',
         seq: this.seq,
@@ -1234,8 +1241,10 @@ export class RoomController {
           .sort((a, b) => a[1].at - b[1].at || a[0].localeCompare(b[0]));
         if (due.length === 0) break;
         rounds += 1;
-        for (const [key] of due) {
-          if (!this.tasks.has(key)) continue;
+        for (const [key, task] of due) {
+          // Validate the registration token: a task may have been re-armed for the next phase
+          // while this due list was being processed.
+          if (this.tasks.get(key)?.token !== task.token) continue;
           this.tasks.delete(key);
           try {
             this.runTask(key);
@@ -1401,7 +1410,8 @@ export class RoomController {
   }
 
   private setTask(key: string, at: number): void {
-    this.tasks.set(key, { at });
+    this.taskSeq += 1;
+    this.tasks.set(key, { at, token: this.taskSeq });
     this.reschedule();
   }
 
@@ -1720,7 +1730,7 @@ export class RoomController {
       playerIdBySeat: this.playerIdBySeat,
       seatByPlayerId: this.seatByPlayerId,
       reporters: Object.fromEntries([...this.reporters].map(([seat, set]) => [String(seat), [...set]])),
-      tasks: [...this.tasks.entries()].map(([key, task]) => ({ key, at: task.at })),
+      tasks: [...this.tasks.entries()].map(([key, task]) => ({ key, at: task.at, token: task.token })),
       savedAt: this.deps.now(),
     };
     return JSON.stringify(room);
@@ -1858,19 +1868,27 @@ export class RoomController {
       }
     }
 
-    for (const task of parsed.tasks ?? []) room.tasks.set(task.key, { at: task.at });
+    for (const task of parsed.tasks ?? []) {
+      room.taskSeq += 1;
+      room.tasks.set(task.key, { at: task.at, token: task.token ?? room.taskSeq });
+    }
 
     // Crash recovery: re-arm replacement timers that could not have been serialized.
     if (!options.connections && room.status === 'playing') {
       for (const seat of room.seats) {
         if (seat.kind === 'human' && !seatConnected(seat)) {
           const since = seat.disconnectedAt ?? now;
-          room.tasks.set(`replace:${seat.index}`, { at: Math.max(now, since + room.replaceMs) });
+          room.taskSeq += 1;
+          room.tasks.set(`replace:${seat.index}`, {
+            at: Math.max(now, since + room.replaceMs),
+            token: room.taskSeq,
+          });
         }
       }
       const actorSeat = room.actorSeatData();
       if (actorSeat && actorSeat.kind === 'human' && !seatConnected(actorSeat) && !actorSeat.autoplay) {
-        room.tasks.set(`grace:${actorSeat.index}`, { at: now + room.graceMs });
+        room.taskSeq += 1;
+        room.tasks.set(`grace:${actorSeat.index}`, { at: now + room.graceMs, token: room.taskSeq });
       }
     }
     room.reschedule();

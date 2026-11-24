@@ -1,7 +1,41 @@
 import { describe, expect, it } from 'vitest';
 import type { PlayerSetup } from '../core/types';
 import type { ServerMsg } from './protocol';
-import { createLocal, hasLocalSave, resumeLocal } from './local-session';
+import { createLocal, hasLocalSave, localSaveIssue, resumeLocal } from './local-session';
+
+describe('LocalSession save version', () => {
+  it('rejects a save from a different board and reports the reason', () => {
+    const data = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+    const session = createLocal({
+      players: [
+        { name: 'A', characterId: 'momotaro', isCpu: false },
+        { name: 'B', characterId: 'alice', isCpu: true },
+      ],
+      years: 1,
+    });
+    session.close();
+    const raw = data.get('fable.local');
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw as string) as { boardVersion: string };
+    parsed.boardVersion = 'obsolete-board';
+    data.set('fable.local', JSON.stringify(parsed));
+    expect(resumeLocal()).toBeNull();
+    expect(localSaveIssue()).toContain('盤面');
+    if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }, 15_000);
+});
 
 describe('LocalSession', () => {
   it('starts a hot-seat game through the same RoomController and routes actions', async () => {

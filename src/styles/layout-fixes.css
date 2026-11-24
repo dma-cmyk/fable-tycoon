@@ -404,10 +404,17 @@
   height: 23px;
   border-radius: 50%;
   border: 1.5px solid #fff;
-  background: var(--red);
+  /* 盤面のピン/リングと同じマス種色（game.ts が --kind-color を入れる）。 */
+  background: var(--kind-color, var(--red));
   color: #fff;
   font-size: 11px;
   font-weight: 800;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28);
+}
+
+.move-chip-num.is-light {
+  color: #20315a;
+  text-shadow: none;
 }
 
 .move-chip-icon {
@@ -2319,5 +2326,532 @@
 
   .move-scroll-btn {
     min-height: 34px;
+  }
+}
+
+/* ---------------------------------------------------------------- 新UIレビュー第1回 必須6: スマホHUD */
+@media (max-width: 899px) {
+  /* (a) 異世界チップはアイコンだけにし、「表示中」タグも落として手番・目的地の文字を確保する。 */
+  .realm-chip-tag,
+  .realm-chip-name {
+    display: none;
+  }
+
+  .realm-chip {
+    flex: 0 0 auto;
+  }
+
+  .game-turn-label {
+    flex: 0 0 auto;
+  }
+
+  .dest-chip {
+    min-width: 132px;
+  }
+
+  /* (b) カード枚数バッジが隣のボタンに潜らないよう、片面を前面へ。 */
+  .icon-btn-badge {
+    top: -4px;
+    right: -2px;
+    z-index: 4;
+  }
+
+  .hud-icon:has(.icon-btn-badge) {
+    z-index: 3;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  /* (c) 横画面: 目的地名の3文字省略と「エモート」の文字切れを解消する。 */
+  .dest-chip {
+    max-width: 310px;
+  }
+
+  .player-plate {
+    flex: 0 1 155px;
+  }
+
+  .hud-icon,
+  .hud-icons .hud-comm-button {
+    width: auto;
+    min-width: 50px;
+    padding: 2px 4px;
+  }
+
+  .hud-icon .icon-btn-label,
+  .hud-icons .hud-comm-button .comm-fab-label {
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- 必須11: コマンドバーの階層 */
+.hud-icons .hud-comm-button {
+  background: #162b52;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 2px 6px rgba(7, 18, 37, 0.3);
+  color: #eef5ff;
+}
+
+.hud-icons .hud-comm-button .comm-fab-label,
+.hud-icons .hud-comm-button.emote-fab .comm-fab-label {
+  color: #eef5ff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hud-icons .hud-comm-button .chat-unread {
+  background: var(--red);
+  color: #fff;
+}
+
+/* FAQ: 主操作（金）に対して補助は紺。チャット/エモートだけが光沢で目立たないようにする。 */
+.city-sheet-footer .city-buy-all {
+  background: linear-gradient(180deg, #ffe483, #ffc42c 70%, #eea100);
+  border-color: #fff6c8;
+  color: #5a2b00;
+  box-shadow: 0 4px 0 #b97c00;
+}
+
+.city-sheet-footer .city-buy-all:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.city-sheet-footer .city-end-buy {
+  background: rgba(14, 34, 70, 0.9);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #eaf2ff;
+  box-shadow: 0 3px 0 rgba(4, 12, 30, 0.45);
+}
+
+/* 物件シート・売り場の見出しアイコン（OS 絵文字の置き換え先）。 */
+.city-hero-emoji-mark {
+  display: grid;
+  place-items: center;
+}
+
+.city-hero-emoji-mark img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 4px rgba(20, 40, 70, 0.25));
+}
+
+.shop-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shop-section-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+
+.shop-section-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+/* ================================================================ 新UIレビュー第1回 (GameUI担当分) */
+
+/* 必須1: 全体地図モードの表示・復帰導線と「地図」ボタンの選択状態。 */
+.map-overview-banner {
+  position: absolute;
+  top: calc(82px + var(--safe-top));
+  left: 50%;
+  z-index: 27;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 15px;
+  border-radius: 999px;
+  border: 2px solid var(--gold);
+  background: rgba(7, 20, 47, 0.92);
+  color: #fff7d6;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(3, 10, 25, 0.4);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.map-overview-banner[hidden] {
+  display: none;
+}
+
+.map-overview-banner-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.map-overview-banner:hover {
+  background: rgba(22, 43, 82, 0.95);
+}
+
+.hud-icon.is-active {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.35), 0 3px 0 rgba(4, 12, 30, 0.35);
+}
+
+.map-recenter.is-overview {
+  border-color: var(--gold);
+  color: #fff3c4;
+}
+
+@media (max-width: 899px) {
+  .map-overview-banner {
+    top: calc(154px + var(--safe-top));
+    max-width: calc(100vw - 24px);
+    font-size: 11px;
+    padding: 3px 12px;
+  }
+
+  .map-recenter {
+    top: calc(202px + var(--safe-top));
+    bottom: auto;
+    font-size: 11.5px;
+    padding: 4px 11px;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .map-overview-banner {
+    top: calc(96px + var(--safe-top));
+    font-size: 10.5px;
+    min-height: 40px;
+    padding: 3px 11px;
+  }
+
+  .map-recenter {
+    top: calc(146px + var(--safe-top));
+    bottom: auto;
+    font-size: 10.5px;
+  }
+}
+
+/* 必須2: キャラ選択PCの右カラム切断を止め、1280x600 でも確定ボタンまで見せる。 */
+.char-picker-main {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .char-filters {
+    gap: 4px;
+    padding: 4px 0;
+  }
+
+  .char-filter-chip {
+    min-height: 34px;
+    padding: 2px 9px;
+  }
+
+  .char-detail {
+    padding: 10px;
+    gap: 5px;
+  }
+
+  .char-detail-art-wrap,
+  .char-detail-art {
+    height: clamp(92px, 15vh, 130px);
+    min-height: 92px;
+  }
+
+  .char-detail-personality {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .char-detail-perk-desc {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+}
+
+/* 必須3: 横画面イベントの絵を確保し、効果テキストも表示する（縦スクロールで読む）。 */
+@media (max-height: 520px) and (min-width: 700px) {
+  .event-panel .event-hero,
+  .event-panel .event-hero.no-image {
+    height: 96px;
+    min-height: 96px;
+  }
+
+  .event-choice-detail {
+    display: block;
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+
+  .event-choice {
+    min-height: 52px;
+  }
+}
+
+/* 必須10: 売り場の「店を出る」を常時固定表示する。 */
+.modal-panel.shop-modal {
+  width: min(940px, 100%);
+  height: min(88dvh, 760px);
+}
+
+.modal-panel.shop-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.shop-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.shop-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.shop-dialog .shop-footer {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 10px 16px calc(10px + var(--safe-bottom));
+  background: #f1e8d2;
+  border-top: 2px solid #ded3b8;
+  box-shadow: 0 -5px 14px rgba(88, 64, 20, 0.1);
+}
+
+@media (max-width: 899px) {
+  .modal-panel.shop-modal {
+    height: min(94dvh, 900px);
+  }
+
+  .modal-panel.shop-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .shop-scroll {
+    display: block;
+    padding: 10px 12px;
+  }
+
+  .shop-scroll .shop-section {
+    margin-bottom: 10px;
+  }
+
+  .shop-dialog .shop-footer {
+    padding: 10px 12px calc(10px + var(--safe-bottom));
+  }
+
+  .shop-leave {
+    width: 100%;
+    min-height: 52px;
+  }
+
+  .shop-footer-note {
+    display: none;
+  }
+}
+
+/* 必須12(c): スマホのランキング吹き出しが画面端で切れないようにする。 */
+@media (max-width: 899px) {
+  .rank-bubble {
+    width: min(150px, calc(100vw - 28px));
+  }
+
+  .rank-row:first-of-type .rank-bubble {
+    left: 0;
+    transform: none;
+  }
+
+  .rank-row:first-of-type .rank-bubble::before {
+    left: 14px;
+    transform: rotate(45deg);
+  }
+
+  .rank-row:last-of-type .rank-bubble {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+
+  .rank-row:last-of-type .rank-bubble::before {
+    left: auto;
+    right: 14px;
+    transform: rotate(45deg);
+  }
+}
+
+/* 推奨2: 年度決算のグラフを1画面に収め、資産バーをプレイヤーカラーに揃える。 */
+.modal-panel.yearend-modal {
+  height: min(96dvh, 860px);
+  max-height: min(96dvh, 860px);
+}
+
+.yearend-modal .modal-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.yearend-scroll {
+  gap: 8px;
+  padding: 10px 16px;
+}
+
+.yearend-head {
+  padding: 7px 12px;
+}
+
+.yearend-race-card {
+  padding: 8px 10px;
+}
+
+.yearend-bars {
+  gap: 3px;
+}
+
+.yearend-bar-row {
+  min-height: 29px;
+}
+
+.yearend-bar-rank {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--bar-color, #9fb3d9);
+  border: 1.5px solid #fff;
+  color: #20315a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.yearend-bar-row.is-top .yearend-bar-rank {
+  color: #5a2b00;
+}
+
+.yearend-chart-card {
+  padding: 6px 10px 8px;
+}
+
+.modal-panel.yearend-modal .asset-chart {
+  height: 118px;
+}
+
+.yearend-note {
+  display: none;
+}
+
+@media (max-height: 680px) {
+  .modal-panel.yearend-modal .asset-chart {
+    height: 112px;
+  }
+
+  .yearend-headline {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .yearend-bar-row {
+    min-height: 26px;
+  }
+}
+
+/* 推奨3: タイトル画面の構図。行進キャラをボタン列・注記から離す。 */
+.title-parade {
+  bottom: 74px;
+  height: 120px;
+}
+
+@media (max-width: 899px) {
+  .title-keyart {
+    object-position: 47% 28%;
+  }
+
+  .title-parade {
+    bottom: calc(295px + var(--safe-bottom));
+    height: 78px;
+  }
+}
+
+@media (max-height: 520px) and (min-width: 700px) {
+  .title-parade {
+    bottom: 84px;
+    height: 64px;
+  }
+}
+
+/* 推奨4: ロビーのヘッダを1行に保つ。 */
+.lobby-header .transport-chips {
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+
+.transport-chip {
+  min-height: 24px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+/* 推奨6: 絞り込みチップの右端フェードと、手番チップの発光は2回だけ。 */
+@media (max-width: 899px) {
+  .char-filter-chips {
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+  }
+}
+
+.status-chip.is-mine {
+  animation-iteration-count: 2;
+}
+
+/* 全体地図バナーと復帰ボタンが重ならないよう、復帰ボタンだけ下段へ逃がす。 */
+@media (min-width: 900px) {
+  .overview-mode .map-recenter {
+    top: calc(134px + var(--safe-top));
+  }
+}
+
+/* `.btn-gold { position: relative }` was beating `.char-confirm { position: sticky }`,
+   which pushed the confirm button out of the clipped detail column. */
+.char-picker-modal .char-detail .char-confirm {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  box-shadow: 0 -8px 12px rgba(18, 40, 79, 0.55), 0 2px 6px rgba(7, 18, 37, 0.28);
+}
+
+/* Host-key check code: small muted line under the room code so typed-code guests can compare. */
+.lobby-host-key {
+  display: inline-block;
+  margin-top: 3px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: #b9c8e5;
+  word-break: break-all;
+}
+
+@media (max-width: 899px) {
+  .lobby-host-key {
+    font-size: 10px;
   }
 }

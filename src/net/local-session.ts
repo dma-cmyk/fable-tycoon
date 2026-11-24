@@ -8,6 +8,7 @@ import type { PlayerSetup } from '../core/types';
 import { GAME_DATA } from '../data/index';
 import type { ChatLine, ClientMsg, LobbyView, ServerMsg } from './protocol';
 import { ALLOWED_YEARS, PROTOCOL_VERSION } from './protocol';
+import { BOARD_VERSION } from './board-version';
 import type { ConnectionState, Session } from './session-types';
 import { CPU_MOVE_DELAY_MS, RoomController } from './room';
 import type { RoomDeps, TimerHandle } from './room';
@@ -80,6 +81,42 @@ function localTimers(): Pick<RoomDeps, 'setTimer' | 'clearTimer'> {
 interface ParsedSave {
   roomId?: string;
   chat?: ChatLine[];
+}
+
+interface LocalSaveEnvelope {
+  v: 1;
+  boardVersion: string;
+  room: string;
+}
+
+let saveIssue: string | null = null;
+
+function decodeSave(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    saveIssue = 'セーブデータを読み込めませんでした。新しいゲームを始めてください。';
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    saveIssue = 'セーブデータを読み込めませんでした。新しいゲームを始めてください。';
+    return null;
+  }
+  if (!('boardVersion' in parsed) || typeof parsed.boardVersion !== 'string') {
+    saveIssue = '古いバージョンのセーブデータです。新しいゲームを始めてください。';
+    return null;
+  }
+  if (parsed.boardVersion !== BOARD_VERSION) {
+    saveIssue = 'ゲームの盤面が更新されました。古いセーブは読み込めません。新しいゲームを始めてください。';
+    return null;
+  }
+  if (!('room' in parsed) || typeof parsed.room !== 'string') {
+    saveIssue = 'セーブデータが壊れています。新しいゲームを始めてください。';
+    return null;
+  }
+  saveIssue = null;
+  return parsed.room;
 }
 
 /** Narrow the persisted JSON just enough to rebuild the synthetic welcome; RoomController.restore validates the rest. */
@@ -344,10 +381,10 @@ export class LocalSession implements Session {
   }
 
   private stampGeneration(msg: ServerMsg): ServerMsg {
-    if (
-      (msg.t === 'welcome' || msg.t === 'lobby' || msg.t === 'snapshot' || msg.t === 'update') &&
-      msg.gen === undefined
-    ) {
+    if (msg.t === 'welcome' || msg.t === 'snapshot') {
+      return { ...msg, gen: msg.gen ?? 1, boardVersion: BOARD_VERSION };
+    }
+    if ((msg.t === 'lobby' || msg.t === 'update') && msg.gen === undefined) {
       return { ...msg, gen: 1 };
     }
     return msg;
@@ -390,23 +427,31 @@ export class LocalSession implements Session {
 
   private persist(): void {
     if (this.disposed) return;
-    writeLocal(LOCAL_SAVE_KEY, this.controller.serialize());
+    const envelope: LocalSaveEnvelope = {
+      v: 1,
+      boardVersion: BOARD_VERSION,
+      room: this.controller.serialize(),
+    };
+    writeLocal(LOCAL_SAVE_KEY, JSON.stringify(envelope));
   }
 
   private replay(listener: (msg: ServerMsg) => void): void {
     if (this.lastWelcome) listener(this.lastWelcome);
-    if (!this.lastSnapshot && !this.lastUpdate && this.lastLobby) {
+    const snapshot = this.lastSnapshot;
+    const update = this.lastUpdate;
+    if (!snapshot && !update && this.lastLobby) {
       listener({ t: 'lobby', lobby: this.lastLobby });
       return;
     }
-    if (this.lastSnapshot) listener(this.lastSnapshot);
-    if (this.lastUpdate && (!this.lastSnapshot || this.lastUpdate.seq > this.lastSnapshot.seq)) {
-      listener(this.lastUpdate);
+    if (snapshot) listener(snapshot);
+    if (update && (!snapshot || (update.gen ?? 1) > (snapshot.gen ?? 1) || update.seq > snapshot.seq)) {
+      listener(update);
     }
   }
 }
 
 export function createLocal(setup: LocalSetup): LocalSession {
+  saveIssue = null;
   return LocalSession.create(setup);
 }
 
@@ -414,11 +459,19 @@ export function hasLocalSave(): boolean {
   return readLocal(LOCAL_SAVE_KEY) !== null;
 }
 
+/** Why the stored local game could not be restored (null when there is no issue). */
+export function localSaveIssue(): string | null {
+  return saveIssue;
+}
+
 export function resumeLocal(): LocalSession | null {
   const raw = readLocal(LOCAL_SAVE_KEY);
-  return raw ? LocalSession.resume(raw) : null;
+  if (!raw) return null;
+  const room = decodeSave(raw);
+  return room ? LocalSession.resume(room) : null;
 }
 
 export function clearLocalSave(): void {
+  saveIssue = null;
   removeLocal(LOCAL_SAVE_KEY);
 }

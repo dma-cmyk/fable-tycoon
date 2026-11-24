@@ -41,6 +41,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
   let filters: CharacterFilterState = { ...rememberedFilters };
   let previewId: string | null = options.current && !exclude.has(options.current) ? options.current : null;
   let handle: ModalHandle | null = null;
+  let pendingFocusKey: string | null = null;
 
   const grid = h('div', { class: 'char-grid' });
   const empty = h('div', { class: 'char-empty', attrs: { hidden: 'hidden' } });
@@ -74,7 +75,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
 
   const available = h('button', {
     class: 'chip chip-small char-available-toggle',
-    attrs: { type: 'button', 'aria-pressed': String(filters.availableOnly) },
+    attrs: { type: 'button', 'aria-label': '空いているキャラだけ', 'aria-pressed': String(filters.availableOnly) },
     on: {
       click: () => {
         filters = { ...filters, availableOnly: !filters.availableOnly };
@@ -85,6 +86,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
   });
 
   const chipsFor = <T extends string>(
+    rowKey: string,
     allLabel: string,
     optionsList: ReadonlyArray<{ id: T; label: string; count: number }>,
     selected: T | 'all',
@@ -94,8 +96,14 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
     const make = (id: T | 'all', label: string, valueCount: number): HTMLElement =>
       h('button', {
         class: 'chip chip-small char-filter-chip',
-        attrs: { type: 'button', 'aria-pressed': String(selected === id) },
-        on: { click: () => onSelect(id) },
+        attrs: { type: 'button', 'data-filter-key': `${rowKey}:${id}`, 'aria-pressed': String(selected === id) },
+        on: {
+          click: (event) => {
+            const key = (event.currentTarget as HTMLElement).dataset.filterKey ?? null;
+            pendingFocusKey = key;
+            onSelect(id);
+          },
+        },
       },
         h('span', { text: label }),
         h('span', { class: 'char-filter-count', text: String(valueCount) }),
@@ -120,14 +128,12 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
   const renderFilters = (): void => {
     available.setAttribute('aria-pressed', String(filters.availableOnly));
     available.className = `chip chip-small char-available-toggle ${filters.availableOnly ? 'is-selected' : ''}`.trim();
-    available.replaceChildren(
-      h('span', { text: '空いているキャラだけ', attrs: { 'aria-hidden': 'true' } }),
-    );
+    available.replaceChildren(h('span', { text: '空いているキャラだけ' }));
     reset.hidden = !hasActiveFilters(filters);
     filterHost.replaceChildren(
       filterRow(
         '地域',
-        chipsFor('すべて', regionOptions, filters.region, (region) => {
+        chipsFor('region', 'すべて', regionOptions, filters.region, (region) => {
           filters = { ...filters, region };
           remember();
           render();
@@ -135,7 +141,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
       ),
       filterRow(
         'タイプ',
-        chipsFor('すべて', roleOptions, filters.role, (role) => {
+        chipsFor('role', 'すべて', roleOptions, filters.role, (role) => {
           filters = { ...filters, role };
           remember();
           render();
@@ -143,7 +149,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
       ),
       filterRow(
         '特性',
-        chipsFor('すべて', perkOptions, filters.perkGroup, (perkGroup) => {
+        chipsFor('perk', 'すべて', perkOptions, filters.perkGroup, (perkGroup) => {
           filters = { ...filters, perkGroup };
           remember();
           render();
@@ -247,6 +253,11 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
     count.textContent = `${filtered.length} / ${GAME_DATA.characters.length} 人`;
     count.hidden = false;
     renderFilters();
+    if (pendingFocusKey) {
+      const key = pendingFocusKey;
+      pendingFocusKey = null;
+      filterHost.querySelector<HTMLElement>(`[data-filter-key="${key}"]`)?.focus({ preventScroll: true });
+    }
     renderDetail();
     syncPreview();
   };

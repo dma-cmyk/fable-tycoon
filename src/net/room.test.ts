@@ -781,6 +781,42 @@ describe('RoomController migration authority and resync', () => {
   });
 });
 
+describe('RoomController timer coalescing', () => {
+  it('does not run a stale turn timer after the ack re-arms the phase', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness, { years: 3, turnSeconds: 20 });
+    let state = started.state;
+    let seq = started.seq;
+    for (let i = 0; i < 5_000; i += 1) {
+      if (state.phase.t === 'year_end') break;
+      const actor = actorOf(state);
+      if (actor === null) throw new Error('actor missing');
+      const update = act(
+        harness,
+        actor === 0 ? 'a' : 'b',
+        seq,
+        cpuDecide(GAME_DATA, state as GameState),
+      );
+      state = update.state;
+      seq = update.seq;
+    }
+    expect(state.phase.t).toBe('year_end');
+    const before = seq;
+    const deadline = harness.room.currentDeadline;
+    if (deadline === null) throw new Error('expected turn deadline');
+    // Jump past both the 6s ack and the old turn deadline in one tick.
+    harness.clock.advance(deadline - harness.clock.now());
+    const updates = harness.broadcasts.filter(
+      (msg): msg is Extract<ServerMsg, { t: 'update' }> => msg.t === 'update' && msg.seq > before,
+    );
+    expect(updates.length).toBe(1);
+    expect(updates[0].state.year).toBe(2);
+    expect(updates[0].state.phase.t).not.toBe('year_end');
+    const nextDeadline = harness.room.currentDeadline;
+    if (nextDeadline !== null) expect(nextDeadline).toBeGreaterThan(harness.clock.now());
+  });
+});
+
 describe('fxDuration', () => {
   it('uses the standard presentation times', () => {
     const dice: Fx = { t: 'dice', values: [1, 2] };

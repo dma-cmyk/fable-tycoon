@@ -67,6 +67,8 @@ export type P2PControl =
   | { k: 'presence'; peerId: string; seat: number | null; at: number }
   | { k: 'host_probe'; from: string; at: number }
   | { k: 'host_ack'; hostPeerId: string; gen: number; seat: number | null; at: number }
+  | { k: 'report_vote'; voteId: string; target: number; voter: string; gen: number; at: number }
+  | { k: 'report_vote_ack'; voteId: string; gen: number }
   | { k: 'probe'; at: number }
   | { k: 'probeAck'; at: number }
   | { k: 'resync' }
@@ -202,6 +204,7 @@ export class MqttTransport implements P2PTransport {
   private inbound: Promise<void> = Promise.resolve();
   private offlineQueue: { topic: string; chunks: WireEnvelope[] }[] = [];
   private closed = false;
+  private blockedPeers = new Set<string>();
 
   constructor(peerId: string, options: MqttTransportOptions) {
     this.peerId = peerId;
@@ -403,6 +406,11 @@ export class MqttTransport implements P2PTransport {
     }
   }
 
+  /** Test seam: drop inbound envelopes from selected peers (per-side partition). */
+  setBlockedPeersForTests(peerIds: readonly string[]): void {
+    this.blockedPeers = new Set(peerIds);
+  }
+
   /** Test seam: tear down the live MQTT client without touching DataChannels. */
   debugKillMqttForTests(): void {
     const client = this.client;
@@ -544,7 +552,7 @@ export class MqttTransport implements P2PTransport {
     } catch {
       return;
     }
-    if (envelope.f === this.peerId) return;
+    if (envelope.f === this.peerId || this.blockedPeers.has(envelope.f)) return;
     this.touch(envelope.f);
 
     if (typeof envelope.n === 'number' && envelope.n > 1) {

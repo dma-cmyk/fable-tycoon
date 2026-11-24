@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { airLaneControl, chooseRecommended, hopDistances, lanePointAt, routeModeOf, vehicleForStep } from './routes';
+import {
+  airLaneControl,
+  chooseRecommended,
+  hopDistances,
+  lanePointAt,
+  multiSourceHopDistances,
+  routeModeOf,
+  vehicleForStep,
+} from './routes';
 
 describe('routeModeOf', () => {
   it('keeps known modes and defaults to rail', () => {
@@ -115,5 +123,32 @@ describe('chooseRecommended', () => {
 
   it('returns null when nothing is reachable', () => {
     expect(chooseRecommended(candidates, new Map())).toBeNull();
+  });
+});
+
+describe('multiSourceHopDistances', () => {
+  const edges = [
+    { a: 'a', b: 'b' },
+    { a: 'b', b: 'c' },
+    { a: 'c', b: 'd' },
+    { a: 'x', b: 'x2' },
+  ];
+
+  it('measures to the nearest of several starts', () => {
+    const distances = multiSourceHopDistances(['a', 'd'], edges);
+    expect(distances.get('a')).toBe(0);
+    expect(distances.get('d')).toBe(0);
+    expect(distances.get('b')).toBe(1);
+    expect(distances.get('c')).toBe(1);
+    expect(distances.has('x')).toBe(false);
+  });
+
+  it('handles duplicate and empty start lists', () => {
+    expect(multiSourceHopDistances(['a', 'a'], edges).size).toBe(4);
+    expect(multiSourceHopDistances([], edges).size).toBe(0);
+  });
+
+  it('keeps hopDistances as the single-start case', () => {
+    expect([...hopDistances('c', edges).entries()]).toEqual([...multiSourceHopDistances(['c'], edges).entries()]);
   });
 });

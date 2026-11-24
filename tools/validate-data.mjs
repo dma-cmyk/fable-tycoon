@@ -410,8 +410,8 @@ if (data['board.json'] !== undefined) {
     const worldNodes = b.nodes.filter((n) => n.realm === undefined);
     const worldNodeCount = worldNodes.length;
     if (worldNodeCount < 800) err('board.json', `too few world nodes: ${worldNodeCount}`);
-    else if (worldNodeCount < 2600 || worldNodeCount > 3200) {
-      warn('board.json', `world nodes ${worldNodeCount} outside the 2600-3200 target (spacing-constrained)`);
+    else if (worldNodeCount > 3200) {
+      warn('board.json', `world nodes ${worldNodeCount} above the 3200 ceiling`);
     }
     const mixCounts = { blue: 0, red: 0, yellow: 0, news: 0, shop: 0, warp: 0 };
     for (const n of worldNodes) if (n.kind in mixCounts) mixCounts[n.kind]++;

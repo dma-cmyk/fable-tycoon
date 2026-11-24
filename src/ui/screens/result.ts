@@ -62,8 +62,18 @@ export class ResultScreen {
             h(
               'div',
               { class: 'result-row-name' },
+              index === 0 ? h('span', { class: 'result-crown', text: '👑', attrs: { 'aria-hidden': 'true' } }) : null,
               h('strong', { text: displayName }),
-              h('span', { class: 'muted', text: player.isCpu ? `CPU ・ ${character?.originRegion ?? ''}` : character?.nameJa ?? '' }),
+              h('span', {
+                class: 'muted',
+                text: player.isCpu
+                  ? `CPU ・ ${character?.originRegion ?? ''}`
+                  : character
+                    ? character.nameJa === character.origin
+                      ? character.originRegion
+                      : character.nameJa
+                    : '',
+              }),
             ),
             h(
               'div',
@@ -74,7 +84,6 @@ export class ResultScreen {
               h('strong', { text: formatOku(income) }),
             ),
           ),
-          index === 0 ? h('span', { class: 'result-crown', text: '👑', attrs: { 'aria-hidden': 'true' } }) : null,
         ),
       );
     });
@@ -132,7 +141,7 @@ export class ResultScreen {
               { class: 'result-winner-text' },
               h('span', { class: 'result-crown-big', text: '👑', attrs: { 'aria-hidden': 'true' } }),
               h('h2', { class: 'result-winner-name', text: winnerDisplayName }),
-              h('p', { class: 'result-winner-char', text: winnerCharacter ? (winner?.isCpu ? `CPU ・ ${winnerCharacter.originRegion}` : `${winnerCharacter.nameJa}（${winnerCharacter.origin}）`) : '' }),
+              h('p', { class: 'result-winner-char', text: winnerCharacter ? (winner?.isCpu ? `CPU ・ ${winnerCharacter.originRegion}` : (winnerCharacter.nameJa === winnerCharacter.origin ? winnerCharacter.originRegion : `${winnerCharacter.nameJa}（${winnerCharacter.origin}）`)) : '' }),
               h('p', { class: 'result-winner-net', text: `総資産 ${formatOku(winnerNet)}` }),
             ),
           ),

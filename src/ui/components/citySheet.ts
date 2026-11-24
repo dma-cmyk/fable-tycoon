@@ -2,7 +2,7 @@ import type { PublicState } from '../../core/engine';
 import { purchasePrice } from '../../core/economy';
 import type {Property} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
-import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
+import { avatar, h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
 import { rubyName } from '../ruby';
 import { LANDMARK_FILES } from '../assetManifest';
 import {
@@ -151,7 +151,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
             class: 'city-hero-landmark',
             attrs: { src: landmarkAsset, alt: '', loading: 'lazy', draggable: 'false' },
           })
-        : h('span', { class: 'city-hero-emoji', text: '🏙️', attrs: { 'aria-hidden': 'true' } }),
+        : h('span', { class: 'city-hero-emoji' }, uiIcon('property', '🏙️', 'city-hero-emoji-mark')),
       h(
         'div',
         { class: 'city-hero-text' },
@@ -274,7 +274,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         h(
           'span',
           { class: 'property-industry-chip', attrs: { 'aria-hidden': 'true' } },
-          h('span', { text: INDUSTRY_ICON[property.industry] }),
+          h('span', { class: 'property-industry-emoji', text: INDUSTRY_ICON[property.industry], attrs: { 'aria-hidden': 'true' } }),
           h('span', { class: 'property-industry-chip-label', text: INDUSTRY_JA[property.industry] }),
         ),
         h(
@@ -325,8 +325,8 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
         if (canAct) {
           if (plan.items.length > 1 && options.onBuyAll) {
             const buyAll = h('button', {
-              class: 'btn btn-red city-buy-all',
-              text: `🛒 まとめて買う（${plan.items.length}件・${formatOku(plan.total)}）`,
+              class: 'btn btn-gold city-buy-all',
+              text: `まとめて買う（${plan.items.length}件・${formatOku(plan.total)}）`,
               attrs: { type: 'button' },
               on: {
                 click: (event) => {
@@ -339,8 +339,8 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
           }
           footer.append(
             h('button', {
-              class: 'btn btn-gold city-end-buy',
-              text: '✔ 購入を終える',
+              class: 'btn btn-ghost city-end-buy',
+              text: '購入を終える',
               attrs: { type: 'button' },
               on: {
                 click: (event) => {

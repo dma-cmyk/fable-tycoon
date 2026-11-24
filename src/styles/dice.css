@@ -9,7 +9,7 @@
   place-items: center;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity var(--dice-fade, 150ms) ease;
 }
 
 .dice-overlay.is-visible {
@@ -22,7 +22,8 @@
   align-items: center;
   gap: 10px;
   max-width: calc(100vw - 16px);
-  padding: 26px 34px 20px;
+  /* 転がるサイコロの跳ね（--die-size の 34%）が枠を突き抜けない上部余白。 */
+  padding: clamp(52px, 17vh, 82px) 44px 20px;
   border-radius: 26px;
   border: 3px solid rgba(255, 255, 255, 0.9);
   background: rgba(5, 14, 32, 0.55);
@@ -187,11 +188,11 @@
 
 /* 着地のつぶれ。キューブの回転は JS が持つので、外側の .die-hop だけを動かす。 */
 .dice-overlay.is-settled .die-hop {
-  animation: die-land 0.3s cubic-bezier(0.2, 1.5, 0.35, 1);
+  animation: die-land var(--dice-land, 0.3s) cubic-bezier(0.2, 1.5, 0.35, 1);
 }
 
 .dice-overlay.is-settled .die-shadow {
-  animation: die-shadow-land 0.3s ease-out;
+  animation: die-shadow-land var(--dice-land, 0.3s) ease-out;
 }
 
 @keyframes die-land {
@@ -265,12 +266,12 @@ body.reduced-motion .dice-overlay .dice-total {
 @media (max-width: 700px) {
   .dice-host {
     --die-size: 96px;
-    gap: 14px;
+    gap: 10px;
   }
 
   .dice-overlay-inner {
     gap: 8px;
-    padding: 16px 18px 12px;
+    padding: 72px 36px 16px;
     border-radius: 20px;
   }
 
@@ -290,7 +291,7 @@ body.reduced-motion .dice-overlay .dice-total {
   .dice-overlay-inner {
     flex-direction: row;
     gap: 16px;
-    padding: 12px 20px;
+    padding: 62px 24px 16px;
     border-radius: 18px;
   }
 

@@ -49,9 +49,13 @@ export function openYearEndDialog(options: YearEndOptions): YearEndHandle {
       raceHost.append(
         h(
           'div',
-          { class: `yearend-bar-row ${index === 0 ? 'is-top' : ''}`.trim() },
-          h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), character?.color ?? playerColor(player), 32)),
-          h('span', { class: 'yearend-bar-name', text: index === 0 ? `👑 ${displayPlayerName(player)}` : displayPlayerName(player) }),
+          {
+            class: `yearend-bar-row ${index === 0 ? 'is-top' : ''}`.trim(),
+            attrs: { style: `--bar-color:${playerColor(player)}` },
+          },
+          h('span', { class: 'yearend-bar-rank', text: String(index + 1), attrs: { 'aria-label': `${index + 1}位` } }),
+          h('span', { class: 'yearend-bar-avatar' }, avatar(characterSprite(character), character?.color ?? playerColor(player), 30)),
+          h('span', { class: 'yearend-bar-name', text: displayPlayerName(player) }),
           h('span', { class: 'yearend-bar-track' }, fill),
           h(
             'span',
