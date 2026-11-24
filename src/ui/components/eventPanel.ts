@@ -2,6 +2,7 @@ import type { PublicState } from '../../core/engine';
 import type { EventChoice, GameEventDef } from '../../core/types';
 import { h } from '../dom';
 import { describeEffect } from '../eventEffects';
+import { eventFootnoteText } from '../eventPanelNote';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
 import {
   assetUrl,
@@ -31,6 +32,8 @@ export class EventPanel {
   private readonly choicesNote: HTMLElement;
   private readonly metaBody: HTMLElement;
   private readonly effectSummary: HTMLElement;
+  private readonly footnote: HTMLElement;
+  private readonly choiceArea: HTMLElement;
   private readonly metaToggle: HTMLButtonElement;
   private readonly seasonBadge: HTMLElement;
   private event: GameEventDef | null = null;
@@ -69,6 +72,8 @@ export class EventPanel {
     this.choicesNote = h('p', { class: 'event-choices-note' });
     this.metaBody = h('div', { class: 'event-meta-body', attrs: { hidden: 'hidden' } });
     this.effectSummary = h('section', { class: 'event-effect-summary', attrs: { hidden: 'hidden' } });
+    this.footnote = h('p', { class: 'event-footnote' });
+    this.choiceArea = h('div', { class: 'event-choice-area' }, this.choicesHost, this.choicesNote);
     this.metaToggle = h('button', {
       class: 'event-meta-toggle',
       text: '📚 元ネタ',
@@ -113,12 +118,9 @@ export class EventPanel {
         ),
         h('div', { class: 'event-meta' }, this.metaToggle, this.metaBody),
         this.effectSummary,
-        h('div', { class: 'event-choice-area' }, this.choicesHost, this.choicesNote),
+        this.choiceArea,
       ),
-      h('p', {
-        class: 'event-footnote',
-        text: '1〜3 キーまたはボタンで選択 ・ 画面の空きをタップで演出スキップ',
-      }),
+      this.footnote,
     );
   }
 
@@ -149,6 +151,7 @@ export class EventPanel {
     this.renderImage(event);
     this.renderMeta(event);
     this.renderEffectSummary(event);
+    this.renderFootnote(event);
     this.setSpeaker('narrator', '……世界のどこかで、ニュースが動き出す。');
     this.setState(state, false);
   }
@@ -197,9 +200,13 @@ export class EventPanel {
     const choices = event.choices ?? [];
     this.choicesHost.replaceChildren();
     if (choices.length === 0) {
-      this.choicesNote.textContent = 'このニュースに選択肢はありません。効果が自動で適用されます。';
+      // The effect summary card + footnote already explain auto-application; a third
+      // line here only padded the panel.
+      this.choicesNote.hidden = true;
+      this.choicesNote.textContent = '';
       return;
     }
+    this.choicesNote.hidden = false;
     const phaseActive = state.phase.t === 'event';
     const enabled = phaseActive && this.canAct && !this.chosen;
     const actor = state.players[state.current];
@@ -262,11 +269,22 @@ export class EventPanel {
     this.kindBadge.dataset.kind = event.kind;
   }
 
+  /**
+   * Choice events advertise the 1–3 keys; auto-applied events only advance when the player
+   * taps to skip, so the selection hint must not appear there.
+   */
+  private renderFootnote(event: GameEventDef): void {
+    this.footnote.textContent = eventFootnoteText(event);
+  }
+
   /** Effect summary card for auto-applied (choice-less) events. */
   private renderEffectSummary(event: GameEventDef): void {
     const hasChoices = (event.choices?.length ?? 0) > 0;
     const effects = event.effects ?? [];
     this.el.classList.toggle('is-compact', !hasChoices);
+    // An empty choice strip (border + padding, no buttons) read as a dead band at the
+    // bottom of auto-applied events.
+    this.choiceArea.hidden = !hasChoices;
     if (hasChoices || effects.length === 0) {
       this.effectSummary.hidden = true;
       this.effectSummary.replaceChildren();

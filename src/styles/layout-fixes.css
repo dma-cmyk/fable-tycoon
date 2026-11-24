@@ -3144,10 +3144,11 @@
   flex: 0 1 auto;
 }
 
+/* Auto-applied events stay content-height on phones too (no empty navy panel). */
 @media (max-width: 899px) and (min-height: 521px) {
   .event-panel.is-compact {
-    bottom: 0;
-    max-height: none;
+    bottom: auto;
+    max-height: calc(100% - 130px);
   }
 }
 
@@ -3272,4 +3273,17 @@
 
 .result-stat-pair {
   white-space: nowrap;
+}
+
+/* Auto-applied events: keep the small "tap to next" hint at every size, and never leave
+   an empty choice strip behind. */
+.event-panel.is-compact .event-choice-area[hidden] {
+  display: none !important;
+}
+
+.event-panel.is-compact .event-footnote {
+  display: block;
+  padding: 4px 10px calc(5px + var(--safe-bottom));
+  color: rgba(255, 255, 255, 0.62);
+  text-align: center;
 }

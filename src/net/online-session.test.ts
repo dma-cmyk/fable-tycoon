@@ -15,6 +15,7 @@ import type { Session } from './session-types';
 import {
   appendReportEvidence,
   authorityInfoForTests,
+  bumpGenerationForTests,
   onlineSaveIssue,
   resumeOnline,
   verifiedSuccessorForRoom,
@@ -1164,6 +1165,81 @@ async function createSplitRoom(
       await new Promise<void>((resolve) => second.close(() => resolve()));
     }
   }, 30_000);
+
+  it('keeps a human turn playable when only the generation changes', async () => {
+    const hostSession = await createOnlineRoom('gen-host');
+    const host = new Peer(hostSession, 'gen-host', false);
+    const guest = new Peer(joinOnlineRoom(hostSession.roomId, 'gen-guest'), 'gen-guest', false);
+    active.push(host, guest);
+    try {
+      await guest.waitFor((msg) => msg.t === 'welcome');
+      const hostWelcome = host.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 0);
+      hostSession.send({ t: 'take_seat', index: 0 });
+      await hostWelcome;
+      hostSession.send({ t: 'pick_character', characterId: 'momotaro' });
+      const guestWelcome = guest.waitForNew((msg) => msg.t === 'welcome' && msg.seat === 1);
+      guest.session.send({ t: 'take_seat', index: 1 });
+      await guestWelcome;
+      guest.session.send({ t: 'pick_character', characterId: 'alice' });
+      // No turn limit: nothing else will ever move the board after a generation-only bump.
+      hostSession.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
+      const started = [host, guest].map((peer) =>
+        peer.waitFor((msg) => msg.t === 'snapshot' || msg.t === 'update', 20_000, 'gen start'),
+      );
+      hostSession.send({ t: 'start' });
+      await Promise.all(started);
+      await host.waitFor((msg) => msg.t === 'update', 20_000, 'host sees the opening update');
+
+      const seqBefore = host.seq;
+      const genBefore = host.gen;
+      expect(bumpGenerationForTests(guest.session)).toBe(true);
+
+      // Both sides must receive an fx-less snapshot of the SAME (gen, seq) with the new gen.
+      const hostSnap = host.waitForNew(
+        (msg) => msg.t === 'snapshot' && (msg.gen ?? 0) > genBefore,
+        20_000,
+        'host re-broadcasts the board for the new generation',
+      );
+      const guestSnap = guest.waitForNew(
+        (msg) => msg.t === 'snapshot' && (msg.gen ?? 0) > genBefore,
+        20_000,
+        'guest receives the board for the new generation',
+      );
+      const [hostBoard, guestBoard] = await Promise.all([hostSnap, guestSnap]);
+      if (hostBoard.t !== 'snapshot' || guestBoard.t !== 'snapshot') throw new Error('not a snapshot');
+      expect(hostBoard.seq).toBe(seqBefore);
+      expect(hostBoard.gen).toBe(guestBoard.gen);
+      expect(host.session.appliedOrder?.()?.gen).toBe(hostBoard.gen);
+      expect(guest.session.appliedOrder?.()?.gen).toBe(guestBoard.gen);
+      expect(hostBoard.resync).toBe(true);
+      expect(guestBoard.resync).toBe(true);
+      // Same seq, new generation: both clients must adopt it (not be filtered as stale).
+      expect(hostBoard.gen).toBeGreaterThan(genBefore);
+      expect(guest.seq).toBe(seqBefore);
+
+      // The acting human can play immediately against the new generation - on both clients.
+      const actorPeer = host.state && actorOf(host.state) === 0 ? host : guest;
+      const before = actorPeer.seq;
+      // Register the wait BEFORE sending: a local host applies its own action synchronously, so
+      // the update can be delivered before a later waitForNew would be installed.
+      const advanced = waitForMsgWithPump(
+        host,
+        (msg) => msg.t === 'update' && msg.seq > before,
+        [host, guest],
+        15_000,
+        'the human turn advances after the generation-only bump',
+      );
+      actorPeer.session.send({
+        t: 'action',
+        seq: before,
+        action: cpuDecide(GAME_DATA, actorPeer.state as GameState),
+      });
+      await advanced;
+    } finally {
+      host.stop();
+      guest.stop();
+    }
+  }, 60_000);
 
   it('rejects an online host save from a different board version', () => {
     const data = new Map<string, string>();

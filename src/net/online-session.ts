@@ -665,6 +665,19 @@ export class OnlineSession implements Session {
     return session;
   }
 
+  requestGenerationBumpForTests(): boolean {
+    const transport = this.transport;
+    if (this.role !== 'guest' || !this.hostPeerId || !transport) return false;
+    void transport.send(this.hostPeerId, {
+      k: 'gen_bump',
+      hostPeerId: this.hostPeerId,
+      from: this.clientId,
+      gen: Math.max(this.generation, this.highestGenerationSeen) + 1,
+      at: Date.now(),
+    });
+    return true;
+  }
+
   resyncPeerForTests(connId: string): void {
     this.controller?.resync(connId);
   }
@@ -1384,6 +1397,7 @@ export class OnlineSession implements Session {
         this.persistHostNow();
         this.announceHost();
         this.sendHeartbeat();
+        this.broadcastGenerationSnapshot();
         this.log(`generation bumped to ${this.generation} by request`);
         return;
       }
@@ -1556,6 +1570,7 @@ export class OnlineSession implements Session {
     this.controller?.setFrozen(false);
     this.log(`host authority confirmed (${this.ackKeys.size}/${this.requiredAcks} acks)`);
     this.sendHeartbeat();
+    this.broadcastGenerationSnapshot();
     this.flushDeferredAction();
   }
 
@@ -1652,6 +1667,7 @@ export class OnlineSession implements Session {
       this.persistHostNow();
       this.announceHost();
       this.sendHeartbeat();
+      this.broadcastGenerationSnapshot();
       this.log(`kept authority over ${control.hostPeerId} with generation ${this.generation}`);
     }
   }
@@ -1807,7 +1823,7 @@ export class OnlineSession implements Session {
       this.maybeResync(control.hostPeerId, control.seq + 1);
       return;
     }
-    this.maybeResync(control.hostPeerId, control.seq);
+    this.maybeResync(control.hostPeerId, control.seq, control.gen);
   }
 
   private switchHost(control: Extract<P2PControl, { k: 'host' }>, fingerprint: string): void {
@@ -1951,6 +1967,32 @@ export class OnlineSession implements Session {
     }
   }
 
+  /**
+   * A generation-only change (promotion, gen_bump, authority confirmation) must re-deliver the
+   * board. Actions carry the generation of the state the UI actually APPLIED; after a bump nobody
+   * has applied anything at the new generation, and no other message would ever carry it — a human
+   * turn with no time limit would stall forever. The snapshot is fx-less (state adopt, no replay).
+   */
+  private broadcastGenerationSnapshot(): void {
+    if (this.role !== 'host' || !this.controller) return;
+    const snapshot = this.controller.publicSnapshot();
+    if (!snapshot.state) return;
+    if (snapshot.lobby.status !== 'playing' && snapshot.lobby.status !== 'finished') return;
+    const message: ServerMsg = {
+      t: 'snapshot',
+      seq: snapshot.seq,
+      state: snapshot.state,
+      deadline: snapshot.deadline,
+      lobby: snapshot.lobby,
+      gen: this.generation,
+      resync: true,
+      boardVersion: BOARD_VERSION,
+    };
+    // Own UI first: it is the one that has to re-arm its action buttons for the new generation.
+    this.onServerMsg(message);
+    void this.transport?.broadcast(message);
+  }
+
   private stampHostMessage(message: ServerMsg): ServerMsg {
     if (
       message.t === 'welcome' ||
@@ -1966,10 +2008,13 @@ export class OnlineSession implements Session {
     return message;
   }
 
-  private maybeResync(hostPeerId: string, hostSeq: number): void {
+  private maybeResync(hostPeerId: string, hostSeq: number, hostGen?: number): void {
     if (this.role !== 'guest' || !this.transport) return;
+    // Resync is decided by the (gen, seq) PAIR: the same seq under a new generation is a different
+    // board state (actions are bound to their generation) and must be re-fetched.
+    const genAhead = hostGen !== undefined && hostGen > this.shadowGeneration;
     const playing = this.shadow.lobby?.status === 'playing' || this.shadow.lobby?.status === 'finished';
-    if (hostSeq <= this.shadow.seq && !(playing && !this.shadow.state)) return;
+    if (!genAhead && hostSeq <= this.shadow.seq && !(playing && !this.shadow.state)) return;
     const now = Date.now();
     if (now - this.lastResyncAt < 1_000) return;
     this.lastResyncAt = now;
@@ -2431,6 +2476,7 @@ export class OnlineSession implements Session {
       this.setState('open');
       this.announceHost();
       this.sendHeartbeat();
+      this.broadcastGenerationSnapshot();
       this.persistHostNow();
       // Old guests re-hello; also actively ping everyone we know about.
       for (const peerId of this.peerSeen.keys()) {
@@ -2764,6 +2810,11 @@ export function resumeHostForTests(checkpoint: HostCheckpoint): Session {
 }
 
 /** Test hook: partition a peer's inbound traffic while leaving its outbound traffic intact. */
+/** Test hook: ask the host to raise its generation without changing the board. */
+export function bumpGenerationForTests(session: Session): boolean {
+  return session instanceof OnlineSession ? session.requestGenerationBumpForTests() : false;
+}
+
 /** Test hook: make the host resend welcome + snapshot to a guest connection id. */
 export function resyncPeerForTests(session: Session, connId: string): void {
   if (session instanceof OnlineSession) session.resyncPeerForTests(connId);
