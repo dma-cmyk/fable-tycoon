@@ -1,0 +1,2378 @@
+[
+  {
+    "id": "tokyo",
+    "nameJa": "東京",
+    "motif": "東京タワーと桜並木",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "yokohama",
+    "nameJa": "横浜",
+    "motif": "赤レンガ倉庫と大観覧車",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "osaka",
+    "nameJa": "大阪",
+    "motif": "大阪城とたこ焼きの屋台",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "kyoto",
+    "nameJa": "京都",
+    "motif": "竹林の小径と石畳",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "nagoya",
+    "nameJa": "名古屋",
+    "motif": "金のしゃちほこが乗る城",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "fukuoka",
+    "nameJa": "福岡",
+    "motif": "屋台のラーメンと明太子",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "sapporo",
+    "nameJa": "札幌",
+    "motif": "雪の時計台と雪だるま",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "sendai",
+    "nameJa": "仙台",
+    "motif": "笹飾りと牛タンの皿",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "hiroshima",
+    "nameJa": "広島",
+    "motif": "牡蠣の養殖筏と瀬戸内の島",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "naha",
+    "nameJa": "那覇",
+    "motif": "シーサーとハイビスカス",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "kanazawa",
+    "nameJa": "金沢",
+    "motif": "兼六園の雪吊りと金箔",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "kobe",
+    "nameJa": "神戸",
+    "motif": "港のクレーンと洋菓子",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "beijing",
+    "nameJa": "北京",
+    "motif": "四合院と北京ダック",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "shanghai",
+    "nameJa": "上海",
+    "motif": "球体の塔と外灘の夜景",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "guangzhou",
+    "nameJa": "広州",
+    "motif": "細いテレビ塔と点心の蒸籠",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "shenzhen",
+    "nameJa": "深圳",
+    "motif": "近未来の高層ビルとドローン",
+    "sheet": "city_icons_01"
+  },
+  {
+    "id": "chengdu",
+    "nameJa": "成都",
+    "motif": "パンダと竹の笹",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "chongqing",
+    "nameJa": "重慶",
+    "motif": "山城の夜景と火鍋",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "xian",
+    "nameJa": "西安",
+    "motif": "方形の城壁とラクダ",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "seoul",
+    "nameJa": "ソウル",
+    "motif": "景福宮の瓦屋根と門",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "busan",
+    "nameJa": "釜山",
+    "motif": "海雲台のビーチと魚市場",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "jeju",
+    "nameJa": "済州",
+    "motif": "石像とみかんの木",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "taipei",
+    "nameJa": "台北",
+    "motif": "円柱の塔と小籠包",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "hong-kong",
+    "nameJa": "香港",
+    "motif": "ビクトリア港の夜景とトラム",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "ulaanbaatar",
+    "nameJa": "ウランバートル",
+    "motif": "ゲルと草原の馬",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "shizuoka",
+    "nameJa": "静岡",
+    "motif": "富士山と茶畑",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "nara",
+    "nameJa": "奈良",
+    "motif": "鹿と鹿せんべい",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "kumamoto",
+    "nameJa": "熊本",
+    "motif": "熊本城とスイカ",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "matsuyama",
+    "nameJa": "松山",
+    "motif": "道後温泉の湯けむりと坊っちゃん列車",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "niigata",
+    "nameJa": "新潟",
+    "motif": "米俵と日本海の夕日",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "toyama",
+    "nameJa": "富山",
+    "motif": "立山連峰とチューリップ",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "takamatsu",
+    "nameJa": "高松",
+    "motif": "うどんの丼と瀬戸大橋",
+    "sheet": "city_icons_02"
+  },
+  {
+    "id": "nagasaki",
+    "nameJa": "長崎",
+    "motif": "ちゃんぽんと港のクレーン",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "kagoshima",
+    "nameJa": "鹿児島",
+    "motif": "桜島と黒豚",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "okayama",
+    "nameJa": "岡山",
+    "motif": "桃と後楽園の松",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "akita",
+    "nameJa": "秋田",
+    "motif": "秋田犬と雪の田んぼ",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "aomori",
+    "nameJa": "青森",
+    "motif": "りんごと雪の岩木山",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "hakodate",
+    "nameJa": "函館",
+    "motif": "五稜郭と夜景の坂",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "ishigaki",
+    "nameJa": "石垣",
+    "motif": "マンタと白い浜",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "tianjin",
+    "nameJa": "天津",
+    "motif": "川沿いの観覧車と包子",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "wuhan",
+    "nameJa": "武漢",
+    "motif": "長江大橋と熱乾麺",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "nanjing",
+    "nameJa": "南京",
+    "motif": "明の城壁と桜",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "hangzhou",
+    "nameJa": "杭州",
+    "motif": "西湖の橋と龍井茶",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "suzhou",
+    "nameJa": "蘇州",
+    "motif": "庭園の池と太鼓橋",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "qingdao",
+    "nameJa": "青島",
+    "motif": "ビールジョッキと赤い屋根",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "dalian",
+    "nameJa": "大連",
+    "motif": "港の灯台と広場",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "xiamen",
+    "nameJa": "廈門",
+    "motif": "島の洋館と海",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "kunming",
+    "nameJa": "昆明",
+    "motif": "石林と花市場",
+    "sheet": "city_icons_03"
+  },
+  {
+    "id": "urumqi",
+    "nameJa": "ウルムチ",
+    "motif": "天山とぶどう棚",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "harbin",
+    "nameJa": "ハルビン",
+    "motif": "氷の城と雪像",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "changchun",
+    "nameJa": "長春",
+    "motif": "路面電車と自動車工場",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "shenyang",
+    "nameJa": "瀋陽",
+    "motif": "故宮の屋根と歯車",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "zhengzhou",
+    "nameJa": "鄭州",
+    "motif": "鉄道の分岐と小麦畑",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "changsha",
+    "nameJa": "長沙",
+    "motif": "辛い鍋とオレンジの洲",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "kaohsiung",
+    "nameJa": "高雄",
+    "motif": "港のコンテナと愛河の橋",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "singapore",
+    "nameJa": "シンガポール",
+    "motif": "マーライオンと超高層ビル",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "bangkok",
+    "nameJa": "バンコク",
+    "motif": "トゥクトゥクと屋台の鍋",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "jakarta",
+    "nameJa": "ジャカルタ",
+    "motif": "モナス塔とサテの屋台",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "manila",
+    "nameJa": "マニラ",
+    "motif": "ジプニーとマンゴー",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "hanoi",
+    "nameJa": "ハノイ",
+    "motif": "湖とバイクの波",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "ho-chi-minh",
+    "nameJa": "ホーチミン",
+    "motif": "中央郵便局とベトナムコーヒー",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "kuala-lumpur",
+    "nameJa": "クアラルンプール",
+    "motif": "双子の塔と熱帯雨林",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "denpasar",
+    "nameJa": "デンパサール",
+    "motif": "棚田とサーフボード",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "phnom-penh",
+    "nameJa": "プノンペン",
+    "motif": "王宮の塔と川の船",
+    "sheet": "city_icons_04"
+  },
+  {
+    "id": "siem-reap",
+    "nameJa": "シェムリアップ",
+    "motif": "アンコールワットの塔と象",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "yangon",
+    "nameJa": "ヤンゴン",
+    "motif": "市場の籠と古い循環列車",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "vientiane",
+    "nameJa": "ビエンチャン",
+    "motif": "凱旋門風の塔とメコン川",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "bandar-seri-begawan",
+    "nameJa": "バンダルスリブガワン",
+    "motif": "水上村の家とボート",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "cebu",
+    "nameJa": "セブ",
+    "motif": "ジンベイザメと白い浜",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "medan",
+    "nameJa": "メダン",
+    "motif": "火山湖とコーヒー豆",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "surabaya",
+    "nameJa": "スラバヤ",
+    "motif": "サメとワニの港の像",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "balikpapan",
+    "nameJa": "バリクパパン",
+    "motif": "油田のやぐらと入り江",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "phuket",
+    "nameJa": "プーケット",
+    "motif": "白い浜とロングテールボート",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "george-town",
+    "nameJa": "ジョージタウン",
+    "motif": "壁画と屋台の麺",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "da-nang",
+    "nameJa": "ダナン",
+    "motif": "竜の橋とビーチ",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "davao",
+    "nameJa": "ダバオ",
+    "motif": "ドリアンとワシ",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "delhi",
+    "nameJa": "デリー",
+    "motif": "赤い城とオートリキシャ",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "mumbai",
+    "nameJa": "ムンバイ",
+    "motif": "駅のドームとチャイの屋台",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "bengaluru",
+    "nameJa": "ベンガルール",
+    "motif": "ガラス張りのビルと庭園",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "chennai",
+    "nameJa": "チェンナイ",
+    "motif": "海辺の砂浜とフィルターコーヒー",
+    "sheet": "city_icons_05"
+  },
+  {
+    "id": "kolkata",
+    "nameJa": "コルカタ",
+    "motif": "路面電車と黄色いタクシー",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "hyderabad",
+    "nameJa": "ハイデラバード",
+    "motif": "四本塔の門とビリヤニ",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "karachi",
+    "nameJa": "カラチ",
+    "motif": "港のクレーンと香辛料の袋",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "dhaka",
+    "nameJa": "ダッカ",
+    "motif": "花飾りのリキシャと川船",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "colombo",
+    "nameJa": "コロンボ",
+    "motif": "港の灯台と紅茶の葉",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "kathmandu",
+    "nameJa": "カトマンズ",
+    "motif": "ヒマラヤの峰と屋根の町",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "ahmedabad",
+    "nameJa": "アーメダバード",
+    "motif": "織物の市場と川の石段",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "pune",
+    "nameJa": "プネー",
+    "motif": "丘の砦と学生のカフェ",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "jaipur",
+    "nameJa": "ジャイプール",
+    "motif": "風の宮殿とラクダ",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "lucknow",
+    "nameJa": "ラクナウ",
+    "motif": "宮殿のアーチとケバブ",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "varanasi",
+    "nameJa": "ヴァラナシ",
+    "motif": "川辺の石段とボート",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "kochi",
+    "nameJa": "コチ",
+    "motif": "中国式漁網と水路",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "lahore",
+    "nameJa": "ラホール",
+    "motif": "巨大な門と庭園",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "chittagong",
+    "nameJa": "チッタゴン",
+    "motif": "港のコンテナと茶園",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "pokhara",
+    "nameJa": "ポカラ",
+    "motif": "湖に映る山とパラグライダー",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "dubai",
+    "nameJa": "ドバイ",
+    "motif": "ブルジュ・ハリファと砂丘",
+    "sheet": "city_icons_06"
+  },
+  {
+    "id": "abu-dhabi",
+    "nameJa": "アブダビ",
+    "motif": "砂漠の超高層ビルとマングローブ",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "doha",
+    "nameJa": "ドーハ",
+    "motif": "真珠の舟と未来的なスカイライン",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "riyadh",
+    "nameJa": "リヤド",
+    "motif": "砂漠の高層ビルとヤシ",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "jeddah",
+    "nameJa": "ジッダ",
+    "motif": "港の灯台と珊瑚礁",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "tehran",
+    "nameJa": "テヘラン",
+    "motif": "雪の山とバザールの絨毯",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "istanbul",
+    "nameJa": "イスタンブール",
+    "motif": "ボスポラス大橋とフェリー",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "jerusalem",
+    "nameJa": "エルサレム",
+    "motif": "石の城壁と市場のスパイス",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "amman",
+    "nameJa": "アンマン",
+    "motif": "円形劇場と石造りの街",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "beirut",
+    "nameJa": "ベイルート",
+    "motif": "海辺の高層ビルと杉の木",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "muscat",
+    "nameJa": "マスカット",
+    "motif": "白い港の要塞と帆船",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "kayseri",
+    "nameJa": "カイセリ",
+    "motif": "雪の火山と絨毯",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "london",
+    "nameJa": "ロンドン",
+    "motif": "ビッグ・ベンと赤い二階バス",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "paris",
+    "nameJa": "パリ",
+    "motif": "エッフェル塔とクロワッサン",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "berlin",
+    "nameJa": "ベルリン",
+    "motif": "ブランデンブルク門とクマ",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "rome",
+    "nameJa": "ローマ",
+    "motif": "コロッセオとピザ",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "madrid",
+    "nameJa": "マドリード",
+    "motif": "王宮の塔とチュロス",
+    "sheet": "city_icons_07"
+  },
+  {
+    "id": "barcelona",
+    "nameJa": "バルセロナ",
+    "motif": "曲線の尖塔とトマト",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "amsterdam",
+    "nameJa": "アムステルダム",
+    "motif": "風車と運河の橋",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "brussels",
+    "nameJa": "ブリュッセル",
+    "motif": "小便小僧とワッフル",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "vienna",
+    "nameJa": "ウィーン",
+    "motif": "宮殿の門と馬車",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "prague",
+    "nameJa": "プラハ",
+    "motif": "丘の城とカレル橋",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "warsaw",
+    "nameJa": "ワルシャワ",
+    "motif": "赤い屋根の旧市街と人魚像",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "budapest",
+    "nameJa": "ブダペスト",
+    "motif": "議事堂と鎖橋",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "athens",
+    "nameJa": "アテネ",
+    "motif": "アクロポリスの柱とオリーブ",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "lisbon",
+    "nameJa": "リスボン",
+    "motif": "黄色いトラムとパステル",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "le-havre",
+    "nameJa": "ル・アーヴル",
+    "motif": "港のクレーンと白いビル",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "copenhagen",
+    "nameJa": "コペンハーゲン",
+    "motif": "人魚像と自転車",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "stockholm",
+    "nameJa": "ストックホルム",
+    "motif": "水路の旧市街と帆船",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "oslo",
+    "nameJa": "オスロ",
+    "motif": "フィヨルドとオペラハウスの屋根",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "helsinki",
+    "nameJa": "ヘルシンキ",
+    "motif": "港の市場と白い船",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "reykjavik",
+    "nameJa": "レイキャビク",
+    "motif": "オーロラと地熱の湯けむり",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "zurich",
+    "nameJa": "チューリッヒ",
+    "motif": "湖と金融街のビル",
+    "sheet": "city_icons_08"
+  },
+  {
+    "id": "milan",
+    "nameJa": "ミラノ",
+    "motif": "白い尖塔の聖堂と手袋",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "venice",
+    "nameJa": "ヴェネツィア",
+    "motif": "ゴンドラと運河の橋",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "munich",
+    "nameJa": "ミュンヘン",
+    "motif": "ビールジョッキと市庁舎の時計",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "frankfurt",
+    "nameJa": "フランクフルト",
+    "motif": "金融街のビルとプレッツェル",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "edinburgh",
+    "nameJa": "エディンバラ",
+    "motif": "丘の城とバグパイプ",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "kyiv",
+    "nameJa": "キーウ",
+    "motif": "ドニエプル川と栗並木",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "belgrade",
+    "nameJa": "ベオグラード",
+    "motif": "川の合流点と要塞",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "hamburg",
+    "nameJa": "ハンブルク",
+    "motif": "港のクレーンと倉庫街",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "cologne",
+    "nameJa": "ケルン",
+    "motif": "二本の尖塔とライン川の船",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "stuttgart",
+    "nameJa": "シュトゥットガルト",
+    "motif": "車の工場とぶどう畑",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "dresden",
+    "nameJa": "ドレスデン",
+    "motif": "バロックの宮殿とエルベ川",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "nice",
+    "nameJa": "ニース",
+    "motif": "紺碧の海とプロムナード",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "lyon",
+    "nameJa": "リヨン",
+    "motif": "坂の旧市街と料理の鍋",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "marseille",
+    "nameJa": "マルセイユ",
+    "motif": "港のヨットと魚スープ",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "bordeaux",
+    "nameJa": "ボルドー",
+    "motif": "ぶどう畑とワインの樽",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "glasgow",
+    "nameJa": "グラスゴー",
+    "motif": "造船所のクレーンとアーチ橋",
+    "sheet": "city_icons_09"
+  },
+  {
+    "id": "manchester",
+    "nameJa": "マンチェスター",
+    "motif": "赤レンガの工場とサッカーボール",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "liverpool",
+    "nameJa": "リバプール",
+    "motif": "港の帆船とギター",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "birmingham",
+    "nameJa": "バーミンガム",
+    "motif": "運河の橋と真鍮の歯車",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "dublin",
+    "nameJa": "ダブリン",
+    "motif": "パブの扉と黒ビール",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "cork",
+    "nameJa": "コーク",
+    "motif": "港の坂とバター",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "porto",
+    "nameJa": "ポルト",
+    "motif": "鉄の橋とポートワイン",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "seville",
+    "nameJa": "セビリア",
+    "motif": "オレンジの木とタイルの広場",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "valencia",
+    "nameJa": "バレンシア",
+    "motif": "未来的な科学館とオレンジ",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "bilbao",
+    "nameJa": "ビルバオ",
+    "motif": "曲線の美術館と橋",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "naples",
+    "nameJa": "ナポリ",
+    "motif": "ヴェスヴィオ山とピッツァ",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "turin",
+    "nameJa": "トリノ",
+    "motif": "アルプスとチョコレート",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "florence",
+    "nameJa": "フィレンツェ",
+    "motif": "赤いドームと革の工房",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "bologna",
+    "nameJa": "ボローニャ",
+    "motif": "斜めの塔とパスタ",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "geneva",
+    "nameJa": "ジュネーブ",
+    "motif": "大噴水とレマン湖の白鳥",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "basel",
+    "nameJa": "バーゼル",
+    "motif": "ライン川の橋とフラスコ",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "salzburg",
+    "nameJa": "ザルツブルク",
+    "motif": "丘の城とチョコレート",
+    "sheet": "city_icons_10"
+  },
+  {
+    "id": "bratislava",
+    "nameJa": "ブラチスラバ",
+    "motif": "丘の城とドナウ川",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "krakow",
+    "nameJa": "クラクフ",
+    "motif": "広場の塔と竜の像",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "gdansk",
+    "nameJa": "グダンスク",
+    "motif": "港のクレーンと琥珀",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "zagreb",
+    "nameJa": "ザグレブ",
+    "motif": "赤い屋根の市場と路面電車",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "split",
+    "nameJa": "スプリト",
+    "motif": "古代ローマの宮殿と港",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "sofia",
+    "nameJa": "ソフィア",
+    "motif": "ヴィトシャ山と石畳の街",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "bucharest",
+    "nameJa": "ブカレスト",
+    "motif": "巨大な議事堂と並木道",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "tallinn",
+    "nameJa": "タリン",
+    "motif": "中世の塔と港のフェリー",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "riga",
+    "nameJa": "リガ",
+    "motif": "黒猫の屋根と曲線の建物",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "vilnius",
+    "nameJa": "ヴィリニュス",
+    "motif": "赤い屋根の旧市街と気球",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "tromso",
+    "nameJa": "トロムソ",
+    "motif": "オーロラと港の帆船",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "bergen",
+    "nameJa": "ベルゲン",
+    "motif": "カラフルな桟橋とフィヨルド",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "rovaniemi",
+    "nameJa": "ロヴァニエミ",
+    "motif": "雪のサンタ村とトナカイ",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "kiruna",
+    "nameJa": "キルナ",
+    "motif": "鉄鉱山とアイスホテル",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "longyearbyen",
+    "nameJa": "ロングイェールビーン",
+    "motif": "流氷とホッキョクグマ",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "moscow",
+    "nameJa": "モスクワ",
+    "motif": "玉ねぎ屋根の塔と雪",
+    "sheet": "city_icons_11"
+  },
+  {
+    "id": "st-petersburg",
+    "nameJa": "サンクトペテルブルク",
+    "motif": "宮殿と白夜の運河",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "novosibirsk",
+    "nameJa": "ノヴォシビルスク",
+    "motif": "雪の大ドーム劇場と科学の街",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "vladivostok",
+    "nameJa": "ウラジオストク",
+    "motif": "港の灯台と金角湾の橋",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "almaty",
+    "nameJa": "アルマトイ",
+    "motif": "雪山と市場のりんご",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "astana",
+    "nameJa": "アスタナ",
+    "motif": "未来的な塔と草原",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "tashkent",
+    "nameJa": "タシケント",
+    "motif": "青いドームの市場と地下鉄",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "samarkand",
+    "nameJa": "サマルカンド",
+    "motif": "青いタイルの門と絨毯",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "baku",
+    "nameJa": "バクー",
+    "motif": "炎の塔とカスピ海",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "tbilisi",
+    "nameJa": "トビリシ",
+    "motif": "温泉の屋根と急斜面の家",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "yerevan",
+    "nameJa": "エレバン",
+    "motif": "ピンクの石の街とアララト山",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "bishkek",
+    "nameJa": "ビシュケク",
+    "motif": "山並みと羊毛のフェルト",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "dushanbe",
+    "nameJa": "ドゥシャンベ",
+    "motif": "山と綿花と噴水",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "yekaterinburg",
+    "nameJa": "エカテリンブルク",
+    "motif": "建設中の高層ビルと鉱石",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "kazan",
+    "nameJa": "カザン",
+    "motif": "白い塔とヴォルガ川の港",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "sochi",
+    "nameJa": "ソチ",
+    "motif": "黒海のビーチと山のスキー場",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "irkutsk",
+    "nameJa": "イルクーツク",
+    "motif": "バイカル湖の氷と木造の家",
+    "sheet": "city_icons_12"
+  },
+  {
+    "id": "murmansk",
+    "nameJa": "ムルマンスク",
+    "motif": "不凍港のクレーンとオーロラ",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "omsk",
+    "nameJa": "オムスク",
+    "motif": "雪の鉄道駅と平原",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "tyumen",
+    "nameJa": "チュメニ",
+    "motif": "油田のやぐらと温泉",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "perm",
+    "nameJa": "ペルミ",
+    "motif": "バレエの靴と白樺",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "samara",
+    "nameJa": "サマラ",
+    "motif": "宇宙ロケットの塔と川",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "volgograd",
+    "nameJa": "ヴォルゴグラード",
+    "motif": "川の堤防と麦畑",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "arkhangelsk",
+    "nameJa": "アルハンゲリスク",
+    "motif": "白夜の港と木材",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "norilsk",
+    "nameJa": "ノリリスク",
+    "motif": "ニッケル鉱山と極夜の街灯",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "tomsk",
+    "nameJa": "トムスク",
+    "motif": "木彫りの窓と雪",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "krasnoyarsk",
+    "nameJa": "クラスノヤルスク",
+    "motif": "川の橋と柱状の岩",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "chita",
+    "nameJa": "チタ",
+    "motif": "国境の駅と草原の馬",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "ulan-ude",
+    "nameJa": "ウランウデ",
+    "motif": "草原のゲルとバイカル湖",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "khabarovsk",
+    "nameJa": "ハバロフスク",
+    "motif": "アムール川の大橋とトラ",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "yakutsk",
+    "nameJa": "ヤクーツク",
+    "motif": "永久凍土の家とダイヤ",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "magadan",
+    "nameJa": "マガダン",
+    "motif": "オホーツク海の港とヒグマ",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "petropavlovsk-kamchatsky",
+    "nameJa": "ペトロパブロフスク・カムチャツキー",
+    "motif": "火山とヒグマ",
+    "sheet": "city_icons_13"
+  },
+  {
+    "id": "yuzhno-sakhalinsk",
+    "nameJa": "ユジノサハリンスク",
+    "motif": "流氷の港と漁船",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "anadyr",
+    "nameJa": "アナディリ",
+    "motif": "極東の港とトナカイ",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "vorkuta",
+    "nameJa": "ヴォルクタ",
+    "motif": "石炭のトロッコと雪原",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "chelyabinsk",
+    "nameJa": "チェリャビンスク",
+    "motif": "湖と工場の煙突",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "ufa",
+    "nameJa": "ウファ",
+    "motif": "丘の街と蜂蜜",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "nizhny-novgorod",
+    "nameJa": "ニジニ・ノヴゴロド",
+    "motif": "クレムリンの塔と川の合流",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "salekhard",
+    "nameJa": "サレハルド",
+    "motif": "北極圏の町とガスのやぐら",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "dudinka",
+    "nameJa": "ドゥディンカ",
+    "motif": "ニッケルの積出港と流氷",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "tiksi",
+    "nameJa": "ティクシ",
+    "motif": "北極海の観測塔と流氷",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "khatanga",
+    "nameJa": "ハタンガ",
+    "motif": "マンモスの牙と雪原",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "mirny",
+    "nameJa": "ミールヌイ",
+    "motif": "露天ダイヤ鉱山と凍土",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "pevek",
+    "nameJa": "ペヴェク",
+    "motif": "北極海航路の船と金鉱",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "verkhoyansk",
+    "nameJa": "ベルホヤンスク",
+    "motif": "氷点下の温度計と毛皮",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "okhotsk",
+    "nameJa": "オホーツク",
+    "motif": "漁船とオホーツクの海",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "bratsk",
+    "nameJa": "ブラーツク",
+    "motif": "巨大ダムとタイガ",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "nadym",
+    "nameJa": "ナディム",
+    "motif": "ガスのパイプラインと白夜",
+    "sheet": "city_icons_14"
+  },
+  {
+    "id": "pechora",
+    "nameJa": "ペチョラ",
+    "motif": "炭鉱のトロッコと白樺",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "syktyvkar",
+    "nameJa": "シクティフカル",
+    "motif": "製紙工場のロールと森",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "cairo",
+    "nameJa": "カイロ",
+    "motif": "ピラミッドとスフィンクス",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "casablanca",
+    "nameJa": "カサブランカ",
+    "motif": "港の灯台と白い街",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "marrakech",
+    "nameJa": "マラケシュ",
+    "motif": "市場のスパイスとヤシ",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "dakar",
+    "nameJa": "ダカール",
+    "motif": "港の灯台とサンゴ礁の島",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "accra",
+    "nameJa": "アクラ",
+    "motif": "海岸のカラフルな漁船",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "lagos",
+    "nameJa": "ラゴス",
+    "motif": "にぎやかな市場とバス",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "nairobi",
+    "nameJa": "ナイロビ",
+    "motif": "サバンナのキリンと高層ビル",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "addis-ababa",
+    "nameJa": "アディスアベバ",
+    "motif": "コーヒーの儀式と高原",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "cape-town",
+    "nameJa": "ケープタウン",
+    "motif": "テーブルマウンテンとペンギン",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "johannesburg",
+    "nameJa": "ヨハネスブルグ",
+    "motif": "金鉱山のトロッコと高層ビル",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "durban",
+    "nameJa": "ダーバン",
+    "motif": "ビーチとサーフボード",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "windhoek",
+    "nameJa": "ウィントフック",
+    "motif": "砂漠の街とオリックス",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "harare",
+    "nameJa": "ハラレ",
+    "motif": "紫の花の並木と市場",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "dar-es-salaam",
+    "nameJa": "ダルエスサラーム",
+    "motif": "港の帆船とココナッツ",
+    "sheet": "city_icons_15"
+  },
+  {
+    "id": "kinshasa",
+    "nameJa": "キンシャサ",
+    "motif": "コンゴ川の船と太鼓",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "tunis",
+    "nameJa": "チュニス",
+    "motif": "青い扉の白い街と港",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "alexandria",
+    "nameJa": "アレクサンドリア",
+    "motif": "古代図書館風の建物と海",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "luxor",
+    "nameJa": "ルクソール",
+    "motif": "オベリスクとナイル川の帆船",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "rabat",
+    "nameJa": "ラバト",
+    "motif": "川沿いの塔と白い城壁",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "tangier",
+    "nameJa": "タンジェ",
+    "motif": "海峡を見下ろす灯台と船",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "abidjan",
+    "nameJa": "アビジャン",
+    "motif": "潟湖の高層ビルと橋",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "kumasi",
+    "nameJa": "クマシ",
+    "motif": "カラフルな布市場と木彫り",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "abuja",
+    "nameJa": "アブジャ",
+    "motif": "岩山と新首都のビル",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "kano",
+    "nameJa": "カノ",
+    "motif": "日干しレンガの城壁とラクダ",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "mombasa",
+    "nameJa": "モンバサ",
+    "motif": "港の帆船と珊瑚の城",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "kampala",
+    "nameJa": "カンパラ",
+    "motif": "丘の街とバナナの市場",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "kigali",
+    "nameJa": "キガリ",
+    "motif": "丘の街とコーヒー豆",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "lusaka",
+    "nameJa": "ルサカ",
+    "motif": "サファリの象と市場",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "luanda",
+    "nameJa": "ルアンダ",
+    "motif": "港のクレーンとアカシア",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "maputo",
+    "nameJa": "マプト",
+    "motif": "港の橋と魚市場",
+    "sheet": "city_icons_16"
+  },
+  {
+    "id": "antananarivo",
+    "nameJa": "アンタナナリボ",
+    "motif": "段々の家とバオバブ",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "livingstone",
+    "nameJa": "リビングストーン",
+    "motif": "大瀑布の橋と虹",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "toamasina",
+    "nameJa": "トアマシナ",
+    "motif": "港の帆船とバニラ",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "new-york",
+    "nameJa": "ニューヨーク",
+    "motif": "自由の女神とタクシー",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "los-angeles",
+    "nameJa": "ロサンゼルス",
+    "motif": "ヤシの木と映画のスポットライト",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "san-francisco",
+    "nameJa": "サンフランシスコ",
+    "motif": "ゴールデンゲート橋とケーブルカー",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "seattle",
+    "nameJa": "シアトル",
+    "motif": "スペースニードルと魚市場",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "chicago",
+    "nameJa": "シカゴ",
+    "motif": "高層ビルとピザ",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "miami",
+    "nameJa": "マイアミ",
+    "motif": "ヤシとパステル色のホテル",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "boston",
+    "nameJa": "ボストン",
+    "motif": "港の帆船と赤レンガ",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "washington",
+    "nameJa": "ワシントン",
+    "motif": "ドームの議事堂と桜",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "houston",
+    "nameJa": "ヒューストン",
+    "motif": "油田のやぐらと宇宙センター",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "las-vegas",
+    "nameJa": "ラスベガス",
+    "motif": "ネオンのカジノとさぼてん",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "toronto",
+    "nameJa": "トロント",
+    "motif": "細長い塔と湖の帆船",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "vancouver",
+    "nameJa": "バンクーバー",
+    "motif": "山と港のクルーズ船",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "montreal",
+    "nameJa": "モントリオール",
+    "motif": "丘の公園とベーグル",
+    "sheet": "city_icons_17"
+  },
+  {
+    "id": "philadelphia",
+    "nameJa": "フィラデルフィア",
+    "motif": "自由の鐘と赤レンガの広場",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "atlanta",
+    "nameJa": "アトランタ",
+    "motif": "桃とニュースのビル",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "dallas",
+    "nameJa": "ダラス",
+    "motif": "カウボーイハットと石油のやぐら",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "denver",
+    "nameJa": "デンバー",
+    "motif": "ロッキー山脈とスキー板",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "phoenix",
+    "nameJa": "フェニックス",
+    "motif": "サボテンと砂漠の夕日",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "san-diego",
+    "nameJa": "サンディエゴ",
+    "motif": "港のヨットとアザラシ",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "portland",
+    "nameJa": "ポートランド",
+    "motif": "針葉樹とコーヒーカップ",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "minneapolis",
+    "nameJa": "ミネアポリス",
+    "motif": "湖と橋",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "detroit",
+    "nameJa": "デトロイト",
+    "motif": "車の工場とモーター",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "new-orleans",
+    "nameJa": "ニューオーリンズ",
+    "motif": "サックスとガス灯",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "nashville",
+    "nameJa": "ナッシュビル",
+    "motif": "ギターと音楽の街角",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "salt-lake-city",
+    "nameJa": "ソルトレイクシティ",
+    "motif": "雪山と塩湖",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "anchorage",
+    "nameJa": "アンカレッジ",
+    "motif": "氷河とヘラジカ",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "honolulu",
+    "nameJa": "ホノルル",
+    "motif": "ヤシとサーフボード",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "st-louis",
+    "nameJa": "セントルイス",
+    "motif": "大きなアーチと川",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "niagara-falls",
+    "nameJa": "ナイアガラフォールズ",
+    "motif": "大瀑布と観光船",
+    "sheet": "city_icons_18"
+  },
+  {
+    "id": "quebec-city",
+    "nameJa": "ケベックシティ",
+    "motif": "城壁と青い屋根",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "calgary",
+    "nameJa": "カルガリー",
+    "motif": "ロデオの帽子と山並み",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "edmonton",
+    "nameJa": "エドモントン",
+    "motif": "大きなショッピングモールと雪",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "winnipeg",
+    "nameJa": "ウィニペグ",
+    "motif": "雪の平原とバイソン",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "halifax",
+    "nameJa": "ハリファックス",
+    "motif": "港の灯台と帆船",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "victoria",
+    "nameJa": "ビクトリア",
+    "motif": "港の花時計とクジラ",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "orlando",
+    "nameJa": "オーランド",
+    "motif": "観覧車と魔法の城",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "austin",
+    "nameJa": "オースティン",
+    "motif": "フードトラックと音楽ステージ",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "whitehorse",
+    "nameJa": "ホワイトホース",
+    "motif": "オーロラと金鉱の町",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "yellowknife",
+    "nameJa": "イエローナイフ",
+    "motif": "ダイヤの原石とオーロラ",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "saskatoon",
+    "nameJa": "サスカトゥーン",
+    "motif": "小麦畑と川の橋",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "regina",
+    "nameJa": "レジャイナ",
+    "motif": "麦畑と州議事堂のドーム",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "thunder-bay",
+    "nameJa": "サンダーベイ",
+    "motif": "湖と貨物船",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "sudbury",
+    "nameJa": "サドバリー",
+    "motif": "大きな煙突と鉱山のトロッコ",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "ottawa",
+    "nameJa": "オタワ",
+    "motif": "議事堂の塔と運河",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "st-johns",
+    "nameJa": "セントジョンズ",
+    "motif": "カラフルな港の家と灯台",
+    "sheet": "city_icons_19"
+  },
+  {
+    "id": "churchill",
+    "nameJa": "チャーチル",
+    "motif": "ホッキョクグマと流氷",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "iqaluit",
+    "nameJa": "イカルイト",
+    "motif": "イグルーと白い氷山",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "prince-rupert",
+    "nameJa": "プリンスルパート",
+    "motif": "漁港とシャチ",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "fairbanks",
+    "nameJa": "フェアバンクス",
+    "motif": "オーロラと犬ぞり",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "nome",
+    "nameJa": "ノーム",
+    "motif": "金鉱のトロッコと流氷",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "juneau",
+    "nameJa": "ジュノー",
+    "motif": "氷河とシャチ",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "nuuk",
+    "nameJa": "ヌーク",
+    "motif": "カラフルな家と氷山",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "inuvik",
+    "nameJa": "イヌヴィック",
+    "motif": "イグルー型の建物とオーロラ",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "cambridge-bay",
+    "nameJa": "ケンブリッジベイ",
+    "motif": "カリブーと北極海の氷",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "rankin-inlet",
+    "nameJa": "ランキンインレット",
+    "motif": "イヌイットの陶芸とニッケル鉱山",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "resolute",
+    "nameJa": "レゾリュート",
+    "motif": "北極観測基地と流氷",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "pond-inlet",
+    "nameJa": "ポンドインレット",
+    "motif": "氷山クルーズとアザラシ",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "baker-lake",
+    "nameJa": "ベイカーレイク",
+    "motif": "金鉱山とカリブー",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "dawson-city",
+    "nameJa": "ドーソンシティ",
+    "motif": "金鉱の町並みと蒸留所",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "fort-mcmurray",
+    "nameJa": "フォートマクマリー",
+    "motif": "オイルサンドのクレーンと森",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "thompson",
+    "nameJa": "トンプソン",
+    "motif": "ニッケル鉱山と雪の道",
+    "sheet": "city_icons_20"
+  },
+  {
+    "id": "happy-valley-goose-bay",
+    "nameJa": "ハッピーバレー・グースベイ",
+    "motif": "水上飛行機とサーモン",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "kuujjuaq",
+    "nameJa": "クージュアク",
+    "motif": "毛皮の工芸とフェリー",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "fort-smith",
+    "nameJa": "フォートスミス",
+    "motif": "ウラン鉱山の跡とオーロラ",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "ilulissat",
+    "nameJa": "イルリサット",
+    "motif": "氷峡湾とオヒョウ",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "sisimiut",
+    "nameJa": "シシミウト",
+    "motif": "犬ぞりとエビ加工",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "kangerlussuaq",
+    "nameJa": "カンゲルルススアーク",
+    "motif": "氷床と北極の滑走路",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "tasiilaq",
+    "nameJa": "タシーラク",
+    "motif": "カヤックと氷山",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "qaanaaq",
+    "nameJa": "カーナーク",
+    "motif": "極北の狩猟小屋と隕石",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "narsarsuaq",
+    "nameJa": "ナルサルスアーク",
+    "motif": "緑の谷とフィヨルド",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "ittoqqortoormiit",
+    "nameJa": "イットコルトーミット",
+    "motif": "ホッキョクグマと氷海",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "mexico-city",
+    "nameJa": "メキシコシティ",
+    "motif": "古代ピラミッドとタコスの屋台",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "cancun",
+    "nameJa": "カンクン",
+    "motif": "白い浜とピラミッド",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "havana",
+    "nameJa": "ハバナ",
+    "motif": "クラシックカーと葉巻",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "panama-city",
+    "nameJa": "パナマシティ",
+    "motif": "運河の閘門と高層ビル",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "puerto-limon",
+    "nameJa": "プエルトリモン",
+    "motif": "熱帯の港とカメ",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "guatemala-city",
+    "nameJa": "グアテマラシティ",
+    "motif": "火山とカラフルな織物",
+    "sheet": "city_icons_21"
+  },
+  {
+    "id": "guadalajara",
+    "nameJa": "グアダラハラ",
+    "motif": "マリアッチのギターと市場",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "monterrey",
+    "nameJa": "モンテレイ",
+    "motif": "山の工場とビール",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "tijuana",
+    "nameJa": "ティフアナ",
+    "motif": "国境の門とブリトー",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "san-juan",
+    "nameJa": "サンファン",
+    "motif": "カラフルな旧市街と要塞",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "kingston",
+    "nameJa": "キングストン",
+    "motif": "レゲエのドラムとビーチ",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "santo-domingo",
+    "nameJa": "サントドミンゴ",
+    "motif": "コロニアルの広場と帆船",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "belize-city",
+    "nameJa": "ベリーズシティ",
+    "motif": "珊瑚礁とカリブの漁船",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "rio-de-janeiro",
+    "nameJa": "リオデジャネイロ",
+    "motif": "シュガーローフ山とビーチ",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "sao-paulo",
+    "nameJa": "サンパウロ",
+    "motif": "高層ビルとコーヒー",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "buenos-aires",
+    "nameJa": "ブエノスアイレス",
+    "motif": "タンゴの靴とオベリスク",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "santiago",
+    "nameJa": "サンティアゴ",
+    "motif": "雪のアンデスと高層ビル",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "lima",
+    "nameJa": "リマ",
+    "motif": "海辺の崖とセビーチェ",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "bogota",
+    "nameJa": "ボゴタ",
+    "motif": "山の街とコーヒー",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "quito",
+    "nameJa": "キト",
+    "motif": "火山とコロニアルの街",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "caracas",
+    "nameJa": "カラカス",
+    "motif": "山と高層ビル",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "montevideo",
+    "nameJa": "モンテビデオ",
+    "motif": "港の灯台とマテ茶",
+    "sheet": "city_icons_22"
+  },
+  {
+    "id": "la-paz",
+    "nameJa": "ラパス",
+    "motif": "急斜面の街とロープウェイ",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "cusco",
+    "nameJa": "クスコ",
+    "motif": "石積みの街とリャマ",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "medellin",
+    "nameJa": "メデジン",
+    "motif": "花の市場とロープウェイ",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "cartagena",
+    "nameJa": "カルタヘナ",
+    "motif": "城壁の港とカラフルな家",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "salvador",
+    "nameJa": "サルバドール",
+    "motif": "カラフルな旧市街と太鼓",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "recife",
+    "nameJa": "レシフェ",
+    "motif": "運河の橋とマンゴー",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "brasilia",
+    "nameJa": "ブラジリア",
+    "motif": "未来的な曲線の議事堂",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "manaus",
+    "nameJa": "マナウス",
+    "motif": "アマゾン川と劇場",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "cordoba",
+    "nameJa": "コルドバ",
+    "motif": "山とアルゼンチンのギター",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "foz-do-iguacu",
+    "nameJa": "フォス・ド・イグアス",
+    "motif": "大瀑布の遊歩道と虹",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "sydney",
+    "nameJa": "シドニー",
+    "motif": "オペラハウスとハーバーブリッジ",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "melbourne",
+    "nameJa": "メルボルン",
+    "motif": "路面電車とスタジアム",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "brisbane",
+    "nameJa": "ブリスベン",
+    "motif": "川の橋とコアラ",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "perth",
+    "nameJa": "パース",
+    "motif": "白い浜とカンガルー",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "auckland",
+    "nameJa": "オークランド",
+    "motif": "帆船と火山の丘",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "suva",
+    "nameJa": "スバ",
+    "motif": "ヤシとカラフルな市場",
+    "sheet": "city_icons_23"
+  },
+  {
+    "id": "adelaide",
+    "nameJa": "アデレード",
+    "motif": "ぶどう畑と公園",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "darwin",
+    "nameJa": "ダーウィン",
+    "motif": "クロコダイルと夕日の海",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hobart",
+    "nameJa": "ホバート",
+    "motif": "港の帆船と山",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "wellington",
+    "nameJa": "ウェリントン",
+    "motif": "風の丘とケーブルカー",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-gate",
+    "nameJa": "天国の門",
+    "motif": "雲上の白い門と光の階段",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-cloud-mansion",
+    "nameJa": "雲上豪邸",
+    "motif": "雲に浮かぶ白亜の豪邸",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-angel-fund",
+    "nameJa": "エンジェル投資ファンド",
+    "motif": "天使の羽と金貨の山",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-halo-bank",
+    "nameJa": "天使の輪銀行",
+    "motif": "光る天使の輪の銀行",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-pearl-hotel",
+    "nameJa": "真珠の門ホテル",
+    "motif": "真珠の門と雲のホテル",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-golden-gate",
+    "nameJa": "黄金の門",
+    "motif": "黄金に輝くアーチ門",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-rainbow-bridge",
+    "nameJa": "虹の橋",
+    "motif": "虹色の橋と綿菓子の雲",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "heaven-fountain-plaza",
+    "nameJa": "泉の広場",
+    "motif": "雲の広場と光る泉",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hell-gate",
+    "nameJa": "地獄の門",
+    "motif": "炎の門と赤い煙",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hell-cauldron-onsen",
+    "nameJa": "釜ゆで温泉リゾート",
+    "motif": "煮えたぎる釜と湯けむり",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hell-needle-ski",
+    "nameJa": "針の山スキー場",
+    "motif": "針の山を滑るスキーヤー",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hell-enma-tax-office",
+    "nameJa": "閻魔税務署",
+    "motif": "炎の庁舎と帳簿の山",
+    "sheet": "city_icons_24"
+  },
+  {
+    "id": "hell-spider-thread",
+    "nameJa": "蜘蛛の糸",
+    "motif": "天へ伸びる銀の蜘蛛の糸",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "hell-lava-bridge",
+    "nameJa": "溶岩橋",
+    "motif": "溶岩の川に架かる橋",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "hell-needle-peak",
+    "nameJa": "針の山頂上",
+    "motif": "針の峰と赤い空",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "hell-cauldron-station",
+    "nameJa": "釜ゆで駅",
+    "motif": "釜の上の駅舎と湯けむり",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-gate",
+    "nameJa": "宇宙港",
+    "motif": "銀河へ伸びる発着ゲート",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-moon-hotel",
+    "nameJa": "月面ホテル",
+    "motif": "クレーターの上のドームホテル",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-mars-lots",
+    "nameJa": "火星の分譲地",
+    "motif": "赤い砂の区画とドーム",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-asteroid-mine",
+    "nameJa": "小惑星レアメタル採掘",
+    "motif": "小惑星に刺さる採掘ドリル",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-orbit-data",
+    "nameJa": "軌道データセンター",
+    "motif": "宇宙に浮かぶサーバーの塔",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-moon-base",
+    "nameJa": "月面基地",
+    "motif": "月のドーム基地とローバー",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-asteroid-belt",
+    "nameJa": "小惑星ベルト",
+    "motif": "小惑星の帯と探査機",
+    "sheet": "city_icons_25"
+  },
+  {
+    "id": "space-launch-pad",
+    "nameJa": "発射台",
+    "motif": "白いロケットと発射台",
+    "sheet": "city_icons_25"
+  }
+]
