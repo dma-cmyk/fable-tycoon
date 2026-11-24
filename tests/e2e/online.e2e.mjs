@@ -330,6 +330,12 @@ function attachErrorCollectors(client) {
       client.commWaitSignals = (client.commWaitSignals || 0) + 1;
       report.commWaitSignals = (report.commWaitSignals || 0) + 1;
     }
+    if (/\[fx\].*skipping/i.test(message.text())) {
+      client.fxSkipWarnings = (client.fxSkipWarnings || 0) + 1;
+      report.fxSkipWarnings = (report.fxSkipWarnings || 0) + 1;
+      client.fxSkipLog = client.fxSkipLog || [];
+      if (client.fxSkipLog.length < 40) client.fxSkipLog.push({ atMs: nowMs(), text: message.text().slice(0, 200) });
+    }
     if (message.type() === 'error') {
       const entry = {
         client: client.id,
@@ -347,7 +353,26 @@ function attachErrorCollectors(client) {
       return;
     }
     if (message.type() === 'warning') {
-      client.warnings.push({ text: message.text().slice(0, 300), atMs: nowMs() });
+      const text = message.text().slice(0, 300);
+      // Broker/transport lines are needed for the report, but a chatty WebRTC
+      // failure loop can fill the ring buffer and evict them. Keep those in
+      // their own unbounded-ish lists and count the noisy kind separately.
+      if (/connected to |broker failed|host welcome on this broker|re-authenticating/i.test(text)) {
+        client.transportLog = client.transportLog || [];
+        if (client.transportLog.length < 400) {
+          client.transportLog.push({ text, atMs: nowMs() });
+        }
+      }
+      if (/webrtc signaling failed|setRemoteDescription|ICE failed/i.test(text)) {
+        client.webrtcFailures = (client.webrtcFailures || 0) + 1;
+        report.webrtcFailures = (report.webrtcFailures || 0) + 1;
+        if ((client.webrtcFailureLog || []).length < 20) {
+          client.webrtcFailureLog = client.webrtcFailureLog || [];
+          client.webrtcFailureLog.push({ text, atMs: nowMs() });
+        }
+        return;
+      }
+      client.warnings.push({ text, atMs: nowMs() });
       if (client.warnings.length > 120) client.warnings.shift();
     }
   });
@@ -2050,7 +2075,9 @@ try {
     ),
   };
   for (const client of clients) {
-    const text = (client.warnings || []).map((warning) => warning.text).join('\n');
+    const text = [...(client.transportLog || []), ...(client.warnings || [])]
+      .map((entry) => entry.text)
+      .join('\n');
     client.brokersConnected = [...text.matchAll(/connected to (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
     client.brokersFailed = [...text.matchAll(/broker failed: (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
     client.brokerUnique = [...new Set(client.brokersConnected)];
@@ -2080,6 +2107,9 @@ try {
     brokersConnected: client.brokersConnected || [],
     brokersFailed: client.brokersFailed || [],
     brokerUnique: client.brokerUnique || [],
+    fxSkipWarnings: client.fxSkipWarnings || 0,
+    fxSkipLog: client.fxSkipLog || [],
+    webrtcFailures: client.webrtcFailures || 0,
   }));
   report.brokers = Object.fromEntries(
     report.clients.map((client) => [
