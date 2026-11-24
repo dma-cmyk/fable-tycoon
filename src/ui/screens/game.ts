@@ -3040,7 +3040,6 @@ export class GameScreen implements ScreenHandle {
           color: '#ff8a8a',
           speed: control.speed,
         }).then(() => { this.transientMsgPending = false; });
-        if (fx.holder !== null) this.map?.bubble(fx.holder, fx.message, 4200);
         this.addLog(`🎺 ${fx.message}`);
         await control.wait(FX_MS.piper);
         return;
@@ -3118,9 +3117,6 @@ export class GameScreen implements ScreenHandle {
     if (this.transientMsgPending) {
       this.transientMsgPending = false;
       this.msgWindow.skipLine();
-    }
-    if (speakerSeat !== null && speaker !== 'narrator') {
-      this.map?.bubble(speakerSeat, fx.text, 4200);
     }
     const where = character ? `（${character.nameJa}）` : '';
     this.portraitMotion('talk');
