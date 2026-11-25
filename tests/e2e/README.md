@@ -47,7 +47,13 @@ Everything is written under `.tmp/e2e/`:
   during play), `canvasLimitWarnings` (browser `Canvas area exceeds` messages),
   `mobileDpr`, `events.byClient`/`events.unique` (event ids seen), and
   `fxObserved` (counts of `piper_roulette` / `piper_disaster` / `skill` /
-  `buyout` / `final_year`).
+  `buyout` / `final_year`). With `E2E_DEBUG_NET=1` it also records
+  `netTimelines` (per-client `__fableNetDebug` samples: role/generation/
+  applied seq/frozen/tasks/deadline plus the HUD primary label),
+  `authorityLogs` (quorum/promotion/authority warnings) and `stallEvidence`
+  (DOM + net snapshot + screenshot when a skippable cutscene exceeds 45 s).
+  Full `[debug:net]` console streams and bot action logs are written per client
+  to `<label>-net-<client>.json`; they are not embedded in `report.json`.
 
 ## Environment
 
@@ -75,7 +81,11 @@ Everything is written under `.tmp/e2e/`:
 - `E2E_SKIP_BUILD=1` reuses the existing `dist/`.
 - `E2E_PORT` (default `5195`), `E2E_SPEED` (default `4` headful / `8`
   headless), `E2E_SLOWMO` (default `150` headful / `0` headless),
-  `E2E_RESULT_TIMEOUT_MS`, `E2E_MIGRATION_TIMEOUT_MS`.
+  `E2E_RESULT_TIMEOUT_MS` (default 720000), `E2E_MIGRATION_TIMEOUT_MS`.
+  The 1-year game with the fun-overhaul content (48 skills, piper events,
+  buyouts, final-year rules) needs ~900 s of wall time at 8x; the 720 s default
+  expires during the final month. Use `E2E_RESULT_TIMEOUT_MS=1200000` for
+  full-length runs.
 - `?speed=N` only accelerates client-side fx playback. Online turn deadlines,
   CPU pacing, and host migration timers stay host-driven.
 - `live-<client>.png` is overwritten every 30 seconds during the run so the

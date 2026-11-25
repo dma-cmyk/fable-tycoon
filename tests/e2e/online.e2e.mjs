@@ -324,6 +324,13 @@ function attachErrorCollectors(client) {
     report.errors.pageErrors.push(entry);
   });
   page.on('console', (message) => {
+    const consoleText = message.text();
+    if (DEBUG_NET && consoleText.includes('[debug:net')) {
+      client.netDebugLog = client.netDebugLog || [];
+      if (client.netDebugLog.length < 5000) {
+        client.netDebugLog.push({ atMs: nowMs(), text: consoleText.slice(0, 700) });
+      }
+    }
     if (/Canvas area exceeds/i.test(message.text())) {
       client.canvasLimitWarnings = (client.canvasLimitWarnings || 0) + 1;
       report.errors.canvasLimitWarnings += 1;
@@ -374,8 +381,14 @@ function attachErrorCollectors(client) {
         }
         return;
       }
+      if (/quorum|authority|promoted|stall|frozen|yielding|competing|step.?down|host role|generation|re-arming/i.test(text)) {
+        client.authorityLog = client.authorityLog || [];
+        if (client.authorityLog.length < 800) {
+          client.authorityLog.push({ text, atMs: nowMs() });
+        }
+      }
       client.warnings.push({ text, atMs: nowMs() });
-      if (client.warnings.length > 120) client.warnings.shift();
+      if (client.warnings.length > 300) client.warnings.shift();
     }
   });
 }
@@ -775,6 +788,101 @@ async function netDebugSnapshot(client) {
     .catch(() => null);
 }
 
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+/**
+ * Periodic host/authority timeline. `?debug=net` exposes `__fableNetDebug` on
+ * window; sampling it every few seconds makes a silent post-migration stall
+ * (frozen controller, missing task, seq divergence) visible in the report.
+ */
+async function sampleNetDebug(client) {
+  const page = client.page;
+  if (!page || page.isClosed() || client.netProbeBlocked) return;
+  const wall = Date.now();
+  if (wall - (client.lastNetSampleAt || 0) < 3000) return;
+  client.lastNetSampleAt = wall;
+  const probe = await withTimeout(
+    page
+      .evaluate(() => {
+        const hook = window.__fableNetDebug;
+        const net = typeof hook === 'function' ? hook() : null;
+        const text = (selector) => {
+          const el = document.querySelector(selector);
+          if (!el || el.hidden) return null;
+          const style = getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return null;
+          return (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        };
+        const primary = document.querySelector('.dice-primary');
+        return {
+          net,
+          ui: {
+            year: text('.game-year-chip'),
+            status: text('.status-chip'),
+            primary: text('.dice-primary'),
+            primaryEnabled: primary ? !primary.disabled : null,
+            skippable: !!document.querySelector('.skip-hint:not([hidden])'),
+            result: !!document.querySelector('.result-screen'),
+          },
+        };
+      })
+      .catch(() => null),
+    4000,
+    'timeout',
+  );
+  if (probe === 'timeout') {
+    client.netProbeBlocked = true;
+    client.netTimeline = client.netTimeline || [];
+    client.netTimeline.push({ atMs: nowMs(), blocked: true });
+    return;
+  }
+  if (!probe) return;
+  const snapshot = probe.net;
+  const tasks = (snapshot?.controller?.tasks ?? []).map(
+    (task) => `${task.key}@${Math.round(task.inMs / 1000)}s`,
+  );
+  const entry = {
+    atMs: nowMs(),
+    role: snapshot?.role ?? null,
+    gen: snapshot?.generation ?? null,
+    highestGen: snapshot?.highestGenerationSeen ?? null,
+    connection: snapshot?.connection ?? null,
+    applied: snapshot?.applied ?? null,
+    pending: snapshot?.pendingAction?.actionType ?? null,
+    frozen: snapshot?.authority?.frozen ?? null,
+    ready: snapshot?.authority?.ready ?? null,
+    confirmed: snapshot?.authority?.promotionConfirmed ?? null,
+    quorum: snapshot?.authority?.quorumOk ?? null,
+    acks: snapshot?.authority ? `${snapshot.authority.acks}/${snapshot.authority.requiredAcks}` : null,
+    cSeq: snapshot?.controller?.seq ?? null,
+    cFrozen: snapshot?.controller?.frozen ?? null,
+    actor: snapshot?.controller?.actorSeat ?? null,
+    phase: snapshot?.controller?.phase ?? null,
+    deadlineInMs:
+      snapshot?.controller?.deadline != null ? snapshot.controller.deadline - Date.now() : null,
+    tasks,
+    broker: snapshot?.broker ?? null,
+    ...probe.ui,
+  };
+  client.netTimeline = client.netTimeline || [];
+  client.netTimeline.push(entry);
+  if (client.netTimeline.length > 1200) client.netTimeline.shift();
+}
+
+async function stallProbe(client, busyFor) {
+  if (client.stallEvidence) return;
+  const diagnostics = await withTimeout(pageDiagnostics(client), 5000, { error: 'probe timeout' });
+  const net = await withTimeout(netDebugSnapshot(client), 5000, null);
+  client.stallEvidence = { atMs: nowMs(), busyFor, diagnostics, net };
+  log(`${client.id}: cutscene stuck for ${Math.round(busyFor / 1000)}s — captured stall evidence`);
+  await withTimeout(screenshot(client, `stall-${client.id}`, { optional: true }), 8000, null);
+}
+
 async function pageDiagnostics(client) {
   const page = client.page;
   if (!page || page.isClosed()) return { closed: true };
@@ -805,6 +913,9 @@ async function pageDiagnostics(client) {
         banners: [...document.querySelectorAll('.game-banner,.conn-banner,.migrate-banner')]
           .filter((el) => !el.hidden && getComputedStyle(el).display !== 'none')
           .map((el) => ({ cls: el.className, text: (el.textContent || '').trim().slice(0, 200) })),
+        toasts: [...document.querySelectorAll('.toast')]
+          .filter((el) => !el.hidden && getComputedStyle(el).display !== 'none')
+          .map((el) => (el.textContent || '').trim().slice(0, 200)),
         resultVisible: !!document.querySelector('.result-screen'),
         rankRows: document.querySelectorAll('.rank-row').length,
         chatTail: [...document.querySelectorAll('.chat-text,.chat-system')]
@@ -1320,6 +1431,7 @@ async function actOnce(client) {
     }
     const busyFor = now - client.fxBusySince;
     if (busyFor > (client.fxBusyMaxSeen || 0)) client.fxBusyMaxSeen = busyFor;
+    if (busyFor > 45_000) await stallProbe(client, busyFor);
     if (SKIP_AFTER_MS > 0 && busyFor > SKIP_AFTER_MS) {
       const canvas = page.locator('.map-canvas').first();
       if (await isVisible(canvas)) {
@@ -1544,10 +1656,17 @@ async function playLoop(client) {
     let action = false;
     try {
       action = await actOnce(client);
+      if (action && action !== 'result') {
+        client.actionLog = client.actionLog || [];
+        if (client.actionLog.length < 500) {
+          client.actionLog.push({ atMs: nowMs(), action });
+        }
+      }
       if ((Date.now() - (client.lastModalSampleAt || 0)) > 1500) {
         client.lastModalSampleAt = Date.now();
         await sampleModalDepth(client);
       }
+      await sampleNetDebug(client);
     } catch (error) {
       if (!page.isClosed()) {
         client.actionError = error.message;
@@ -2348,6 +2467,38 @@ try {
       }
     }
     report.fxObserved = { totals, perClient, buyoutsConfirmed: Object.fromEntries(clients.map((c) => [c.id, c.buyoutDone || 0])) };
+  }
+  {
+    report.netTimelines = Object.fromEntries(
+      clients.map((client) => [client.id, (client.netTimeline || []).slice(-80)]),
+    );
+    report.authorityLogs = Object.fromEntries(
+      clients.map((client) => [client.id, client.authorityLog || []]),
+    );
+    report.stallEvidence = Object.fromEntries(
+      clients.filter((client) => client.stallEvidence).map((client) => [client.id, client.stallEvidence]),
+    );
+    report.netDebugLines = Object.fromEntries(
+      clients.map((client) => [client.id, (client.netDebugLog || []).length]),
+    );
+    // Full debug streams are large; keep them out of report.json.
+    for (const client of clients) {
+      const payload = {
+        id: client.id,
+        netDebugLog: client.netDebugLog || [],
+        authorityLog: client.authorityLog || [],
+        netTimeline: client.netTimeline || [],
+        actionLog: client.actionLog || [],
+        stallEvidence: client.stallEvidence ?? null,
+        actionError: client.actionError ?? null,
+      };
+      if (payload.netDebugLog.length || payload.netTimeline.length || payload.authorityLog.length) {
+        await writeFile(
+          path.join(OUT, `${RUN_LABEL}-net-${client.id}.json`),
+          JSON.stringify(payload, null, 1),
+        );
+      }
+    }
   }
   report.cutscene = {
     skipAfterMs: SKIP_AFTER_MS,
