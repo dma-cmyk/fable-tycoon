@@ -26,6 +26,8 @@ const HEADFUL = process.env.E2E_HEADFUL === '1';
 const SPEED = process.env.E2E_SPEED || (HEADFUL ? '4' : '8');
 const SLOWMO = Number(process.env.E2E_SLOWMO || (HEADFUL ? 150 : 0));
 const SKIP_BUILD = process.env.E2E_SKIP_BUILD === '1';
+/** `E2E_DEBUG_NET=1` adds `?debug=net` so the client emits [debug:net] console entries. */
+const DEBUG_NET = process.env.E2E_DEBUG_NET === '1';
 const RUN_LABEL = (process.env.E2E_RUN_LABEL || 'run').replace(/[^A-Za-z0-9_-]/g, '') || 'run';
 const SCENARIO = process.env.E2E_SCENARIO || (process.env.E2E_CLIENTS ? 'subset' : 'full');
 const CPU_GAP = process.env.E2E_CPU_GAP === '1';
@@ -680,6 +682,17 @@ async function sampleModalDepth(client) {
   }
 }
 
+async function netDebugSnapshot(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return null;
+  return page
+    .evaluate(() => {
+      const hook = window.__fableNetDebug;
+      return typeof hook === 'function' ? hook() : null;
+    })
+    .catch(() => null);
+}
+
 async function pageDiagnostics(client) {
   const page = client.page;
   if (!page || page.isClosed()) return { closed: true };
@@ -724,7 +737,10 @@ async function pageDiagnostics(client) {
 
 async function openOnlineEntry(client) {
   const page = client.page;
-  await page.goto(`${BASE}/?speed=${SPEED}`, { waitUntil: 'domcontentloaded' });
+  const home = new URL(BASE);
+  home.searchParams.set('speed', SPEED);
+  if (DEBUG_NET) home.searchParams.set('debug', 'net');
+  await page.goto(home.toString(), { waitUntil: 'domcontentloaded' });
   await waitFor(
     () => isVisible(page.locator('.title-screen, .title-menu-btn')),
     { timeout: 35_000, label: `${client.id} title screen` },
@@ -802,6 +818,7 @@ function withSpeed(url) {
   try {
     const parsed = new URL(url);
     parsed.searchParams.set('speed', SPEED);
+    if (DEBUG_NET) parsed.searchParams.set('debug', 'net');
     return parsed.toString();
   } catch {
     return `${url}${url.includes('?') ? '&' : '?'}speed=${SPEED}`;
@@ -2061,8 +2078,13 @@ async function dumpFailure(error) {
   for (const client of clients) {
     try {
       const diagnostics = await pageDiagnostics(client);
+      const netDebug = await netDebugSnapshot(client);
       report.failureDiagnostics = report.failureDiagnostics || {};
       report.failureDiagnostics[client.id] = diagnostics;
+      if (netDebug) {
+        report.failureNetDebug = report.failureNetDebug || {};
+        report.failureNetDebug[client.id] = netDebug;
+      }
       await screenshot(client, `failure-${client.id}`, { optional: true });
     } catch (screenshotError) {
       log(`could not capture failure state for ${client.id}: ${screenshotError.message}`);
