@@ -1048,10 +1048,11 @@ textarea.input {
   opacity: 0.85;
 }
 
-/* 幅の狭い場所ではふりがな込みで折り返させない。 */
+/* 幅の狭い場所ではふりがな込みで折り返させない。
+   ふりがなの無い名前（is-plain）は 2 行に折り返してよい。 */
 .city-hero-name .ruby-name,
-.dest-name .ruby-name,
-.roulette-name .ruby-name {
+.dest-name .ruby-name:not(.is-plain),
+.roulette-name .ruby-name:not(.is-plain) {
   white-space: nowrap;
 }
 

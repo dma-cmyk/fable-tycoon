@@ -365,6 +365,11 @@ interface DrawnLabel {
 }
 
 const SEAT_COLORS = ['#e63946', '#2089c8', '#e08a1e', '#7c5cff'];
+/** Stacked-token chip radius / horizontal pitch (px at DPR 1). */
+const BADGE_R = 11;
+const BADGE_PITCH = BADGE_R * 2 - 1;
+/** Half-width of the screen box a token plus its stacked chips occupies. */
+const TOKEN_BOX_HALF_W = 40;
 const TAU = Math.PI * 2;
 const LABEL_FONT = '"M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif';
 
@@ -2659,15 +2664,22 @@ export class MapView {
   }
 
   /** Screen boxes that may temporarily cover a label. They only fade it, never move it. */
+  /**
+   * Screen box of a token: the sprite plus the row of stacked-token chips above
+   * its head. Labels dodge this whole box so a chip never lands on a city name.
+   */
+  private tokenScreenBox(sx: number, sy: number, th = this.tokenHeight()): Rect {
+    const top = sy - th - BADGE_R * 2 - 6;
+    return { x: sx - TOKEN_BOX_HALF_W, y: top, w: TOKEN_BOX_HALF_W * 2, h: sy + 8 - top };
+  }
+
   /** True when a blocker rect is a token sprite box (as opposed to HUD chrome). */
   private isTokenBlocker(rect: Rect, now: number): boolean {
-    const th = this.tokenHeight();
     for (const token of this.tokens) {
       const world = this.tokenWorldPosition(token.playerId, now);
       if (!world) continue;
-      const x = this.camera.screenX(world.x) - 30;
-      const y = this.camera.screenY(world.y) - th - 16;
-      if (Math.abs(rect.x - x) < 0.5 && Math.abs(rect.y - y) < 0.5 && Math.abs(rect.h - (th + 24)) < 0.5) {
+      const box = this.tokenScreenBox(this.camera.screenX(world.x), this.camera.screenY(world.y));
+      if (Math.abs(rect.x - box.x) < 0.5 && Math.abs(rect.y - box.y) < 0.5 && Math.abs(rect.h - box.h) < 0.5) {
         return true;
       }
     }
@@ -2707,9 +2719,7 @@ export class MapView {
     for (const token of this.tokens) {
       const world = this.tokenWorldPosition(token.playerId, now);
       if (!world) continue;
-      const sx = cam.screenX(world.x);
-      const sy = cam.screenY(world.y);
-      out.push({ x: sx - 30, y: sy - th - 16, w: 60, h: th + 24 });
+      out.push(this.tokenScreenBox(cam.screenX(world.x), cam.screenY(world.y), th));
     }
     const r = this.tileRadius();
     for (const option of this.moveOptions ?? []) {
@@ -3842,12 +3852,7 @@ export class MapView {
       ? this.tokenWorldPosition(this.state.current, now)
       : null;
     const ownTokenBlocker: Rect | null = ownToken
-      ? {
-        x: this.camera.screenX(ownToken.x) - 30,
-        y: this.camera.screenY(ownToken.y) - this.tokenHeight() - 16,
-        w: 60,
-        h: this.tokenHeight() + 24,
-      }
+      ? this.tokenScreenBox(this.camera.screenX(ownToken.x), this.camera.screenY(ownToken.y))
       : null;
     const fixedBlockers = this.labelObstacles
       .concat(ownTokenBlocker ? [ownTokenBlocker] : [])
@@ -4879,21 +4884,20 @@ export class MapView {
         hidden = badgeIds.length - 3;
         badgeIds = badgeIds.slice(0, 3);
       }
-      const offsets: Array<[number, number]> = [
-        [-22, -20],
-        [22, -20],
-        [0, 22],
-      ];
+      // Stacked players sit in a single row over the current token's head, never
+      // under the pedestal: the city name bubble hangs below the square, so a
+      // chip at +y would cover it at every zoom level.
+      const rowY = baseY - h - BADGE_R - 4;
       badgeIds.forEach((playerId, index) => {
-        const [ox, oy] = offsets[index] ?? [0, 22];
+        const ox = (index - (badgeIds.length - 1) / 2) * BADGE_PITCH;
         entries.push({
           ...base(playerId),
           x: baseX + ox,
-          y: baseY + oy,
+          y: rowY,
           worldX: node.x,
           worldY: node.y,
           idle: true,
-          height: 26,
+          height: BADGE_R * 2,
           badge: true,
           badgeIndex: index,
           badgeCount: index === badgeIds.length - 1 ? hidden : 0,
@@ -5133,7 +5137,7 @@ export class MapView {
     char: Character | undefined,
     color: string,
   ): void {
-    const r = 12;
+    const r = layout.height / 2;
     let scale = 1;
     const bounce = this.arrivalBounces.get(layout.playerId);
     if (bounce !== undefined) {
@@ -5171,7 +5175,7 @@ export class MapView {
     ctx.scale(scale, scale);
     ctx.fillStyle = 'rgba(7, 30, 50, 0.2)';
     ctx.beginPath();
-    ctx.ellipse(0, 9, 10, 3, 0, 0, TAU);
+    ctx.ellipse(0, r * 0.75, r * 0.83, r * 0.25, 0, 0, TAU);
     ctx.fill();
     ctx.beginPath();
     ctx.arc(0, 0, r + 2, 0, TAU);

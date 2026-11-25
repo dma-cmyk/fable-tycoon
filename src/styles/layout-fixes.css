@@ -4432,7 +4432,7 @@
     font-size: 15px;
     font-weight: 900;
     color: #ffffff;
-    max-width: 118px;
+    max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -4600,6 +4600,10 @@
 
   /* 広いモニタ（1500px以上）では順位カードに名前も1行添える */
   @media (min-width: 1500px) {
+  .game-screen .player-plate-dest-name {
+    max-width: 190px;
+  }
+
     .game-screen .pc-topbar-ranking .rank-row {
       max-width: 205px;
       padding: 5px 12px 5px 8px !important;
@@ -4656,7 +4660,7 @@
 
     .game-screen .player-plate-dest-name {
       font-size: 14px;
-      max-width: 96px;
+      max-width: 132px;
     }
 
     .game-screen .player-plate-dest-steps {
@@ -5091,5 +5095,273 @@
   .game-screen .pc-comm-fab,
   .game-screen .pc-comm-drawer {
     zoom: 1.6;
+  }
+}
+
+/* ============================================================================
+   7. 長い駅名を省略しない（PC 上段の目的地 / 目的地チップ / 目的地ルーレット / 行き先候補）
+   最長は「ペトロパブロフスク・カムチャツキー」（17 文字）と、
+   異世界の「釜ゆで温泉リゾート」（漢字 10 文字＋ふりがな 12 文字）。
+   PC は 2 行折り返し、スマホはチップ・ルーレットとも 2 行まで許容し、
+   それでも入らないときだけ game.ts 側がフォントを縮める（最小 10px）。
+   ============================================================================ */
+
+/* (a) PC 上段の目的地: 2 行まで折り返す（高さは変えない） */
+@media (min-width: 900px) {
+  .game-screen .player-plate-dest-name {
+    white-space: normal;
+    line-height: 1.12;
+    max-height: 2.3em;
+    overflow: hidden;
+    text-overflow: clip;
+    word-break: normal;
+  }
+
+
+  .game-screen .player-plate-dest-name ruby {
+    ruby-position: over;
+  }
+
+  /* ふりがなは行内で割らない（割れると読みが崩れる） */
+  .game-screen .player-plate-dest-name .ruby-name:not(.is-plain),
+  .move-chip-name .ruby-name:not(.is-plain) {
+    white-space: nowrap;
+  }
+}
+
+/* (b) スマホの目的地チップ: 2 行まで折り返す（それ以上は縮小して収める） */
+.dest-name {
+  line-height: 1.14;
+  max-height: 2.35em;
+  word-break: normal;
+}
+
+.dest-name .ruby-name:not(.is-plain) {
+  white-space: nowrap;
+}
+
+/* (c) 目的地ルーレット: 2 行まで折り返す（パネルは中央寄せなので高さは自然に伸びる） */
+.roulette-name {
+  white-space: normal;
+  line-height: 1.08;
+  max-height: 2.2em;
+  overflow: hidden;
+  word-break: normal;
+}
+
+.roulette-name .ruby-name:not(.is-plain) {
+  white-space: nowrap;
+}
+
+/* (d) 行き先候補チップの駅名は 1 行 nowrap。収まらない分は game.ts が縮小し、
+   それでも入らない最長名（17 文字）だけ 2 行に折り返す（§8 のチップ全体レイアウトが前提）。 */
+
+/* 2 行になったチップの高さぶん、トレイが上へ伸びても盤面を潰さないよう行間を詰める */
+.move-chip-scroll.is-two-row {
+  row-gap: 5px;
+}
+
+.move-chip-main {
+  justify-content: center;
+}
+
+/* ふりがな付きの駅名は nowrap なので、2 行化の対象からはみ出さないよう行高だけ確保する */
+.move-chip-name ruby {
+  ruby-position: over;
+}
+
+/* 候補チップの「駅」バッジが 2 行目に押し出されないよう上寄せにする */
+.move-chip-name-row {
+  align-items: flex-start;
+}
+
+/* ============================================================================
+   8. 行き先候補チップの 2 段レイアウト（スマホ全体・PC の多候補モード）
+   駅名が番号／タイル／おすすめ／あとNマスに押されて 2〜3 文字ずつ折れるのを直す。
+   1 行目: 駅名（＋「駅」バッジ）がチップ幅いっぱい
+   2 行目: 番号・タイル・おすすめ・あとNマス
+   ============================================================================ */
+
+.move-chip-scroll.is-two-row .move-chip,
+.game-screen .game-bottom-bar .move-chip-scroll.is-two-row .move-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 1px;
+  min-height: 0;
+  padding: 5px 9px 6px;
+}
+
+.move-chip-scroll.is-two-row .move-chip-main,
+.game-screen .game-bottom-bar .move-chip-scroll.is-two-row .move-chip-main {
+  flex: 1 1 100%;
+  order: -1;
+  min-width: 0;
+  width: 100%;
+}
+
+.move-chip-scroll.is-two-row .move-chip-name-row {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+}
+
+.move-chip-scroll.is-two-row .move-chip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.move-chip-scroll.is-two-row .move-chip-meta {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.move-chip-scroll.is-two-row .move-chip-dest {
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .move-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 1px;
+    min-height: 0;
+    padding: 5px 8px 6px;
+  }
+
+  .move-chip-main {
+    flex: 1 1 100%;
+    order: -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .move-chip-name-row {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .move-chip-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .move-chip-meta {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .move-chip-dest {
+    white-space: nowrap;
+  }
+
+  .move-chip-kind.is-tile {
+    width: 22px;
+    height: 22px;
+  }
+
+  .move-chip-num {
+    width: 21px;
+    height: 21px;
+    font-size: 10.5px;
+  }
+}
+
+/* 折り返しは最後の手段。2 行までに抑えてチップの高さを固定する。 */
+.move-chip-name.is-long {
+  white-space: normal;
+  word-break: normal;
+  line-height: 1.2;
+  max-height: 2.4em;
+  overflow: hidden;
+}
+
+/* 候補が多いとき「目的地に近い順（23か所）」が「（23…」に切れていた。
+   入りきらないときだけ案内文を 1 行目いっぱいに広げ、操作ボタンを 2 行目へ送る。 */
+@media (max-width: 899px) {
+  .move-options-head {
+    flex-wrap: wrap;
+    row-gap: 3px;
+  }
+
+  .move-options-prompt {
+    flex: 1 1 7em;
+    min-width: 7em;
+  }
+}
+
+/* is-long は「2 段レイアウトの nowrap」より優先させる（特異度で負けると折り返さない）。 */
+.move-chip-scroll .move-chip-name.is-long,
+.game-screen .game-bottom-bar .move-chip-scroll .move-chip-name.is-long,
+.move-chip-scroll.is-two-row .move-chip-name.is-long {
+  white-space: normal;
+  word-break: normal;
+  line-height: 1.2;
+  max-height: 2.45em;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+/* 2 段チップは縦に詰める（2 段グリッドがパネル内に収まる高さを維持する）。 */
+@media (max-width: 899px) {
+  .move-chip {
+    padding: 3px 7px 4px;
+    row-gap: 0;
+  }
+
+  .move-chip-main {
+    gap: 0;
+  }
+
+  .move-chip-name {
+    line-height: 1.12;
+  }
+
+  .move-chip-scroll.is-two-row .move-chip {
+    padding: 3px 7px 4px;
+  }
+
+  .move-chip-num {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  .move-chip-kind.is-tile {
+    width: 20px;
+    height: 20px;
+  }
+
+  .move-chip-tag {
+    line-height: 12px;
+  }
+}
+
+/* 「目的地に近い順（25か所）」が「（25…」と切れる件:
+   スマホでは案内文を 2 行まで折り返して全文を見せる（高さの増分は約 12px）。 */
+@media (max-width: 899px) {
+  .move-options-prompt {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.15;
+    font-size: 9.5px;
   }
 }

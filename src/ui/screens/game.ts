@@ -37,6 +37,7 @@ import {
 } from '../format';
 import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
 import { rubyName } from '../ruby';
+import { fitTextOneLine } from '../fitText';
 import { placeDestinationArrow } from '../destArrow';
 import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
 import { isIdenticalResync, type ResyncWatermark } from '../resync';
@@ -1252,6 +1253,7 @@ export class GameScreen implements ScreenHandle {
     this.destText.replaceChildren(
       inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
     );
+    fitTextOneLine(this.destText, { minPx: 10 });
     this.destChip.classList.toggle('is-realm', inRealm);
     const distanceSeat = actor ?? displaySeat ?? 0;
     const destPlayer = state.players[distanceSeat];
@@ -1265,6 +1267,7 @@ export class GameScreen implements ScreenHandle {
     this.playerPlateDestName.replaceChildren(
       inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
     );
+    fitTextOneLine(this.playerPlateDestName, { minPx: 11 });
     this.playerPlateDestSteps.textContent = stepsLabel;
     this.playerPlateDest.classList.toggle('is-realm', inRealm);
     this.updateDestArrow(state, actor, destNode);
@@ -1717,6 +1720,17 @@ export class GameScreen implements ScreenHandle {
       scroller,
     );
     this.updateMoveSelectionUi();
+    // 駅名は 1 行が基本。まず縮小で収め、最小サイズでも入らないときだけ
+    // 2 行に折り返す（スマホでも「シュト／ゥット／ガルト」のようには割らない）。
+    const chipNames = [...this.moveOptionsHost.querySelectorAll<HTMLElement>('.move-chip-name')];
+    chipNames.forEach((name) => name.classList.remove('is-long'));
+    chipNames.forEach((name) => fitTextOneLine(name, { minPx: 11 }));
+    chipNames
+      .filter((name) => name.scrollWidth > name.clientWidth + 0.5)
+      .forEach((name) => {
+        name.classList.add('is-long');
+        fitTextOneLine(name, { minPx: 11 });
+      });
     if (freshOptions) {
       // Measure the newly visible move-options tray immediately and re-frame so candidates
       // never sit behind the bottom option bar or top ranking strip on mobile viewports.
@@ -3065,6 +3079,7 @@ export class GameScreen implements ScreenHandle {
       candidate.tier === 1 ? 'metropolis' : candidate.tier === 2 && candidate.port ? 'port_town' : 'town';
     const paint = (candidate: typeof city): void => {
       this.rouletteName.replaceChildren(rubyName(candidate.nameJa, candidate.nameKana));
+      fitTextOneLine(this.rouletteName, { minPx: 16 });
       this.rouletteCountry.textContent = `${candidate.countryJa} ・ ${candidate.nameEn}`;
       this.rouletteBadge.textContent = countryFlag(candidate.country);
       this.rouletteBadge.className = `roulette-city-badge tier-${Math.min(3, Math.max(1, candidate.tier))}`;
