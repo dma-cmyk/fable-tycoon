@@ -170,6 +170,55 @@ describe('FxPlayer watchdog', () => {
     player.destroy();
     warn.mockRestore();
   });
+
+  it('preserves the new epoch watchdog and isolates stale PlaybackControl after reset()', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const onWatchdog = vi.fn();
+    const applied: Array<{ seq: number; gen: number | undefined }> = [];
+    let staleControlSkippedAfterReset = false;
+    let releaseFirst!: () => void;
+    let call = 0;
+
+    const player = new FxPlayer({
+      settings: () => settings,
+      handleFx: async (_fx, _state, control) => {
+        call += 1;
+        if (call === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+          // After reset(), stale control MUST report skipped=true and MUST NOT pause the new epoch's watchdog.
+          staleControlSkippedAfterReset = control.skipped;
+          control.setManualWait(true);
+          return;
+        }
+        return new Promise<void>(() => undefined);
+      },
+      applyState: (_s, _d, seq, gen) => applied.push({ seq, gen }),
+      setBusy: () => undefined,
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+      onWatchdog,
+    });
+
+    player.enqueue({ seq: 1, fx: [toastFx], state, deadline: null, gen: 1 });
+    player.reset();
+    player.enqueue({ seq: 2, fx: [toastFx], state, deadline: null, gen: 2 });
+    releaseFirst();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(staleControlSkippedAfterReset).toBe(true);
+    const budget = estimateFxDurationMs(toastFx) * 2 + 8000;
+    await vi.advanceTimersByTimeAsync(budget + 100);
+    expect(player.busy).toBe(false);
+    expect(applied).toEqual([{ seq: 2, gen: 2 }]);
+    expect(onWatchdog).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    player.destroy();
+    warn.mockRestore();
+  });
 });
 
 describe('FxPlayer backlog pruning', () => {

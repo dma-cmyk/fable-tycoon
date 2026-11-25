@@ -10,6 +10,7 @@ import type { ChatLine, ClientMsg, LobbyView, ServerMsg } from './protocol';
 import { ALLOWED_YEARS, PROTOCOL_VERSION } from './protocol';
 import { BOARD_VERSION } from './board-version';
 import type { ConnectionState, Session } from './session-types';
+import type { NetDebugSnapshot } from './debug';
 import { CPU_MOVE_DELAY_MS, RoomController } from './room';
 import type { RoomDeps, TimerHandle } from './room';
 
@@ -366,6 +367,35 @@ export class LocalSession implements Session {
     const msg = this.lastUpdate ?? this.lastSnapshot;
     if (!msg) return null;
     return { gen: 1, seq: msg.seq };
+  }
+
+  debugSnapshot(): NetDebugSnapshot {
+    const applied = this.appliedOrder();
+    return {
+      roomId: this.roomId,
+      clientId: 'local',
+      role: 'host',
+      seat: this.humanSeatList[0] ?? null,
+      connection: this.state,
+      generation: 1,
+      highestGenerationSeen: 1,
+      lastReceived: applied,
+      applied,
+      pendingAction: null,
+      deferredAction: null,
+      switchingAuthority: false,
+      authority: {
+        ready: true,
+        promotionConfirmed: true,
+        quorumOk: true,
+        requiredAcks: 0,
+        acks: 0,
+        frozen: this.controller.isFrozen,
+      },
+      controller: this.controller.debugSnapshot(),
+      broker: null,
+      mirrors: [],
+    };
   }
 
   send(msg: ClientMsg): void {

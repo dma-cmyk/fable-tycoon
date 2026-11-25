@@ -162,4 +162,52 @@ describe('MqttTransport chunking and encryption', () => {
       await Promise.all([host.close(), guest.close(), probe1.close(), probe2.close()]);
     }
   }, 20_000);
+
+  it('upgrades broker mirrors dynamically via setRedundantBrokers()', async () => {
+    const broker2 = await Aedes.createBroker({ heartbeatInterval: 1_000 });
+    const server2 = createServer((socket) => broker2.handle(socket));
+    await new Promise<void>((resolve) => server2.listen(0, '127.0.0.1', resolve));
+    const addr2 = server2.address();
+    if (typeof addr2 !== 'object' || !addr2) throw new Error('broker2 did not bind');
+    const url2 = `mqtt://127.0.0.1:${addr2.port}`;
+
+    const peer = new MqttTransport('mirror-upgrade-peer', {
+      identity: await generateIdentity(),
+      brokers: [url, url2],
+      disableWebRtc: true,
+      redundantBrokers: 0,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    const peer2 = new MqttTransport('mirror-only-peer', {
+      identity: await generateIdentity(),
+      brokers: [url2],
+      disableWebRtc: true,
+      redundantBrokers: 0,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    try {
+      await peer.connect('MIRROR1');
+      await peer2.connect('MIRROR1');
+      expect(peer.broker()).toBe(url);
+      expect(peer.mirrorBrokers()).toEqual([]);
+
+      peer.setRedundantBrokers(1, [url, url2]);
+      const start = Date.now();
+      while (!peer.mirrorBrokers().includes(url2)) {
+        if (Date.now() - start > 5_000) throw new Error('mirror broker did not connect');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      const received = Promise.withResolvers<P2PMessage>();
+      const unsub = peer2.onMessage((_from, msg) => received.resolve(msg));
+      await peer.broadcast({ t: 'system', text: 'via-upgraded-mirror' });
+      await expect(received.promise).resolves.toMatchObject({ t: 'system', text: 'via-upgraded-mirror' });
+      unsub();
+    } finally {
+      await Promise.all([peer.close(), peer2.close()]);
+      await new Promise<void>((resolve) => server2.close(() => resolve()));
+      await new Promise<void>((resolve) => broker2.close(() => resolve()));
+    }
+  }, 20_000);
 });

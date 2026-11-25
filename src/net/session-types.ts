@@ -2,6 +2,7 @@
 // so CPU/local hot-seat (LocalSession: RoomController inside the browser) and online play
 // (OnlineSession: WebSocket to the authoritative server) share one UI code path.
 import type { ClientMsg, LobbyView, ServerMsg } from './protocol';
+import type { NetDebugSnapshot } from './debug';
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -23,6 +24,10 @@ export interface Session {
   onConnection(listener: (s: ConnectionState) => void): () => void;
   /** The (gen, seq) of the last state actually delivered to subscribers (null before the first). */
   appliedOrder?(): { gen: number; seq: number } | null;
+  /** Ask the authoritative host for a fresh snapshot (online only). */
+  requestResync?(): void;
+  /** Read-only network/controller state snapshot for `?debug=net` and tests. */
+  debugSnapshot?(): NetDebugSnapshot;
   /** Leave permanently (online: sends 'leave' then closes). */
   close(): void;
 }

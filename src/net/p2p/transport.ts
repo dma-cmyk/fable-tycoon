@@ -194,6 +194,8 @@ interface PeerState {
   offerSent: boolean;
   remoteSet: boolean;
   candidates: RTCIceCandidateInit[];
+  offerFailures: number;
+  nextOfferAt: number;
 }
 
 interface InboundParts {
@@ -277,6 +279,8 @@ export class MqttTransport implements P2PTransport {
   private mirrors = new Map<string, MqttClient>();
   private mirrorTimer: unknown = null;
   private mirrorInFlight = false;
+  private mirrorRetryNeeded = false;
+  private redundantBrokers = 0;
   private brokerUrl: string | null = null;
   private brokerList: readonly string[] = [];
   private brokerIndex = 0;
@@ -305,6 +309,7 @@ export class MqttTransport implements P2PTransport {
   constructor(peerId: string, options: MqttTransportOptions) {
     this.peerId = peerId;
     this.options = options;
+    this.redundantBrokers = Math.max(0, options.redundantBrokers ?? 0);
     this.log = options.log ?? (() => {});
   }
 
@@ -314,6 +319,36 @@ export class MqttTransport implements P2PTransport {
 
   broker(): string | null {
     return this.brokerUrl;
+  }
+
+  mirrorBrokers(): string[] {
+    return [...this.mirrors.keys()];
+  }
+
+  /**
+   * Dynamically raise mirror broker count (e.g. when a guest promotes to host and must cover
+   * every public broker so guests stranded on a 3rd broker can reach the new authority).
+   */
+  setRedundantBrokers(wanted: number, brokers?: readonly string[]): void {
+    const nextWanted = Math.max(0, wanted);
+    this.redundantBrokers = nextWanted;
+    if (brokers && brokers.length > 0) {
+      const merged = [...this.brokerList];
+      for (const broker of brokers) {
+        if (!merged.includes(broker)) merged.push(broker);
+      }
+      this.brokerList = merged;
+    }
+    if (this.closed || !this.key || this.mirrors.size >= nextWanted) return;
+    if (this.mirrorTimer !== null) {
+      clearTimeout(this.mirrorTimer as number);
+      this.mirrorTimer = null;
+    }
+    if (this.mirrorInFlight) {
+      this.mirrorRetryNeeded = true;
+      return;
+    }
+    this.ensureMirrors();
   }
 
   p2pPeers(): number {
@@ -422,13 +457,13 @@ export class MqttTransport implements P2PTransport {
 
   /** Extra broker connections for hosts: a guest that landed on another public broker still hears us. */
   private ensureMirrors(): void {
-    const wanted = this.options.redundantBrokers ?? 0;
+    const wanted = this.redundantBrokers;
     if (wanted <= 0 || this.closed) return;
     if (this.mirrorTimer !== null) return;
-    void this.connectMirrors(wanted);
+    void this.connectMirrors();
   }
 
-  private async connectMirrors(wanted: number): Promise<void> {
+  private async connectMirrors(): Promise<void> {
     if (this.mirrorInFlight || this.closed) return;
     this.mirrorInFlight = true;
     try {
@@ -437,7 +472,7 @@ export class MqttTransport implements P2PTransport {
       );
       for (const broker of candidates) {
         if (this.closed) return;
-        if (this.mirrors.size >= wanted) return;
+        if (this.mirrors.size >= this.redundantBrokers) return;
         try {
           const client = await this.openClient(broker);
           if (this.closed) {
@@ -455,7 +490,14 @@ export class MqttTransport implements P2PTransport {
     } finally {
       this.mirrorInFlight = false;
       if (this.closed) return;
-      if (this.mirrors.size < wanted) {
+      if (this.mirrorRetryNeeded) {
+        this.mirrorRetryNeeded = false;
+        if (this.mirrors.size < this.redundantBrokers) {
+          this.ensureMirrors();
+          return;
+        }
+      }
+      if (this.mirrors.size < this.redundantBrokers) {
         // Public brokers are flaky; keep trying the missing mirrors with a bounded backoff.
         if (this.mirrorTimer !== null) clearTimeout(this.mirrorTimer as number);
         this.mirrorTimer = setTimeout(() => {
@@ -879,6 +921,8 @@ export class MqttTransport implements P2PTransport {
         offerSent: false,
         remoteSet: false,
         candidates: [],
+        offerFailures: 0,
+        nextOfferAt: 0,
       };
       this.peers.set(peerId, peer);
     }
@@ -895,7 +939,7 @@ export class MqttTransport implements P2PTransport {
   private maybeOffer(peerId: string): void {
     if (!this.rtcAvailable() || this.peerId >= peerId) return;
     const peer = this.touch(peerId);
-    if (peer.pc || peer.offerSent) return;
+    if (peer.pc || peer.offerSent || Date.now() < peer.nextOfferAt) return;
     peer.offerSent = true;
     void this.createOffer(peerId);
   }
@@ -908,7 +952,9 @@ export class MqttTransport implements P2PTransport {
       if (event.candidate) void this.sendSignal(peerId, { k: 'rtc', kind: 'ice', candidate: event.candidate.toJSON() });
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') this.teardownPc(peerId);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this.teardownPc(peerId, pc.connectionState === 'failed');
+      }
     };
     return pc;
   }
@@ -927,7 +973,7 @@ export class MqttTransport implements P2PTransport {
       });
     } catch (error) {
       this.log('webrtc offer failed', error);
-      this.teardownPc(peerId);
+      this.teardownPc(peerId, true);
     }
   }
 
@@ -944,7 +990,7 @@ export class MqttTransport implements P2PTransport {
     const peer = this.touch(from);
     try {
       if (signal.kind === 'offer') {
-        this.teardownPc(from);
+        this.teardownPc(from, false);
         const fresh = this.touch(from);
         const pc = this.createPeer(from);
         pc.ondatachannel = (event) => {
@@ -965,7 +1011,8 @@ export class MqttTransport implements P2PTransport {
         return;
       }
       if (signal.kind === 'answer') {
-        if (!peer.pc) return;
+        // Ignore stale/duplicate answers when no local offer is pending (prevents InvalidStateError storms).
+        if (!peer.pc || peer.pc.signalingState !== 'have-local-offer') return;
         await peer.pc.setRemoteDescription(signal.sdp);
         peer.remoteSet = true;
         for (const candidate of peer.candidates.splice(0)) {
@@ -982,7 +1029,7 @@ export class MqttTransport implements P2PTransport {
       }
     } catch (error) {
       this.log('webrtc signaling failed', error);
-      this.teardownPc(from);
+      this.teardownPc(from, true);
     }
   }
 
@@ -991,6 +1038,8 @@ export class MqttTransport implements P2PTransport {
     peer.dc = dc;
     dc.onopen = () => {
       peer.dcOpen = true;
+      peer.offerFailures = 0;
+      peer.nextOfferAt = 0;
       this.log(`p2p channel open: ${peerId}`);
     };
     dc.onclose = () => {
@@ -1009,7 +1058,7 @@ export class MqttTransport implements P2PTransport {
     };
   }
 
-  private teardownPc(peerId: string): void {
+  private teardownPc(peerId: string, failed = false): void {
     const peer = this.peers.get(peerId);
     if (!peer) return;
     try {
@@ -1028,6 +1077,11 @@ export class MqttTransport implements P2PTransport {
     peer.offerSent = false;
     peer.remoteSet = false;
     peer.candidates = [];
+    if (failed) {
+      peer.offerFailures += 1;
+      const backoffMs = Math.min(60_000, 5_000 * 3 ** Math.min(3, peer.offerFailures - 1));
+      peer.nextOfferAt = Date.now() + backoffMs;
+    }
   }
 
   // ---------------------------------------------------------------- teardown

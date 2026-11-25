@@ -881,6 +881,55 @@ describe('RoomController migration authority and resync', () => {
       expect(last.resync).toBe(true);
     }
   });
+
+  it('replays duplicate (seq, action) idempotently without double-apply or stale error', () => {
+    const harness = makeHarness();
+    const started = startTwoHumans(harness);
+    const update1 = act(harness, 'a', started.seq, { t: 'roll' });
+    expect(update1.seq).toBe(started.seq + 1);
+
+    const errorsBefore = errorsOf(harness, 'a').length;
+    const sentBefore = harness.sent.length;
+    // Duplicate resend of the exact same (seq, action): must replay update1 directly and NOT double-apply.
+    harness.room.message('a', { t: 'action', seq: started.seq, action: { t: 'roll' } });
+    expect(harness.room.currentSeq).toBe(update1.seq);
+    expect(errorsOf(harness, 'a').length).toBe(errorsBefore);
+    const replayed = harness.sent.slice(sentBefore).find((e) => e.connId === 'a' && e.msg.t === 'update');
+    expect(replayed?.msg.t === 'update' ? replayed.msg.seq : null).toBe(update1.seq);
+
+    // Advance one more step, then resend the older action: host sends a resync snapshot instead of stale.
+    const nextAction = cpuDecide(GAME_DATA, update1.state as GameState);
+    const update2 = act(harness, 'a', update1.seq, nextAction);
+    const sentBeforeResync = harness.sent.length;
+    harness.room.message('a', { t: 'action', seq: started.seq, action: { t: 'roll' } });
+    expect(harness.room.currentSeq).toBe(update2.seq);
+    expect(errorsOf(harness, 'a').length).toBe(errorsBefore);
+    const snap = harness.sent
+      .slice(sentBeforeResync)
+      .find((e) => e.connId === 'a' && e.msg.t === 'snapshot');
+    expect(snap?.msg.t === 'snapshot' ? snap.msg.resync : false).toBe(true);
+  });
+
+  it('resets stale old-host deadline on adopt and re-arms turn/cpu/ack tasks on unfreeze & rearmTurn', () => {
+    const harness = makeHarness();
+    startTwoHumans(harness, { years: 1, turnSeconds: 20 });
+    const pub = harness.room.publicSnapshot();
+    expect(pub.deadline).not.toBeNull();
+
+    // New host adopts 60s later (old deadline is already long expired!): must NOT immediately timeout.
+    const adoptedHarness = makeHarness();
+    adoptedHarness.clock.advance(60_000);
+    const adopted = RoomController.adopt({ ...pub, hostSeat: 1 }, adoptedHarness.deps, { frozen: true });
+    expect(adopted.isFrozen).toBe(true);
+    expect(adopted.currentDeadline).toBeNull();
+    expect(adopted.debugSnapshot().tasks.some((t) => t.kind === 'turn')).toBe(false);
+
+    adopted.setFrozen(false);
+    adopted.rearmTurn();
+    expect(adopted.currentDeadline).not.toBeNull();
+    expect(adopted.currentDeadline as number).toBeGreaterThan(adoptedHarness.clock.now());
+    expect(adopted.debugSnapshot().tasks.some((t) => t.kind === 'turn')).toBe(true);
+  });
 });
 
 describe('RoomController timer coalescing', () => {

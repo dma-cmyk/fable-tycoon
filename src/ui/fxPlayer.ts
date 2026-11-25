@@ -65,11 +65,13 @@ export interface FxPlayerHost {
   setBusy(busy: boolean): void;
   setSkippable(skippable: boolean): void;
   onQueueChange(pending: number): void;
+  /** Optional cleanup hook run when the watchdog force-terminates a stalled update. */
+  onWatchdog?(update: FxUpdate): void;
 }
 
 interface ActiveWait {
   resolve: () => void;
-  timer: number;
+  timer: ReturnType<typeof globalThis.setTimeout>;
 }
 
 export class FxPlayer {
@@ -100,6 +102,15 @@ export class FxPlayer {
     if (this.destroyed) return;
     this.queue.push(update);
     this.host.onQueueChange(this.queue.length);
+    if (
+      this.running &&
+      !this.watchdogPaused &&
+      this.watchdogTimer === null &&
+      this.activeUpdate &&
+      this.activeUpdate.epoch === this.epoch
+    ) {
+      this.armWatchdog(this.activeUpdate.update, this.activeUpdate.epoch, this.activeUpdate.budgetMs);
+    }
     void this.pump();
   }
 
@@ -178,7 +189,7 @@ export class FxPlayer {
 
   private finishActive(): void {
     if (this.active) {
-      window.clearTimeout(this.active.timer);
+      globalThis.clearTimeout(this.active.timer);
       const { resolve } = this.active;
       this.active = null;
       resolve();
@@ -210,6 +221,7 @@ export class FxPlayer {
     this.clearWatchdog();
     if (this.watchdogPaused || this.destroyed) return;
     this.watchdogTimer = globalThis.setTimeout(() => {
+      this.watchdogTimer = null;
       if (this.epoch !== epoch || this.destroyed) return;
       // Apply the NEWEST queued update's authoritative state (not the stalled head), otherwise
       // dropping later queued updates leaves the UI stuck on an old CPU turn while the room has
@@ -221,9 +233,15 @@ export class FxPlayer {
       this.watchdogPaused = false;
       this.running = false;
       this.queue = [];
+      this.skipRequested = false;
+      this.skipUpdateRequested = false;
       this.runSkipCallbacks();
       this.finishActive();
-      this.skipRequested = false;
+      try {
+        this.host.onWatchdog?.(latest);
+      } catch {
+        /* presentation cleanup must not prevent unlocking the UI */
+      }
       this.host.setBusy(false);
       this.host.setSkippable(false);
       this.host.onQueueChange(0);
@@ -248,21 +266,22 @@ export class FxPlayer {
     return Math.max(settings.fxSpeed, backlog >= 2 ? 2 : 1);
   }
 
-  private controlFor(): PlaybackControl {
+  private controlFor(epoch: number): PlaybackControl {
     const player = this;
+    const stale = () => player.destroyed || player.epoch !== epoch;
     return {
       get speed() {
         return player.speedFactor();
       },
       get skipped() {
-        return player.skipRequested;
+        return player.skipRequested || stale();
       },
       wait(ms: number) {
-        if (player.destroyed || ms <= 0) return Promise.resolve();
+        if (stale() || ms <= 0) return Promise.resolve();
         const scaled = Math.max(40, Math.round(ms / player.speedFactor()));
         const { promise, resolve } = Promise.withResolvers<void>();
         player.finishActive();
-        const timer = window.setTimeout(() => {
+        const timer = globalThis.setTimeout(() => {
           if (player.active?.resolve === resolve) player.active = null;
           resolve();
         }, scaled);
@@ -270,17 +289,18 @@ export class FxPlayer {
         return promise;
       },
       waitManual() {
-        if (player.destroyed || player.skipRequested) return Promise.resolve();
+        if (stale() || player.skipRequested) return Promise.resolve();
         const { promise, resolve } = Promise.withResolvers<void>();
         player.finishActive();
         player.manualResolve = resolve;
         return promise;
       },
       setManualWait(waiting: boolean) {
+        if (stale()) return;
         player.setManualWait(waiting);
       },
       onSkip(callback: () => void) {
-        if (player.skipRequested) {
+        if (player.skipRequested || stale()) {
           callback();
           return () => undefined;
         }
@@ -309,15 +329,15 @@ export class FxPlayer {
         this.skipRequested = false;
         this.host.setSkippable(true);
         try {
-          await this.host.handleFx(fx, update.state, this.controlFor());
+          await this.host.handleFx(fx, update.state, this.controlFor(epoch));
         } catch {
           // A presentation handler must not wedge the game. Continue to the next fx.
         } finally {
-          this.setManualWait(false);
+          if (this.epoch === epoch) this.setManualWait(false);
         }
       }
+      if (this.epoch !== epoch) return;
       this.skipUpdateRequested = false;
-      if (this.epoch !== epoch) break;
       this.clearWatchdog();
       this.activeUpdate = null;
       this.finishActive();
@@ -326,10 +346,11 @@ export class FxPlayer {
       this.host.onQueueChange(this.queue.length);
       if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq, update.gen);
     }
+    // CRITICAL: never mutate watchdog or queue state if reset()/watchdog started a newer epoch.
+    if (this.epoch !== epoch) return;
     this.clearWatchdog();
     this.activeUpdate = null;
     this.watchdogPaused = false;
-    if (this.epoch !== epoch) return;
     this.running = false;
     this.host.setBusy(false);
     this.host.setSkippable(false);

@@ -40,6 +40,8 @@ import type {
 } from './protocol';
 import { FX_MS } from './session-types';
 import { normalizeForMatch, sanitizeChat } from './filter';
+import { classifyRoomTask, netDebug } from './debug';
+import type { RoomDebugSnapshot, RoomTaskSnapshot } from './debug';
 
 export type TimerHandle = unknown;
 
@@ -317,11 +319,18 @@ export class RoomController {
   private ticking = false;
   private disposed = false;
   private frozen = false;
+  private frozenAt: number | null = null;
+  private lastProgressAt = 0;
+  private recentActions = new Map<
+    number,
+    { seat: number; actionKey: string; update: Extract<ServerMsg, { t: 'update' }> }
+  >();
 
   constructor(deps: RoomDeps) {
     this.deps = deps;
     this.roomId = deps.roomId;
     const now = deps.now();
+    this.lastProgressAt = now;
     this.seats = Array.from({ length: MAX_SEATS }, (_, index) => this.emptySeat(index, now));
   }
 
@@ -358,6 +367,96 @@ export class RoomController {
 
   get currentDeadline(): number | null {
     return this.deadline;
+  }
+
+  get isFrozen(): boolean {
+    return this.frozen;
+  }
+
+  get turnFxBudgetMs(): number {
+    return this.turnFxMs;
+  }
+
+  get lastProgressTimestamp(): number {
+    return this.lastProgressAt;
+  }
+
+  /**
+   * Maximum time (ms) before the board is expected to advance autonomously (CPU, autoplay,
+   * disconnected grace, year_end auto-ack, or timed human turn). Returns null when a connected
+   * human has unlimited turn time (`turnSeconds === 0`) outside `year_end`.
+   */
+  expectedProgressWaitMs(): number | null {
+    if (this.frozen || this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
+      return null;
+    }
+    const seat = this.actorSeatData();
+    if (!seat) return null;
+    if (seat.kind === 'cpu' || seat.autoplay) {
+      return this.turnFxMs + this.cpuDelayMs;
+    }
+    if (seat.kind !== 'human') return null;
+    const ackWait =
+      this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs)
+        ? this.turnFxMs + this.yearEndAckMs
+        : null;
+    const turnWait = this.settings.turnSeconds > 0 ? this.turnFxMs + this.settings.turnSeconds * 1000 : null;
+    const graceWait = !seatConnected(seat) ? this.graceMs : null;
+    const candidates = [ackWait, turnWait, graceWait].filter((v): v is number => v !== null);
+    if (candidates.length === 0) return null;
+    return Math.min(...candidates);
+  }
+
+  /** True when the scheduler has the task required to advance the current autonomous/timed turn. */
+  hasExpectedProgressTask(): boolean {
+    if (this.frozen || this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
+      return true;
+    }
+    const seat = this.actorSeatData();
+    if (!seat) return true;
+    if (seat.kind === 'cpu' || seat.autoplay) return this.tasks.has('cpu');
+    if (seat.kind !== 'human') return true;
+    const needsAck =
+      this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs);
+    if (needsAck && !this.tasks.has('ack')) return false;
+    if (!seatConnected(seat) && !this.tasks.has(`grace:${seat.index}`)) return false;
+    if (this.settings.turnSeconds > 0 && !this.tasks.has('turn')) return false;
+    return true;
+  }
+
+  /** Snapshot of all currently armed timer tasks (turn/cpu/ack/grace/replace). */
+  scheduledTasks(): RoomTaskSnapshot[] {
+    const now = this.deps.now();
+    return [...this.tasks.entries()]
+      .sort((a, b) => a[1].at - b[1].at || a[0].localeCompare(b[0]))
+      .map(([key, task]) => ({
+        key,
+        kind: classifyRoomTask(key),
+        at: task.at,
+        inMs: task.at - now,
+      }));
+  }
+
+  /** Read-only controller snapshot for `?debug=net` logs and tests. */
+  debugSnapshot(): RoomDebugSnapshot {
+    return {
+      roomId: this.roomId,
+      status: this.status,
+      seq: this.seq,
+      frozen: this.frozen,
+      actorSeat: this.actorSeat(),
+      phase: this.state?.phase.t ?? null,
+      deadline: this.deadline,
+      tasks: this.scheduledTasks(),
+    };
+  }
+
+  /** Test seam: wipe scheduled turn/cpu/ack/grace tasks to exercise the host stall watchdog. */
+  clearProgressTasksForTests(): void {
+    this.clearTask('turn');
+    this.clearTask('cpu');
+    this.clearTask('ack');
+    for (const seat of this.seats) this.clearTask(`grace:${seat.index}`);
   }
 
   chatHistory(): ChatLine[] {
@@ -474,7 +573,30 @@ export class RoomController {
    */
   setFrozen(frozen: boolean): void {
     if (this.frozen === frozen) return;
+    const now = this.deps.now();
     this.frozen = frozen;
+    if (frozen) {
+      this.frozenAt = now;
+    } else {
+      if (this.frozenAt !== null) {
+        const freezeMs = Math.max(0, now - this.frozenAt);
+        if (this.deadline !== null) this.deadline += freezeMs;
+        if (this.turnStartedAt > 0) this.turnStartedAt += freezeMs;
+      }
+      this.frozenAt = null;
+      this.lastProgressAt = now;
+    }
+    netDebug(this.roomId, `room frozen=${String(frozen)}`, { seq: this.seq, actorSeat: this.actorSeat() });
+    this.armTurn(this.lastFx);
+  }
+
+  /** Unconditionally re-arm turn/CPU/year-end-ack/grace/replace tasks (authority confirmation & stall recovery). */
+  rearmTurn(options?: { resetDeadline?: boolean }): void {
+    if (options?.resetDeadline) {
+      this.deadline = null;
+      this.deadlineSeq = -1;
+      this.deadlineActor = null;
+    }
     this.armTurn(this.lastFx);
   }
 
@@ -657,15 +779,12 @@ export class RoomController {
     conn.token = seat.token ?? conn.token;
     this.clearTask(`grace:${seat.index}`);
     this.clearTask(`replace:${seat.index}`);
+    if (!this.frozen && this.status === 'playing' && this.actorSeat() === seat.index) {
+      this.armTurn(this.lastFx);
+    }
     this.system(`${characterLabel(seat)} が戻ってきました`);
     this.sendWelcome(conn);
     this.broadcastLobby();
-    if (!this.frozen && (this.status === 'playing' || this.status === 'finished')) {
-      if (this.actorSeat() === seat.index) {
-        this.clearTask('cpu');
-        if (this.deadline !== null) this.setTask('turn', this.deadline);
-      }
-    }
   }
 
   private sendWelcome(conn: Conn, resync = false, includeSnapshot = true): void {
@@ -953,6 +1072,8 @@ export class RoomController {
       this.lastBy = 0;
       this.status = 'playing';
       this.seq = 1;
+      this.lastProgressAt = this.deps.now();
+      this.recentActions.clear();
     } catch (error) {
       this.log('start failed', error);
       this.sendError(
@@ -991,10 +1112,6 @@ export class RoomController {
   // ---------------------------------------------------------------- game actions
 
   private onAction(conn: Conn, msg: Extract<ClientMsg, { t: 'action' }>): void {
-    if (this.status !== 'playing' || !this.state) {
-      this.sendError(conn.id, 'not_your_turn', 'ゲーム中ではありません');
-      return;
-    }
     const seat = this.seatOfConn(conn);
     if (!seat) {
       this.sendError(conn.id, 'not_your_turn', '席に座っていません');
@@ -1002,6 +1119,37 @@ export class RoomController {
     }
     if (this.frozen) {
       this.sendError(conn.id, 'bad_request', 'ホスト権限の確認待ちです');
+      return;
+    }
+    // Idempotent retry handling: if a client resends the exact same (seq, action) we already
+    // committed (e.g. after a lost update packet), never double-apply and never reject with stale;
+    // replay the original update or a fresh resync snapshot instead.
+    if (
+      (this.status === 'playing' || this.status === 'finished') &&
+      this.state &&
+      typeof msg.seq === 'number' &&
+      msg.seq < this.seq &&
+      msg.action &&
+      typeof msg.action === 'object'
+    ) {
+      const prior = this.recentActions.get(msg.seq);
+      if (prior && prior.seat === seat.index && prior.actionKey === JSON.stringify(msg.action)) {
+        netDebug(this.roomId, 'idempotent action replay', {
+          seat: seat.index,
+          seq: msg.seq,
+          currentSeq: this.seq,
+          action: msg.action.t,
+        });
+        if (prior.update.seq === this.seq) {
+          this.deps.send(conn.id, prior.update);
+        } else {
+          this.sendWelcome(conn, true);
+        }
+        return;
+      }
+    }
+    if (this.status !== 'playing' || !this.state) {
+      this.sendError(conn.id, 'not_your_turn', 'ゲーム中ではありません');
       return;
     }
     const actor = actorOf(this.state);
@@ -1024,9 +1172,10 @@ export class RoomController {
     this.clearTask(`grace:${seat.index}`);
     try {
       if (actor === null) throw new Error('active actor disappeared');
+      const prevSeq = this.seq;
       const action: Action = msg.action;
       const result = step(this.deps.data, this.state, actor, action);
-      this.commit(result, actor);
+      this.commit(result, actor, { prevSeq, seat: seat.index, action });
       if (resumed) this.broadcastLobby();
     } catch (error) {
       seat.autoplay = resumed;
@@ -1172,18 +1321,23 @@ export class RoomController {
 
   // ---------------------------------------------------------------- engine commit
 
-  private commit(result: StepResult, actor: number): void {
+  private commit(
+    result: StepResult,
+    actor: number,
+    sourceAction?: { prevSeq: number; seat: number; action: Action },
+  ): void {
     this.state = result.state;
     this.seq += 1;
     this.lastFx = result.fx;
     this.lastBy = actor;
+    this.lastProgressAt = this.deps.now();
 
     if (result.state.phase.t === 'game_over') {
       this.status = 'finished';
     }
     this.armTurn(result.fx);
 
-    const update: ServerMsg = {
+    const update: Extract<ServerMsg, { t: 'update' }> = {
       t: 'update',
       seq: this.seq,
       by: actor,
@@ -1191,6 +1345,17 @@ export class RoomController {
       state: sanitizeState(result.state),
       deadline: this.deadline,
     };
+    if (sourceAction) {
+      this.recentActions.set(sourceAction.prevSeq, {
+        seat: sourceAction.seat,
+        actionKey: JSON.stringify(sourceAction.action),
+        update,
+      });
+      if (this.recentActions.size > 16) {
+        const oldest = this.recentActions.keys().next();
+        if (!oldest.done) this.recentActions.delete(oldest.value);
+      }
+    }
     this.deps.broadcast(update);
     if (this.status === 'finished') this.broadcastLobby();
     this.maybeCpuReactions(result.fx, actor);
@@ -1226,7 +1391,15 @@ export class RoomController {
         this.clearTask(`replace:${human.index}`);
       }
     }
-    if (this.frozen) return;
+    if (this.frozen) {
+      netDebug(this.roomId, 'armTurn (frozen)', {
+        seq: this.seq,
+        actorSeat: this.actorSeat(),
+        phase: this.state.phase.t,
+        tasks: this.scheduledTasks(),
+      });
+      return;
+    }
     const actor = actorOf(this.state);
     if (actor === null) return;
     const seat = this.seats[this.seatByPlayerId[actor]];
@@ -1234,6 +1407,12 @@ export class RoomController {
 
     if (seat.kind === 'cpu') {
       this.setTask('cpu', now + this.turnFxMs + this.cpuDelayMs);
+      netDebug(this.roomId, 'armTurn (cpu)', {
+        seq: this.seq,
+        actorSeat: seat.index,
+        phase: this.state.phase.t,
+        tasks: this.scheduledTasks(),
+      });
       return;
     }
     if (seat.kind !== 'human') return;
@@ -1273,6 +1452,14 @@ export class RoomController {
       }
       this.setTask('turn', this.deadline);
     }
+    netDebug(this.roomId, 'armTurn', {
+      seq: this.seq,
+      frozen: this.frozen,
+      actorSeat: seat.index,
+      phase: this.state.phase.t,
+      deadline: this.deadline,
+      tasks: this.scheduledTasks(),
+    });
   }
 
   private tick(): void {
@@ -1795,7 +1982,11 @@ export class RoomController {
    * other humans start disconnected so the normal grace -> autoplay -> CPU rules apply until they
    * re-hello.
    */
-  static adopt(snapshot: RoomPublicSnapshot, deps: RoomDeps): RoomController {
+  static adopt(
+    snapshot: RoomPublicSnapshot,
+    deps: RoomDeps,
+    options?: { frozen?: boolean },
+  ): RoomController {
     const room = new RoomController(deps);
     const now = deps.now();
     room.status = snapshot.lobby.status;
@@ -1810,10 +2001,17 @@ export class RoomController {
     room.nextChatId = room.chat.reduce((max, line) => Math.max(max, line.id + 1), 1);
     room.lastFx = [...snapshot.lastFx];
     room.lastBy = null;
-    room.deadline = snapshot.deadline;
-    room.deadlineSeq = room.seq;
+    // Never inherit the previous host's wall-clock deadline (likely expired during migration
+    // silence or skewed between devices). The new host computes a fresh deadline on its own clock.
+    room.deadline = null;
+    room.deadlineSeq = -1;
     room.deadlineActor = null;
     room.turnStartedAt = now;
+    room.lastProgressAt = now;
+    if (options?.frozen) {
+      room.frozen = true;
+      room.frozenAt = now;
+    }
     const scale = typeof deps.fxScale === 'function' ? deps.fxScale() : (deps.fxScale ?? 1);
     room.turnFxMs = sumFxDuration(snapshot.lastFx) * scale;
     room.nextEmoteId = 1;

@@ -253,6 +253,10 @@ export class App {
   private adoptSession(session: Session): void {
     if (this.session && this.session !== session) this.session.close();
     this.session = session;
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __fableNetDebug?: () => unknown }).__fableNetDebug = () =>
+        this.session?.debugSnapshot?.() ?? null;
+    }
   }
 
   private closeSession(): void {

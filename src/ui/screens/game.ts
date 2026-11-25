@@ -777,6 +777,17 @@ export class GameScreen implements ScreenHandle {
         this.skipHint.hidden = !skippable || !!this.resultScreen;
       },
       onQueueChange: () => undefined,
+      onWatchdog: () => {
+        Audio.stopVoice();
+        this.dice.cancel();
+        this.resolveHandoff();
+        this.pendingPhaseEnd = null;
+        this.map?.cancelAnimations(false);
+        this.stopStepsCounter();
+        this.transientMsgPending = false;
+        this.msgWindow.clear();
+        this.syncMessageWindowLayer();
+      },
     });
 
     this.bindKeyboard();
@@ -1072,6 +1083,7 @@ export class GameScreen implements ScreenHandle {
     }
     const japanese = ERROR_JA[code] ?? message ?? `エラー: ${code}`;
     this.app.toasts.show(japanese, 'bad', 3400);
+    if (code === 'stale') this.session.requestResync?.();
     if (code === 'not_your_turn' || code === 'stale' || code === 'illegal' || code === 'bad_request') {
       this.refreshActionDialogs();
     }
@@ -2152,7 +2164,11 @@ export class GameScreen implements ScreenHandle {
 
   private sendAction(action: Action): void {
     if (!this.state || this.actionPending || this.fxBusy) return;
-    if (this.appliedGen !== this.latestGen) return;
+    if (this.appliedGen !== this.latestGen) {
+      this.session.requestResync?.();
+      this.app.toasts.show('最新の盤面を同期しています…', 'info', 2500);
+      return;
+    }
     this.actionPending = true;
     this.armPendingTimer();
     this.updateHud();
@@ -2196,9 +2212,10 @@ export class GameScreen implements ScreenHandle {
       this.actionPending = false;
       this.eventPanel.resetChosen();
       this.updateHud();
+      this.session.requestResync?.();
       this.app.toasts.show('操作の応答がありませんでした。もう一度お試しください。', 'warn', 3200);
       this.refreshActionDialogs();
-    }, 9000);
+    }, 13_000);
   }
 
   private clearPendingTimer(): void {

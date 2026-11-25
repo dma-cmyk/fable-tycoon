@@ -39,6 +39,8 @@ import {
   verifyTransferProof,
 } from './authority';
 import type { FollowRecord, KeyLink, SeatRosterCert, TransferApproval, TransferProof } from './authority';
+import { netDebug } from './debug';
+import type { NetDebugSnapshot, PendingActionSnapshot } from './debug';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const REPORTS_KEY = 'fable.reports';
@@ -55,6 +57,13 @@ const SELF_HOST_GRACE_MS = 10_000;
 const REAUTH_SILENCE_MS = 10_000;
 const HOST_REPLY_SILENCE_MS = 8_000;
 const BROKER_RETRY_MS = 5_000;
+const DEFAULT_WELCOME_TIMEOUT_MS = 5_000;
+const DEFAULT_ACTION_RETRY_MS = 6_000;
+const DEFAULT_ACTION_RESYNC_MS = 4_000;
+const DEFAULT_MAX_ACTION_RETRIES = 2;
+const DEFAULT_MAX_ACTION_RESYNCS = 2;
+const DEFAULT_HOST_STALL_EXTRA_MS = 10_000;
+const DEFAULT_MAX_HOST_STALL_REARMS = 3;
 
 const data: GameData = GAME_DATA;
 
@@ -82,8 +91,18 @@ export interface NetworkConfig {
   /** No authenticated host reply for this long => re-discover the broker (not a resync trigger). */
   hostReplySilenceMs?: number;
   brokerRetryMs?: number;
+  /** Guest initial-welcome timeout before rotating off an unresponsive broker. */
+  welcomeTimeoutMs?: number;
   /** Extra broker connections per client (hosts/guests both use mirrors when configured). */
   redundantBrokers?: number;
+  /** Client safety net: resend same (gen, seq) after this delay, then escalate to resync. */
+  actionRetryMs?: number;
+  actionResyncMs?: number;
+  maxActionRetries?: number;
+  maxActionResyncs?: number;
+  /** Host safety net: extra grace on top of fx/turn budget before re-arming stalled room tasks. */
+  hostStallExtraMs?: number;
+  maxHostStallRearms?: number;
 }
 
 let networkConfig: NetworkConfig = {};
@@ -589,8 +608,15 @@ export class OnlineSession implements Session {
   private probeStartedAt = 0;
   private promotedAt = 0;
   private hostFollowers = new Set<string>();
+  /** Peers that have received an authoritative hello/snapshot under the current host generation. */
+  private peerWelcomedInGen = new Set<string>();
   /** fingerprint -> the single host (fp + gen) that peer's latest liveness says it follows. */
   private followers = new Map<string, FollowRecord>();
+  private lastBoardGen = -1;
+  private lastBoardSeq = -1;
+  private lastBoardAdvanceAt = 0;
+  private hostStallRearms = 0;
+  private lastHostStallRearmAt = 0;
   private highestGenerationSeen = 0;
   private brokerMisses = new Set<string>();
   /** Agreed-lobby human seat count; quorum for an UNCONFIRMED promotion must use this. */
@@ -622,6 +648,8 @@ export class OnlineSession implements Session {
   private lastBrokerRotateAt = 0;
   private appliedGen = 0;
   private appliedSeq = -1;
+  private lastReceivedGen = 0;
+  private lastReceivedSeq = -1;
   /** seq -> generation of the state that carried it (actions are stamped from what the UI applied). */
   private deliveredOrders = new Map<number, number>();
   private switchingAuthority = false;
@@ -631,7 +659,16 @@ export class OnlineSession implements Session {
   private lastResyncAt = 0;
   private pendingSeat: number | null = null;
   private pendingCharacter: string | null = null;
-  private pendingAction: { gen: number; seq: number; action: Action; sentAt: number } | null = null;
+  private pendingAction: {
+    gen: number;
+    seq: number;
+    action: Action;
+    firstSentAt: number;
+    sentAt: number;
+    retries: number;
+    resyncs: number;
+    lastResyncAt: number;
+  } | null = null;
   /**
    * An action dropped only because the authority was being confirmed/switched. It was derived from
    * the applied state, so it is re-sent once that same (gen, seq) is usable again instead of making
@@ -741,6 +778,10 @@ export class OnlineSession implements Session {
     this.transport?.setBlockedPeersForTests(peerIds);
   }
 
+  clearRoomTasksForTests(): void {
+    this.controller?.clearProgressTasksForTests();
+  }
+
   reportVotes(): Record<string, string[]> {
     return { ...this.shadow.reportVotes };
   }
@@ -751,6 +792,55 @@ export class OnlineSession implements Session {
       requiredAcks: this.requiredAcks,
       acks: this.ackKeys.size,
       frozen: !this.authorityReady && this.role === 'host',
+    };
+  }
+
+  debugSnapshot(): NetDebugSnapshot {
+    const pending: PendingActionSnapshot | null = this.pendingAction
+      ? {
+          gen: this.pendingAction.gen,
+          seq: this.pendingAction.seq,
+          actionType: this.pendingAction.action.t,
+          firstSentAt: this.pendingAction.firstSentAt,
+          sentAt: this.pendingAction.sentAt,
+          retries: this.pendingAction.retries,
+          resyncs: this.pendingAction.resyncs,
+        }
+      : null;
+    return {
+      roomId: this.roomId,
+      clientId: this.clientId,
+      role: this.role,
+      seat: this.seat,
+      connection: this.connectionState,
+      generation: this.generation,
+      highestGenerationSeen: this.highestGenerationSeen,
+      lastReceived:
+        this.lastReceivedSeq >= 0
+          ? { gen: this.lastReceivedGen, seq: this.lastReceivedSeq }
+          : null,
+      applied: this.appliedOrder(),
+      pendingAction: pending,
+      deferredAction: this.deferredAction
+        ? {
+            gen: this.deferredAction.gen,
+            seq: this.deferredAction.seq,
+            actionType: this.deferredAction.action.t,
+            at: this.deferredAction.at,
+          }
+        : null,
+      switchingAuthority: this.switchingAuthority,
+      authority: {
+        ready: this.authorityReady,
+        promotionConfirmed: this.promotionConfirmed,
+        quorumOk: this.quorumOk,
+        requiredAcks: this.requiredAcks,
+        acks: this.ackKeys.size,
+        frozen: this.controller?.isFrozen ?? (!this.authorityReady && this.role === 'host'),
+      },
+      controller: this.controller?.debugSnapshot() ?? null,
+      broker: this.transport?.broker() ?? null,
+      mirrors: this.transport?.mirrorBrokers() ?? [],
     };
   }
 
@@ -873,12 +963,18 @@ export class OnlineSession implements Session {
       } else if (msg.t === 'pick_character') {
         this.pendingCharacter = msg.characterId;
       } else if (msg.t === 'action') {
+        const now = Date.now();
         this.pendingAction = {
           gen: msg.gen ?? this.generation,
           seq: msg.seq,
           action: msg.action,
-          sentAt: Date.now(),
+          firstSentAt: now,
+          sentAt: now,
+          retries: 0,
+          resyncs: 0,
+          lastResyncAt: 0,
         };
+        this.debug('action queued', { gen: this.pendingAction.gen, seq: this.pendingAction.seq, t: msg.action.t });
       } else if (msg.t === 'leave_seat' || msg.t === 'leave') {
         this.pendingSeat = null;
         this.pendingCharacter = null;
@@ -907,6 +1003,14 @@ export class OnlineSession implements Session {
       return;
     }
     if (this.switchingAuthority) return; // still mid-switch; a later state re-tries
+    if (this.role === 'host' && (!this.authorityReady || !this.quorumOk)) return;
+    if (applied.gen !== this.generation) {
+      // Wait for the new generation's snapshot instead of looping softReject on every watchdog tick.
+      if (this.role === 'guest' && this.hostPeerId) {
+        this.maybeResync(this.hostPeerId, applied.seq, this.generation);
+      }
+      return;
+    }
     // `send` re-derives the generation for this seq from what was actually delivered, so an action
     // held across a generation bump is resubmitted under the NEW generation, not the old one.
     this.deferredAction = null;
@@ -1000,6 +1104,7 @@ export class OnlineSession implements Session {
     this.generation = generation;
     this.promotedAt = 0;
     this.hostFollowers.clear();
+    this.peerWelcomedInGen.clear();
     this.lastCompeting = null;
     this.probeStartedAt = 0;
     this.authorityReady = true;
@@ -1045,6 +1150,7 @@ export class OnlineSession implements Session {
       discoveredBroker.set(this.roomId, transport.broker() as string);
     }
     this.setState('open');
+    this.resetHostStallWatch(this.controller.currentSeq);
     this.startTimers();
     this.sendHeartbeat();
     this.persistHostNow();
@@ -1105,7 +1211,7 @@ export class OnlineSession implements Session {
 
   /** Try the announced host broker first, then rotate on failed discovery (public brokers differ). */
   private async connectGuestTransport(): Promise<void> {
-    while (!this.closed && !this.crashed) {
+    while (!this.closed && !this.crashed && this.role === 'guest') {
       const transport = this.createTransport();
       this.transport = transport;
       transport.onMessage((from, message, fingerprint) =>
@@ -1114,6 +1220,7 @@ export class OnlineSession implements Session {
       transport.onStatus((status) => this.onTransportStatus(status));
       try {
         await transport.connect(this.roomId);
+        if (this.closed || this.crashed || this.role !== 'guest') return;
         if (!this.timersStarted) {
           this.timersStarted = true;
           this.startTimers();
@@ -1132,16 +1239,22 @@ export class OnlineSession implements Session {
 
   private startWelcomeWatchdog(): void {
     this.clearWelcomeWatchdog();
+    const timeoutMs = networkConfig.welcomeTimeoutMs ?? DEFAULT_WELCOME_TIMEOUT_MS;
     this.welcomeTimer = setTimeout(() => {
       this.welcomeTimer = null;
-      if (this.closed || this.crashed || this.connectionState === 'open') return;
+      if (this.closed || this.crashed || this.role !== 'guest' || this.connectionState === 'open') {
+        return;
+      }
       this.log('no host welcome on this broker; trying the next broker');
-      this.brokerAttempt += 1;
       const old = this.transport;
+      const currentBroker = old?.broker();
+      if (currentBroker) this.brokerMisses.add(currentBroker);
+      this.rotationsSinceHostReply += 1;
+      this.brokerAttempt += 1;
       this.transport = null;
       if (old) void old.close();
       void this.connectGuestTransport();
-    }, 5_000);
+    }, timeoutMs);
   }
 
   private clearWelcomeWatchdog(): void {
@@ -1197,11 +1310,17 @@ export class OnlineSession implements Session {
         return;
       }
       if (message.t === 'action' && message.gen !== this.generation) {
+        this.guestSeen.set(from, Date.now());
         void this.transport?.send(from, {
           t: 'error',
           code: 'stale',
           message: 'ホスト世代が変わりました。最新の状態から操作してください',
         });
+        if (this.isKnownSeatKey(fingerprint)) {
+          this.reviveSeatFromPeer(from, fingerprint);
+          this.controller.connect(from);
+          this.controller.resync(from);
+        }
         return;
       }
       const pinned = this.peerKeys.get(from);
@@ -1238,27 +1357,45 @@ export class OnlineSession implements Session {
         this.hostFollowers.add(from);
         const hostFp = this.ownHostFingerprint();
         const record = this.followers.get(fingerprint);
-        // A peer that addresses this host directly is following it unless it explicitly said
-        // otherwise; this keeps the initial quorum from freezing before the first presence tick.
-        if (!record || record.hostFp === hostFp) {
+        // A peer that addresses this host directly is following it unless it already declared a
+        // newer/equal generation for another host; overwrite stale pre-migration records.
+        if (!record || record.hostFp === hostFp || record.gen < this.generation) {
           this.recordFollowing(fingerprint, { hostFp, gen: this.generation });
         }
       }
-      // A signed hello/chat/action from a seated peer proves it accepted this generation's host.
-      if (seated && this.promotedAt > 0 && !this.authorityReady) {
-        this.ackKeys.add(fingerprint);
-        if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
+      const wasConnectedBefore =
+        message.t === 'hello' && seated && this.controller.seatForConn(from) !== null;
+      if (message.t === 'action') {
+        if (seated && this.promotedAt > 0 && (!this.authorityReady || !this.promotionConfirmed)) {
+          this.ackKeys.add(fingerprint);
+          this.updateHostQuorum();
+          if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
+        }
+        if (!this.authorityReady || !this.quorumOk) {
+          void this.transport?.send(from, {
+            t: 'error',
+            code: 'stale',
+            message: 'ホストを切り替えています。少し待ってから操作してください',
+          });
+          return;
+        }
       }
-      if (message.t === 'action' && (!this.authorityReady || !this.quorumOk)) {
-        void this.transport?.send(from, {
-          t: 'error',
-          code: 'stale',
-          message: 'ホストを切り替えています。少し待ってから操作してください',
-        });
-        return;
-      }
+      // Process hello/reconnect BEFORE becoming authority ready so the guest is marked connected
+      // in the confirmation snapshot and turn/grace timers reflect the reconnected seat.
       this.controller.connect(from);
       this.controller.message(from, message);
+      if (message.t === 'hello' && !this.peerWelcomedInGen.has(from)) {
+        this.peerWelcomedInGen.add(from);
+        // If presence previously triggered reviveSeatFromPeer before the guest switched hostPeerId,
+        // onHello saw the seat already connected and skipped the snapshot. Guarantee one resync
+        // snapshot on the guest's first hello in this generation so appliedGen catches up.
+        if (wasConnectedBefore) this.controller.resync(from);
+      }
+      if (seated && this.promotedAt > 0 && (!this.authorityReady || !this.promotionConfirmed)) {
+        this.ackKeys.add(fingerprint);
+        this.updateHostQuorum();
+        if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
+      }
       this.afterHostMessage(message);
       return;
     }
@@ -1297,6 +1434,18 @@ export class OnlineSession implements Session {
       this.flushQueue();
     }
     if (!this.acceptServerMessage(message)) return;
+    if (message.t === 'snapshot' || message.t === 'update') {
+      this.lastReceivedGen = genOf(message) ?? this.generation;
+      this.lastReceivedSeq = message.seq;
+      this.debug(`recv ${message.t}`, {
+        gen: this.lastReceivedGen,
+        seq: this.lastReceivedSeq,
+        resync: message.t === 'snapshot' ? message.resync === true : undefined,
+        pendingAction: this.pendingAction
+          ? { gen: this.pendingAction.gen, seq: this.pendingAction.seq, t: this.pendingAction.action.t }
+          : null,
+      });
+    }
     this.onServerMsg(message);
     if (message.t === 'welcome' || message.t === 'snapshot') this.broadcastPresence();
   }
@@ -1430,6 +1579,7 @@ export class OnlineSession implements Session {
           });
           this.rebuildTransferProof();
         }
+        this.updateHostQuorum();
         if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
         return;
       }
@@ -1473,18 +1623,25 @@ export class OnlineSession implements Session {
         if (control.gen <= this.generation) return;
         this.highestGenerationSeen = Math.max(this.highestGenerationSeen, control.gen);
         this.generation = control.gen + 1;
+        this.peerWelcomedInGen.clear();
         this.persistHostNow();
         this.announceHost();
         this.sendHeartbeat();
         this.broadcastGenerationSnapshot();
+        this.controller?.rearmTurn();
         this.log(`generation bumped to ${this.generation} by request`);
         return;
       }
       case 'probeAck':
         return;
       case 'resync':
-        if (this.role === 'host' && this.peerKeys.get(from) === fingerprint) {
-          this.controller?.resync(from);
+        if (this.role === 'host' && this.controller && this.peerKeys.get(from) === fingerprint) {
+          this.guestSeen.set(from, Date.now());
+          this.reviveSeatFromPeer(from, fingerprint);
+          if (!this.controller.hasSeat(from)) {
+            this.controller.connect(from);
+          }
+          this.controller.resync(from);
         }
         return;
       default:
@@ -1629,6 +1786,9 @@ export class OnlineSession implements Session {
         this.quorumOk = true;
         this.authorityReady = true;
         this.controller?.setFrozen(false);
+        this.controller?.rearmTurn();
+        this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
+        this.flushDeferredAction();
         this.log('host continues alone (no other human seats)');
       }
       return;
@@ -1651,12 +1811,24 @@ export class OnlineSession implements Session {
       return;
     }
     this.quorumMessageShown = false;
-    if (this.promotedAt > 0 && this.ackKeys.size < this.requiredAcks) {
-      // Wait for explicit acks on a promoted host; heartbeat re-announcement solicits them.
+    if (this.promotedAt > 0 && !this.promotionConfirmed) {
+      if (this.ackKeys.size < this.requiredAcks) {
+        // Wait for explicit acks on a promoted host; heartbeat re-announcement solicits them.
+        return;
+      }
+      // Quorum returned with required acks already gathered: run the full authority confirmation
+      // path so promotionConfirmed flips to true, tasks re-arm, and the generation snapshot goes out.
+      this.becomeAuthorityReady();
+      this.log(`host quorum restored (${visible}/${needed})`);
+      const text = '通信が回復しました';
+      this.onServerMsg({ t: 'system', text });
+      void this.transport?.broadcast({ t: 'system', text });
       return;
     }
     this.authorityReady = true;
     this.controller?.setFrozen(false);
+    this.controller?.rearmTurn();
+    this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
     this.flushDeferredAction();
     this.log(`host quorum restored (${visible}/${needed})`);
     const text = '通信が回復しました';
@@ -1665,7 +1837,7 @@ export class OnlineSession implements Session {
   }
 
   private becomeAuthorityReady(): void {
-    if (this.authorityReady || !this.quorumOk) return;
+    if ((this.authorityReady && this.promotionConfirmed) || !this.quorumOk) return;
     this.authorityReady = true;
     this.promotionConfirmed = true;
     this.rotationsSinceHostReply = 0;
@@ -1677,7 +1849,10 @@ export class OnlineSession implements Session {
       this.requiredAcks,
     );
     this.controller?.setFrozen(false);
+    this.controller?.rearmTurn();
+    this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
     this.log(`host authority confirmed (${this.ackKeys.size}/${this.requiredAcks} acks)`);
+    this.debug('authority ready', this.debugSnapshot());
     this.sendHeartbeat();
     this.broadcastGenerationSnapshot();
     this.flushDeferredAction();
@@ -1776,10 +1951,12 @@ export class OnlineSession implements Session {
     if (control.gen >= this.generation) {
       this.generation = nextGeneration([this.highestGenerationSeen, control.gen, this.generation]);
       this.highestGenerationSeen = this.generation;
+      this.peerWelcomedInGen.clear();
       this.persistHostNow();
       this.announceHost();
       this.sendHeartbeat();
       this.broadcastGenerationSnapshot();
+      this.controller?.rearmTurn();
       this.log(`kept authority over ${control.hostPeerId} with generation ${this.generation}`);
     }
   }
@@ -1942,7 +2119,12 @@ export class OnlineSession implements Session {
       (seatIndex) => control.seatKeys[seatIndex] === this.identity?.fingerprint,
     );
     if (ownSeat !== undefined) this.seat = Number(ownSeat);
-    if (this.pendingAction && control.seq > this.pendingAction.seq) this.pendingAction = null;
+    if (
+      this.pendingAction &&
+      isNewerStateOrder(this.pendingAction.gen, this.pendingAction.seq, control.gen, control.seq)
+    ) {
+      this.pendingAction = null;
+    }
     if (!this.lastWelcome || this.connectionState !== 'open') this.sendHello();
     const ownHash = stateHashOf(this.shadow.state, this.shadow.seq);
     const playing = this.shadow.lobby?.status === 'playing' || this.shadow.lobby?.status === 'finished';
@@ -2079,7 +2261,7 @@ export class OnlineSession implements Session {
     this.sendHostAck(control.hostPeerId, control.gen);
     this.broadcastPresence();
     if (seenAbove) this.requestGenerationBump(control.hostPeerId, this.highestGenerationSeen);
-    setTimeout(() => this.maybeResync(control.hostPeerId, control.seq), 100);
+    setTimeout(() => this.maybeResync(control.hostPeerId, control.seq, control.gen), 100);
     if (hadOwnProgress) {
       // A strictly newer authority wins; whatever this side advanced during the partition is void.
       this.onServerMsg({
@@ -2090,6 +2272,7 @@ export class OnlineSession implements Session {
   }
 
   private sendHostAck(hostPeerId: string, gen: number): void {
+    if (this.seat === null) return;
     const now = Date.now();
     if (this.lastAckGen === gen && now - this.lastAckAt < 2_000) return;
     this.lastAckGen = gen;
@@ -2518,10 +2701,11 @@ export class OnlineSession implements Session {
     const now = Date.now();
     if (this.role === 'host') {
       this.updateHostQuorum();
-      if (!this.authorityReady && this.promotedAt > 0) {
+      if ((!this.authorityReady || !this.promotionConfirmed) && this.promotedAt > 0) {
         if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
         if (!this.authorityReady && now - this.promotedAt > 1_500) this.sendHeartbeat();
       }
+      this.checkHostProgressStall(now);
       const peerSilence = networkConfig.peerSilenceMs ?? DEFAULT_PEER_SILENCE_MS;
       for (const [peerId, seen] of [...this.guestSeen]) {
         if (now - seen <= peerSilence) continue;
@@ -2544,6 +2728,13 @@ export class OnlineSession implements Session {
     }
     this.retryPendingGuestOps(now);
     this.flushDeferredAction();
+    if (
+      this.hostPeerId &&
+      this.generation > this.shadowGeneration &&
+      (this.shadow.lobby?.status === 'playing' || this.shadow.lobby?.status === 'finished')
+    ) {
+      this.maybeResync(this.hostPeerId, this.shadow.seq, this.generation);
+    }
     if (typeof document === 'undefined' || document.visibilityState === 'visible') {
       if (now - this.lastLivenessAt > REAUTH_SILENCE_MS) {
         this.reauthenticate('no server activity while visible');
@@ -2595,10 +2786,68 @@ export class OnlineSession implements Session {
     if (this.isLowestAliveHuman(now)) this.promoteToHost();
   }
 
+  private resetHostStallWatch(seq: number): void {
+    this.lastBoardGen = this.generation;
+    this.lastBoardSeq = seq;
+    this.lastBoardAdvanceAt = Date.now();
+    this.hostStallRearms = 0;
+    this.lastHostStallRearmAt = 0;
+  }
+
+  /**
+   * Bounded host-side safety net: if an active, confirmed, unfrozen host fails to advance an
+   * autonomous or timed turn (CPU, autoplay, disconnected grace, year_end ack, or timed human turn)
+   * past its fx+timer budget + extra grace (default 10s), or if its expected scheduler task went
+   * missing, re-arm the room tasks and log a warning. Capped per (gen, seq) so it never loops.
+   */
+  private checkHostProgressStall(now: number): void {
+    if (
+      this.role !== 'host' ||
+      !this.controller ||
+      !this.authorityReady ||
+      !this.quorumOk ||
+      this.controller.isFrozen
+    ) {
+      return;
+    }
+    if (this.controller.roomStatus !== 'playing') {
+      this.lastBoardAdvanceAt = now;
+      this.hostStallRearms = 0;
+      return;
+    }
+    const seq = this.controller.currentSeq;
+    if (seq !== this.lastBoardSeq || this.generation !== this.lastBoardGen) {
+      this.resetHostStallWatch(seq);
+      return;
+    }
+    const maxRearms = networkConfig.maxHostStallRearms ?? DEFAULT_MAX_HOST_STALL_REARMS;
+    if (this.hostStallRearms >= maxRearms) return;
+    const expectedWait = this.controller.expectedProgressWaitMs();
+    if (expectedWait === null) return;
+    const extraMs = networkConfig.hostStallExtraMs ?? DEFAULT_HOST_STALL_EXTRA_MS;
+    const since = Math.max(this.lastBoardAdvanceAt, this.lastHostStallRearmAt);
+    const taskMissing = !this.controller.hasExpectedProgressTask();
+    const threshold = taskMissing ? Math.min(2_000, extraMs) : expectedWait + extraMs;
+    if (now - since < threshold) return;
+
+    this.hostStallRearms += 1;
+    this.lastHostStallRearmAt = now;
+    const snap = this.controller.debugSnapshot();
+    this.log(
+      `host board stalled at gen=${this.generation} seq=${seq} for ${now - this.lastBoardAdvanceAt}ms ` +
+        `(taskMissing=${String(taskMissing)}, rearm ${this.hostStallRearms}/${maxRearms}); re-arming room tasks`,
+      { actorSeat: snap.actorSeat, phase: snap.phase, tasks: snap.tasks },
+    );
+    this.controller.rearmTurn();
+    this.debug('host stall rearm complete', this.debugSnapshot());
+  }
+
   /**
    * MQTT is QoS1, but public brokers still occasionally lose a packet. Lobby requests and the
-   * current action are idempotent at the protocol level (repeat take_seat re-sends welcome, repeat
-   * action on the same seq is applied once and then stale), so retry until observed.
+   * current action are idempotent at the protocol level (repeat take_seat re-sends welcome; repeat
+   * action with the same (gen, seq) is replayed idempotently by the host without double-applying).
+   * Safety net is strictly bounded: resend up to maxActionRetries after actionRetryMs (default 6s),
+   * then request resync up to maxActionResyncs, then clear & soft-reject so UI never wedges.
    */
   private retryPendingGuestOps(now: number): void {
     if (this.role !== 'guest' || this.closed || this.crashed) return;
@@ -2614,20 +2863,61 @@ export class OnlineSession implements Session {
         }
       }
     }
-    if (
-      this.pendingAction &&
-      this.pendingAction.gen === this.generation &&
-      this.shadow.seq === this.pendingAction.seq &&
-      now - this.pendingAction.sentAt >= 1_000
-    ) {
-      this.pendingAction.sentAt = now;
-      this.deliverToHost({
-        t: 'action',
-        gen: this.pendingAction.gen,
-        seq: this.pendingAction.seq,
-        action: this.pendingAction.action,
-      });
+    const pending = this.pendingAction;
+    if (!pending) return;
+    if (isNewerStateOrder(pending.gen, pending.seq, this.shadowGeneration, this.shadow.seq)) {
+      this.pendingAction = null;
+      return;
     }
+    const retryMs = networkConfig.actionRetryMs ?? DEFAULT_ACTION_RETRY_MS;
+    const resyncMs = networkConfig.actionResyncMs ?? DEFAULT_ACTION_RESYNC_MS;
+    const maxRetries = networkConfig.maxActionRetries ?? DEFAULT_MAX_ACTION_RETRIES;
+    const maxResyncs = networkConfig.maxActionResyncs ?? DEFAULT_MAX_ACTION_RESYNCS;
+
+    // If the host generation moved on while our action was pending, never resend under the old
+    // generation; immediately escalate to resync (bounded) so we adopt the new board cleanly.
+    const sameGen = pending.gen === this.generation;
+    if (sameGen && pending.retries < maxRetries) {
+      if (now - pending.sentAt >= retryMs) {
+        pending.sentAt = now;
+        pending.retries += 1;
+        this.debug('resend pending action', {
+          gen: pending.gen,
+          seq: pending.seq,
+          t: pending.action.t,
+          retry: pending.retries,
+          maxRetries,
+        });
+        this.deliverToHost({
+          t: 'action',
+          gen: pending.gen,
+          seq: pending.seq,
+          action: pending.action,
+        });
+      }
+      return;
+    }
+    const sinceLast = pending.lastResyncAt > 0 ? now - pending.lastResyncAt : now - pending.sentAt;
+    if (sinceLast < resyncMs) return;
+    if (pending.resyncs < maxResyncs) {
+      pending.resyncs += 1;
+      pending.lastResyncAt = now;
+      this.debug('escalate pending action to resync', {
+        gen: pending.gen,
+        seq: pending.seq,
+        t: pending.action.t,
+        resync: pending.resyncs,
+        maxResyncs,
+      });
+      this.requestResync();
+      return;
+    }
+    // Bounded upper limit reached: release UI lock and stop retrying.
+    this.log(
+      `pending action timed out at gen=${pending.gen} seq=${pending.seq} after ${pending.retries} retries and ${pending.resyncs} resyncs`,
+    );
+    this.pendingAction = null;
+    this.softReject('操作の応答がありませんでした。最新の状態を確認してもう一度お試しください');
   }
 
   /**
@@ -2714,7 +3004,8 @@ export class OnlineSession implements Session {
         deadline: this.shadow.deadline,
       };
       const deps = this.hostDeps();
-      this.controller = RoomController.adopt(snapshot, deps);
+      this.clearWelcomeWatchdog();
+      this.controller = RoomController.adopt(snapshot, deps, { frozen: true });
       this.role = 'host';
       this.promotionConfirmed = false;
       this.agreedHumanSeats = snapshot.lobby.seats.filter((seat) => seat.kind === 'human').length;
@@ -2723,20 +3014,26 @@ export class OnlineSession implements Session {
       this.highestGenerationSeen = this.generation;
       this.promotedAt = Date.now();
       this.hostFollowers.clear();
+      this.peerWelcomedInGen.clear();
+      this.pendingAction = null;
       this.lastCompeting = null;
       this.probeStartedAt = 0;
       this.ackKeys.clear();
       this.quorumOk = true;
       this.quorumMessageShown = false;
       this.requiredAcks = this.requiredAckCount();
-      this.authorityReady = this.requiredAcks === 0;
-      this.controller.setFrozen(!this.authorityReady);
+      this.authorityReady = false;
       this.hostPeerId = this.clientId;
       this.prevHostFpForTransfer = this.rosterCert?.hostFp ?? this.hostKeyFingerprint ?? '';
       this.hostKeyFingerprint = this.identity?.fingerprint ?? null;
       this.hostSeat = this.seat;
       this.transferApprovals.clear();
       this.mergeAgreedSeatKeys(snapshot.seatKeys, snapshot.reclaimKeys);
+      // Guests only mirror 1 extra broker; a promoted host must cover every candidate broker so
+      // guests stranded on a 3rd broker can reach the new authority and confirm quorum.
+      const baseBrokers = networkConfig.brokers ?? DEFAULT_BROKERS;
+      const wantedMirrors = networkConfig.redundantBrokers ?? Math.max(0, baseBrokers.length - 1);
+      this.transport?.setRedundantBrokers(wantedMirrors, baseBrokers);
       if (this.identity && this.rosterCert) {
         const ownIdentity = this.identity;
         const gen = this.generation;
@@ -2765,6 +3062,11 @@ export class OnlineSession implements Session {
         boardVersion: BOARD_VERSION,
       });
       this.setState('open');
+      this.resetHostStallWatch(snapshot.seq);
+      if (this.requiredAcks === 0) {
+        this.becomeAuthorityReady();
+      }
+      this.debug('promoted to host', this.debugSnapshot());
       this.announceHost();
       this.sendHeartbeat();
       this.broadcastGenerationSnapshot();
@@ -2848,6 +3150,8 @@ export class OnlineSession implements Session {
         this.lastSnapshot = message;
         this.appliedGen = message.gen ?? this.generation;
         this.appliedSeq = message.seq;
+        this.lastReceivedGen = this.appliedGen;
+        this.lastReceivedSeq = message.seq;
         this.noteDeliveredOrder(message.seq, this.appliedGen);
         this.lastLobby = message.lobby;
         this.seat = message.lobby.seats.find((seat) => seat.index === this.seat)?.index ?? this.seat;
@@ -2856,19 +3160,32 @@ export class OnlineSession implements Session {
         this.shadow.seq = message.seq;
         this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
-        if (this.pendingAction && message.seq > this.pendingAction.seq) this.pendingAction = null;
+        if (
+          this.pendingAction &&
+          isNewerStateOrder(this.pendingAction.gen, this.pendingAction.seq, this.appliedGen, message.seq)
+        ) {
+          this.pendingAction = null;
+        }
         break;
       case 'update':
         this.lastUpdate = message;
         this.appliedGen = message.gen ?? this.generation;
         this.appliedSeq = message.seq;
+        this.lastReceivedGen = this.appliedGen;
+        this.lastReceivedSeq = message.seq;
         this.noteDeliveredOrder(message.seq, this.appliedGen);
         this.shadow.state = message.state;
         this.shadow.seq = message.seq;
         this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
         this.shadow.lastFx = message.fx;
-        if (this.pendingAction && message.seq > this.pendingAction.seq) this.pendingAction = null;
+        if (
+          this.pendingAction &&
+          isNewerStateOrder(this.pendingAction.gen, this.pendingAction.seq, this.appliedGen, message.seq)
+        ) {
+          this.pendingAction = null;
+        }
+        if (this.role === 'host') this.resetHostStallWatch(message.seq);
         break;
       case 'error':
         if (
@@ -2980,6 +3297,10 @@ export class OnlineSession implements Session {
   private log(message: string, detail?: unknown): void {
     if (detail === undefined) console.warn(`[online ${this.roomId}] ${message}`);
     else console.warn(`[online ${this.roomId}] ${message}`, detail);
+  }
+
+  private debug(message: string, detail?: unknown): void {
+    netDebug(`${this.roomId}/${this.role}:${this.seat ?? '-'}`, message, detail);
   }
 }
 
@@ -3099,6 +3420,10 @@ export function authorityInfoForTests(session: Session): {
   return session instanceof OnlineSession ? session.authorityInfo() : null;
 }
 
+export function netDebugSnapshotForTests(session: Session): NetDebugSnapshot | null {
+  return session instanceof OnlineSession ? session.debugSnapshot() : null;
+}
+
 export function checkpointHostForTests(session: Session): HostCheckpoint | null {
   return session instanceof OnlineSession ? session.hostCheckpoint() : null;
 }
@@ -3120,6 +3445,10 @@ export function resyncPeerForTests(session: Session, connId: string): void {
 
 export function setBlockedPeersForTests(session: Session, peerIds: readonly string[]): void {
   if (session instanceof OnlineSession) session.setBlockedPeersForTests(peerIds);
+}
+
+export function clearRoomTasksForTests(session: Session): void {
+  if (session instanceof OnlineSession) session.clearRoomTasksForTests();
 }
 
 export function setNetworkPartitionForTests(session: Session, blocked: boolean): void {
