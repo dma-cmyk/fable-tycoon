@@ -661,11 +661,16 @@ async function sampleModalDepth(client) {
       }).length;
       const status = (document.querySelector('.status-chip')?.textContent || '').trim();
       const banner = (document.querySelector('.game-banner')?.textContent || '').trim();
-      return { visibleModals, status, banner };
+      const eventTitle = (document.querySelector('.event-panel.is-open .event-title')?.textContent || '').trim();
+      return { visibleModals, status, banner, eventTitle };
     })
     .catch(() => null);
   if (!sample) return;
   client.modalSamples = (client.modalSamples || 0) + 1;
+  if (sample.eventTitle) {
+    client.eventTitles = client.eventTitles || new Set();
+    if (client.eventTitles.size < 200) client.eventTitles.add(sample.eventTitle);
+  }
   if (/通信待ち/.test(sample.banner) || /通信待ち/.test(sample.status)) {
     client.commWaitUi = (client.commWaitUi || 0) + 1;
     report.commWaitUi = (report.commWaitUi || 0) + 1;
@@ -1390,6 +1395,11 @@ async function playLoop(client) {
     }
     await sleep(action ? 120 : 220);
   }
+  // Close an in-flight cutscene interval so a stopped/killed client does not keep accruing.
+  if (client.fxBusySince) {
+    client.fxBusyTotalMs = (client.fxBusyTotalMs || 0) + (Date.now() - client.fxBusySince);
+    client.fxBusySince = 0;
+  }
 }
 
 // ---------------------------------------------------------------- evidence helpers
@@ -1724,15 +1734,23 @@ async function main() {
 
   // Emote in the lobby (DOM bubbles exist here; in-game emotes are canvas-only).
   phase('emote_test', { from: chatSender.id });
-  await openEmoteTab(chatSender, '喜怒哀楽');
-  await press(chatSender, chatSender.page.locator('.emote-btn').first());
   const emoteBubble = chatReceiver.page.locator(
     `.lobby-seat[data-seat="${chatSender.seat}"] .lobby-seat-bubble`,
   );
-  await waitFor(() => isVisible(emoteBubble.first()), {
-    timeout: 10_000,
-    label: `${chatReceiver.id} receives emote bubble`,
-  });
+  let emoteDelivered = false;
+  for (let attempt = 1; attempt <= 3 && !emoteDelivered; attempt += 1) {
+    if (attempt > 1) log(`${chatSender.id}: resending emote (attempt ${attempt})`);
+    await openEmoteTab(chatSender, '喜怒哀楽');
+    await press(chatSender, chatSender.page.locator('.emote-btn').first());
+    emoteDelivered = await waitFor(() => isVisible(emoteBubble.first()), {
+      timeout: 10_000,
+      interval: 250,
+      label: `${chatReceiver.id} receives emote bubble`,
+    })
+      .then(() => true)
+      .catch(() => false);
+  }
+  if (!emoteDelivered) throw new Error(`${chatReceiver.id} never received the emote after 3 sends`);
   const emoteText = ((await emoteBubble.first().textContent()) || '').trim();
   if (!emoteText || emoteText === chatText) {
     throw new Error(`emote bubble did not show a distinct emote line: "${emoteText}"`);
@@ -2122,6 +2140,25 @@ try {
   report.maxModals = Math.max(0, ...clients.map((client) => client.maxModals || 0));
   report.maxModalsNonActor = Math.max(0, ...clients.map((client) => client.maxModalsNonActor || 0));
   report.canvasLimitWarnings = report.errors.canvasLimitWarnings;
+  {
+    // events.json has unique titles, so the visible event title maps 1:1 to an event id.
+    let eventsForReport = [];
+    try {
+      eventsForReport = JSON.parse(await readFile(path.join(ROOT, 'src/data/events.json'), 'utf8'));
+    } catch {
+      eventsForReport = [];
+    }
+    const titleToId = new Map(eventsForReport.map((event) => [event.title, event.id]));
+    const byClient = {};
+    const all = new Set();
+    for (const client of clients) {
+      const titles = [...(client.eventTitles || [])];
+      const ids = titles.map((title) => titleToId.get(title) ?? `unknown:${title}`);
+      ids.forEach((id) => all.add(id));
+      byClient[client.id] = ids;
+    }
+    report.events = { byClient, unique: [...all].sort() };
+  }
   report.cutscene = {
     skipAfterMs: SKIP_AFTER_MS,
     totalSkips: clients.reduce((sum, client) => sum + (client.stuckSkips || 0), 0),
@@ -2131,7 +2168,7 @@ try {
         {
           skips: client.stuckSkips || 0,
           maxBusyMs: client.fxBusyMaxSeen || 0,
-          totalBusyMs: Math.round(client.fxBusyTotalMs || 0) + (client.fxBusySince ? Date.now() - client.fxBusySince : 0),
+          totalBusyMs: Math.round(client.fxBusyTotalMs || 0),
           normalFxCount: (client.fxDurations || []).length,
           normalFxMaxMs: Math.max(0, ...(client.fxDurations || [])),
         },
@@ -2166,7 +2203,7 @@ try {
     maxModalsNonActor: client.maxModalsNonActor || 0,
     stuckSkips: client.stuckSkips || 0,
     fxBusyMaxMs: client.fxBusyMaxSeen || 0,
-    fxBusyTotalMs: Math.round(client.fxBusyTotalMs || 0) + (client.fxBusySince ? Date.now() - client.fxBusySince : 0),
+    fxBusyTotalMs: Math.round(client.fxBusyTotalMs || 0),
     skipLog: client.skipLog || [],
     fxDurationsMs: client.fxDurations || [],
     brokersConnected: client.brokersConnected || [],
