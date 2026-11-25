@@ -9,6 +9,8 @@ import type { PublicState, ServerMsg } from './protocol';
 import type { Session } from './session-types';
 import { setNetDebugForTests } from './debug';
 import { FxPlayer, estimateFxDurationMs } from '../ui/fxPlayer';
+import { isIdenticalResync } from '../ui/resync';
+import type { ResyncWatermark } from '../ui/resync';
 import type { UiSettings } from '../ui/settings';
 import {
   authorityInfoForTests,
@@ -992,6 +994,418 @@ describe('host migration stall reproductions & regressions', () => {
     } finally {
       debugSpy.mockRestore();
       setNetDebugForTests(null);
+    }
+  }, 30_000);
+
+  it('repro 1a: 20s turn deadline still fires within 25s and advances via CPU despite quorum flapping every 5s', async () => {
+    const broker = await startBroker();
+    activeBrokers.push(broker);
+    configureNetworkForTests({
+      brokers: [broker.url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 120,
+      hostSilenceMs: 12_000,
+      peerSilenceMs: 900,
+      probeMs: 300,
+      hostGoneMs: 15_000,
+      selfHostGraceMs: 2_000,
+      saveThrottleMs: 20,
+      graceMs: 30_000,
+      replaceMs: 120_000,
+      yearEndAckMs: 30_000,
+      cpuDelayMs: 80,
+      fxScale: 0.01,
+      clientIds: { qfh: 'qf-host', qfg1: 'qf-g1', qfg2: 'qf-g2' },
+    });
+
+    const host = new TestPeer(await createOnlineRoom('qfh'), 'qf-host');
+    const g1 = new TestPeer(joinOnlineRoom(host.session.roomId, 'qfg1'), 'qf-g1');
+    const g2 = new TestPeer(joinOnlineRoom(host.session.roomId, 'qfg2'), 'qf-g2');
+    activePeers.push(host, g1, g2);
+    await Promise.all([g1, g2].map((g) => g.waitFor((m) => m.t === 'welcome')));
+    await seatAll(host, [g1, g2]);
+    host.session.send({ t: 'settings', settings: { years: 1, turnSeconds: 20 } });
+    const started = [host, g1, g2].map((p) => p.waitFor((m) => m.t === 'update'));
+    host.session.send({ t: 'start' });
+    await Promise.all(started);
+
+    // Advance until seat 2 (g2) is the acting human, then let nobody act.
+    const peers = [host, g1, g2];
+    for (let i = 0; i < 40 && actorOf(host.state as PublicState) !== 2; i += 1) {
+      const a = actorOf(host.state as PublicState) ?? 0;
+      const before = host.seq;
+      const allSaw = Promise.all(peers.map((p) => p.waitFor((m) => m.t === 'update' && m.seq > before)));
+      peers[a].session.send({
+        t: 'action',
+        seq: peers[a].seq,
+        action: cpuDecide(GAME_DATA, peers[a].state as GameState),
+      });
+      await allSaw;
+    }
+    expect(actorOf(host.state as PublicState)).toBe(2);
+    const seqAtTurnStart = host.seq;
+    const turnStartMs = Date.now();
+
+    // Flap host quorum every 5 seconds: lose quorum for ~2.2s, restore for ~2.8s.
+    let quorumLosses = 0;
+    const flapDone = (async () => {
+      for (let cycle = 0; cycle < 5; cycle += 1) {
+        if (host.seq > seqAtTurnStart) break;
+        const nextLossAt = turnStartMs + (cycle + 1) * 5_000 - 2_200;
+        const waitBefore = nextLossAt - Date.now();
+        if (waitBefore > 0) await new Promise((r) => setTimeout(r, waitBefore));
+        if (host.seq > seqAtTurnStart) break;
+        setBlockedPeersForTests(host.session, ['qf-g1', 'qf-g2']);
+        try {
+          await waitUntil(
+            () => netDebugSnapshotForTests(host.session)?.authority.quorumOk === false || host.seq > seqAtTurnStart,
+            2_500,
+            'quorum dips',
+          );
+          if (netDebugSnapshotForTests(host.session)?.authority.quorumOk === false) quorumLosses += 1;
+        } catch {
+          // ignore if seq already advanced
+        }
+        await new Promise((r) => setTimeout(r, 1_400));
+        setBlockedPeersForTests(host.session, []);
+        try {
+          await waitUntil(
+            () => netDebugSnapshotForTests(host.session)?.authority.quorumOk === true || host.seq > seqAtTurnStart,
+            2_500,
+            'quorum restores',
+          );
+        } catch {
+          // ignore
+        }
+      }
+      setBlockedPeersForTests(host.session, []);
+    })();
+
+    try {
+      await waitUntil(
+        () => host.seq > seqAtTurnStart && g2.seq > seqAtTurnStart,
+        25_000,
+        '20s turn deadline fires within 25s despite quorum flapping every 5s',
+        () => ({
+          elapsedMs: Date.now() - turnStartMs,
+          quorumLosses,
+          host: netDebugSnapshotForTests(host.session),
+        }),
+      );
+      expect(Date.now() - turnStartMs).toBeLessThanOrEqual(25_000);
+      expect(quorumLosses).toBeGreaterThanOrEqual(2);
+      expect(host.history.some((m) => m.t === 'system' && m.text.includes('時間切れ'))).toBe(true);
+    } finally {
+      setBlockedPeersForTests(host.session, []);
+      await flapDone;
+    }
+  }, 45_000);
+
+  it('repro 1b: host migration preserves elapsed turn time via relative turnElapsedMs instead of resetting to +20s', async () => {
+    const broker = await startBroker();
+    activeBrokers.push(broker);
+    configureNetworkForTests({
+      brokers: [broker.url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 150,
+      hostSilenceMs: 700,
+      peerSilenceMs: 1_800,
+      probeMs: 200,
+      hostGoneMs: 1_500,
+      selfHostGraceMs: 800,
+      saveThrottleMs: 20,
+      graceMs: 30_000,
+      replaceMs: 120_000,
+      yearEndAckMs: 30_000,
+      cpuDelayMs: 80,
+      fxScale: 0.01,
+      clientIds: { elh: 'el-host', elg1: 'el-g1', elg2: 'el-g2' },
+    });
+
+    const host = new TestPeer(await createOnlineRoom('elh'), 'el-host');
+    const g1 = new TestPeer(joinOnlineRoom(host.session.roomId, 'elg1'), 'el-g1');
+    const g2 = new TestPeer(joinOnlineRoom(host.session.roomId, 'elg2'), 'el-g2');
+    activePeers.push(host, g1, g2);
+    await Promise.all([g1, g2].map((g) => g.waitFor((m) => m.t === 'welcome')));
+    await seatAll(host, [g1, g2]);
+    host.session.send({ t: 'settings', settings: { years: 1, turnSeconds: 20 } });
+    const started = [host, g1, g2].map((p) => p.waitFor((m) => m.t === 'update'));
+    host.session.send({ t: 'start' });
+    await Promise.all(started);
+
+    // Move to seat 2 (g2) so g2 is acting human and remains alive across migration.
+    const peers = [host, g1, g2];
+    for (let i = 0; i < 40 && actorOf(host.state as PublicState) !== 2; i += 1) {
+      const a = actorOf(host.state as PublicState) ?? 0;
+      const before = host.seq;
+      const allSaw = Promise.all(peers.map((p) => p.waitFor((m) => m.t === 'update' && m.seq > before)));
+      peers[a].session.send({
+        t: 'action',
+        seq: peers[a].seq,
+        action: cpuDecide(GAME_DATA, peers[a].state as GameState),
+      });
+      await allSaw;
+    }
+    expect(actorOf(host.state as PublicState)).toBe(2);
+    const seqAtStart = host.seq;
+    const turnStartedAt = Date.now();
+
+    // Let 6 seconds elapse on the original host, then kill host so g1 adopts the room.
+    await new Promise((r) => setTimeout(r, 6_000));
+    killSessionForTests(host.session);
+
+    await waitUntil(
+      () =>
+        netDebugSnapshotForTests(g1.session)?.role === 'host' &&
+        netDebugSnapshotForTests(g1.session)?.authority.promotionConfirmed === true,
+      8_000,
+      'g1 confirms host authority',
+      () => netDebugSnapshotForTests(g1.session),
+    );
+    const remainingAfterConfirm =
+      (netDebugSnapshotForTests(g1.session)?.controller?.deadline ?? Number.POSITIVE_INFINITY) - Date.now();
+    // With 6s elapsed before crash + ~1.5s migration, remaining MUST be <= 15s (NOT reset to 20s!).
+    expect(remainingAfterConfirm).toBeLessThan(15_500);
+
+    // The original 20s deadline must still fire within 24s of turn start.
+    await waitUntil(
+      () => g1.seq > seqAtStart && g2.seq > seqAtStart,
+      24_000 - (Date.now() - turnStartedAt),
+      'migrated turn deadline fires on original schedule',
+      () => ({ elapsedMs: Date.now() - turnStartedAt, g1: netDebugSnapshotForTests(g1.session) }),
+    );
+  }, 45_000);
+
+  it('repro 2: same-(gen, seq) resync and FxPlayer watchdog never leave cutscene stuck in busy state', async () => {
+    const broker = await startBroker();
+    activeBrokers.push(broker);
+    configureNetworkForTests({
+      brokers: [broker.url],
+      disableWebRtc: true,
+      connectTimeoutMs: 2_000,
+      heartbeatMs: 120,
+      hostSilenceMs: 10_000,
+      peerSilenceMs: 10_000,
+      saveThrottleMs: 20,
+      graceMs: 30_000,
+      replaceMs: 60_000,
+      yearEndAckMs: 30_000,
+      cpuDelayMs: 50,
+      fxScale: 0.01,
+      clientIds: { rs2h: 'rs2-host', rs2g: 'rs2-guest' },
+    });
+
+    const host = new TestPeer(await createOnlineRoom('rs2h'), 'rs2-host');
+    const guest = new TestPeer(joinOnlineRoom(host.session.roomId, 'rs2g'), 'rs2-guest');
+    activePeers.push(host, guest);
+    await guest.waitFor((m) => m.t === 'welcome');
+    await seatAll(host, [guest]);
+    host.session.send({ t: 'settings', settings: { years: 1, turnSeconds: 0 } });
+    const started = [host, guest].map((p) => p.waitFor((m) => m.t === 'update'));
+    host.session.send({ t: 'start' });
+    await Promise.all(started);
+
+    const settings: UiSettings = { fxSpeed: 8, autoAdvance: true, showChat: true, reducedMotion: false };
+    let watermark: ResyncWatermark | null = null;
+    let fxBusy = false;
+    let hangFx = true;
+    const fxPlayer = new FxPlayer({
+      settings: () => settings,
+      handleFx: () => (hangFx ? new Promise<void>(() => undefined) : Promise.resolve()),
+      applyState: (state, _deadline, seq, gen) => {
+        watermark = { gen: gen ?? 1, seq, state };
+      },
+      setBusy: (busy) => {
+        fxBusy = busy;
+      },
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+    });
+    const unsub = guest.session.subscribe((msg) => {
+      if (msg.t === 'snapshot') {
+        const gen = msg.gen ?? 1;
+        if (msg.resync && !fxPlayer.busy && !fxBusy && isIdenticalResync(watermark, { gen, seq: msg.seq, state: msg.state })) {
+          return;
+        }
+        fxPlayer.reset();
+        watermark = { gen, seq: msg.seq, state: msg.state };
+      } else if (msg.t === 'update') {
+        fxPlayer.enqueue({ seq: msg.seq, fx: msg.fx, state: msg.state, deadline: msg.deadline, gen: msg.gen });
+      }
+    });
+    try {
+      const beforeSeq = host.seq;
+      host.session.send({
+        t: 'action',
+        seq: beforeSeq,
+        action: cpuDecide(GAME_DATA, host.state as GameState),
+      });
+      await guest.waitFor((m) => m.t === 'update' && m.seq > beforeSeq, 5_000, 'guest receives update');
+      expect(fxPlayer.busy).toBe(true);
+      expect(fxBusy).toBe(true);
+
+      // Guest requests explicit resync for the SAME (gen, seq) while FxPlayer is hung on that update.
+      guest.session.requestResync?.();
+      await waitUntil(
+        () => !fxPlayer.busy && !fxBusy && watermark?.seq === host.seq,
+        5_000,
+        'same-(gen, seq) resync clears hung FxPlayer and adopts board',
+        () => ({ busy: fxPlayer.busy, fxBusy, watermarkSeq: watermark?.seq, hostSeq: host.seq }),
+      );
+      hangFx = false;
+    } finally {
+      unsub();
+      fxPlayer.destroy();
+    }
+  }, 30_000);
+
+  it('repro 3a: migration avoids false quorum-lost spam and guests restore mirror brokers after broker rotation', async () => {
+    const brokerA = await startBroker();
+    const brokerB = await startBroker();
+    const brokerC = await startBroker();
+    activeBrokers.push(brokerA, brokerB, brokerC);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const common = {
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 120,
+        hostSilenceMs: 700,
+        peerSilenceMs: 2_000,
+        probeMs: 200,
+        hostGoneMs: 1_500,
+        selfHostGraceMs: 800,
+        welcomeTimeoutMs: 600,
+        hostReplySilenceMs: 1_000,
+        brokerRetryMs: 300,
+        saveThrottleMs: 20,
+        graceMs: 30_000,
+        replaceMs: 60_000,
+        yearEndAckMs: 30_000,
+        cpuDelayMs: 50,
+        fxScale: 0.01,
+      } as const;
+
+      configureNetworkForTests({
+        ...common,
+        brokers: [brokerA.url, brokerB.url, brokerC.url],
+        clientIds: { q3h: 'q3-host', q3g1: 'q3-g1', q3g2: 'q3-g2', q3g3: 'q3-g3' },
+      });
+
+      const host = new TestPeer(await createOnlineRoom('q3h'), 'q3-host');
+      const g1 = new TestPeer(joinOnlineRoom(host.session.roomId, 'q3g1'), 'q3-g1');
+      const g2 = new TestPeer(joinOnlineRoom(host.session.roomId, 'q3g2'), 'q3-g2');
+      const g3 = new TestPeer(joinOnlineRoom(host.session.roomId, 'q3g3'), 'q3-g3');
+      activePeers.push(host, g1, g2, g3);
+      await Promise.all([g1, g2, g3].map((g) => g.waitFor((m) => m.t === 'welcome')));
+      await seatAll(host, [g1, g2, g3]);
+      host.session.send({ t: 'settings', settings: { years: 1, turnSeconds: 20 } });
+      const started = [host, g1, g2, g3].map((p) => p.waitFor((m) => m.t === 'update'));
+      host.session.send({ t: 'start' });
+      await Promise.all(started);
+
+      // Kill host: g1 promotes, g2/g3 may rotate brokers during host silence.
+      warn.mockClear();
+      killSessionForTests(host.session);
+
+      await waitUntil(
+        () => {
+          const s1 = netDebugSnapshotForTests(g1.session);
+          const s2 = netDebugSnapshotForTests(g2.session);
+          const s3 = netDebugSnapshotForTests(g3.session);
+          return (
+            s1?.role === 'host' &&
+            s1.authority.ready === true &&
+            s1.authority.promotionConfirmed === true &&
+            s1.mirrors.length === 2 &&
+            (s2?.mirrors.length ?? 0) >= 1 &&
+            (s3?.mirrors.length ?? 0) >= 1 &&
+            s2?.applied?.gen === s1.generation &&
+            s3?.applied?.gen === s1.generation
+          );
+        },
+        15_000,
+        'promoted host confirms without false quorum-lost flap and guests retain mirror brokers',
+        () => ({
+          g1: netDebugSnapshotForTests(g1.session),
+          g2: netDebugSnapshotForTests(g2.session),
+          g3: netDebugSnapshotForTests(g3.session),
+        }),
+      );
+
+      // Healthy migration must NOT have logged a spurious `host quorum lost (1/3)`!
+      const quorumLostLogs = warn.mock.calls
+        .map((args) => String(args[0] ?? ''))
+        .filter((text) => text.includes('host quorum lost'));
+      expect(quorumLostLogs).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  }, 45_000);
+
+  it('repro 1c: host stall watchdog forces deadline to now with prominent warning when hitting maxHostStallRearms', async () => {
+    const broker = await startBroker();
+    activeBrokers.push(broker);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      configureNetworkForTests({
+        brokers: [broker.url],
+        disableWebRtc: true,
+        connectTimeoutMs: 2_000,
+        heartbeatMs: 120,
+        hostSilenceMs: 10_000,
+        peerSilenceMs: 10_000,
+        saveThrottleMs: 20,
+        graceMs: 30_000,
+        replaceMs: 60_000,
+        yearEndAckMs: 30_000,
+        cpuDelayMs: 80,
+        fxScale: 0.01,
+        hostStallExtraMs: 250,
+        maxHostStallRearms: 2,
+        clientIds: { sfh: 'sf-host', sfg: 'sf-guest' },
+      });
+
+      const host = new TestPeer(await createOnlineRoom('sfh'), 'sf-host');
+      const guest = new TestPeer(joinOnlineRoom(host.session.roomId, 'sfg'), 'sf-guest');
+      activePeers.push(host, guest);
+      await guest.waitFor((m) => m.t === 'welcome');
+      await seatAll(host, [guest]);
+      host.session.send({ t: 'settings', settings: { years: 1, turnSeconds: 20 } });
+      const started = [host, guest].map((p) => p.waitFor((m) => m.t === 'update'));
+      host.session.send({ t: 'start' });
+      await Promise.all(started);
+
+      const stalledSeq = host.seq;
+      const startAt = Date.now();
+      // First wipe: stall watchdog rearm 1/2 restores the turn task (without expiring 20s deadline).
+      clearRoomTasksForTests(host.session);
+      await waitUntil(
+        () => warn.mock.calls.some((args) => String(args[0] ?? '').includes('rearm 1/2')),
+        4_000,
+        'host stall watchdog runs rearm 1/2',
+        () => netDebugSnapshotForTests(host.session),
+      );
+      expect(host.seq).toBe(stalledSeq);
+
+      // Second wipe: hitting maxHostStallRearms (2/2) MUST emit [STALL-FORCE] and expire deadline NOW!
+      clearRoomTasksForTests(host.session);
+      await waitUntil(
+        () => host.seq > stalledSeq && guest.seq > stalledSeq,
+        5_000,
+        'host stall watchdog forces deadline expiry at maxHostStallRearms',
+        () => ({ elapsed: Date.now() - startAt, host: netDebugSnapshotForTests(host.session) }),
+      );
+      expect(Date.now() - startAt).toBeLessThan(10_000);
+      expect(
+        warn.mock.calls.some((args) => String(args[0] ?? '').includes('[STALL-FORCE]')),
+      ).toBe(true);
+      expect(host.history.some((m) => m.t === 'system' && m.text.includes('時間切れ'))).toBe(true);
+    } finally {
+      warn.mockRestore();
     }
   }, 30_000);
 });

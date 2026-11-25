@@ -49,13 +49,13 @@ const GUEST_SAVE_KEY = 'fable.online.guest';
 const HOST_SAVE_KEY = 'fable.online.host';
 const DEFAULT_HEARTBEAT_MS = 3_000;
 const DEFAULT_HOST_SILENCE_MS = 10_000;
-const DEFAULT_PEER_SILENCE_MS = 10_000;
+const DEFAULT_PEER_SILENCE_MS = 15_000;
 const PROBE_TIMEOUT_MS = 5_000;
 const HOST_PROBE_MS = 3_000;
 const HOST_GONE_MS = 15_000;
 const SELF_HOST_GRACE_MS = 10_000;
 const REAUTH_SILENCE_MS = 10_000;
-const HOST_REPLY_SILENCE_MS = 8_000;
+const HOST_REPLY_SILENCE_MS = 12_000;
 const BROKER_RETRY_MS = 5_000;
 const DEFAULT_WELCOME_TIMEOUT_MS = 5_000;
 const DEFAULT_ACTION_RETRY_MS = 6_000;
@@ -458,6 +458,8 @@ interface Shadow {
   hostSeat: number | null;
   lastFx: RoomPublicSnapshot['lastFx'];
   deadline: number | null;
+  turnElapsedMs: number;
+  turnElapsedAt: number;
 }
 
 function emptyShadow(): Shadow {
@@ -472,6 +474,8 @@ function emptyShadow(): Shadow {
     hostSeat: null,
     lastFx: [],
     deadline: null,
+    turnElapsedMs: 0,
+    turnElapsedAt: 0,
   };
 }
 
@@ -948,7 +952,7 @@ export class OnlineSession implements Session {
       msg = { ...msg, gen };
     }
     if (this.role === 'host' && this.controller) {
-      if (msg.t === 'action' && (!this.authorityReady || !this.quorumOk)) {
+      if (msg.t === 'action' && (!this.authorityReady || !this.quorumOk || this.controller.isFrozen)) {
         this.deferAction(msg.gen ?? this.generation, msg.seq, msg.action);
         this.softReject('通信待ちのため操作できません。再接続を待っています');
         return;
@@ -1003,7 +1007,7 @@ export class OnlineSession implements Session {
       return;
     }
     if (this.switchingAuthority) return; // still mid-switch; a later state re-tries
-    if (this.role === 'host' && (!this.authorityReady || !this.quorumOk)) return;
+    if (this.role === 'host' && (!this.authorityReady || !this.quorumOk || this.controller?.isFrozen)) return;
     if (applied.gen !== this.generation) {
       // Wait for the new generation's snapshot instead of looping softReject on every watchdog tick.
       if (this.role === 'guest' && this.hostPeerId) {
@@ -1265,16 +1269,19 @@ export class OnlineSession implements Session {
 
   private createTransport(): MqttTransport {
     if (!this.identity) throw new Error('identity not initialised');
-    // Respect brokerMisses from brokerCandidates() instead of pinning back to an unresponsive hostBroker.
+    // Respect brokerMisses from brokerCandidates() for primary ordering, while keeping the rest
+    // of the base brokers at the tail so mirrors and failover never collapse to a single broker.
+    const base = networkConfig.brokers ?? DEFAULT_BROKERS;
     const candidates = this.brokerCandidates();
     const preferred =
       this.hostBroker && !this.brokerMisses.has(this.hostBroker) && candidates.includes(this.hostBroker)
         ? this.hostBroker
         : null;
-    const brokers = preferred
+    const ordered = preferred
       ? [preferred, ...candidates.filter((broker) => broker !== preferred)]
       : candidates;
-    const defaultMirrors = this.role === 'host' ? Math.max(0, brokers.length - 1) : 1;
+    const brokers = [...new Set([...ordered, ...base])];
+    const defaultMirrors = this.role === 'host' ? Math.max(0, brokers.length - 1) : Math.min(1, Math.max(0, brokers.length - 1));
     const transport = new MqttTransport(this.clientId, {
       identity: this.identity,
       brokers,
@@ -1371,7 +1378,7 @@ export class OnlineSession implements Session {
           this.updateHostQuorum();
           if (this.ackKeys.size >= this.requiredAcks) this.becomeAuthorityReady();
         }
-        if (!this.authorityReady || !this.quorumOk) {
+        if (!this.authorityReady || !this.quorumOk || this.controller.isFrozen) {
           void this.transport?.send(from, {
             t: 'error',
             code: 'stale',
@@ -1429,7 +1436,9 @@ export class OnlineSession implements Session {
     if (message.t === 'welcome') {
       this.lastHostHeartbeatAt = Date.now();
       this.brokerAttempt = 0;
+      this.brokerMisses.clear();
       this.clearWelcomeWatchdog();
+      this.ensureGuestMirrors();
       this.setState('open');
       this.flushQueue();
     }
@@ -1541,6 +1550,8 @@ export class OnlineSession implements Session {
         if (control.gen !== this.generation) return;
         const keys = this.controller?.publicSnapshot().seatKeys ?? {};
         if (!Object.values(keys).includes(fingerprint)) return;
+        this.guestSeen.set(from, Date.now());
+        this.refreshFollowerFromDirectMessage(fingerprint);
         pending.acked.add(fingerprint);
         const needed = this.voteAckTargets(pending.control.target, pending.control.voter);
         if ([...needed].every((key) => key === this.ownHostFingerprint() || pending.acked.has(key))) {
@@ -1566,10 +1577,15 @@ export class OnlineSession implements Session {
           this.log('drop host_ack: ack names a different host key');
           return;
         }
-        this.recordFollowing(fingerprint, {
-          hostFp: this.identity?.fingerprint ?? this.clientId,
-          gen: this.generation,
-        });
+        this.guestSeen.set(from, Date.now());
+        this.recordFollowing(
+          fingerprint,
+          {
+            hostFp: this.identity?.fingerprint ?? this.clientId,
+            gen: this.generation,
+          },
+          control.at,
+        );
         this.ackKeys.add(fingerprint);
         if (control.transferSig && control.pub) {
           this.transferApprovals.set(fingerprint, {
@@ -1592,7 +1608,7 @@ export class OnlineSession implements Session {
             this.reviveSeatFromPeer(from, fingerprint);
           }
         }
-        this.recordFollowing(fingerprint, control.following);
+        this.recordFollowing(fingerprint, control.following, control.at);
         return;
       case 'hb':
       case 'host': {
@@ -1637,6 +1653,7 @@ export class OnlineSession implements Session {
       case 'resync':
         if (this.role === 'host' && this.controller && this.peerKeys.get(from) === fingerprint) {
           this.guestSeen.set(from, Date.now());
+          this.refreshFollowerFromDirectMessage(fingerprint);
           this.reviveSeatFromPeer(from, fingerprint);
           if (!this.controller.hasSeat(from)) {
             this.controller.connect(from);
@@ -1747,12 +1764,70 @@ export class OnlineSession implements Session {
     });
   }
 
-  private recordFollowing(fingerprint: string, following: { hostFp: string; gen: number } | null): void {
+  private ensureGuestMirrors(): void {
+    if (this.role !== 'guest' || !this.transport) return;
+    const baseBrokers = networkConfig.brokers ?? DEFAULT_BROKERS;
+    const defaultGuestMirrors = Math.min(1, Math.max(0, baseBrokers.length - 1));
+    const wantedMirrors = networkConfig.redundantBrokers ?? defaultGuestMirrors;
+    if (wantedMirrors > 0) this.transport.setRedundantBrokers(wantedMirrors, baseBrokers);
+  }
+
+  private refreshFollowerFromDirectMessage(fingerprint: string): void {
+    if (this.role !== 'host' || !this.controller) return;
+    const snapNow = this.controller.publicSnapshot();
+    const seated =
+      Object.values(snapNow.seatKeys).includes(fingerprint) ||
+      Object.values(snapNow.reclaimKeys ?? {}).includes(fingerprint);
+    if (!seated) return;
+    const hostFp = this.ownHostFingerprint();
+    const record = this.followers.get(fingerprint);
+    if (!record || record.hostFp === hostFp || record.gen < this.generation) {
+      this.recordFollowing(fingerprint, { hostFp, gen: this.generation });
+    }
+  }
+
+  private recordFollowing(
+    fingerprint: string,
+    following: { hostFp: string; gen: number } | null,
+    senderAt?: number,
+  ): void {
+    const existing = this.followers.get(fingerprint);
     if (!following) {
+      // Ignore stale out-of-order `following: null` presence arriving after a newer record.
+      if (
+        existing &&
+        senderAt !== undefined &&
+        existing.senderAt !== undefined &&
+        senderAt <= existing.senderAt
+      ) {
+        return;
+      }
       this.followers.delete(fingerprint);
       return;
     }
-    this.followers.set(fingerprint, { hostFp: following.hostFp, gen: following.gen, at: Date.now() });
+    if (existing) {
+      // Never let a delayed packet from an older generation clobber a newer generation's follower!
+      if (following.gen < existing.gen) return;
+      if (
+        following.gen === existing.gen &&
+        following.hostFp !== existing.hostFp &&
+        senderAt !== undefined &&
+        existing.senderAt !== undefined &&
+        senderAt < existing.senderAt
+      ) {
+        return;
+      }
+    }
+    const nextSenderAt =
+      senderAt !== undefined
+        ? Math.max(senderAt, existing?.senderAt ?? senderAt)
+        : existing?.senderAt;
+    this.followers.set(fingerprint, {
+      hostFp: following.hostFp,
+      gen: following.gen,
+      at: Date.now(),
+      ...(nextSenderAt !== undefined ? { senderAt: nextSenderAt } : {}),
+    });
   }
 
   private ownHostFingerprint(): string {
@@ -1787,7 +1862,6 @@ export class OnlineSession implements Session {
         this.authorityReady = true;
         this.controller?.setFrozen(false);
         this.controller?.rearmTurn();
-        this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
         this.flushDeferredAction();
         this.log('host continues alone (no other human seats)');
       }
@@ -1796,20 +1870,36 @@ export class OnlineSession implements Session {
     const needed = this.strictMajority(total);
     const visible = this.visibleHumanConfirmations();
     const ok = visible >= needed;
-    if (ok === this.quorumOk) return;
-    this.quorumOk = ok;
     if (!ok) {
+      const graceMs = Math.max(2_000, (networkConfig.heartbeatMs ?? DEFAULT_HEARTBEAT_MS) * 2);
+      const inInitialPromotionWindow =
+        this.promotedAt > 0 && !this.promotionConfirmed && Date.now() - this.promotedAt < graceMs;
+      if (ok === this.quorumOk) {
+        // Still without quorum past the initial promotion grace: notify the UI once.
+        if (!inInitialPromotionWindow && !this.quorumMessageShown) {
+          this.quorumMessageShown = true;
+          const text = `通信待ち：${needed} 人中 ${visible} 人しか接続できていません。再接続を待っています`;
+          this.onServerMsg({ t: 'system', text });
+          void this.transport?.broadcast({ t: 'system', text });
+          this.log(`host quorum lost (${visible}/${needed})`);
+        }
+        return;
+      }
+      this.quorumOk = false;
       this.authorityReady = false;
       this.controller?.setFrozen(true);
-      if (!this.quorumMessageShown) {
+      if (!inInitialPromotionWindow && !this.quorumMessageShown) {
         this.quorumMessageShown = true;
         const text = `通信待ち：${needed} 人中 ${visible} 人しか接続できていません。再接続を待っています`;
         this.onServerMsg({ t: 'system', text });
         void this.transport?.broadcast({ t: 'system', text });
+        this.log(`host quorum lost (${visible}/${needed})`);
       }
-      this.log(`host quorum lost (${visible}/${needed})`);
       return;
     }
+    if (ok === this.quorumOk) return;
+    this.quorumOk = true;
+    const hadShownLoss = this.quorumMessageShown;
     this.quorumMessageShown = false;
     if (this.promotedAt > 0 && !this.promotionConfirmed) {
       if (this.ackKeys.size < this.requiredAcks) {
@@ -1819,21 +1909,24 @@ export class OnlineSession implements Session {
       // Quorum returned with required acks already gathered: run the full authority confirmation
       // path so promotionConfirmed flips to true, tasks re-arm, and the generation snapshot goes out.
       this.becomeAuthorityReady();
-      this.log(`host quorum restored (${visible}/${needed})`);
-      const text = '通信が回復しました';
-      this.onServerMsg({ t: 'system', text });
-      void this.transport?.broadcast({ t: 'system', text });
+      if (hadShownLoss) {
+        this.log(`host quorum restored (${visible}/${needed})`);
+        const text = '通信が回復しました';
+        this.onServerMsg({ t: 'system', text });
+        void this.transport?.broadcast({ t: 'system', text });
+      }
       return;
     }
     this.authorityReady = true;
     this.controller?.setFrozen(false);
     this.controller?.rearmTurn();
-    this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
     this.flushDeferredAction();
-    this.log(`host quorum restored (${visible}/${needed})`);
-    const text = '通信が回復しました';
-    this.onServerMsg({ t: 'system', text });
-    void this.transport?.broadcast({ t: 'system', text });
+    if (hadShownLoss) {
+      this.log(`host quorum restored (${visible}/${needed})`);
+      const text = '通信が回復しました';
+      this.onServerMsg({ t: 'system', text });
+      void this.transport?.broadcast({ t: 'system', text });
+    }
   }
 
   private becomeAuthorityReady(): void {
@@ -1848,13 +1941,18 @@ export class OnlineSession implements Session {
       [...this.ackKeys],
       this.requiredAcks,
     );
-    this.controller?.setFrozen(false);
-    this.controller?.rearmTurn();
-    this.resetHostStallWatch(this.controller?.currentSeq ?? this.shadow.seq);
+    const seq = this.controller?.currentSeq ?? this.shadow.seq;
+    if (seq !== this.lastBoardSeq || this.generation !== this.lastBoardGen) {
+      this.resetHostStallWatch(seq);
+    }
     this.log(`host authority confirmed (${this.ackKeys.size}/${this.requiredAcks} acks)`);
     this.debug('authority ready', this.debugSnapshot());
     this.sendHeartbeat();
+    // Deliver the gen-confirmed snapshot BEFORE unfreezing/running overdue tasks so guests adopt
+    // the new generation before any immediate turn timeout update arrives.
     this.broadcastGenerationSnapshot();
+    this.controller?.setFrozen(false);
+    this.controller?.rearmTurn();
     this.flushDeferredAction();
   }
 
@@ -1875,6 +1973,7 @@ export class OnlineSession implements Session {
       connectedHumans: connectedHumans(snapshot.lobby),
       stateHash: stateHashOf(snapshot.state, snapshot.seq),
       broker: this.transport?.broker() ?? null,
+      turnElapsedMs: snapshot.turnElapsedMs,
       at: Date.now(),
     };
   }
@@ -2078,6 +2177,8 @@ export class OnlineSession implements Session {
     }
     this.lastHostReplyAt = Date.now();
     this.rotationsSinceHostReply = 0;
+    this.brokerMisses.clear();
+    this.ensureGuestMirrors();
     if (this.hostKeyFingerprint === null) this.hostKeyFingerprint = fingerprint;
     if (control.rosterCert) void this.ingestRosterCert(control.rosterCert);
     if (control.transferProof) {
@@ -2111,6 +2212,13 @@ export class OnlineSession implements Session {
     this.shadow.reportVotes = { ...control.reportVotes };
     this.lastLobby = control.lobby;
     this.shadow.lobby = control.lobby;
+    if (
+      control.seq === this.shadow.seq &&
+      typeof control.turnElapsedMs === 'number' &&
+      Number.isFinite(control.turnElapsedMs)
+    ) {
+      this.updateShadowTurnElapsed(control.turnElapsedMs);
+    }
     if (control.broker) {
       this.hostBroker = control.broker;
       discoveredBroker.set(this.roomId, control.broker);
@@ -2242,8 +2350,16 @@ export class OnlineSession implements Session {
       this.shadowGeneration = control.gen;
       this.shadow.seq = 0;
       this.shadow.state = null;
+      this.shadow.turnElapsedMs = 0;
+      this.shadow.turnElapsedAt = 0;
       this.lastSnapshot = null;
       this.lastUpdate = null;
+    } else if (
+      control.seq === this.shadow.seq &&
+      typeof control.turnElapsedMs === 'number' &&
+      Number.isFinite(control.turnElapsedMs)
+    ) {
+      this.updateShadowTurnElapsed(control.turnElapsedMs);
     }
     if (previousHostPeerId && previousHostPeerId !== control.hostPeerId && previousHostFp) {
       // Tell the old host immediately that this seat now follows the new authority; it must stop
@@ -2432,6 +2548,7 @@ export class OnlineSession implements Session {
       lobby: snapshot.lobby,
       gen: this.generation,
       resync: true,
+      turnElapsedMs: snapshot.turnElapsedMs,
       boardVersion: BOARD_VERSION,
     };
     // Own UI first: it is the one that has to re-arm its action buttons for the new generation.
@@ -2580,6 +2697,7 @@ export class OnlineSession implements Session {
       connectedHumans: connectedHumans(snapshot.lobby),
       stateHash: stateHashOf(snapshot.state, snapshot.seq),
       broker: this.transport.broker(),
+      turnElapsedMs: snapshot.turnElapsedMs,
       ...(this.rosterCert ? { rosterCert: this.rosterCert } : {}),
       ...(this.transferProof ? { transferProof: this.transferProof } : {}),
       at: Date.now(),
@@ -2652,6 +2770,7 @@ export class OnlineSession implements Session {
       connectedHumans: connectedHumans(snapshot.lobby),
       stateHash: stateHashOf(snapshot.state, snapshot.seq),
       broker: this.transport.broker(),
+      turnElapsedMs: snapshot.turnElapsedMs,
       ...(this.rosterCert ? { rosterCert: this.rosterCert } : {}),
       ...(this.transferProof ? { transferProof: this.transferProof } : {}),
       at: Date.now(),
@@ -2833,6 +2952,19 @@ export class OnlineSession implements Session {
     this.hostStallRearms += 1;
     this.lastHostStallRearmAt = now;
     const snap = this.controller.debugSnapshot();
+    if (this.hostStallRearms >= maxRearms) {
+      console.warn(
+        `[online ${this.roomId}] [STALL-FORCE] host board stalled at gen=${this.generation} seq=${seq} ` +
+          `for ${now - this.lastBoardAdvanceAt}ms (taskMissing=${String(taskMissing)}, rearm ${this.hostStallRearms}/${maxRearms}); ` +
+          'forcing deadline to now',
+        { actorSeat: snap.actorSeat, phase: snap.phase, tasks: snap.tasks },
+      );
+      if (!this.controller.forceExpireTurnNow()) {
+        this.controller.rearmTurn();
+      }
+      this.debug('host stall forced expiry complete', this.debugSnapshot());
+      return;
+    }
     this.log(
       `host board stalled at gen=${this.generation} seq=${seq} for ${now - this.lastBoardAdvanceAt}ms ` +
         `(taskMissing=${String(taskMissing)}, rearm ${this.hostStallRearms}/${maxRearms}); re-arming room tasks`,
@@ -2986,10 +3118,29 @@ export class OnlineSession implements Session {
     return candidates.length > 0 && candidates[0] === this.seat;
   }
 
+  private currentShadowTurnElapsedMs(now = Date.now()): number {
+    return (
+      this.shadow.turnElapsedMs +
+      (this.shadow.turnElapsedAt > 0 ? Math.max(0, now - this.shadow.turnElapsedAt) : 0)
+    );
+  }
+
+  private updateShadowTurnElapsed(elapsedMs: number): void {
+    const now = Date.now();
+    const next = Math.max(0, elapsedMs);
+    // Keep elapsed time monotonic within the same (gen, seq) so a delayed heartbeat from a
+    // secondary mirror broker can never roll the estimated elapsed time backwards.
+    if (next >= this.currentShadowTurnElapsedMs(now)) {
+      this.shadow.turnElapsedMs = next;
+      this.shadow.turnElapsedAt = now;
+    }
+  }
+
   private promoteToHost(): void {
     if (this.role !== 'guest' || this.promoting || !this.shadow.lobby || this.seat === null) return;
     this.promoting = true;
     try {
+      const turnElapsedMs = this.currentShadowTurnElapsedMs();
       const snapshot: RoomPublicSnapshot = {
         roomId: this.roomId,
         lobby: this.shadow.lobby,
@@ -3002,6 +3153,7 @@ export class OnlineSession implements Session {
         reportVotes: this.shadow.reportVotes,
         lastFx: this.shadow.lastFx,
         deadline: this.shadow.deadline,
+        turnElapsedMs,
       };
       const deps = this.hostDeps();
       this.clearWelcomeWatchdog();
@@ -3019,9 +3171,9 @@ export class OnlineSession implements Session {
       this.lastCompeting = null;
       this.probeStartedAt = 0;
       this.ackKeys.clear();
-      this.quorumOk = true;
-      this.quorumMessageShown = false;
       this.requiredAcks = this.requiredAckCount();
+      this.quorumOk = this.requiredAcks === 0;
+      this.quorumMessageShown = false;
       this.authorityReady = false;
       this.hostPeerId = this.clientId;
       this.prevHostFpForTransfer = this.rosterCert?.hostFp ?? this.hostKeyFingerprint ?? '';
@@ -3146,7 +3298,9 @@ export class OnlineSession implements Session {
         }
         if (this.role === 'guest') this.hostSeat = message.lobby.seats.find((seat) => seat.isHost)?.index ?? this.hostSeat;
         break;
-      case 'snapshot':
+      case 'snapshot': {
+        const prevSeq = this.shadow.seq;
+        const prevGen = this.shadowGeneration;
         this.lastSnapshot = message;
         this.appliedGen = message.gen ?? this.generation;
         this.appliedSeq = message.seq;
@@ -3160,6 +3314,18 @@ export class OnlineSession implements Session {
         this.shadow.seq = message.seq;
         this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
+        const isNewDecision = message.seq !== prevSeq || this.shadowGeneration !== prevGen;
+        if (typeof message.turnElapsedMs === 'number' && Number.isFinite(message.turnElapsedMs)) {
+          if (isNewDecision) {
+            this.shadow.turnElapsedMs = Math.max(0, message.turnElapsedMs);
+            this.shadow.turnElapsedAt = Date.now();
+          } else {
+            this.updateShadowTurnElapsed(message.turnElapsedMs);
+          }
+        } else if (isNewDecision) {
+          this.shadow.turnElapsedMs = 0;
+          this.shadow.turnElapsedAt = Date.now();
+        }
         if (
           this.pendingAction &&
           isNewerStateOrder(this.pendingAction.gen, this.pendingAction.seq, this.appliedGen, message.seq)
@@ -3167,6 +3333,7 @@ export class OnlineSession implements Session {
           this.pendingAction = null;
         }
         break;
+      }
       case 'update':
         this.lastUpdate = message;
         this.appliedGen = message.gen ?? this.generation;
@@ -3178,6 +3345,8 @@ export class OnlineSession implements Session {
         this.shadow.seq = message.seq;
         this.shadowGeneration = genOf(message) ?? this.generation;
         this.shadow.deadline = message.deadline;
+        this.shadow.turnElapsedMs = 0;
+        this.shadow.turnElapsedAt = Date.now();
         this.shadow.lastFx = message.fx;
         if (
           this.pendingAction &&

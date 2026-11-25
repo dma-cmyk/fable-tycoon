@@ -219,6 +219,78 @@ describe('FxPlayer watchdog', () => {
     player.destroy();
     warn.mockRestore();
   });
+
+  it('does not wedge in busy state if applyState throws and compresses obsolete backlog updates', async () => {
+    const seenSeqs: number[] = [];
+    const appliedSeqs: number[] = [];
+    let throwOnce = true;
+    const player = new FxPlayer({
+      settings: () => settings,
+      handleFx: async (_fx, state) => {
+        seenSeqs.push(state.current);
+        await Promise.resolve();
+      },
+      applyState: (_s, _d, seq) => {
+        if (throwOnce) {
+          throwOnce = false;
+          throw new Error('simulated DOM applyState failure');
+        }
+        appliedSeqs.push(seq);
+      },
+      setBusy: () => undefined,
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+    });
+
+    const s = (n: number) => ({ current: n, players: [] }) as unknown as PublicState;
+    player.enqueue({ seq: 10, fx: [toastFx], state: s(10), deadline: null, gen: 1 });
+    player.enqueue({ seq: 11, fx: [toastFx], state: s(11), deadline: null, gen: 1 });
+    player.enqueue({ seq: 12, fx: [toastFx], state: s(12), deadline: null, gen: 1 });
+    player.enqueue({ seq: 13, fx: [toastFx], state: s(13), deadline: null, gen: 1 });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(player.busy).toBe(false);
+    // Intermediate stale updates (11, 12) compressed so we jumped directly to the latest update (13).
+    expect(appliedSeqs).toEqual([13]);
+    expect(seenSeqs).toEqual([10, 13]);
+    player.destroy();
+  });
+
+  it('exposes live backlog count on PlaybackControl so voice-heavy cutscenes stop blocking while behind', async () => {
+    const backlogs: number[] = [];
+    const releases: Array<() => void> = [];
+    const player = new FxPlayer({
+      settings: () => ({ ...settings, fxSpeed: 1 }),
+      handleFx: (_fx, _state, control) => {
+        backlogs.push(control.backlog);
+        const { promise, resolve } = Promise.withResolvers<void>();
+        releases.push(resolve);
+        return promise;
+      },
+      applyState: () => undefined,
+      setBusy: () => undefined,
+      setSkippable: () => undefined,
+      onQueueChange: () => undefined,
+    });
+
+    player.enqueue({ seq: 1, fx: [toastFx], state, deadline: null, gen: 1 });
+    expect(backlogs).toEqual([0]);
+    player.enqueue({ seq: 2, fx: [toastFx], state, deadline: null, gen: 1 });
+    player.enqueue({ seq: 3, fx: [toastFx], state, deadline: null, gen: 1 });
+    releases.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(backlogs).toEqual([0, 1]);
+    releases.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(backlogs).toEqual([0, 1, 0]);
+    releases.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(player.busy).toBe(false);
+    player.destroy();
+  });
 });
 
 describe('FxPlayer backlog pruning', () => {

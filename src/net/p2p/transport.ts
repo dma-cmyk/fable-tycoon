@@ -94,6 +94,8 @@ export type P2PControl =
       rosterCert?: SeatRosterCert;
       /** Signed transfer proof so offline guests rejoining from an old invite URL can verify the successor. */
       transferProof?: TransferProof;
+      /** Elapsed ms since the current decision started on the host (relative; clock-skew safe). */
+      turnElapsedMs?: number;
       at: number;
     }
   | {
@@ -113,6 +115,8 @@ export type P2PControl =
       broker: string | null;
       rosterCert?: SeatRosterCert;
       transferProof?: TransferProof;
+      /** Elapsed ms since the current decision started on the host (relative; clock-skew safe). */
+      turnElapsedMs?: number;
       at: number;
     }
   | {
@@ -388,7 +392,7 @@ export class MqttTransport implements P2PTransport {
     this.inboxTopic = `${this.root}/${this.peerId}`;
     this.key = await deriveRoomKey(roomId);
 
-    const brokers = this.options.brokers ?? DEFAULT_BROKERS;
+    const brokers = [...new Set(this.options.brokers ?? DEFAULT_BROKERS)];
     this.brokerList = brokers;
     let lastError: unknown = null;
     for (let index = 0; index < brokers.length; index += 1) {
@@ -473,11 +477,12 @@ export class MqttTransport implements P2PTransport {
       for (const broker of candidates) {
         if (this.closed) return;
         if (this.mirrors.size >= this.redundantBrokers) return;
+        if (broker === this.brokerUrl || this.mirrors.has(broker)) continue;
         try {
           const client = await this.openClient(broker);
-          if (this.closed) {
+          if (this.closed || broker === this.brokerUrl || this.mirrors.has(broker)) {
             client.end(true);
-            return;
+            continue;
           }
           this.mirrors.set(broker, client);
           this.attachMirror(broker, client);
@@ -510,11 +515,19 @@ export class MqttTransport implements P2PTransport {
 
   private attachMirror(broker: string, client: MqttClient): void {
     client.on('message', (_topic: string, payload: Uint8Array) => {
+      if (this.closed || this.mirrors.get(broker) !== client) return;
       this.handleWire(payload.toString());
     });
     const drop = (): void => {
       if (this.mirrors.get(broker) !== client) return;
       this.mirrors.delete(broker);
+      // Explicitly end the dropped mirror so mqtt.js reconnectPeriod does not keep a zombie
+      // duplicate connection alive in the background while ensureMirrors opens a replacement.
+      try {
+        client.end(true);
+      } catch {
+        // ignore
+      }
       if (this.closed) return;
       this.scheduleMirrorRetry();
       this.recomputeStatus();
@@ -522,15 +535,23 @@ export class MqttTransport implements P2PTransport {
     client.on('close', drop);
     client.on('offline', drop);
     client.on('connect', () => {
-      if (this.closed) return;
+      if (this.closed || this.mirrors.get(broker) !== client) return;
       void this.subscribe(client)
         .then(() => {
+          if (this.closed || this.mirrors.get(broker) !== client) return;
           this.recomputeStatus();
           this.flushOfflineQueue();
         })
-        .catch((error) => this.log(`mirror subscribe failed: ${broker}`, error));
+        .catch((error) => {
+          if (!this.closed && this.mirrors.get(broker) === client) {
+            this.log(`mirror subscribe failed: ${broker}`, error);
+          }
+        });
     });
-    client.on('error', (error: Error) => this.log('mirror mqtt error', error));
+    client.on('error', (error: Error) => {
+      if (this.closed || this.mirrors.get(broker) !== client) return;
+      this.log('mirror mqtt error', error);
+    });
   }
 
   private scheduleMirrorRetry(): void {
@@ -561,29 +582,34 @@ export class MqttTransport implements P2PTransport {
 
   private attachClient(client: MqttClient): void {
     client.on('message', (_topic: string, payload: Uint8Array) => {
+      if (this.closed || this.client !== client) return;
       this.handleWire(payload.toString());
     });
     client.on('close', () => {
-      if (this.closed) return;
+      if (this.closed || this.client !== client) return;
       // A live mirror still carries traffic for every room member: only report reconnecting when
       // NO broker connection is usable.
       this.recomputeStatus();
       this.scheduleFailover();
     });
     client.on('offline', () => {
-      if (this.closed) return;
+      if (this.closed || this.client !== client) return;
       this.recomputeStatus();
       this.scheduleFailover();
     });
     client.on('connect', () => {
-      if (this.closed) return;
+      if (this.closed || this.client !== client) return;
       this.clearFailover();
       void this.subscribe(client).then(() => {
+        if (this.closed || this.client !== client) return;
         this.recomputeStatus();
         this.flushOfflineQueue();
       });
     });
-    client.on('error', (error: Error) => this.log('mqtt error', error));
+    client.on('error', (error: Error) => {
+      if (this.closed || this.client !== client) return;
+      this.log('mqtt error', error);
+    });
   }
 
   private subscribe(client: MqttClient): Promise<void> {
@@ -629,10 +655,41 @@ export class MqttTransport implements P2PTransport {
       this.brokerIndex = (this.brokerIndex + 1) % this.brokerList.length;
       const broker = this.brokerList[this.brokerIndex];
       this.log(`mqtt failover to ${broker}`);
+      const existingMirror = this.mirrors.get(broker);
+      if (existingMirror) {
+        this.mirrors.delete(broker);
+        if (existingMirror.connected) {
+          // Promote the already-connected mirror to primary instead of opening a duplicate socket.
+          existingMirror.removeAllListeners();
+          this.client = existingMirror;
+          this.brokerUrl = broker;
+          this.attachClient(existingMirror);
+          await this.subscribe(existingMirror);
+          this.setStatus('open');
+          this.flushOfflineQueue();
+          this.ensureMirrors();
+          return;
+        }
+        try {
+          existingMirror.end(true);
+        } catch {
+          // ignore
+        }
+      }
       const client = await this.openClient(broker);
       if (this.closed) {
         client.end(true);
         return;
+      }
+      // If a mirror connected to `broker` concurrently during openClient, drop the duplicate mirror.
+      const dupMirror = this.mirrors.get(broker);
+      if (dupMirror) {
+        this.mirrors.delete(broker);
+        try {
+          dupMirror.end(true);
+        } catch {
+          // ignore
+        }
       }
       this.client = client;
       this.brokerUrl = broker;
@@ -640,6 +697,7 @@ export class MqttTransport implements P2PTransport {
       await this.subscribe(client);
       this.setStatus('open');
       this.flushOfflineQueue();
+      this.ensureMirrors();
     } catch (error) {
       this.log('mqtt failover failed', error);
       this.scheduleFailover();

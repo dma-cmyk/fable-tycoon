@@ -56,6 +56,8 @@ export interface PlaybackControl {
   onSkip(callback: () => void): () => void;
   readonly skipped: boolean;
   readonly speed: number;
+  /** Number of newer updates waiting behind the currently playing head. */
+  readonly backlog: number;
 }
 
 export interface FxPlayerHost {
@@ -273,6 +275,9 @@ export class FxPlayer {
       get speed() {
         return player.speedFactor();
       },
+      get backlog() {
+        return Math.max(0, player.queue.length - 1);
+      },
       get skipped() {
         return player.skipRequested || stale();
       },
@@ -316,44 +321,59 @@ export class FxPlayer {
     this.running = true;
     this.host.setBusy(true);
     this.host.setSkippable(true);
-    while (this.queue.length > 0 && !this.destroyed && this.epoch === epoch) {
-      const update = this.queue[0];
-      const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
-      const watchdogMs = estimatedMs * 2 + 8000;
-      this.watchdogPaused = false;
-      this.skipUpdateRequested = false;
-      this.armWatchdog(update, epoch, watchdogMs);
-      for (const fx of update.fx) {
-        if (this.destroyed || this.epoch !== epoch || this.skipUpdateRequested) break;
+    try {
+      while (this.queue.length > 0 && !this.destroyed && this.epoch === epoch) {
+        const update = this.queue[0];
+        const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
+        const watchdogMs = estimatedMs * 2 + 8000;
+        this.watchdogPaused = false;
+        this.skipUpdateRequested = false;
+        this.armWatchdog(update, epoch, watchdogMs);
+        for (const fx of update.fx) {
+          if (this.destroyed || this.epoch !== epoch || this.skipUpdateRequested) break;
+          this.skipCallbacks.clear();
+          this.skipRequested = false;
+          this.host.setSkippable(true);
+          try {
+            await this.host.handleFx(fx, update.state, this.controlFor(epoch));
+          } catch {
+            // A presentation handler must not wedge the game. Continue to the next fx.
+          } finally {
+            if (this.epoch === epoch) this.setManualWait(false);
+          }
+        }
+        if (this.epoch !== epoch) return;
+        this.skipUpdateRequested = false;
+        this.clearWatchdog();
+        this.activeUpdate = null;
+        this.finishActive();
         this.skipCallbacks.clear();
-        this.skipRequested = false;
-        this.host.setSkippable(true);
-        try {
-          await this.host.handleFx(fx, update.state, this.controlFor(epoch));
-        } catch {
-          // A presentation handler must not wedge the game. Continue to the next fx.
-        } finally {
-          if (this.epoch === epoch) this.setManualWait(false);
+        this.queue.shift();
+        // When 3+ newer updates pile up behind the finished update, collapse obsolete middle updates
+        // and jump straight to the latest so slow clients never fall tens of seconds behind.
+        if (this.queue.length > 2) {
+          this.queue = [this.queue[this.queue.length - 1]];
+        }
+        this.host.onQueueChange(this.queue.length);
+        if (!this.destroyed) {
+          try {
+            this.host.applyState(update.state, update.deadline, update.seq, update.gen);
+          } catch {
+            // A state paint failure must never leave FxPlayer permanently wedged in busy=true.
+          }
         }
       }
-      if (this.epoch !== epoch) return;
-      this.skipUpdateRequested = false;
-      this.clearWatchdog();
-      this.activeUpdate = null;
-      this.finishActive();
-      this.skipCallbacks.clear();
-      this.queue.shift();
-      this.host.onQueueChange(this.queue.length);
-      if (!this.destroyed) this.host.applyState(update.state, update.deadline, update.seq, update.gen);
+    } finally {
+      // CRITICAL: never mutate watchdog or queue state if reset()/watchdog started a newer epoch.
+      if (this.epoch === epoch) {
+        this.clearWatchdog();
+        this.activeUpdate = null;
+        this.watchdogPaused = false;
+        this.running = false;
+        this.host.setBusy(false);
+        this.host.setSkippable(false);
+        if (this.queue.length > 0 && !this.destroyed) void this.pump();
+      }
     }
-    // CRITICAL: never mutate watchdog or queue state if reset()/watchdog started a newer epoch.
-    if (this.epoch !== epoch) return;
-    this.clearWatchdog();
-    this.activeUpdate = null;
-    this.watchdogPaused = false;
-    this.running = false;
-    this.host.setBusy(false);
-    this.host.setSkippable(false);
-    if (this.queue.length > 0 && !this.destroyed) void this.pump();
   }
 }

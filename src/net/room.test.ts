@@ -910,25 +910,90 @@ describe('RoomController migration authority and resync', () => {
     expect(snap?.msg.t === 'snapshot' ? snap.msg.resync : false).toBe(true);
   });
 
-  it('resets stale old-host deadline on adopt and re-arms turn/cpu/ack tasks on unfreeze & rearmTurn', () => {
+  it('computes adopted deadline from relative turnElapsedMs (immune to clock skew) and re-arms turn/cpu/ack tasks on unfreeze & rearmTurn', () => {
     const harness = makeHarness();
     startTwoHumans(harness, { years: 1, turnSeconds: 20 });
     const pub = harness.room.publicSnapshot();
     expect(pub.deadline).not.toBeNull();
+    expect(pub.turnElapsedMs).toBe(0);
 
-    // New host adopts 60s later (old deadline is already long expired!): must NOT immediately timeout.
+    // New host's wall clock is skewed +60s ahead (old absolute deadline would already be expired):
+    // adopting with relative turnElapsedMs must compute a fresh local deadline without firing immediately.
     const adoptedHarness = makeHarness();
     adoptedHarness.clock.advance(60_000);
     const adopted = RoomController.adopt({ ...pub, hostSeat: 1 }, adoptedHarness.deps, { frozen: true });
     expect(adopted.isFrozen).toBe(true);
-    expect(adopted.currentDeadline).toBeNull();
-    expect(adopted.debugSnapshot().tasks.some((t) => t.kind === 'turn')).toBe(false);
-
-    adopted.setFrozen(false);
-    adopted.rearmTurn();
     expect(adopted.currentDeadline).not.toBeNull();
     expect(adopted.currentDeadline as number).toBeGreaterThan(adoptedHarness.clock.now());
+    expect(adopted.debugSnapshot().tasks.some((t) => t.kind === 'turn')).toBe(false);
+
+    const deadlineBeforeUnfreeze = adopted.currentDeadline as number;
+    adopted.setFrozen(false);
+    adopted.rearmTurn();
+    expect(adopted.currentDeadline).toBe(deadlineBeforeUnfreeze);
     expect(adopted.debugSnapshot().tasks.some((t) => t.kind === 'turn')).toBe(true);
+  });
+
+  it('restores elapsed turn time on adopt and fires immediately on unfreeze when already expired', () => {
+    const harness = makeHarness({ fxScale: 0.01 });
+    const started = startTwoHumans(harness, { years: 1, turnSeconds: 20 });
+    harness.clock.advance(7_000);
+    const pub = harness.room.publicSnapshot();
+    expect(pub.turnElapsedMs).toBe(7_000);
+
+    // Skewed +120s clock on successor: remaining time must be ~13s (20s - 7s + small fx), not 20s.
+    const successor = makeHarness({ fxScale: 0.01 });
+    successor.clock.advance(120_000);
+    const adopted = RoomController.adopt({ ...pub, hostSeat: 1 }, successor.deps, { frozen: true });
+    const remaining = (adopted.currentDeadline as number) - successor.clock.now();
+    expect(remaining).toBeGreaterThan(12_000);
+    expect(remaining).toBeLessThan(14_000);
+    adopted.setFrozen(false);
+    expect(adopted.currentSeq).toBe(started.seq);
+
+    // Adopt a snapshot whose elapsed turn time already exceeds the 20s budget: stays paused while
+    // frozen, then immediately runs timeout upon setFrozen(false).
+    const overdueHarness = makeHarness({ fxScale: 0.01 });
+    const overdue = RoomController.adopt(
+      { ...pub, hostSeat: 1, turnElapsedMs: 25_000 },
+      overdueHarness.deps,
+      { frozen: true },
+    );
+    expect(overdue.currentSeq).toBe(started.seq);
+    overdue.setFrozen(false);
+    expect(overdue.currentSeq).toBeGreaterThan(started.seq);
+    expect(
+      overdueHarness.broadcasts.some((m) => m.t === 'system' && m.text.includes('時間切れ')),
+    ).toBe(true);
+  });
+
+  it('never extends turn deadline across repeated freeze/unfreeze cycles or rearmTurn, and forceExpireTurnNow fires immediately', () => {
+    const harness = makeHarness({ fxScale: 0.01 });
+    const started = startTwoHumans(harness, { years: 1, turnSeconds: 20 });
+    const initialDeadline = harness.room.currentDeadline as number;
+    expect(initialDeadline).toBeGreaterThan(harness.clock.now());
+
+    // Repeated freeze/unfreeze and rearmTurn must NEVER shift or recreate the deadline.
+    for (let i = 0; i < 3; i += 1) {
+      harness.clock.advance(2_000);
+      harness.room.setFrozen(true);
+      harness.clock.advance(2_000);
+      harness.room.setFrozen(false);
+      harness.room.rearmTurn();
+      expect(harness.room.currentDeadline).toBe(initialDeadline);
+    }
+    expect(harness.room.currentSeq).toBe(started.seq);
+
+    // Advancing to the exact original deadline fires timeout without extension.
+    harness.clock.advance(initialDeadline - harness.clock.now());
+    expect(harness.room.currentSeq).toBeGreaterThan(started.seq);
+
+    // On a fresh timed turn, forceExpireTurnNow immediately expires the deadline and advances seq.
+    const harness2 = makeHarness({ fxScale: 0.01 });
+    const started2 = startTwoHumans(harness2, { years: 1, turnSeconds: 20 });
+    expect(harness2.room.forceExpireTurnNow()).toBe(true);
+    expect(harness2.room.currentSeq).toBeGreaterThan(started2.seq);
+    expect(harness2.broadcasts.some((m) => m.t === 'system' && m.text.includes('時間切れ'))).toBe(true);
   });
 });
 

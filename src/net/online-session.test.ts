@@ -477,6 +477,8 @@ async function createSplitRoom(
         if (finished || state.phase.t !== 'game_over') return;
         finished = true;
         clearTimeout(gameTimeout);
+        killGuestGate.resolve();
+        killHostGate.resolve();
         settled.resolve(state);
       };
     }
@@ -484,9 +486,10 @@ async function createSplitRoom(
     observe(guest2);
     observe(guest3);
 
-    // Kill the host while it is the current actor in choose_dest (the browser failure case).
+    // Kill the host while it is the current actor in choose_dest (the browser failure case),
+    // only after guest2 has finished rejoining so disabling host.autoPlay cannot deadlock rejoin.
     host.onState = (state) => {
-      if (state.current === 0 && state.phase.t === 'choose_dest') {
+      if (guest2Rejoined && state.current === 0 && state.phase.t === 'choose_dest') {
         host.autoPlay = false;
         killHostGate.resolve();
       }
@@ -994,7 +997,7 @@ async function createSplitRoom(
         selfHostGraceMs: 1_000,
         saveThrottleMs: 20,
         probeTimeoutMs: 4_000,
-        graceMs: 120_000,
+        graceMs: 300,
         replaceMs: 120_000,
         yearEndAckMs: 120_000,
         cpuDelayMs: 50,

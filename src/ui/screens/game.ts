@@ -120,6 +120,7 @@ export class GameScreen implements ScreenHandle {
   private mapReady = false;
   private readonly pendingMessages: ServerMsg[] = [];
   private deadline: number | null = null;
+  private latestDeadline: number | null = null;
   private lobby: LobbyView | null = null;
   private mySeat: number | null = null;
   private actionPending = false;
@@ -780,6 +781,7 @@ export class GameScreen implements ScreenHandle {
       onWatchdog: () => {
         Audio.stopVoice();
         this.dice.cancel();
+        this.cancelRoulette();
         this.resolveHandoff();
         this.pendingPhaseEnd = null;
         this.map?.cancelAnimations(false);
@@ -835,10 +837,8 @@ export class GameScreen implements ScreenHandle {
     window.clearTimeout(this.turnBannerTimer);
     window.clearTimeout(this.monthFlipTimer);
     if (this.stepsTimer) cancelAnimationFrame(this.stepsTimer);
-    window.clearTimeout(this.rouletteTimer);
     this.clearCityPick();
-    window.clearInterval(this.rouletteInterval);
-    this.rouletteFinish?.(true);
+    this.cancelRoulette();
     this.canvas.removeEventListener('pointerdown', this.onMapInteract);
     this.canvas.removeEventListener('pointerup', this.onMapInteract);
     this.canvas.removeEventListener('wheel', this.onMapInteract);
@@ -925,10 +925,23 @@ export class GameScreen implements ScreenHandle {
     this.latestSeq = -1;
     this.appliedSeq = -1;
     this.seq = 0;
+    this.latestDeadline = null;
     this.actionPending = false;
     this.pendingPhaseEnd = null;
     this.clearPendingTimer();
     this.eventPanel.resetChosen();
+  }
+
+  private cancelRoulette(): void {
+    window.clearTimeout(this.rouletteTimer);
+    this.rouletteTimer = 0;
+    window.clearInterval(this.rouletteInterval);
+    this.rouletteInterval = 0;
+    const finish = this.rouletteFinish;
+    this.rouletteFinish = null;
+    finish?.(true);
+    this.rouletteOverlay.hidden = true;
+    this.rouletteOverlay.classList.remove('is-spinning', 'is-result');
   }
 
   /**
@@ -939,6 +952,7 @@ export class GameScreen implements ScreenHandle {
   private interruptInFlightFx(): void {
     Audio.stopVoice();
     this.dice.cancel();
+    this.cancelRoulette();
     this.resolveHandoff();
     this.pendingPhaseEnd = null;
     // Cancel in-flight move/warp animations BEFORE fxPlayer.reset() so snapshot adoption
@@ -988,15 +1002,19 @@ export class GameScreen implements ScreenHandle {
         if (gen < this.latestGen) break;
         if (gen > this.latestGen) this.beginGeneration(gen);
         const resync = this.isResync(msg);
-        if (!resync && msg.seq < this.latestSeq) break;
+        // Never allow a delayed lower-seq resync snapshot in the same generation to roll back a
+        // newer update already received from the host.
+        if (gen === this.latestGen && msg.seq < this.latestSeq) break;
         // A same-(gen, seq) resync that matches what is already on screen (and is not replacing
         // queued fx) must not interrupt a running cutscene.
         if (
           resync &&
           !this.fxPlayer.busy &&
+          !this.fxBusy &&
           isIdenticalResync(this.appliedWatermark, { gen, seq: msg.seq, state: msg.state })
         ) {
           this.fxPlayer.dropThrough(gen, msg.seq);
+          this.latestDeadline = msg.deadline;
           this.deadline = msg.deadline;
           this.lobby = msg.lobby;
           this.syncFlaggedSeats();
@@ -1010,6 +1028,7 @@ export class GameScreen implements ScreenHandle {
         this.latestSeq = Math.max(this.latestSeq, msg.seq);
         this.lobby = msg.lobby;
         this.syncFlaggedSeats();
+        this.latestDeadline = msg.deadline;
         this.deadline = msg.deadline;
         this.actionPending = false;
         this.clearPendingTimer();
@@ -1025,6 +1044,7 @@ export class GameScreen implements ScreenHandle {
         if (gen === this.latestGen && msg.seq <= this.latestSeq) break;
         this.latestGen = gen;
         this.latestSeq = msg.seq;
+        this.latestDeadline = msg.deadline;
         this.deadline = msg.deadline;
         this.actionPending = false;
         this.clearPendingTimer();
@@ -1119,7 +1139,12 @@ export class GameScreen implements ScreenHandle {
     this.appliedWatermark = { gen, seq, state };
     const previousYear = this.state?.year;
     this.state = state;
-    this.deadline = deadline;
+    if (gen === this.latestGen && seq < this.latestSeq) {
+      this.deadline = this.latestDeadline;
+    } else {
+      this.deadline = deadline;
+      if (gen === this.latestGen) this.latestDeadline = deadline;
+    }
     this.loading.hidden = true;
     this.map?.setState(state);
     this.map?.setMonth(state.month);
@@ -2977,17 +3002,23 @@ export class GameScreen implements ScreenHandle {
       const narrationText = destinationNarration(destName);
       const speed = control.speed;
       const autoAdvance = uiSettings().autoAdvance;
+      const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0;
       let voiceStarted = false;
-      const voicePromise = Audio.playVoice('narrator', narrationText, {
-        rate: speed,
-        onStart: () => {
-          voiceStarted = true;
-        },
-      });
-      const boundedVoice = raceWithTimeout(
-        voicePromise,
-        voiceBudgetMs(0, narrationText, voicePlaybackRate(speed)) + 3000,
-      );
+      const voicePromise =
+        control.backlog > 0
+          ? Promise.resolve()
+          : Audio.playVoice('narrator', narrationText, {
+              rate: speed,
+              onStart: () => {
+                voiceStarted = true;
+              },
+            });
+      const boundedVoice = waitForVoice
+        ? raceWithTimeout(
+            voicePromise,
+            voiceBudgetMs(0, narrationText, voicePlaybackRate(speed)) + 3000,
+          )
+        : undefined;
       const shown = this.msgWindow.show({
         speaker: 'narrator',
         name: 'ナレーター',
@@ -2995,8 +3026,7 @@ export class GameScreen implements ScreenHandle {
         color: '#ffd23f',
         speed,
         autoAdvance,
-        voiceDone: boundedVoice,
-        voiceStarted: () => voiceStarted,
+        ...(boundedVoice ? { voiceDone: boundedVoice, voiceStarted: () => voiceStarted } : {}),
       });
       control.onSkip(() => {
         Audio.stopVoice();
@@ -3693,28 +3723,33 @@ export class GameScreen implements ScreenHandle {
     const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
     const speed = control.speed;
     const autoAdvance = uiSettings().autoAdvance;
+    // Voice playback rate is intentionally capped at 1.2x for intelligibility; at 4x/8x or while
+    // catching up on queued updates, do not block message advancement on 1.2x audio playback.
+    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0;
     let voiceStarted = false;
-    const voicePromise = muted
-      ? Promise.resolve()
-      : Audio.playVoice(voiceKey, fx.text, {
-          rate: speed,
-          onStart: () => {
-            voiceStarted = true;
-          },
-        });
-    const boundedVoice = raceWithTimeout(
-      voicePromise,
-      voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000,
-    );
+    const voicePromise =
+      muted || control.backlog > 0
+        ? Promise.resolve()
+        : Audio.playVoice(voiceKey, fx.text, {
+            rate: speed,
+            onStart: () => {
+              voiceStarted = true;
+            },
+          });
+    const boundedVoice = waitForVoice
+      ? raceWithTimeout(
+          voicePromise,
+          voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000,
+        )
+      : undefined;
     // One message window for every spoken line; the event panel no longer carries a
-    // duplicate narrator card. The window stays visible until voice finishes (then advances
-    // after a short pause), or scales by speed when silent.
+    // duplicate narrator card. At 1x/2x without backlog the window waits until voice finishes,
+    // while fast-forward (4x/8x) and backlog catch-up advance on the speed-scaled reading timer.
     const windowLine = {
       ...this.messageLineFor(speaker, label, fx.text, state, speakerSeat),
       speed,
       autoAdvance,
-      voiceDone: boundedVoice,
-      voiceStarted: () => voiceStarted,
+      ...(boundedVoice ? { voiceDone: boundedVoice, voiceStarted: () => voiceStarted } : {}),
     };
     const shown = this.msgWindow.show(windowLine);
     control.onSkip(() => {

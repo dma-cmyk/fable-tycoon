@@ -132,6 +132,8 @@ export type ServerMsg =
       gen?: number;
       /** Re-sent on explicit resync: same (gen, seq) must be delivered, not dropped. */
       resync?: boolean;
+      /** Elapsed ms since the current turn decision started (relative; clock-skew safe). */
+      turnElapsedMs?: number;
       boardVersion?: string;
     }
   // incremental: apply fx animations then adopt state

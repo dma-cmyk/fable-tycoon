@@ -210,4 +210,43 @@ describe('MqttTransport chunking and encryption', () => {
       await new Promise<void>((resolve) => broker2.close(() => resolve()));
     }
   }, 20_000);
+
+  it('repro 3b: primary failover promotes/deduplicates an existing mirror instead of duplicating the same broker', async () => {
+    const broker2 = await Aedes.createBroker({ heartbeatInterval: 1_000 });
+    const server2 = createServer((socket) => broker2.handle(socket));
+    await new Promise<void>((resolve) => server2.listen(0, '127.0.0.1', resolve));
+    const addr2 = server2.address();
+    if (typeof addr2 !== 'object' || !addr2) throw new Error('broker2 did not bind');
+    const url2 = `mqtt://127.0.0.1:${addr2.port}`;
+
+    const peer = new MqttTransport('failover-dedup-peer', {
+      identity: await generateIdentity(),
+      brokers: [url, url2],
+      disableWebRtc: true,
+      redundantBrokers: 1,
+      connectTimeoutMs: 2_000,
+      log: () => {},
+    });
+    try {
+      await peer.connect('DEDUP1');
+      const start = Date.now();
+      while (!peer.mirrorBrokers().includes(url2)) {
+        if (Date.now() - start > 5_000) throw new Error('mirror url2 did not connect');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      expect(peer.broker()).toBe(url);
+      expect(peer.mirrorBrokers()).toEqual([url2]);
+
+      peer.debugKillMqttForTests();
+      await peer.debugFailoverForTests();
+
+      expect(peer.broker()).toBe(url2);
+      // Primary broker MUST NOT also appear in mirrorBrokers()!
+      expect(peer.mirrorBrokers()).not.toContain(url2);
+    } finally {
+      await peer.close();
+      await new Promise<void>((resolve) => server2.close(() => resolve()));
+      await new Promise<void>((resolve) => broker2.close(() => resolve()));
+    }
+  }, 20_000);
 });

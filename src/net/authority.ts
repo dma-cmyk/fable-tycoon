@@ -17,6 +17,8 @@ export interface FollowState {
 
 export interface FollowRecord extends FollowState {
   at: number;
+  /** Sender's own timestamp when known; prevents out-of-order delayed packets from regressing state. */
+  senderAt?: number;
 }
 
 /** New authority generation: always strictly greater than every generation seen so far. */
