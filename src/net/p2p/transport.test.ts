@@ -83,7 +83,7 @@ describe('MqttTransport chunking and encryption', () => {
     }
   }, 20_000);
 
-  it('ignores ephemeral probe peers, deduplicates by fingerprint, and removes peers on bye (#10)', async () => {
+  it('ignores ephemeral probe peers and deduplicates by fingerprint in the lobby count (#10)', async () => {
     const now = 100_000;
     expect(
       countUniquePeers(
@@ -139,7 +139,6 @@ describe('MqttTransport chunking and encryption', () => {
       const probeCount = Promise.withResolvers<void>();
       let seenProbes = 0;
       const guestSeen = Promise.withResolvers<void>();
-      const byeSeen = Promise.withResolvers<void>();
       const unsub = host.onMessage((from, msg) => {
         if ('k' in msg && msg.k === 'probe') {
           void host.send(from, { k: 'probeAck', at: Date.now() });
@@ -147,7 +146,6 @@ describe('MqttTransport chunking and encryption', () => {
           if (seenProbes >= 2) probeCount.resolve();
         }
         if ('t' in msg && msg.t === 'chat') guestSeen.resolve();
-        if ('k' in msg && msg.k === 'bye') byeSeen.resolve();
       });
 
       await probe1.broadcast({ k: 'probe', at: Date.now() });
@@ -159,10 +157,6 @@ describe('MqttTransport chunking and encryption', () => {
       await guest.send('lobby-host', { t: 'chat', text: 'hello' });
       await guestSeen.promise;
       expect(host.relayPeers()).toBe(1);
-
-      await guest.broadcast({ k: 'bye' });
-      await byeSeen.promise;
-      expect(host.relayPeers()).toBe(0);
       unsub();
     } finally {
       await Promise.all([host.close(), guest.close(), probe1.close(), probe2.close()]);

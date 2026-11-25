@@ -38,8 +38,8 @@ export interface PeerCountEntry {
 }
 
 /**
- * Counts distinct active remote peers, deduplicating reconnects / probe peers / multi-broker
- * echoes that share the same cryptographic fingerprint.
+ * Lobby display only: counts distinct active remote peers, collapsing probe peers, stale entries
+ * and reconnects that share a cryptographic fingerprint. Never used for routing or liveness.
  */
 export function countUniquePeers(
   entries: Iterable<PeerCountEntry>,
@@ -47,16 +47,12 @@ export function countUniquePeers(
   selfPeerId: string,
   ttlMs = PEER_ACTIVE_TTL_MS,
 ): { p2p: number; relay: number } {
-  // Collapse by fingerprint when known, otherwise by peerId.
   const buckets = new Map<string, boolean>();
   for (const entry of entries) {
-    if (!entry.peerId || entry.peerId === selfPeerId || isEphemeralProbePeer(entry.peerId)) {
-      continue;
-    }
+    if (!entry.peerId || entry.peerId === selfPeerId || isEphemeralProbePeer(entry.peerId)) continue;
     if (!entry.dcOpen && now - entry.lastSeen > ttlMs) continue;
     const key = entry.fingerprint ? `fp:${entry.fingerprint}` : `id:${entry.peerId}`;
-    const prev = buckets.get(key) ?? false;
-    buckets.set(key, prev || entry.dcOpen);
+    buckets.set(key, (buckets.get(key) ?? false) || entry.dcOpen);
   }
   let p2p = 0;
   let relay = 0;
@@ -190,6 +186,7 @@ type WirePayload = { k: 'app'; msg: P2PMessage } | RtcSignal;
 
 interface PeerState {
   lastSeen: number;
+  /** Last verified sender fingerprint (lobby peer-count dedup only). */
   fingerprint: string | null;
   pc: RTCPeerConnection | null;
   dc: RTCDataChannel | null;
@@ -328,17 +325,11 @@ export class MqttTransport implements P2PTransport {
   }
 
   private peerCounts(): { p2p: number; relay: number } {
-    const now = Date.now();
     const entries: PeerCountEntry[] = [];
     for (const [peerId, peer] of this.peers) {
-      entries.push({
-        peerId,
-        lastSeen: peer.lastSeen,
-        dcOpen: peer.dcOpen,
-        fingerprint: peer.fingerprint,
-      });
+      entries.push({ peerId, lastSeen: peer.lastSeen, dcOpen: peer.dcOpen, fingerprint: peer.fingerprint });
     }
-    return countUniquePeers(entries, now, this.peerId);
+    return countUniquePeers(entries, Date.now(), this.peerId);
   }
 
   onStatus(listener: (status: TransportStatus) => void): () => void {
@@ -644,20 +635,14 @@ export class MqttTransport implements P2PTransport {
   }
 
   send(peerId: string, message: P2PMessage): Promise<void> {
-    const ephemeralReply =
-      isEphemeralProbePeer(peerId) ||
-      (isP2PControl(message) && (message.k === 'probe' || message.k === 'probeAck'));
-    if (!ephemeralReply) {
-      this.touch(peerId);
-      this.maybeOffer(peerId);
-    }
+    this.touch(peerId);
+    this.maybeOffer(peerId);
     return this.enqueue(async () => {
       const chunks = await this.encode({ k: 'app', msg: message });
       // Always keep one relay copy: a DataChannel can be "open" on the sender while the other side
       // has not flushed its open event yet (observed in WebKit). Envelope-id dedup makes the
       // duplicate harmless, and when MQTT is down the copy is queued for flush.
       this.publishChunks(this.topicFor(peerId), chunks);
-      if (ephemeralReply) return;
       const peer = this.peers.get(peerId);
       if (peer?.dcOpen && peer.dc && peer.dc.readyState === 'open') {
         this.sendChunks(peerId, chunks, peer.dc);
@@ -775,6 +760,7 @@ export class MqttTransport implements P2PTransport {
       return;
     }
     if (envelope.f === this.peerId || this.blockedPeers.has(envelope.f)) return;
+    this.touch(envelope.f);
 
     if (typeof envelope.n === 'number' && envelope.n > 1) {
       const existing = this.parts.get(envelope.id);
@@ -863,20 +849,12 @@ export class MqttTransport implements P2PTransport {
     }
     if (!isWirePayload(decoded)) return;
     if (decoded.k === 'rtc') {
-      if (!isEphemeralProbePeer(from)) this.touch(from, fingerprint);
       await this.handleSignal(from, decoded);
       return;
     }
     if (!isP2PMessage(decoded.msg)) return;
-    if (isP2PControl(decoded.msg) && decoded.msg.k === 'bye') {
-      this.removePeer(from);
-    } else if (
-      !isEphemeralProbePeer(from) &&
-      !(isP2PControl(decoded.msg) && (decoded.msg.k === 'probe' || decoded.msg.k === 'probeAck'))
-    ) {
-      this.touch(from, fingerprint);
-      this.maybeOffer(from);
-    }
+    this.touch(from).fingerprint = fingerprint;
+    this.maybeOffer(from);
     for (const listener of this.messageListeners) listener(from, decoded.msg, fingerprint);
   }
 
@@ -889,20 +867,12 @@ export class MqttTransport implements P2PTransport {
     }
   }
 
-  private touch(peerId: string, fingerprint?: string): PeerState {
-    if (fingerprint) {
-      // Drop stale relay-only entries from an earlier session with the same cryptographic identity.
-      for (const [otherId, other] of [...this.peers]) {
-        if (otherId !== peerId && other.fingerprint === fingerprint && !other.dcOpen) {
-          this.removePeer(otherId);
-        }
-      }
-    }
+  private touch(peerId: string): PeerState {
     let peer = this.peers.get(peerId);
     if (!peer) {
       peer = {
         lastSeen: Date.now(),
-        fingerprint: fingerprint ?? null,
+        fingerprint: null,
         pc: null,
         dc: null,
         dcOpen: false,
@@ -912,15 +882,8 @@ export class MqttTransport implements P2PTransport {
       };
       this.peers.set(peerId, peer);
     }
-    if (fingerprint) peer.fingerprint = fingerprint;
     peer.lastSeen = Date.now();
     return peer;
-  }
-
-  private removePeer(peerId: string): void {
-    if (!this.peers.has(peerId)) return;
-    this.teardownPc(peerId);
-    this.peers.delete(peerId);
   }
 
   // ---------------------------------------------------------------- WebRTC

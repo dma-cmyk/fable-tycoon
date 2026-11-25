@@ -1975,6 +1975,23 @@ async function main() {
   for (const entry of remainingResults) {
     await screenshot(entry.client, `result-${entry.client.id}`);
   }
+  // Return-to-title check on one client's result screen.
+  {
+    const leaver = remainingResults[0].client;
+    const titleButton = leaver.page.getByRole('button', { name: /タイトルへ/ }).first();
+    if (!(await isVisible(titleButton))) {
+      throw new Error(`${leaver.id}: タイトルへ button not found on the result screen`);
+    }
+    await press(leaver, titleButton);
+    await waitFor(() => isVisible(leaver.page.locator('.title-screen, .title-menu-btn')), {
+      timeout: 20_000,
+      interval: 250,
+      label: `${leaver.id} returns to title`,
+    });
+    report.titleReturn = { client: leaver.id, ok: true };
+    await screenshot(leaver, 'title-after-result', { optional: true });
+    log(`${leaver.id} returned to the title screen from the result screen`);
+  }
   if (HEADFUL) {
     log('holding result screens for 20s');
     await sleep(20_000);
