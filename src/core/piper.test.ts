@@ -257,7 +257,7 @@ describe('気まぐれな善行', () => {
     for (let seed = 1; seed <= runs; seed += 1) {
       const state = fresh([1, 1, 1, 1], 3, seed);
       state.current = 0;
-      state.players[0].cash = -40;
+      state.players[0].cash = -25;
       state.piper = { holder: 0, level: 1, heldTurns: 0 };
       state.rng = seed;
       const fx: Fx[] = [];
@@ -267,7 +267,7 @@ describe('気まぐれな善行', () => {
       gifts += 1;
       expect(gift.title).toBe(PIPER_GIFTS[0].title);
       expect(state.players[0].cash).toBe(0);
-      expect(gift.amount).toBeCloseTo(40);
+      expect(gift.amount).toBeCloseTo(25);
     }
     expect(Math.abs(gifts / runs - PIPER_GIFT_CHANCE)).toBeLessThan(0.025);
     expect(gifts).toBeGreaterThan(80);
@@ -293,6 +293,31 @@ describe('気まぐれな善行', () => {
       expect(gift.amount).toBeGreaterThan(0);
     }
     expect(bought).toBeGreaterThan(5);
+  });
+
+  it('善行は上限を超えない（高額物件や大きな借金でも一発逆転にならない）', () => {
+    // どの物件もバブルで高騰していて、上限内の空き物件がない状況。
+    const pricey = structuredClone(data);
+    for (const p of pricey.cities.find((c) => c.id === 'tokyo')?.properties ?? []) p.price = Math.max(p.price, 400);
+    let gifts = 0;
+    for (let seed = 1; seed <= 800; seed += 1) {
+      const state = createGame(pricey, config([1, 1, 1, 1], 3, seed)).state;
+      state.current = 0;
+      state.players[0].nodeId = 'c:tokyo';
+      state.players[0].cash = seed % 2 === 0 ? 30 : -900;
+      state.cityMods = [{ cityId: 'tokyo', mult: 3, yearsLeft: 2, label: 'テスト', kind: 'bubble' }];
+      state.piper = { holder: 0, level: 1, heldTurns: 0 };
+      state.rng = seed;
+      const before = netWorth(pricey, state, 0);
+      const fx: Fx[] = [];
+      runPiperTurnStart(pricey, state, fx);
+      const gift = giftFx(fx);
+      if (!gift) continue;
+      gifts += 1;
+      expect(gift.amount).toBeLessThanOrEqual(80);
+      expect(netWorth(pricey, state, 0) - before).toBeLessThanOrEqual(80);
+    }
+    expect(gifts).toBeGreaterThan(10);
   });
 });
 describe('「1回休み」の示談（人間の手番）', () => {

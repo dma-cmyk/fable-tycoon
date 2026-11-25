@@ -20,6 +20,7 @@ import {
   netWorth,
   ownedProperties,
   sellPrice,
+  yearScale,
 } from './economy';
 import { nodeForCity } from './graph';
 import { sayCharacterLine } from './speech';
@@ -592,10 +593,22 @@ function runDisaster(
 
 // ---------------------------------------------------------------- rare gift
 
+/**
+ * 善行の上限（億円）。気まぐれは「ちょっと得した」で止める。上限が無いと、たまたま立っていた
+ * 駅の最高額物件（バブル中なら数百〜数千億）が無償で渡り、順位が一発で決まってしまう
+ * （Sol のプレイテストで 900 億の物件が渡って 4 位→1 位）。
+ */
+function giftCap(data: GameData, state: GameState, player: PlayerState): number {
+  return Math.max(40 * yearScale(state), Math.min(80 * yearScale(state), Math.max(0, netWorth(data, state, player.id)) * 0.08));
+}
+
 function runGift(data: GameData, state: GameState, fx: Fx[], player: PlayerState): void {
+  const cap = giftCap(data, state, player);
   const cityId = player.nodeId.startsWith('c:') ? player.nodeId.slice(2) : null;
   const city = cityId ? data.cities.find((c) => c.id === cityId) : undefined;
-  const free = city?.properties.filter((p) => state.owner[p.id] === undefined) ?? [];
+  const free = (city?.properties ?? [])
+    .filter((p) => state.owner[p.id] === undefined && currentPrice(data, state, p.id) <= cap)
+    .sort((a, b) => b.price - a.price || a.id.localeCompare(b.id));
 
   let kind: PiperGiftKind;
   if (player.cash < 0) kind = 'debt_payoff';
@@ -604,14 +617,14 @@ function runGift(data: GameData, state: GameState, fx: Fx[], player: PlayerState
 
   let amount = 0;
   if (kind === 'debt_payoff') {
-    amount = -player.cash;
-    player.cash = 0;
+    amount = Math.min(cap, -player.cash);
+    player.cash += amount;
   } else if (kind === 'free_property') {
-    const property = free.sort((a, b) => b.price - a.price || a.id.localeCompare(b.id))[0];
+    const property = free[0];
     amount = Math.max(0, currentPrice(data, state, property.id));
     state.owner[property.id] = player.id;
   } else {
-    amount = Math.min(60, 10 + Math.max(0, netWorth(data, state, player.id)) * 0.02);
+    amount = Math.min(cap, 10 + Math.max(0, netWorth(data, state, player.id)) * 0.02);
     player.cash += amount;
   }
 
