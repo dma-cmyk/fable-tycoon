@@ -101,6 +101,14 @@ function buildState(): GameState {
   assign('london', [3, 3, 1]);
   assign('osaka', [1, 1]);
   assign('cairo', [2, 2, 2]);
+  if (params.get('citymods') === '1') {
+    state.cityMods = [
+      { cityId: 'san-francisco', mult: 1.8, yearsLeft: 2, label: 'AIバブル', kind: 'bubble' },
+      { cityId: 'cairo', mult: 0.6, yearsLeft: 1, label: '運河封鎖', kind: 'blockade' },
+      { cityId: 'paris', mult: 0.7, yearsLeft: 2, label: '港湾スト', kind: 'damage' },
+      { cityId: 'osaka', mult: 1.4, yearsLeft: 1, label: '万博特需', kind: 'boom' },
+    ];
+  }
   return state;
 }
 

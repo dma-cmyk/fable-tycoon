@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { allNarrationTexts } from '../src/audio/narration.ts';
+import { piperNarrationTexts, piperVoiceLines } from '../src/core/piperLines.ts';
 import { voiceHash } from '../src/audio/voicekey.ts';
 import { buildVoiceManifest, voiceMetaMatches } from '../src/audio/voice-manifest.ts';
 
@@ -178,6 +179,21 @@ for (const character of characters) {
   }
 }
 
+// turnLines.json: 状況別の手番開始ボイス。character と同じ char:<id> キーで登録する
+const turnLines = await readJson('turnLines.json', {});
+if (!turnLines || typeof turnLines !== 'object' || Array.isArray(turnLines)) {
+  console.warn('gen-voice: src/data/turnLines.json is not an object; skipping turn lines');
+} else {
+  for (const character of characters) {
+    const situations = turnLines[character.id];
+    if (!situations || typeof situations !== 'object') continue;
+    for (const lines of Object.values(situations)) {
+      if (!Array.isArray(lines)) continue;
+      for (const text of lines) addItem(['char'], `char:${character.id}`, text, character.voice);
+    }
+  }
+}
+
 // events.json: intro lines + choice replies
 for (const event of events) {
   for (const line of event.lines ?? []) addDialogue(['event'], line);
@@ -216,6 +232,11 @@ if (Array.isArray(emotes)) {
 for (const text of allNarrationTexts(cities)) {
   addItem(['narration'], 'narrator', text, narratorVoice);
 }
+
+// 取り立て屋 (2026-11 fun overhaul): NPC の固定台詞 + 災害/善行/示談のナレーション。
+// piperLines.ts が唯一の出典なので、字幕と音声がずれない。
+for (const line of piperVoiceLines()) addDialogue(['npc'], line);
+for (const text of piperNarrationTexts()) addDialogue(['narration'], { speaker: 'narrator', text });
 
 function inGroup(item, group) {
   return group === null || item.groups.has(group);

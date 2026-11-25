@@ -10,7 +10,6 @@ import {
   annualIncome,
   characterPerk,
   currentPrice,
-  findProperty,
   incomeMultiplier,
   netWorth,
   ownCount,
@@ -20,6 +19,15 @@ import {
   yearScale,
 } from './economy';
 import { handLimitFor } from './cards';
+import { peekCityTarget } from './cityMods';
+import { cpuSkillAction } from './skills';
+import { PIPER_DEAL_EVENT_ID } from './piperLines';
+import { piperDealCpuChoice, piperMoveBias } from './piperCpu';
+import {
+  chooseBuyoutAction,
+  chooseShowdownCardAction,
+  chooseTakeoverTarget,
+} from './showdown';
 
 const CARD_VALUE: Readonly<Record<string, number>> = {
   shield: 100,
@@ -36,6 +44,7 @@ const CARD_VALUE: Readonly<Record<string, number>> = {
   express2: 35,
   carpet: 30,
   insider: 20,
+  underdog: 90,
 };
 
 export function cpuDecide(data: GameData, state: GameState): Action {
@@ -46,15 +55,20 @@ export function cpuDecide(data: GameData, state: GameState): Action {
 
   switch (state.phase.t) {
     case 'turn_start':
-      return chooseCard(data, state, player) ?? { t: 'roll' };
+      return cpuSkillAction(data, state) ?? chooseCard(data, state, player) ?? { t: 'roll' };
+    case 'skill_target':
+      return cpuSkillAction(data, state) ?? { t: 'cancel' };
     case 'choose_dest':
-      return { t: 'move', nodeId: chooseMove(data, state, state.phase.options) };
+      return { t: 'move', nodeId: chooseMove(data, state, player, state.phase.options) };
     case 'buy':
-      return chooseBuy(data, state, player) ?? { t: 'end_buy' };
+      return chooseBuyoutAction(data, state, player) ?? chooseBuy(data, state, player) ?? { t: 'end_buy' };
     case 'shop':
       return chooseShop(data, state, player);
     case 'event': {
       const eventId = state.phase.eventId;
+      if (eventId === PIPER_DEAL_EVENT_ID) {
+        return { t: 'choose', index: piperDealCpuChoice(data, state, player) };
+      }
       const event = data.events.find((e) => e.id === eventId);
       if (!event?.choices || event.choices.length === 0) return { t: 'choose', index: 0 };
       return { t: 'choose', index: chooseEventOption(data, state, player, event.choices) };
@@ -125,6 +139,8 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
   const others = state.players.filter((p) => p.id !== player.id);
 
   if (player.cash < 0 && hand.has('bailout')) return { t: 'use_card', cardId: 'bailout' };
+  const showdownCard = chooseShowdownCardAction(data, state, player);
+  if (showdownCard) return showdownCard;
   if (hand.has('golden_egg') && annualIncome(data, state, player.id) >= 25) {
     return { t: 'use_card', cardId: 'golden_egg' };
   }
@@ -134,16 +150,6 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
   if (hand.has('tariff') && othersCash >= 40) return { t: 'use_card', cardId: 'tariff' };
   if (hand.has('piper_pass') && state.piper.holder === player.id && others.length > 0) {
     return { t: 'use_card', cardId: 'piper_pass' };
-  }
-  if (level >= 3) {
-    const takeoverOptions = cpuTakeoverOptions(data, state, player);
-    const completesMonopoly = takeoverOptions.some((option) => {
-      const ref = findProperty(data, option.slice(2));
-      return ref !== null && ownCount(data, state, player.id, ref.cityId) === ref.city.properties.length - 1;
-    });
-    if (hand.has('takeover') && completesMonopoly) {
-      return { t: 'use_card', cardId: 'takeover' };
-    }
   }
 
   const destNode = nodeForCity(data, state.destination);
@@ -169,25 +175,12 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
   return null;
 }
 
-function cpuTakeoverOptions(data: GameData, state: GameState, player: PlayerState): string[] {
-  const out: string[] = [];
-  for (const city of data.cities) {
-    for (const property of city.properties) {
-      const owner = state.owner[property.id];
-      if (owner === undefined || owner === player.id) continue;
-      if (player.cash >= currentPrice(data, state, property.id) * 1.5) {
-        out.push(`p:${property.id}`);
-      }
-    }
-  }
-  return out.sort();
-}
-
 // ---------------------------------------------------------------- movement
 
 function chooseMove(
   data: GameData,
   state: GameState,
+  player: PlayerState,
   options: MoveOption[],
 ): string {
   const destNode = nodeForCity(data, state.destination);
@@ -198,6 +191,8 @@ function chooseMove(
   const scored: Scored[] = options.map((option) => {
     let score = destNode ? effectiveDistance(data, option.nodeId, destNode) : 0;
     if (!Number.isFinite(score)) score = 9999;
+    // Lv1 は取り立て屋を気にしない（DESIGN §2.8）。Lv2/Lv3 だけ押し付け・回避を狙う。
+    if (player.cpuLevel >= 2) score += piperMoveBias(data, state, player, option);
     return { option, score };
   });
   scored.sort((a, b) => {
@@ -347,6 +342,14 @@ function effectValue(data: GameData, state: GameState, actor: number, effect: Ef
       return effect.who === 'self' ? -60 * effect.turns : 15 * effect.turns;
     case 'piper':
       return effect.to === 'self' ? -70 : 20;
+    case 'city_mod': {
+      const cityId = peekCityTarget(data, state, effect.city, actor);
+      if (!cityId) return (effect.mult - 1) * 10;
+      const owned = actorOwned.filter((ref) => ref.cityId === cityId);
+      const income = owned.reduce((sum, ref) => sum + (ref.property.price * ref.property.yieldPct) / 100, 0);
+      const asset = owned.reduce((sum, ref) => sum + currentPrice(data, state, ref.property.id), 0);
+      return (effect.mult - 1) * (income * Math.max(1, effect.years) + asset * 0.5);
+    }
     case 'gamble':
       return (
         effect.chance * effectListValue(data, state, actor, effect.win) +
@@ -391,12 +394,7 @@ function chooseCardTarget(
     }
     case 'takeover': {
       if (level === 1) return options[0];
-      const scored = options.slice().sort((a, b) => {
-        const pa = propertyScore(data, state, player.id, a.slice(2));
-        const pb = propertyScore(data, state, player.id, b.slice(2));
-        return pa !== pb ? pb - pa : a.localeCompare(b);
-      });
-      return scored[0];
+      return chooseTakeoverTarget(data, state, player, options) ?? options[0];
     }
     case 'portal': {
       const destNode = nodeForCity(data, state.destination);
@@ -430,17 +428,6 @@ function chooseCardTarget(
     default:
       return options[0];
   }
-}
-
-function propertyScore(data: GameData, state: GameState, playerId: number, propertyId: string): number {
-  const ref = findProperty(data, propertyId);
-  if (!ref) return -Infinity;
-  const cost = Math.max(1, currentPrice(data, state, propertyId) * 1.5);
-  let score = (ref.property.yieldPct * ref.property.price) / cost;
-  const owned = ownCount(data, state, playerId, ref.cityId);
-  if (owned > 0) score += 3;
-  if (owned === ref.city.properties.length - 1) score += 1000;
-  return score;
 }
 
 function chooseDiscard(player: PlayerState): string {

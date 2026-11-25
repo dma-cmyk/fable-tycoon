@@ -1,0 +1,392 @@
+/* 取り立て屋の演出 (2026-11 fun overhaul).
+   ルーレット・キングの大災害・気まぐれな善行の 3 種類。すべて `PiperShow` が生成する。
+   再生時間は JS が `--piper-beat` / `--piper-beat-2`（fxSpeed で割った実時間）で渡す。 */
+
+.piper-show {
+  position: absolute;
+  inset: 0;
+  z-index: 66;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+  --piper-beat: 300ms;
+  --piper-beat-2: 520ms;
+}
+
+.piper-show[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- roulette */
+
+.piper-show-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(560px, calc(100vw - 28px));
+  padding: 18px 20px 16px;
+  border-radius: 26px;
+  border: 4px solid #fff;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 210, 63, 0.3), transparent 58%),
+    linear-gradient(180deg, #2a1a3f 0%, #160b26 60%, #0b0514 100%);
+  box-shadow:
+    0 0 0 6px rgba(255, 210, 63, 0.55),
+    0 30px 70px rgba(0, 0, 0, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.16);
+  animation: piper-panel-in var(--piper-beat) cubic-bezier(.2, 1.5, .4, 1) both;
+}
+
+.piper-show-panel[hidden] { display: none; }
+
+@keyframes piper-panel-in {
+  0% { transform: scale(0.82) translateY(12px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.piper-show-kicker {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: #ffe9a8;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.piper-show-reel {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.piper-show-cell {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 8px;
+  border-radius: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.35));
+  filter: grayscale(0.65) brightness(0.72);
+  transition: transform 90ms linear, filter 120ms linear, border-color 120ms linear;
+}
+
+.piper-show-cell[data-level='2'] {
+  background: linear-gradient(180deg, rgba(96, 146, 255, 0.28), rgba(8, 10, 30, 0.7));
+}
+
+.piper-show-cell[data-level='3'] {
+  background: linear-gradient(180deg, rgba(255, 84, 84, 0.32), rgba(40, 4, 10, 0.75));
+}
+
+.piper-show-cell.is-current {
+  filter: none;
+  border-color: #ffe066;
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0 0 22px rgba(255, 214, 90, 0.65);
+}
+
+.piper-show-cell.is-hit {
+  filter: none;
+  border-color: #fff;
+  animation: piper-cell-hit 380ms cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.piper-show-cell[data-level='3'].is-hit {
+  box-shadow: 0 0 34px rgba(255, 60, 60, 0.9), 0 0 0 3px rgba(255, 210, 63, 0.8);
+}
+
+@keyframes piper-cell-hit {
+  0% { transform: scale(1.22) rotate(-3deg); }
+  55% { transform: scale(0.96) rotate(1.5deg); }
+  100% { transform: scale(1.06) rotate(0deg); }
+}
+
+.piper-show-face {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45));
+}
+
+.piper-show-cell[data-level='3'] .piper-show-face { filter: drop-shadow(0 0 12px rgba(255, 60, 60, 0.8)); }
+
+.piper-show-cell-name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #ffeec4;
+  letter-spacing: 0.08em;
+}
+
+.piper-show-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+}
+
+.piper-show-result-name {
+  font-size: clamp(19px, 3vw, 25px);
+  font-weight: 800;
+  color: #fff3c4;
+  text-shadow: 0 2px 0 rgba(80, 20, 0, 0.6), 0 0 18px rgba(255, 190, 60, 0.6);
+}
+
+.piper-show-result-note {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd9a0;
+}
+
+.piper-show.is-finishing .piper-show-panel {
+  animation: piper-panel-out var(--piper-beat) ease-in both;
+}
+
+@keyframes piper-panel-out {
+  to { transform: scale(0.94); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- king disaster */
+
+.piper-show-disaster {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.piper-show-disaster[hidden] { display: none; }
+
+.piper-show-disaster-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 40, 40, 0.9), rgba(120, 0, 0, 0.55) 45%, rgba(30, 0, 0, 0) 75%);
+  animation: piper-flash var(--piper-beat-2) ease-out both;
+}
+
+@keyframes piper-flash {
+  0% { opacity: 0.95; }
+  35% { opacity: 0.45; }
+  100% { opacity: 0.7; }
+}
+
+.piper-show-disaster-crown {
+  position: absolute;
+  top: 12%;
+  font-size: clamp(54px, 10vw, 96px);
+  filter: drop-shadow(0 0 26px rgba(255, 210, 63, 0.95));
+  animation: piper-crown 900ms ease-in-out infinite alternate;
+}
+
+@keyframes piper-crown {
+  from { transform: translateY(-6px) rotate(-6deg); }
+  to { transform: translateY(6px) rotate(6deg); }
+}
+
+.piper-show-disaster-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(620px, calc(100vw - 24px));
+  padding: 20px 22px 18px;
+  border-radius: 26px;
+  border: 4px solid #fff;
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 12px, transparent 12px 24px),
+    linear-gradient(180deg, #51060c 0%, #2a0106 65%, #120003 100%);
+  box-shadow:
+    0 0 0 6px rgba(255, 200, 60, 0.65),
+    0 0 48px rgba(255, 40, 40, 0.7),
+    0 34px 70px rgba(0, 0, 0, 0.7);
+  animation: piper-slam var(--piper-beat) cubic-bezier(.1, 1.7, .3, 1) both;
+}
+
+.piper-show.is-slam .piper-show-disaster-card {
+  animation: piper-slam var(--piper-beat) cubic-bezier(.1, 1.7, .3, 1) both,
+    piper-shake 320ms linear 2;
+}
+
+@keyframes piper-slam {
+  0% { transform: scale(2.1) rotate(-4deg); opacity: 0; }
+  55% { transform: scale(0.94) rotate(1.2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes piper-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-7px, 3px) rotate(-0.6deg); }
+  50% { transform: translate(6px, -4px) rotate(0.6deg); }
+  75% { transform: translate(-4px, -2px) rotate(-0.3deg); }
+}
+
+.piper-show-disaster-icon {
+  font-size: clamp(38px, 7vw, 54px);
+  line-height: 1;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
+}
+
+.piper-show-disaster-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: #ffb3b3;
+}
+
+.piper-show-disaster-title {
+  font-size: clamp(24px, 5.4vw, 46px);
+  font-weight: 800;
+  line-height: 1.08;
+  text-align: center;
+  color: #fff6d8;
+  text-shadow:
+    0 3px 0 #7a0b12,
+    0 0 22px rgba(255, 90, 60, 0.85),
+    0 8px 18px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
+}
+
+.piper-show-disaster-amount {
+  font-size: clamp(30px, 6.4vw, 54px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ff6b6b;
+  text-shadow: 0 3px 0 rgba(60, 0, 0, 0.8), 0 0 20px rgba(255, 60, 60, 0.7);
+}
+
+.piper-show-victim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.piper-show-victim-img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 12%;
+  background: #23324d;
+  animation: piper-victim 420ms ease-in-out infinite alternate;
+}
+
+.piper-show-victim-img[hidden] { display: none; }
+
+@keyframes piper-victim {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+
+.piper-show-victim-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #ffe4e4;
+}
+
+.piper-show.is-settled .piper-show-disaster-flash { opacity: 0.35; }
+
+/* ---------------------------------------------------------------- gift */
+
+.piper-show-gift {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.piper-show-gift[hidden] { display: none; }
+
+.piper-show-gift-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: min(520px, calc(100vw - 28px));
+  padding: 18px 22px 16px;
+  border-radius: 26px;
+  border: 4px solid #fff;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.55), transparent 60%),
+    linear-gradient(180deg, #fff3b6, #ffcf4d 55%, #e79a12);
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.55),
+    0 0 42px rgba(255, 214, 88, 0.85),
+    0 28px 60px rgba(0, 0, 0, 0.45);
+  color: #4a2a00;
+  animation: piper-panel-in var(--piper-beat) cubic-bezier(.2, 1.5, .4, 1) both;
+}
+
+.piper-show.is-pop .piper-show-gift-card {
+  animation: piper-panel-in var(--piper-beat) cubic-bezier(.2, 1.5, .4, 1) both,
+    piper-pop 520ms ease-in-out 2;
+}
+
+@keyframes piper-pop {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.03) rotate(-0.8deg); }
+}
+
+.piper-show-gift-icon { font-size: clamp(38px, 7vw, 52px); line-height: 1; }
+
+.piper-show-gift-title {
+  font-size: clamp(21px, 4.4vw, 34px);
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.12;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.7);
+}
+
+.piper-show-gift-amount {
+  font-size: clamp(28px, 6vw, 46px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #0b6b2f;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.8);
+}
+
+.piper-show-gift-note {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #7a4a00;
+}
+
+/* ---------------------------------------------------------------- phone */
+
+@media (max-width: 560px) {
+  .piper-show-panel { padding: 14px 12px 12px; gap: 8px; border-width: 3px; }
+  .piper-show-reel { gap: 7px; }
+  .piper-show-cell { padding: 7px 4px 6px; border-width: 2px; border-radius: 14px; }
+  .piper-show-cell-name { font-size: 10px; }
+  .piper-show-kicker { font-size: 10.5px; letter-spacing: 0.16em; }
+  .piper-show-result-name { font-size: 17px; }
+  .piper-show-result-note { font-size: 10.5px; }
+  .piper-show-disaster-card { padding: 14px 12px 12px; border-width: 3px; }
+  .piper-show-disaster-crown { top: 8%; font-size: 44px; }
+  .piper-show-gift-card { padding: 14px 14px 12px; border-width: 3px; }
+  .piper-show-victim { padding: 3px 10px 3px 4px; }
+  .piper-show-victim-img { width: 30px; height: 30px; }
+  .piper-show-victim-name { font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piper-show *,
+  .piper-show *::before,
+  .piper-show *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

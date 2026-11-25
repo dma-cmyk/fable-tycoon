@@ -60,17 +60,20 @@ const PERKS = [
 const ROLES = ['hero', 'sidekick', 'villain', 'animal', 'monster', 'royal', 'trickster'];
 const LINE_KEYS = [
   'select', 'turn', 'buy', 'monopoly', 'goal', 'blue', 'red', 'card',
-  'piper_get', 'piper_hit', 'win', 'lose',
+  'piper_get', 'piper_hit', 'win', 'lose', 'skill',
 ];
+const SKILL_HINTS = ['early', 'behind', 'ahead', 'anytime'];
 const WHO = ['self', 'all', 'others', 'richest', 'poorest', 'random_other'];
 const CARD_KINDS = ['move', 'money', 'attack', 'defense', 'special'];
 const SQUARE_KINDS = ['blue', 'red', 'yellow', 'news', 'shop', 'warp', 'portal'];
 const REALM_IDS = ['heaven', 'hell', 'space'];
 const REALM_OR_WORLD = [...REALM_IDS, 'world'];
 const EDGE_MODES = ['rail', 'sea', 'air'];
+const CITY_MOD_KINDS = ['bubble', 'damage', 'blockade', 'boom'];
+const CITY_TARGET_KEYWORDS = ['here', 'destination', 'random', 'richest_best', 'self_best'];
 const EFFECT_OPS = [
   'cash', 'cash_pct', 'per_property', 'industry_mod', 'price_mod', 'sell',
-  'card', 'move', 'skip', 'piper', 'gamble', 'realm',
+  'card', 'move', 'skip', 'piper', 'gamble', 'realm', 'city_mod',
 ];
 
 const LANDMARK_CITY = {
@@ -144,11 +147,11 @@ function designNpcIds() {
 const DESIGN_NPC_IDS = designNpcIds();
 
 if (DESIGN_CHAR_IDS.size !== 48) err('docs/DESIGN.md', `parsed ${DESIGN_CHAR_IDS.size} character ids (expected 48)`);
-if (DESIGN_CARD_IDS.size !== 14) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS.size} card ids (expected 14)`);
+if (DESIGN_CARD_IDS.size !== 15) err('docs/DESIGN.md', `parsed ${DESIGN_CARD_IDS.size} card ids (expected 15)`);
 if (DESIGN_NPC_IDS.size !== 8) err('docs/DESIGN.md', `parsed ${DESIGN_NPC_IDS.size} NPC ids (expected 8)`);
 
 // ---------------------------------------------------------------- load JSON
-const KNOWN = ['cities.json', 'realms.json', 'warp.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json', 'emotes.json'];
+const KNOWN = ['cities.json', 'realms.json', 'warp.json', 'board.json', 'characters.json', 'events.json', 'cards.json', 'npcs.json', 'emotes.json', 'turnLines.json'];
 const data = {};
 let jsonFiles = [];
 try {
@@ -635,12 +638,88 @@ if (data['characters.json'] !== undefined) {
         for (const key of Object.keys(c.lines)) {
           if (!LINE_KEYS.includes(key)) warn(`${p}.lines.${key}`, 'unknown line key');
         }
+        if (isStr(c.lines.skill)) {
+          if ([...c.lines.skill].length > 45) err(`${p}.lines.skill`, 'must be at most 45 characters (voiced)');
+          if (/[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]/.test(c.lines.skill)) {
+            err(`${p}.lines.skill`, 'must not contain latin letters or digits (voiced)');
+          }
+        }
       }
     });
     if (chars.length !== 48) err('characters.json', `expected 48 characters, got ${chars.length}`);
     for (const id of DESIGN_CHAR_IDS) if (!ids.has(id)) err('characters.json', `missing character id "${id}" from DESIGN.md §7`);
     for (const id of ids) if (!DESIGN_CHAR_IDS.has(id)) err('characters.json', `unknown character id "${id}" (not in DESIGN.md §7)`);
     charIds = ids;
+  }
+}
+
+// ---------------------------------------------------------------- turnLines
+// 手番開始の状況別台詞。全キャラ・全状況ぶんの固定文が必要（音声を事前生成する）。
+const TURN_LINE_SITUATIONS = { normal: 6, lead: 2, last: 2, piper: 2, near: 2, final: 2, realm: 2 };
+const TURN_LINE_MIN = 8;
+const TURN_LINE_MAX = 30;
+// ASCII と全角の英数字。VOICEVOX に読ませない固定文なので禁止する。
+const TURN_LINE_FORBIDDEN = /[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]/;
+if (data['turnLines.json'] !== undefined) {
+  const sets = data['turnLines.json'];
+  if (!isObj(sets)) {
+    err('turnLines.json', 'must be an object of characterId → TurnLines');
+  } else {
+    const charsById = new Map((Array.isArray(data['characters.json']) ? data['characters.json'] : []).map((c) => [c.id, c]));
+    for (const id of Object.keys(sets)) {
+      if (!charIds.has(id)) err(`turnLines.${id}`, `unknown character id "${id}"`);
+    }
+    for (const id of charIds) {
+      const p = `turnLines.${id}`;
+      const set = sets[id];
+      if (!isObj(set)) {
+        err(p, 'missing (every character needs situational turn lines)');
+        continue;
+      }
+      for (const key of Object.keys(set)) {
+        if (!(key in TURN_LINE_SITUATIONS)) err(`${p}.${key}`, 'unknown situation');
+      }
+      const seen = new Map();
+      for (const [key, expected] of Object.entries(TURN_LINE_SITUATIONS)) {
+        const list = set[key];
+        if (!Array.isArray(list) || list.length === 0) {
+          err(`${p}.${key}`, 'must be a non-empty array');
+          continue;
+        }
+        if (list.length !== expected) err(`${p}.${key}`, `expected ${expected} lines, got ${list.length}`);
+        list.forEach((text, i) => {
+          const tp = `${p}.${key}[${i}]`;
+          if (!isStr(text)) {
+            err(tp, 'must be a non-empty string');
+            return;
+          }
+          const length = [...text].length;
+          if (length < TURN_LINE_MIN || length > TURN_LINE_MAX) {
+            err(tp, `must be ${TURN_LINE_MIN}–${TURN_LINE_MAX} chars, got ${length}`);
+          }
+          if (TURN_LINE_FORBIDDEN.test(text)) err(tp, 'must not contain latin letters or digits');
+          if (seen.has(text)) err(tp, `duplicate line (also at ${seen.get(text)})`);
+          else seen.set(text, `${key}[${i}]`);
+        });
+        // 書き出しが揃うと「同じ事しか言っていない」ように聞こえる。同じ場面では先頭 4 文字を変える。
+        const heads = new Map();
+        list.forEach((text, i) => {
+          if (!isStr(text)) return;
+          const head = [...text].slice(0, 4).join('');
+          if (heads.has(head)) err(`${p}.${key}[${i}]`, `same opening "${head}" as ${key}[${heads.get(head)}]`);
+          else heads.set(head, i);
+        });
+        // 「〜の番」は 1 本まで。番が来たことは言い回しで伝える。
+        if (key === 'normal') {
+          const turnPhrases = list.filter((text) => isStr(text) && text.includes('の番'));
+          if (turnPhrases.length > 1) err(`${p}.normal`, `at most 1 line may say の番, got ${turnPhrases.length}`);
+        }
+      }
+      const character = charsById.get(id);
+      if (character && isObj(character.lines) && isStr(character.lines.turn) && Array.isArray(set.normal) && !set.normal.includes(character.lines.turn)) {
+        err(`${p}.normal`, 'must include characters.json lines.turn');
+      }
+    }
   }
 }
 
@@ -699,11 +778,19 @@ if (data['cards.json'] !== undefined) {
         err(`${p}.needsTarget`, 'must be player, city or airport');
       }
     });
-    if (cards.length !== 14) err('cards.json', `expected 14 cards, got ${cards.length}`);
+    if (cards.length !== 15) err('cards.json', `expected 15 cards, got ${cards.length}`);
     for (const id of DESIGN_CARD_IDS) if (!ids.has(id)) err('cards.json', `missing card id "${id}" from DESIGN.md §2.5`);
     for (const id of ids) if (!DESIGN_CARD_IDS.has(id)) err('cards.json', `unknown card id "${id}"`);
     cardIds = ids;
   }
+}
+
+// ---------------------------------------------------------------- character skills
+// cards.json の cardIds がそろってから、effect（card op）込みで固有技を検証する。
+if (Array.isArray(data['characters.json'])) {
+  data['characters.json'].forEach((c, i) => {
+    if (isObj(c)) validateSkill(c.skill, `characters[${i}].skill`);
+  });
 }
 
 // ---------------------------------------------------------------- emotes
@@ -773,6 +860,7 @@ if (data['events.json'] !== undefined) {
         err(`${p}.minYear`, 'must be an integer 1..10');
       }
       if (ev.once !== undefined && typeof ev.once !== 'boolean') err(`${p}.once`, 'must be boolean');
+      if (ev.finalYear !== undefined && typeof ev.finalYear !== 'boolean') err(`${p}.finalYear`, 'must be boolean');
       if (ev.monthly !== undefined && typeof ev.monthly !== 'boolean') err(`${p}.monthly`, 'must be boolean');
       if (ev.realms !== undefined) {
         if (!Array.isArray(ev.realms) || ev.realms.length === 0) err(`${p}.realms`, 'must be a non-empty array when present');
@@ -864,11 +952,87 @@ function validateSpeaker(sp, p) {
   err(p, `invalid speaker reference "${sp}"`);
 }
 
-function validateEffect(ef, p, depth = 0) {
+function validateSkill(skill, p) {
+  if (skill === undefined) { err(p, 'is required (固有技)'); return; }
+  if (!isObj(skill)) { err(p, 'must be an object'); return; }
+  if (!isStr(skill.name)) err(`${p}.name`, 'must be a non-empty string');
+  else if ([...skill.name].length > 20) warn(`${p}.name`, 'skill name is longer than 20 characters');
+  if (!isStr(skill.desc)) err(`${p}.desc`, 'must be a non-empty string');
+  if (skill.target !== undefined && skill.target !== 'player') {
+    err(`${p}.target`, 'must be "player" when present');
+  }
+  const allowTarget = skill.target === 'player';
+  if (!Array.isArray(skill.effects) || skill.effects.length === 0) {
+    err(`${p}.effects`, 'must be a non-empty array');
+  } else {
+    skill.effects.forEach((ef, i) => validateEffect(ef, `${p}.effects[${i}]`, 0, allowTarget));
+    const usesTarget = skill.effects.some((ef) => effectUsesTarget(ef));
+    if (allowTarget && !usesTarget) err(p, 'target: "player" is declared but no effect uses who/to: "target"');
+  }
+  if (skill.cpuHint !== undefined && !oneOf(skill.cpuHint, SKILL_HINTS)) {
+    err(`${p}.cpuHint`, `invalid cpuHint "${skill.cpuHint}"`);
+  }
+  if (isStr(skill.desc) && Array.isArray(skill.effects)) {
+    const numbers = [...new Set(skillNumbers(skill.effects))];
+    for (const value of numbers) {
+      if (!skill.desc.includes(String(value))) {
+        err(`${p}.desc`, `does not mention the effect value ${value} (desc must match effects)`);
+      }
+    }
+    if ([...skill.desc].length > 90) warn(`${p}.desc`, 'skill description is longer than 90 characters');
+  }
+}
+
+/** 効果（入れ子の gamble を含む）が who / to に 'target' を使うか。 */
+function effectUsesTarget(ef) {
+  if (!isObj(ef)) return false;
+  if (ef.who === 'target' || ef.to === 'target') return true;
+  if (ef.op === 'gamble') {
+    return [...(ef.win ?? []), ...(ef.lose ?? [])].some((child) => effectUsesTarget(child));
+  }
+  return false;
+}
+
+/** desc に必ず出るべき数値（確率は %、金額は絶対値）。 */
+function skillNumbers(effects) {
+  const out = [];
+  const walk = (list) => {
+    for (const ef of list ?? []) {
+      if (!isObj(ef)) continue;
+      switch (ef.op) {
+        case 'cash': if (isNum(ef.amount)) out.push(Math.abs(ef.amount)); break;
+        case 'cash_pct': if (isNum(ef.pct)) out.push(Math.abs(ef.pct)); break;
+        case 'per_property': if (isNum(ef.perProperty)) out.push(Math.abs(ef.perProperty)); break;
+        case 'industry_mod': out.push(ef.mult, ef.years); break;
+        case 'price_mod': out.push(ef.mult); break;
+        case 'city_mod': out.push(ef.mult, ef.years); break;
+        case 'sell': out.push(ef.count, ef.priceMult); break;
+        case 'skip': out.push(ef.turns); break;
+        case 'card': if (isNum(ef.count) && ef.count > 1) out.push(ef.count); break;
+        case 'gamble':
+          if (isNum(ef.chance)) out.push(Math.round(ef.chance * 100));
+          walk(ef.win);
+          walk(ef.lose);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  walk(effects);
+  return out.filter((value) => Number.isFinite(value));
+}
+
+function validateEffect(ef, p, depth = 0, allowTarget = false) {
   if (depth > 8) { err(p, 'effect nesting is too deep'); return; }
   if (!isObj(ef)) { err(p, 'must be an object'); return; }
   if (!EFFECT_OPS.includes(ef.op)) { err(`${p}.op`, `invalid effect op "${ef.op}"`); return; }
   const who = (wp) => {
+    if (ef.who === 'target') {
+      if (allowTarget) return;
+      err(wp, '"target" is only valid inside character skill effects, not events');
+      return;
+    }
     if (!oneOf(ef.who, WHO)) err(wp, `invalid who "${ef.who}"`);
   };
   const industry = (ip, allowAny = false) => {
@@ -927,7 +1091,9 @@ function validateEffect(ef, p, depth = 0) {
       if (!isInt(ef.turns) || ef.turns <= 0) err(`${p}.turns`, 'must be a positive integer');
       break;
     case 'piper':
-      if (!oneOf(ef.to, WHO)) err(`${p}.to`, `invalid who "${ef.to}"`);
+      if (ef.to === 'target') {
+        if (!allowTarget) err(`${p}.to`, '"target" is only valid inside character skill effects, not events');
+      } else if (!oneOf(ef.to, WHO)) err(`${p}.to`, `invalid who "${ef.to}"`);
       break;
     case 'realm':
       who(`${p}.who`);
@@ -936,10 +1102,22 @@ function validateEffect(ef, p, depth = 0) {
     case 'gamble':
       if (!isNum(ef.chance) || ef.chance < 0 || ef.chance > 1) err(`${p}.chance`, 'must be in [0, 1]');
       if (!Array.isArray(ef.win)) err(`${p}.win`, 'must be an array');
-      else ef.win.forEach((x, i) => validateEffect(x, `${p}.win[${i}]`, depth + 1));
+      else ef.win.forEach((x, i) => validateEffect(x, `${p}.win[${i}]`, depth + 1, allowTarget));
       if (!Array.isArray(ef.lose)) err(`${p}.lose`, 'must be an array');
-      else ef.lose.forEach((x, i) => validateEffect(x, `${p}.lose[${i}]`, depth + 1));
+      else ef.lose.forEach((x, i) => validateEffect(x, `${p}.lose[${i}]`, depth + 1, allowTarget));
       break;
+    case 'city_mod': {
+      if (!isStr(ef.city)) err(`${p}.city`, 'must be a city id or target keyword');
+      else if (!CITY_TARGET_KEYWORDS.includes(ef.city) && !cityIds.has(ef.city)) {
+        if (cityIds.size) err(`${p}.city`, `unknown city "${ef.city}"`);
+      }
+      if (!isNum(ef.mult) || ef.mult <= 0) err(`${p}.mult`, 'must be a positive number');
+      else if (ef.mult < 0.2 || ef.mult > 5) warn(`${p}.mult`, `unusual city multiplier ${ef.mult} (expected 0.2..5)`);
+      if (!isInt(ef.years) || ef.years <= 0) err(`${p}.years`, 'must be a positive integer');
+      if (!isStr(ef.label)) err(`${p}.label`, 'must be a non-empty string');
+      if (!oneOf(ef.kind, CITY_MOD_KINDS)) err(`${p}.kind`, `invalid city mod kind "${ef.kind}"`);
+      break;
+    }
   }
 }
 

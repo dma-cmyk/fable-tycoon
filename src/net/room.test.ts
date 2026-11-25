@@ -4,7 +4,8 @@ import { actorOf, cpuDecide } from '../core/engine';
 import { GAME_DATA } from '../data/index';
 import type { AllowedYears, ChatLine, PublicState, Report, ServerMsg } from './protocol';
 import { COMM, PROTOCOL_VERSION } from './protocol';
-import { fxDuration, RoomController, sumFxDuration } from './room';
+import { fxDuration, RoomController } from './room';
+import { routineFxDuration } from '../core/fxPacing';
 import { FX_MS } from './session-types';
 import type { RoomDeps } from './room';
 
@@ -603,7 +604,17 @@ describe('RoomController full game', () => {
     expect(actorOf(state)).toBe(1);
     if (!handover) throw new Error('cpu handover missing');
     expect(handover.by).toBe(0);
-    const delay = sumFxDuration(handover.fx) + 400;
+    const delay =
+      handover.fx.reduce(
+        (sum, item) =>
+          sum +
+          routineFxDuration(fxDuration(item), item, {
+            actor: handover.by,
+            isCpu: (playerId: number | null | undefined) =>
+              handover.state.players[playerId ?? -1]?.isCpu === true,
+          }),
+        0,
+      ) + 400;
     harness.clock.advance(delay - 1);
     expect(latest(harness.broadcasts, 'update')).toBe(handover);
     harness.clock.advance(1);

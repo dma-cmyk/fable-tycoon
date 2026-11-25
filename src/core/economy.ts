@@ -1,6 +1,6 @@
 // Prices, income, net worth and the fiscal-year scaling rules (DESIGN §2.2/§2.3).
 
-import type { GameData, GameState, Industry, PerkId, Property, StateView } from './types';
+import type { CityModState, GameData, GameState, Industry, PerkId, Property, StateView } from './types';
 import { getGraph } from './graph';
 
 export const STARTING_CASH = 100;
@@ -17,6 +17,27 @@ export interface PropertyRef {
   property: Property;
   city: GameData['cities'][number];
   cityId: string;
+}
+
+/** 都市 mod の積み上げ上限・下限（イベントの都市バブル／災害で使う）。 */
+export const CITY_MOD_MIN = 0.3;
+export const CITY_MOD_MAX = 3;
+
+/** その都市に有効な city_mod だけを返す（UI のバッジ用）。 */
+export function activeCityMods(state: StateView, cityId: string): CityModState[] {
+  return (state.cityMods ?? []).filter((mod) => mod.cityId === cityId && mod.yearsLeft > 0);
+}
+
+/**
+ * 都市単位の物件価格・収益に掛かる実効倍率。複数の mod は乗算し、
+ * 積み上げ結果を 0.3〜3.0 にクランプする（1都市を1イベントで壊し切らないため）。
+ */
+export function cityModMultiplier(state: StateView, cityId: string): number {
+  let mult = 1;
+  for (const mod of state.cityMods ?? []) {
+    if (mod.cityId === cityId && mod.yearsLeft > 0) mult *= mod.mult;
+  }
+  return Math.min(CITY_MOD_MAX, Math.max(CITY_MOD_MIN, mult));
 }
 
 export function findProperty(data: GameData, propertyId: string): PropertyRef | null {
@@ -36,7 +57,11 @@ export function industryPriceMult(state: StateView, industry: Industry): number 
 export function currentPrice(data: GameData, state: StateView, propertyId: string): number {
   const ref = findProperty(data, propertyId);
   if (!ref) throw new Error(`unknown property: ${propertyId}`);
-  return ref.property.price * industryPriceMult(state, ref.property.industry);
+  return (
+    ref.property.price *
+    industryPriceMult(state, ref.property.industry) *
+    cityModMultiplier(state, ref.cityId)
+  );
 }
 
 /** What `playerId` actually pays to buy (haggler −10%). */
@@ -50,7 +75,12 @@ export function purchasePrice(
   const ref = findProperty(data, propertyId);
   if (!ref || !player) throw new Error(`unknown property/player: ${propertyId}/${playerId}`);
   const discount = characterPerk(data, state, playerId) === 'haggler' ? 0.9 : 1;
-  return ref.property.price * industryPriceMult(state, ref.property.industry) * discount;
+  return (
+    ref.property.price *
+    industryPriceMult(state, ref.property.industry) *
+    cityModMultiplier(state, ref.cityId) *
+    discount
+  );
 }
 
 export function sellPrice(data: GameData, state: StateView, propertyId: string): number {
@@ -138,7 +168,12 @@ export function propertyAnnualIncome(
 ): number {
   const base = (property.price * property.yieldPct) / 100;
   const mono = monopolises(data, state, playerId, cityId) ? 2 : 1;
-  return base * incomeMultiplier(data, state, playerId, property.industry) * mono;
+  return (
+    base *
+    incomeMultiplier(data, state, playerId, property.industry) *
+    mono *
+    cityModMultiplier(state, cityId)
+  );
 }
 
 /** Sum of all owned properties' annual income (億円, floats allowed; display rounds). */

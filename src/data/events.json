@@ -39,8 +39,16 @@
     "choices": [
       {
         "label": "乗る！",
-        "detail": "IT・AIの収益×3（3年）。35%でバブル崩壊し、IT収益×0.3（2年）＋IT物件1件を30%安値で売却。",
+        "detail": "IT・AIの収益×3（3年）。深圳のバブル（物件価格・収益 ×1.60、2年）。35%でバブル崩壊し、IT収益×0.3（2年）＋深圳の打撃（物件価格・収益 ×0.55、2年）＋IT物件1件を30%安値で売却。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "shenzhen",
+            "mult": 1.6,
+            "years": 2,
+            "label": "AIバブル",
+            "kind": "bubble"
+          },
           {
             "op": "industry_mod",
             "industry": "tech",
@@ -59,6 +67,14 @@
               }
             ],
             "lose": [
+              {
+                "op": "city_mod",
+                "city": "shenzhen",
+                "mult": 0.55,
+                "years": 2,
+                "label": "AIバブル崩壊",
+                "kind": "damage"
+              },
               {
                 "op": "industry_mod",
                 "industry": "tech",
@@ -173,8 +189,16 @@
     "choices": [
       {
         "label": "救出に投資",
-        "detail": "現金20億を払い、海運・物流の収益×1.6（2年）。",
+        "detail": "現金20億を払い、海運・物流の収益×1.6（2年）。アレクサンドリアの封鎖（物件価格・収益 ×0.55、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "alexandria",
+            "mult": 0.55,
+            "years": 2,
+            "label": "運河封鎖",
+            "kind": "blockade"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -229,8 +253,16 @@
       },
       {
         "label": "迂回ルートで儲ける",
-        "detail": "海運収益×1.3（1年）＋現金10億。",
+        "detail": "海運収益×1.3（1年）＋現金10億。ケープタウンの好況（物件価格・収益 ×1.35、1年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "cape-town",
+            "mult": 1.35,
+            "years": 1,
+            "label": "喜望峰回り",
+            "kind": "boom"
+          },
           {
             "op": "industry_mod",
             "industry": "shipping",
@@ -547,8 +579,16 @@
     "choices": [
       {
         "label": "全額おろす",
-        "detail": "所持金+10%。ただし金融収益×0.7（2年）。",
+        "detail": "所持金+10%。サンフランシスコの打撃（物件価格・収益 ×0.70、2年）。金融収益×0.7（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "san-francisco",
+            "mult": 0.7,
+            "years": 2,
+            "label": "取り付け騒ぎ",
+            "kind": "damage"
+          },
           {
             "op": "cash_pct",
             "who": "self",
@@ -1014,8 +1054,16 @@
     "choices": [
       {
         "label": "工場を建てる",
-        "detail": "現金-40億。IT収益×1.8（3年）＋製造業収益×1.3（3年）。",
+        "detail": "現金-40億。台北の好況（物件価格・収益 ×1.50、2年）。IT収益×1.8（3年）＋製造業収益×1.3（3年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "taipei",
+            "mult": 1.5,
+            "years": 2,
+            "label": "半導体特需",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -1399,8 +1447,16 @@
       },
       {
         "label": "現実の土地を買う",
-        "detail": "現金-15億。観光収益×1.3（2年）。",
+        "detail": "現金-15億。現在地の都市の好況（物件価格・収益 ×1.40、2年）。観光収益×1.3（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "here",
+            "mult": 1.4,
+            "years": 2,
+            "label": "現実回帰",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -1734,8 +1790,16 @@
     "choices": [
       {
         "label": "球根を買う",
-        "detail": "40%で+50億、60%で-35億。",
+        "detail": "アムステルダムのバブル（物件価格・収益 ×2.00、2年）。40%で+50億、60%で-35億＋アムステルダムの打撃（物件価格・収益 ×0.40、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "amsterdam",
+            "mult": 2,
+            "years": 2,
+            "label": "チューリップ熱",
+            "kind": "bubble"
+          },
           {
             "op": "gamble",
             "chance": 0.4,
@@ -1747,6 +1811,14 @@
               }
             ],
             "lose": [
+              {
+                "op": "city_mod",
+                "city": "amsterdam",
+                "mult": 0.4,
+                "years": 2,
+                "label": "球根の暴落",
+                "kind": "damage"
+              },
               {
                 "op": "cash",
                 "who": "self",
@@ -1842,8 +1914,16 @@
     "choices": [
       {
         "label": "株を買う",
-        "detail": "35%で+60億、65%で-40億。",
+        "detail": "ロンドンのバブル（物件価格・収益 ×1.70、2年）。35%で+60億、65%で-40億＋ロンドンの打撃（物件価格・収益 ×0.45、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "london",
+            "mult": 1.7,
+            "years": 2,
+            "label": "南海の泡",
+            "kind": "bubble"
+          },
           {
             "op": "gamble",
             "chance": 0.35,
@@ -1855,6 +1935,14 @@
               }
             ],
             "lose": [
+              {
+                "op": "city_mod",
+                "city": "london",
+                "mult": 0.45,
+                "years": 2,
+                "label": "泡の崩壊",
+                "kind": "damage"
+              },
               {
                 "op": "cash",
                 "who": "self",
@@ -2127,8 +2215,16 @@
       },
       {
         "label": "スコップを売る",
-        "detail": "現金+35億。製造業収益×1.4（2年）。",
+        "detail": "現金+35億。ヨハネスブルグの好況（物件価格・収益 ×1.50、2年）。製造業収益×1.4（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "johannesburg",
+            "mult": 1.5,
+            "years": 2,
+            "label": "金鉱ブーム",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -2264,8 +2360,16 @@
       },
       {
         "label": "紙幣を刷る",
-        "detail": "30%で+60億、70%で-40億。",
+        "detail": "ベルリンの打撃（物件価格・収益 ×0.55、2年）付き。30%で+60億、70%で-40億。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "berlin",
+            "mult": 0.55,
+            "years": 2,
+            "label": "紙くず",
+            "kind": "damage"
+          },
           {
             "op": "gamble",
             "chance": 0.3,
@@ -2365,8 +2469,16 @@
       },
       {
         "label": "現金で待つ",
-        "detail": "所持金+5%。金融収益×0.7（2年）。",
+        "detail": "所持金+5%。ニューヨークの打撃（物件価格・収益 ×0.60、2年）。金融収益×0.7（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "new-york",
+            "mult": 0.6,
+            "years": 2,
+            "label": "大恐慌",
+            "kind": "damage"
+          },
           {
             "op": "cash_pct",
             "who": "self",
@@ -2566,8 +2678,16 @@
     "choices": [
       {
         "label": "不動産を買う",
-        "detail": "現金-30億。製造業収益×1.5（2年）。45%で+40億、55%で製造業物件の価格-15%（恒久）＋収益×0.7（2年）。",
+        "detail": "現金-30億。東京のバブル（物件価格・収益 ×1.60、2年）。製造業収益×1.5（2年）。45%で+40億、55%で製造業物件の価格-15%（恒久）＋収益×0.7（2年）＋東京の打撃（物件価格・収益 ×0.50、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "tokyo",
+            "mult": 1.6,
+            "years": 2,
+            "label": "土地バブル",
+            "kind": "bubble"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -2591,6 +2711,14 @@
               }
             ],
             "lose": [
+              {
+                "op": "city_mod",
+                "city": "tokyo",
+                "mult": 0.5,
+                "years": 2,
+                "label": "地価の崩壊",
+                "kind": "damage"
+              },
               {
                 "op": "price_mod",
                 "industry": "industry",
@@ -2704,8 +2832,16 @@
     "choices": [
       {
         "label": "新規上場に乗る",
-        "detail": "30%で+60億、70%で-40億。",
+        "detail": "30%で+60億＋サンフランシスコのバブル（物件価格・収益 ×1.70、2年）、70%で-40億＋サンフランシスコの打撃（物件価格・収益 ×0.50、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "san-francisco",
+            "mult": 1.7,
+            "years": 2,
+            "label": "ネット株の熱狂",
+            "kind": "bubble"
+          },
           {
             "op": "gamble",
             "chance": 0.3,
@@ -2717,6 +2853,14 @@
               }
             ],
             "lose": [
+              {
+                "op": "city_mod",
+                "city": "san-francisco",
+                "mult": 0.5,
+                "years": 2,
+                "label": "ドットコム崩壊",
+                "kind": "damage"
+              },
               {
                 "op": "cash",
                 "who": "self",
@@ -3314,8 +3458,16 @@
       },
       {
         "label": "紙幣を刷る",
-        "detail": "25%で+70億、75%で-50億。",
+        "detail": "ハラレの打撃（物件価格・収益 ×0.45、2年）付き。25%で+70億、75%で-50億。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "harare",
+            "mult": 0.45,
+            "years": 2,
+            "label": "通貨の崩壊",
+            "kind": "damage"
+          },
           {
             "op": "gamble",
             "chance": 0.25,
@@ -4010,8 +4162,16 @@
     "choices": [
       {
         "label": "レンガの家を買う",
-        "detail": "現金-30億。製造業収益×1.5（2年）＋弁護士軍団カード。",
+        "detail": "現金-30億。手番が最も持つ都市のバブル（物件価格・収益 ×1.50、2年）。製造業収益×1.5（2年）＋弁護士軍団カード。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "self_best",
+            "mult": 1.5,
+            "years": 2,
+            "label": "住宅バブル",
+            "kind": "bubble"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -4413,6 +4573,14 @@
         "op": "cash",
         "who": "all",
         "amount": -10
+      },
+      {
+        "op": "city_mod",
+        "city": "naha",
+        "mult": 0.6,
+        "years": 1,
+        "label": "台風上陸",
+        "kind": "damage"
       }
     ]
   },
@@ -4828,8 +4996,16 @@
     "choices": [
       {
         "label": "花見に行く",
-        "detail": "現金-10億。観光収益×1.3（1年）＋食品収益×1.2（1年）。",
+        "detail": "現金-10億。京都の好況（物件価格・収益 ×1.35、1年）。観光収益×1.3（1年）＋食品収益×1.2（1年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "kyoto",
+            "mult": 1.35,
+            "years": 1,
+            "label": "花見特需",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -4953,8 +5129,16 @@
     "choices": [
       {
         "label": "冷房を強める",
-        "detail": "現金-10億。エネルギー収益×1.5（1年）。",
+        "detail": "現金-10億。ヒューストンの好況（物件価格・収益 ×1.30、1年）。エネルギー収益×1.5（1年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "houston",
+            "mult": 1.3,
+            "years": 1,
+            "label": "冷房需要",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -5160,6 +5344,14 @@
         "op": "cash",
         "who": "all",
         "amount": -8
+      },
+      {
+        "op": "city_mod",
+        "city": "sapporo",
+        "mult": 0.75,
+        "years": 1,
+        "label": "大雪",
+        "kind": "damage"
       }
     ]
   },
@@ -6495,8 +6687,16 @@
     "choices": [
       {
         "label": "迂回特需に乗る",
-        "detail": "現金-10億（保険料）。海運の収益×1.6（2年）。",
+        "detail": "現金-10億（保険料）。海運の収益×1.6（2年）。ケープタウンの好況（物件価格・収益 ×1.50、2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "cape-town",
+            "mult": 1.5,
+            "years": 2,
+            "label": "喜望峰回り",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -6592,8 +6792,16 @@
     "choices": [
       {
         "label": "予約枠を買い占める",
-        "detail": "現金-25億。海運の収益×1.5（2年）。",
+        "detail": "現金-25億。パナマシティの封鎖（物件価格・収益 ×0.60、2年）。海運の収益×1.5（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "panama-city",
+            "mult": 0.6,
+            "years": 2,
+            "label": "運河の渇水",
+            "kind": "blockade"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -6677,8 +6885,16 @@
     "choices": [
       {
         "label": "製菓会社に売り込む",
-        "detail": "現金-15億。食品の収益×1.6（2年）。",
+        "detail": "現金-15億。アクラの好況（物件価格・収益 ×1.45、2年）。食品の収益×1.6（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "accra",
+            "mult": 1.45,
+            "years": 2,
+            "label": "カカオ高騰",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -7055,8 +7271,16 @@
     "choices": [
       {
         "label": "医薬品の製造に投資",
-        "detail": "現金-25億。製造業の収益×1.4（2年）。",
+        "detail": "現金-25億。コペンハーゲンの好況（物件価格・収益 ×1.40、2年）。製造業の収益×1.4（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "copenhagen",
+            "mult": 1.4,
+            "years": 2,
+            "label": "肥満症薬ブーム",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -7253,8 +7477,16 @@
     "choices": [
       {
         "label": "ブラインドボックス事業に乗る",
-        "detail": "現金-15億。娯楽の収益×1.3（1年）と娯楽物件の価格+35%（恒久）。",
+        "detail": "現金-15億。バンコクのバブル（物件価格・収益 ×1.30、1年）。娯楽の収益×1.3（1年）と娯楽物件の価格+35%（恒久）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "bangkok",
+            "mult": 1.3,
+            "years": 1,
+            "label": "ブラインドボックス熱",
+            "kind": "bubble"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -7355,8 +7587,16 @@
     "choices": [
       {
         "label": "入市料を払って営業する",
-        "detail": "現金-10億。観光の収益×1.3（2年）。",
+        "detail": "現金-10億。ヴェネツィアの好況（物件価格・収益 ×1.30、2年）。観光の収益×1.3（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "venice",
+            "mult": 1.3,
+            "years": 2,
+            "label": "入市料特需",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -7557,8 +7797,16 @@
     "choices": [
       {
         "label": "値下げ競争に加わる",
-        "detail": "現金-20億。製造業の収益×1.3（2年）。",
+        "detail": "現金-20億。深圳の打撃（物件価格・収益 ×0.70、2年）。製造業の収益×1.3（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "shenzhen",
+            "mult": 0.7,
+            "years": 2,
+            "label": "値崩れ",
+            "kind": "damage"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -7647,8 +7895,16 @@
     "choices": [
       {
         "label": "安全投資を先回りする",
-        "detail": "現金-20億。大きすぎて潰せませんカード1枚と製造業の収益×1.2（2年）。",
+        "detail": "現金-20億。シアトルの打撃（物件価格・収益 ×0.75、2年）。大きすぎて潰せませんカード1枚と製造業の収益×1.2（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "seattle",
+            "mult": 0.75,
+            "years": 2,
+            "label": "品質不信",
+            "kind": "damage"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -8642,8 +8898,16 @@
     "choices": [
       {
         "label": "石油を買い占める",
-        "detail": "現金-30億。資源の収益×1.9（2年）。",
+        "detail": "現金-30億。リヤドの好況（物件価格・収益 ×1.60、2年）。資源の収益×1.9（2年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "riyadh",
+            "mult": 1.6,
+            "years": 2,
+            "label": "原油高",
+            "kind": "boom"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -8754,8 +9018,16 @@
       },
       {
         "label": "米国資産を買う",
-        "detail": "現金-25億。製造業の収益×1.4（3年）。",
+        "detail": "現金-25億。東京のバブル（物件価格・収益 ×1.45、2年）。製造業の収益×1.4（3年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "tokyo",
+            "mult": 1.45,
+            "years": 2,
+            "label": "円高バブル",
+            "kind": "bubble"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -8847,8 +9119,16 @@
       },
       {
         "label": "工場を買う",
-        "detail": "現金-30億。製造業の収益×1.5（3年）。",
+        "detail": "現金-30億。バンコクの打撃（物件価格・収益 ×0.60、2年）。製造業の収益×1.5（3年）。",
         "effects": [
+          {
+            "op": "city_mod",
+            "city": "bangkok",
+            "mult": 0.6,
+            "years": 2,
+            "label": "通貨危機",
+            "kind": "damage"
+          },
           {
             "op": "cash",
             "who": "self",
@@ -11527,6 +11807,1547 @@
           }
         ],
         "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "city-olympics-boom",
+    "title": "五輪の街、地価が先に走る",
+    "kind": "history",
+    "fact": "1964年の東京五輪に向けて、首都高速道路や東海道新幹線などの整備が進み、開催都市では地価と消費が大きく伸びた。",
+    "sources": [
+      {
+        "title": "1964 Summer Olympics - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/1964_Summer_Olympics",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "開催都市の不動産高騰と開催費の膨張を誇張した創作。実在の人物・企業を貶める意図はない。",
+    "weight": 5,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "五輪の聖火が来る。地価は先に走り出す。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "開催費は膨らみ、地価も膨らむ。見事な聖火です。"
+      },
+      {
+        "speaker": "char:kintaro",
+        "text": "金の斧より、駅前の土地が欲しいです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "祭りのあとに残るのは、立派な競技場と請求書です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "開催都市に投資する",
+        "detail": "現金-25億。東京の好況（物件価格・収益 ×1.60、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "city_mod",
+            "city": "tokyo",
+            "mult": 1.6,
+            "years": 2,
+            "label": "五輪特需",
+            "kind": "boom"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "競技場の隣の空き地が、一年で三倍になりました。"
+          }
+        ],
+        "cpuWeight": 1.3
+      },
+      {
+        "label": "開催費を監査する",
+        "detail": "現金+15億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "監査は儲かります。監査される側より。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "屋台を出す",
+        "detail": "観光の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.4,
+            "years": 2,
+            "label": "五輪の屋台"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:golden_goose",
+            "text": "金の卵より、たこ焼きが売れます。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "city-sudden-tourist-boom",
+    "title": "写真一枚で、港町が世界の目的地に",
+    "kind": "fable",
+    "satireNote": "SNSのバズで観光地の需給が一夜で反転する現象を誇張した創作。実在の人物・企業とは関係ない。",
+    "weight": 5,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "ある港町が、写真一枚で世界の目的地になった。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "予約は三年先まで。住民は一か月で観光業者になりました。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "月より近いのに、月より混んでいます。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "バズは去る。家賃は残る。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "宿を開く",
+        "detail": "現金-20億。函館の好況（物件価格・収益 ×1.80、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "city_mod",
+            "city": "hakodate",
+            "mult": 1.8,
+            "years": 2,
+            "label": "観光バズ",
+            "kind": "boom"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "ベッドは満床、駐車場は満車、住民は満腹ではありません。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "地元の魚を売る",
+        "detail": "現金+15億。食品の収益×1.3（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 1,
+            "label": "港の食堂"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "魚は安く、観光客の財布は軽い。理想的です。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "静かな街へ移る",
+        "detail": "目的地の近くへ移る。",
+        "effects": [
+          {
+            "op": "move",
+            "who": "self",
+            "to": "destination_near"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "静かな街を探す旅が始まりました。"
+          }
+        ],
+        "cpuWeight": 0.7
+      }
+    ]
+  },
+  {
+    "id": "city-factory-closure",
+    "title": "工場の門が閉まる日",
+    "kind": "history",
+    "fact": "デトロイトは二十世紀後半に自動車工場の閉鎖と人口流出が続き、二〇一三年に連邦破産法の適用を申請した。",
+    "sources": [
+      {
+        "title": "Decline of Detroit - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Decline_of_Detroit",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "工場閉鎖と都市財政の悪化を誇張した創作。実在の人物・企業を名指しする意図はない。",
+    "weight": 5,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "工場の門が閉まると、街の時計も止まる。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "雇用は数字の都合で動きます。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "工場は閉まっていません。とても静かなだけです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "静かな工場ほど、よく響く。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "廃工場を買う",
+        "detail": "現金-20億。40%でデトロイトの好況（物件価格・収益 ×1.80、2年）、60%でデトロイトの打撃（物件価格・収益 ×0.50、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "city_mod",
+                "city": "detroit",
+                "mult": 1.8,
+                "years": 2,
+                "label": "再開発",
+                "kind": "boom"
+              }
+            ],
+            "lose": [
+              {
+                "op": "city_mod",
+                "city": "detroit",
+                "mult": 0.5,
+                "years": 2,
+                "label": "工場閉鎖",
+                "kind": "damage"
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "再開発は来年です。鼻が伸びる前に言っておきます。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "労働者にスープを配る",
+        "detail": "現金-10億＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "スープの湯気だけが、まだ街の景気を支えています。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "別の街へ移る",
+        "detail": "目的地の近くへ移る。",
+        "effects": [
+          {
+            "op": "move",
+            "who": "self",
+            "to": "destination_near"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "荷物は少なく、未練は多めです。"
+          }
+        ],
+        "cpuWeight": 0.8
+      }
+    ]
+  },
+  {
+    "id": "city-gold-strike",
+    "title": "砂の下から金が出た",
+    "kind": "history",
+    "fact": "一八九〇年代、西オーストラリアで金鉱が相次いで発見され、パースなどの都市に人口と資本が集中した。",
+    "sources": [
+      {
+        "title": "Western Australian gold rushes - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Western_Australian_gold_rush",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "金鉱ブームの熱狂と、掘る人より売る人が儲かる構図を誇張した創作。",
+    "weight": 5,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "砂の下から金が出た。街が一夜で生まれた。"
+      },
+      {
+        "speaker": "char:jack",
+        "text": "豆の木より速く、街が伸びます。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "金を掘る者より、金を数える者が儲かる。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "夢の街には、夢の値段がつきます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "採掘権を買う",
+        "detail": "35%で+70億＋パースの好況（物件価格・収益 ×1.90、2年）、65%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 70
+              },
+              {
+                "op": "city_mod",
+                "city": "perth",
+                "mult": 1.9,
+                "years": 2,
+                "label": "金鉱ブーム",
+                "kind": "boom"
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:jack",
+            "text": "掘り当てました。豆は一本もありませんが。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "道具屋を開く",
+        "detail": "現金+25億。パースの好況（物件価格・収益 ×1.50、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "city_mod",
+            "city": "perth",
+            "mult": 1.5,
+            "years": 2,
+            "label": "金鉱ブーム",
+            "kind": "boom"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "スコップの値段は、金の値段に比例します。"
+          }
+        ],
+        "cpuWeight": 1.4
+      },
+      {
+        "label": "鉄道に投資する",
+        "detail": "現金-15億。製造業の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 2,
+            "label": "金鉱鉄道"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "線路の先に金鉱。線路の元に請求書。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "city-port-strike",
+    "title": "港が止まると、棚が止まる",
+    "kind": "news",
+    "fact": "二〇二四年十月、米国の港湾労働者の組合が大規模なストライキを行い、東海岸とメキシコ湾岸の主要港が停止した。",
+    "sources": [
+      {
+        "title": "2024 United States port strike - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/2024_United_States_port_strike",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "港湾ストの物流麻痺と、代替港の便乗値上げを誇張した創作。",
+    "weight": 5,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "港が止まると、世界の棚が止まる。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "船は沖で待ち、コンテナは並ぶ。経済は駐車中です。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "俺の船も待っている。家賃だけは動いている。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "ストのあとには、値上げという残業が待っています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "代替港を押さえる",
+        "detail": "現金-15億。ロサンゼルスの封鎖（物件価格・収益 ×0.70、1年）＋釜山の好況（物件価格・収益 ×1.30、1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "city_mod",
+            "city": "los-angeles",
+            "mult": 0.7,
+            "years": 1,
+            "label": "港湾スト",
+            "kind": "blockade"
+          },
+          {
+            "op": "city_mod",
+            "city": "busan",
+            "mult": 1.3,
+            "years": 1,
+            "label": "代替港",
+            "kind": "boom"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "荷物は遠回り。請求書は特急です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "在庫を売り抜ける",
+        "detail": "50%で+35億、50%で-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 35
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "在庫は嘘をつきません。値段はつきますが。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "静観する",
+        "detail": "弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "待つことも戦略です。家賃が許せば。"
+          }
+        ],
+        "cpuWeight": 0.8
+      }
+    ]
+  },
+  {
+    "id": "city-casino-resort",
+    "title": "カジノが来る、街が賭ける",
+    "kind": "news",
+    "fact": "大阪は二〇二三年に、カジノを含む統合型リゾートの整備計画を国から認定され、二〇三〇年ごろの開業を目指している。",
+    "sources": [
+      {
+        "title": "Integrated resort - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Integrated_resort",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "統合型リゾート構想の期待先行と、地価・住民負担の膨張を誇張した創作。",
+    "weight": 4,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "カジノが来る。街は期待と心配で二重に膨らむ。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "賭けるのは客だけではありません。自治体もです。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "出口のない迷路より、出口のないホテルが怖いです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "夢の売上は、夢のうちに計上されます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "周辺の土地を買う",
+        "detail": "現金-30億。大阪のバブル（物件価格・収益 ×1.70、3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "city_mod",
+            "city": "osaka",
+            "mult": 1.7,
+            "years": 3,
+            "label": "カジノバブル",
+            "kind": "bubble"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "土地が先に当たりました。カジノはまだです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "反対運動に寄付する",
+        "detail": "現金-10億＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "住民説明会は、三時間で五時間に伸びました。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "様子を見る",
+        "detail": "現金+5億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 5
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "見ているだけでも、手数料は発生します。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "city-water-crisis",
+    "title": "蛇口が天気予報になる街",
+    "kind": "history",
+    "fact": "メキシコシティは地下水への依存と地盤沈下により水不足が慢性化し、給水制限が繰り返されている。",
+    "sources": [
+      {
+        "title": "Water in Mexico City - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Water_in_Mexico_City",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "水不足と給水制限を、観光と不動産の値段に結びつけて誇張した創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "水道の蛇口が、天気予報になります。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "地盤は沈み、水は遠くなり、家賃は上がります。"
+      },
+      {
+        "speaker": "char:urashima",
+        "text": "竜宮城は水だらけでした。こちらは逆です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "水はタダ。ただし、運ぶのは有料です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "給水事業に投資する",
+        "detail": "現金-20億。メキシコシティの打撃（物件価格・収益 ×0.70、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "city_mod",
+            "city": "mexico-city",
+            "mult": 0.7,
+            "years": 2,
+            "label": "水不足",
+            "kind": "damage"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:urashima",
+            "text": "水を売る商売は、乾いているほど儲かります。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "節水して売る",
+        "detail": "現金+15億。メキシコシティの打撃（物件価格・収益 ×0.85、1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "city_mod",
+            "city": "mexico-city",
+            "mult": 0.85,
+            "years": 1,
+            "label": "節水令",
+            "kind": "damage"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "節水の広告費が、水道代より高くつきました。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "高地へ引っ越す",
+        "detail": "ランダムな都市へ移る。",
+        "effects": [
+          {
+            "op": "move",
+            "who": "self",
+            "to": "random_city"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "水のある街は、たいてい遠い街です。"
+          }
+        ],
+        "cpuWeight": 0.7
+      }
+    ]
+  },
+  {
+    "id": "city-tech-layoffs",
+    "title": "技術者の街に、静かな通知",
+    "kind": "fable",
+    "satireNote": "好景気の街が一斉解雇で冷える現象を誇張した創作。実在の企業を指すものではない。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "技術者の街に、静かな解雇通知が届いた。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "世界の景気は、私たちの椅子で分かります。空いています。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "業績は最高です。人員は最低です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "事務所の明かりが消えると、屋台も早く閉まります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "空いた事務所を買う",
+        "detail": "現金-15億。ベンガルールの打撃（物件価格・収益 ×0.65、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "city_mod",
+            "city": "bengaluru",
+            "mult": 0.65,
+            "years": 2,
+            "label": "レイオフ",
+            "kind": "damage"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "席はたくさんあります。仕事は、少しだけです。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "人材を引き抜く",
+        "detail": "現金-10億。IT・AIの収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.3,
+            "years": 2,
+            "label": "優秀な人材"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "首になる前に、引き抜かれる。これが技術者の夢です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "屋台を始める",
+        "detail": "現金+20億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "失業した技術者が、いちばん儲かる屋台を発明しました。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "city-volcano-tourism",
+    "title": "溶岩は冷えるが、話題は冷めない",
+    "kind": "fable",
+    "satireNote": "噴火を観光資源として売る商業主義を誇張した創作。実在の被害や人物を扱うものではない。",
+    "weight": 4,
+    "minYear": 1,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "噴火が始まった。観光客は逃げずに、カメラを向けた。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "危険と隣り合わせの景観は、高く売れます。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "月の火口より、こちらの方が人気です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "溶岩は冷えるが、話題は冷めない。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "観光ツアーを組む",
+        "detail": "現金-15億。レイキャビクの好況（物件価格・収益 ×1.50、2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "city_mod",
+            "city": "reykjavik",
+            "mult": 1.5,
+            "years": 2,
+            "label": "噴火観光",
+            "kind": "boom"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "ヘルメットと防塵マスク付き。お土産は灰です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "避難所に寄付する",
+        "detail": "現金-10億＋弁護士軍団カード。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "寄付の領収書だけが、噴火より長く残りました。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "火山灰を袋詰めにする",
+        "detail": "現金+25億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:kaguya",
+            "text": "灰はただです。袋と夢に値段がつきます。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "final-tax-audit-frontrunner",
+    "title": "首位に税務調査が入る",
+    "kind": "fable",
+    "satireNote": "首位への税務調査と、節税スキームの危うさを誇張した創作。実在の人物・企業とは関係ない。",
+    "weight": 9,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最終年、税務署は順位表を見ている。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "一番儲けた人を探すのは簡単です。一番目立つので。"
+      },
+      {
+        "speaker": "char:robin_hood",
+        "text": "調査は前からしていました。今さらですが。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "帳簿は正直に。領収書はもっと正直に。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "素直に納める",
+        "detail": "最富裕の所持金-12%。首位が最も持つ都市の打撃（物件価格・収益 ×0.75、2年）。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "richest",
+            "pct": -12
+          },
+          {
+            "op": "city_mod",
+            "city": "richest_best",
+            "mult": 0.75,
+            "years": 2,
+            "label": "税務調査",
+            "kind": "damage"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "納税は立派です。特に、私が集める場合は。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "税理士に任せる",
+        "detail": "50%で最富裕の所持金-6%＋首位が最も持つ都市の打撃（物件価格・収益 ×0.85、1年）、50%で最富裕の所持金-20%＋首位が最も持つ都市の打撃（物件価格・収益 ×0.60、2年）。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash_pct",
+                "who": "richest",
+                "pct": -6
+              },
+              {
+                "op": "city_mod",
+                "city": "richest_best",
+                "mult": 0.85,
+                "years": 1,
+                "label": "税務調査",
+                "kind": "damage"
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "richest",
+                "pct": -20
+              },
+              {
+                "op": "city_mod",
+                "city": "richest_best",
+                "mult": 0.6,
+                "years": 2,
+                "label": "重加算税",
+                "kind": "damage"
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "税理士の時計は、なぜか常に請求時間を指しています。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "他人を密告する",
+        "detail": "最富裕の所持金-8%。手番の現金+8億。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "richest",
+            "pct": -8
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 8
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:robin_hood",
+            "text": "密告は趣味ではありません。ですが、実入りはいいです。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "final-bubble-burst",
+    "title": "最後のバブルが弾ける",
+    "kind": "fable",
+    "satireNote": "最終年にだけ弾ける都合のよいバブルという創作。実在の経済を予測するものではない。",
+    "weight": 9,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最終年、いちばん高いビルから音がした。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "バブルは弾けました。私の手柄ではありません。"
+      },
+      {
+        "speaker": "char:wolf",
+        "text": "高く積んだものは、よく落ちてきます。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "首位の街が、静かになりました。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "city_mod",
+        "city": "richest_best",
+        "mult": 0.45,
+        "years": 2,
+        "label": "最後の崩壊",
+        "kind": "damage"
+      },
+      {
+        "op": "sell",
+        "who": "richest",
+        "industry": "any",
+        "count": 1,
+        "priceMult": 0.75
+      },
+      {
+        "op": "cash",
+        "who": "richest",
+        "amount": -20,
+        "scale": false
+      }
+    ]
+  },
+  {
+    "id": "final-public-backlash",
+    "title": "世論が首位を吊るす",
+    "kind": "fable",
+    "satireNote": "終盤の報道合戦と不買運動を誇張した創作。実在の人物・企業を貶める意図はない。",
+    "weight": 8,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "世論は、首位の名前を覚えてしまった。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "好感度は資産です。そして、たいてい負債です。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "森の評判は、すぐ広まります。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "謝罪会見の時間だけが、長引きます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash_pct",
+        "who": "richest",
+        "pct": -10
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 0.85,
+        "years": 1,
+        "label": "世論の逆風"
+      },
+      {
+        "op": "city_mod",
+        "city": "richest_best",
+        "mult": 0.8,
+        "years": 1,
+        "label": "不買運動",
+        "kind": "damage"
+      }
+    ]
+  },
+  {
+    "id": "final-last-place-rescue",
+    "title": "最下位に救済基金が届く",
+    "kind": "fable",
+    "satireNote": "最終盤の救済策と、その財源が首位から出る構造を誇張した創作。",
+    "weight": 8,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最下位を放っておくと、物語が短くなる。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "慈善は立派です。税金でやるなら、なおさら。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "今から働くより、助けてもらう方が早いです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "救済の財源は、だいたい首位の街から出ます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash",
+        "who": "poorest",
+        "amount": 80
+      },
+      {
+        "op": "cash",
+        "who": "richest",
+        "amount": -10
+      },
+      {
+        "op": "card",
+        "who": "poorest",
+        "card": "shield",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "final-shareholder-suit",
+    "title": "株主代表訴訟、最終法廷",
+    "kind": "fable",
+    "satireNote": "株主代表訴訟と最終年の法廷劇を誇張した創作。実在の訴訟・人物とは関係ない。",
+    "weight": 8,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "株主が、経営者を訴えた。法廷は最終年の廊下にある。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "説明責任という言葉を、初めて聞きました。"
+      },
+      {
+        "speaker": "char:mad_hatter",
+        "text": "判決は来週です。来週は来ませんが。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "弁護士だけが、確実に儲かっています。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash_pct",
+        "who": "richest",
+        "pct": -8
+      },
+      {
+        "op": "sell",
+        "who": "richest",
+        "industry": "any",
+        "count": 1,
+        "priceMult": 0.8
+      }
+    ]
+  },
+  {
+    "id": "final-last-auction",
+    "title": "最終競売、最後の値段",
+    "kind": "fable",
+    "satireNote": "最終盤の競売と、自分の街を自分で競り上げる自転車操業を誇張した創作。",
+    "weight": 9,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最終年、最後の競売が始まった。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "値段は私がつけます。払うのは、たぶんあなたです。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "最終年なので、夢を少し多めに盛りました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "落札の鐘が鳴る。財布も鳴る。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "自分の街を競り上げる",
+        "detail": "現金-20億。手番が最も持つ都市のバブル（物件価格・収益 ×1.40、1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "city_mod",
+            "city": "self_best",
+            "mult": 1.4,
+            "years": 1,
+            "label": "最後のバブル",
+            "kind": "bubble"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "自分で値を上げる。立派な投資です。誰も信じませんが。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "首位の街を落とす",
+        "detail": "現金-15億。首位が最も持つ都市の打撃（物件価格・収益 ×0.80、1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "city_mod",
+            "city": "richest_best",
+            "mult": 0.8,
+            "years": 1,
+            "label": "競売不成立",
+            "kind": "damage"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "落札させないのも、立派な入札です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "傍観する",
+        "detail": "弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "傍観席にも、ちゃんと席代がかかります。"
+          }
+        ],
+        "cpuWeight": 0.8
+      }
+    ]
+  },
+  {
+    "id": "final-frontrunner-curse",
+    "title": "首位の呪い",
+    "kind": "fable",
+    "satireNote": "首位に取り立て屋が集まるという創作。実在の制度や人物とは関係ない。",
+    "weight": 8,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "首位になると、取り立て屋が寄ってくる。"
+      },
+      {
+        "speaker": "npc:piper1",
+        "text": "最終年は、特に寄ります。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "笛の音は、もう聞き慣れました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "王座の周りには、いつも誰かが立っています。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "piper",
+        "to": "richest"
+      },
+      {
+        "op": "cash_pct",
+        "who": "richest",
+        "pct": -5
+      }
+    ]
+  },
+  {
+    "id": "final-underdog-loan",
+    "title": "どん底への最後の融資",
+    "kind": "fable",
+    "satireNote": "最下位への怪しい融資と、首位叩きの世論を誇張した創作。",
+    "weight": 9,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最下位の元に、怪しい銀行員が現れた。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "担保は不要です。あなたの希望で十分です。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "借りられるうちに借りましょう。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "返済は、たぶん来年です。来年はありませんが。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "最下位に融資する",
+        "detail": "最貧困の現金+60億。手番の現金-10億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "poorest",
+            "amount": 60
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "情けは人のためならず。私の手数料のためです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "首位を叩く",
+        "detail": "最富裕の所持金-8%。ほかの全員の現金+10億。",
+        "effects": [
+          {
+            "op": "cash_pct",
+            "who": "richest",
+            "pct": -8
+          },
+          {
+            "op": "cash",
+            "who": "others",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:robin_hood",
+            "text": "分配は得意です。特に他人の分を。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "見なかったことにする",
+        "detail": "弁護士軍団カードを1枚得る。",
+        "effects": [
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "見なかったことにした請求書は、だいたい届きます。"
+          }
+        ],
+        "cpuWeight": 0.8
+      }
+    ]
+  },
+  {
+    "id": "final-tax-haven-raid",
+    "title": "タックスヘイブンに灯りがつく",
+    "kind": "fable",
+    "satireNote": "タックスヘイブン摘発と資金引き上げを誇張した創作。実在の国・機関を名指しするものではない。",
+    "weight": 8,
+    "finalYear": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "最終年、海の向こうの口座に灯りがついた。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "透明性は大切です。特に他人の資産の。"
+      },
+      {
+        "speaker": "char:aladdin",
+        "text": "ランプの精も、最近は申告が必要です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "匿名の口座が、名前を呼ばれて固まっています。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "cash_pct",
+        "who": "richest",
+        "pct": -14
+      },
+      {
+        "op": "city_mod",
+        "city": "richest_best",
+        "mult": 0.7,
+        "years": 1,
+        "label": "資金引き上げ",
+        "kind": "damage"
       }
     ]
   }

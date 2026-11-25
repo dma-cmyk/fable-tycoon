@@ -27,9 +27,18 @@ import {
   yearScale,
 } from './economy';
 import { drawCards, handLimitFor, isCardId } from './cards';
+import { applyCityMod } from './cityMods';
+import { isFinalYearActive } from './showdown';
 import { transferPiper } from './piper';
 import { REALMS, randomWorldCityNodeId, realmEntryNodeId } from './realm';
 import { emitDialogueLines, sayCharacterLine } from './speech';
+
+/** 最終年イベントの重みブースト（最終年は逆転ドラマを濃くする）。 */
+export const FINAL_YEAR_WEIGHT_BOOST = 3;
+/** 直近この件数に出たイベントは再抽選しない（候補が尽きたら戻す）。 */
+export const RECENT_EVENT_WINDOW = 12;
+/** 最終月に、そのゲームで初めて出るイベントへ掛ける重み。 */
+export const FINAL_MONTH_FRESH_BOOST = 2;
 
 function monthAllowed(event: GameEventDef, month: number): boolean {
   return !event.months || event.months.includes(month);
@@ -38,6 +47,28 @@ function monthAllowed(event: GameEventDef, month: number): boolean {
 function realmAllowed(event: GameEventDef, realm: RealmId | 'world'): boolean {
   if (!event.realms || event.realms.length === 0) return realm === 'world';
   return event.realms.includes(realm);
+}
+
+/** 最終年イベントは最終年だけ、それ以外は通年。 */
+function yearAllowed(event: GameEventDef, state: GameState): boolean {
+  return !event.finalYear || isFinalYearActive(state);
+}
+
+/** 直近に出たイベント。候補が尽きたときは全候補へ戻す（乱数の回数は変えない）。 */
+function withoutRecent(state: GameState, eligible: GameEventDef[]): GameEventDef[] {
+  const recent = new Set((state.recentEvents ?? []).slice(-RECENT_EVENT_WINDOW));
+  if (recent.size === 0) return eligible;
+  const fresh = eligible.filter((e) => !recent.has(e.id));
+  return fresh.length > 0 ? fresh : eligible;
+}
+
+function eventWeight(event: GameEventDef, state: GameState): number {
+  let weight = event.weight;
+  if (event.finalYear && isFinalYearActive(state)) weight *= FINAL_YEAR_WEIGHT_BOOST;
+  if (isFinalYearActive(state) && state.month === 3 && !(state.recentEvents ?? []).includes(event.id)) {
+    weight *= FINAL_MONTH_FRESH_BOOST;
+  }
+  return weight;
 }
 
 /** Picks a weighted, year-, month-, realm- and once-eligible news event. */
@@ -51,11 +82,12 @@ export function pickEvent(
       e.monthly !== true &&
       e.weight > 0 &&
       state.year >= (e.minYear ?? 1) &&
+      yearAllowed(e, state) &&
       monthAllowed(e, state.month) &&
       realmAllowed(e, realm) &&
       (!e.once || !state.usedOnceEvents.includes(e.id)),
   );
-  return weightedPick(state, eligible, (e) => e.weight);
+  return weightedPick(state, withoutRecent(state, eligible), (e) => eventWeight(e, state));
 }
 
 /** Month-start event candidates; the 30% chance roll lives in engine.ts. */
@@ -69,16 +101,19 @@ export function pickMonthlyEvent(
       e.monthly === true &&
       e.weight > 0 &&
       state.year >= (e.minYear ?? 1) &&
+      yearAllowed(e, state) &&
       monthAllowed(e, month) &&
       (!e.once || !state.usedOnceEvents.includes(e.id)),
   );
-  return weightedPick(state, eligible, (e) => e.weight);
+  return weightedPick(state, withoutRecent(state, eligible), (e) => eventWeight(e, state));
 }
 
 export function markEventUsed(state: GameState, event: GameEventDef): void {
   if (event.once && !state.usedOnceEvents.includes(event.id)) {
     state.usedOnceEvents.push(event.id);
   }
+  // 全履歴を残す（直近12件の再登場回避と、最終月の「初出」判定の両方に使う）。
+  (state.recentEvents ??= []).push(event.id);
 }
 
 /** Emits the opening dialogue, then closes the event window. */
@@ -87,11 +122,19 @@ export function emitEventOpening(state: GameState, fx: Fx[], event: GameEventDef
   emitDialogueLines(state, fx, event.lines, actor);
 }
 
-export function resolveTargets(data: GameData, state: GameState, who: Who, actor: number): number[] {
+export function resolveTargets(
+  data: GameData,
+  state: GameState,
+  who: Who,
+  actor: number,
+  targetId?: number,
+): number[] {
   const ids = state.players.map((p) => p.id);
   switch (who) {
     case 'self':
       return ids.includes(actor) ? [actor] : [];
+    case 'target':
+      return targetId !== undefined && ids.includes(targetId) ? [targetId] : [];
     case 'all':
       return ids;
     case 'others':
@@ -117,14 +160,20 @@ export function resolveTargets(data: GameData, state: GameState, who: Who, actor
   }
 }
 
+/**
+ * Applies an effect list in order. `targetId` backs `who: 'target'` (固有技で選んだ相手).
+ * Events must not use `who: 'target'`: validate-data rejects it, and without a targetId it
+ * resolves to nobody.
+ */
 export function applyEffects(
   data: GameData,
   state: GameState,
   fx: Fx[],
   effects: Effect[] | undefined,
   actor: number,
+  targetId?: number,
 ): void {
-  for (const effect of effects ?? []) applyEffect(data, state, fx, effect, actor);
+  for (const effect of effects ?? []) applyEffect(data, state, fx, effect, actor, targetId);
 
   // Other players cannot enter a per-player sell phase mid-turn; settle them automatically.
   for (const player of state.players) {
@@ -160,11 +209,12 @@ function applyEffect(
   fx: Fx[],
   effect: Effect,
   actor: number,
+  targetId?: number,
 ): void {
   switch (effect.op) {
     case 'cash': {
       const amount = effect.amount * (effect.scale === false ? 1 : yearScale(state));
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const p = state.players[id];
         p.cash += amount;
         fx.push({ t: 'cash', playerId: id, delta: amount, reason: 'イベント' });
@@ -172,7 +222,7 @@ function applyEffect(
       return;
     }
     case 'cash_pct': {
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const p = state.players[id];
         const delta = Math.max(0, p.cash) * (effect.pct / 100);
         p.cash += delta;
@@ -182,7 +232,7 @@ function applyEffect(
     }
     case 'per_property': {
       const scale = effect.scale === false ? 1 : yearScale(state);
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const count = ownedProperties(data, state, id).filter(
           (ref) => effect.industry === 'any' || ref.property.industry === effect.industry,
         ).length;
@@ -212,14 +262,14 @@ function applyEffect(
       return;
     }
     case 'sell': {
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         forceSell(data, state, fx, id, effect.industry, effect.count, effect.priceMult);
       }
       return;
     }
     case 'card': {
       const count = effect.count ?? 1;
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const drawn = isCardId(effect.card) ? Array.from({ length: count }, () => effect.card) : drawCards(data, state, count);
         for (const cardId of drawn) {
           state.players[id].cards.push(cardId);
@@ -229,7 +279,7 @@ function applyEffect(
       return;
     }
     case 'move': {
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const nodeId = resolveMoveNode(data, state, id, effect.to);
         if (!nodeId) continue;
         state.players[id].nodeId = nodeId;
@@ -239,14 +289,14 @@ function applyEffect(
       return;
     }
     case 'skip': {
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         state.players[id].skipTurns += effect.turns;
         fx.push({ t: 'toast', text: `${state.players[id].name} は ${effect.turns} 回休みになった。` });
       }
       return;
     }
     case 'piper': {
-      const targets = resolveTargets(data, state, effect.to, actor);
+      const targets = resolveTargets(data, state, effect.to, actor, targetId);
       for (const id of targets) {
         transferPiper(state, fx, id, `イベントの力で ${state.players[id].name} に取り立て屋が移った！`);
         sayCharacterLine(data, state, id, 'piper_get', fx);
@@ -254,7 +304,7 @@ function applyEffect(
       return;
     }
     case 'realm': {
-      for (const id of resolveTargets(data, state, effect.who, actor)) {
+      for (const id of resolveTargets(data, state, effect.who, actor, targetId)) {
         const node =
           effect.realm === 'world'
             ? randomWorldCityNodeId(data, state)
@@ -277,8 +327,12 @@ function applyEffect(
       const win = nextRandom(state) < effect.chance;
       fx.push({ t: 'toast', text: win ? '賭けに勝った！' : '賭けに負けた……' });
       for (const child of win ? effect.win : effect.lose) {
-        applyEffect(data, state, fx, child, actor);
+        applyEffect(data, state, fx, child, actor, targetId);
       }
+      return;
+    }
+    case 'city_mod': {
+      applyCityMod(data, state, fx, effect, actor);
       return;
     }
     default: {

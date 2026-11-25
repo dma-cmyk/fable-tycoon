@@ -77,9 +77,9 @@
   {
     "id": "takeover",
     "name": "敵対的買収",
-    "desc": "選んだ相手の物件1つを現在価格の1.5倍で強制購入する。",
+    "desc": "他プレイヤーの物件1つを現在価格の1.5倍で強制購入する。独占都市を狙えば支配が崩れる。",
     "kind": "attack",
-    "weight": 4,
+    "weight": 7,
     "needsTarget": "player",
     "price": 70
   },
@@ -115,5 +115,13 @@
     "kind": "defense",
     "weight": 6,
     "price": 35
+  },
+  {
+    "id": "underdog",
+    "name": "下剋上の豆",
+    "desc": "最下位のときだけ使える。首位との総資産差の18%を、現金→物件の順で奪い取る。最終年を除く各年末決算で最下位に無料で配られる。",
+    "kind": "special",
+    "weight": 1,
+    "price": 25
   }
 ]

@@ -60,7 +60,25 @@ import {
   pickEvent,
   pickMonthlyEvent,
 } from './events';
-import { assignPiperToFarthest, runPiperTurnStart, transferPiper } from './piper';
+import { tickCityMods } from './cityMods';
+import { beginSkill, canUseSkill, fireSkill } from './skills';
+import {
+  applyPiperDeal,
+  assignPiperToFarthest,
+  runPiperMonthStart,
+  runPiperTurnStart,
+  transferPiper,
+} from './piper';
+import { PIPER_DEAL_EVENT_ID } from './piperLines';
+import {
+  applyBuyout,
+  checkBuyout,
+  destinationBonusMultiplier,
+  finalYearBlueMultiplier,
+  finalYearFx,
+  grantUnderdogCard,
+  playUnderdogCard,
+} from './showdown';
 import {
   REALMS,
   effectiveDistance,
@@ -70,7 +88,7 @@ import {
   realmEntryNodeId,
   worldCityNodeIds,
 } from './realm';
-import { sayCharacterLine } from './speech';
+import { sayCharacterLine, sayTurnLine } from './speech';
 import { cpuDecide as decideCpu } from './cpu';
 
 export const ALLOWED_YEARS = [1, 3, 5, 10, 20] as const;
@@ -175,6 +193,7 @@ export function createGame(data: GameData, config: GameConfig): StepResult {
     usedOnceEvents: [],
     activeEventId: null,
     assetHistory: [],
+    cityMods: [],
   };
 
   const fx: Fx[] = [];
@@ -209,10 +228,17 @@ function validateConfig(data: GameData, config: GameConfig): void {
 /** Picks and announces a new destination. Mutates the (cloned) state and rng. */
 type DestinationMode = { kind: 'range' } | { kind: 'nearest'; minDistance: number };
 
-/** Initial goals are 18–44 steps away; tiny maps widen upward, then use farthest. */
-const DESTINATION_RANGE_MIN = 18;
-const DESTINATION_RANGE_MAX = 44;
+/**
+ * Initial goals are 18–36 steps away; tiny maps widen upward, then use farthest.
+ * Sol's playtest drew a 47-step goal and the race stopped feeling like a race; the band keeps
+ * the 95th percentile at ~36 while staying long enough for 5–8 goals per 3-year game.
+ */
+const DESTINATION_RANGE_MIN = 20;
+const DESTINATION_RANGE_MAX = 36;
 const DESTINATION_FLOOR = 18;
+/** Below this, a goal is a stroll; above it, the pull toward the blue/yellow squares wins. */
+const DESTINATION_SWEET_MIN = 24;
+const DESTINATION_SWEET_MAX = 32;
 
 /** Picks and announces a new destination. Mutates the (cloned) state and rng. */
 function chooseDestination(
@@ -262,7 +288,13 @@ function chooseDestination(
     }
     if (pool.length === 0) pool = farthest(candidates);
     chosen =
-      weightedPick(state, pool, (c) => (c.tier === 1 ? 1.35 : c.tier === 2 ? 1.15 : 1)) ?? pool[0];
+      weightedPick(
+        state,
+        pool,
+        (c) =>
+          (c.tier === 1 ? 1.35 : c.tier === 2 ? 1.15 : 1) *
+          (c.dist >= DESTINATION_SWEET_MIN && c.dist <= DESTINATION_SWEET_MAX ? 1.3 : 0.8),
+      ) ?? pool[0];
   }
 
   state.destination = chosen.cityId;
@@ -313,6 +345,9 @@ export function step(
     case 'card_target':
       onCardTarget(data, next, fx, action);
       break;
+    case 'skill_target':
+      onSkillTarget(data, next, fx, action);
+      break;
     case 'discard':
       onDiscard(data, next, fx, action);
       break;
@@ -345,6 +380,11 @@ function onTurnStart(data: GameData, state: GameState, fx: Fx[], action: Action)
   }
   if (action.t === 'use_card') {
     useCard(data, state, fx, action.cardId);
+    return;
+  }
+  if (action.t === 'use_skill') {
+    if (!canUseSkill(data, state, state.players[state.current])) illegal('skill is not available');
+    beginSkill(data, state, fx);
     return;
   }
   illegal(`action ${action.t} is not legal at turn start`);
@@ -429,6 +469,13 @@ function useCard(data: GameData, state: GameState, fx: Fx[], cardId: string): vo
     }
     case 'insider': {
       chooseDestination(data, state, fx, player.nodeId, { kind: 'nearest', minDistance: 20 });
+      resolveRoll(data, state, fx, 1);
+      return;
+    }
+    case 'underdog': {
+      if (!playUnderdogCard(data, state, fx, player.id)) {
+        illegal('下剋上の豆は最下位のときだけ使える');
+      }
       resolveRoll(data, state, fx, 1);
       return;
     }
@@ -576,6 +623,7 @@ function moveAlong(
         fx,
         victim.id,
         `${player.name} が通過した ${victim.name} に取り立て屋を押し付けた！`,
+        { keepForm: true },
       );
       sayCharacterLine(data, state, victim.id, 'piper_get', fx);
     }
@@ -612,7 +660,7 @@ function claimDestination(data: GameData, state: GameState, fx: Fx[], player: Pl
   const cityNode = nodeForCity(data, cityId);
   if (!cityNode) return false;
   const startDistance = state.destinationStartDistance ?? 20;
-  const bonus = destinationBonus(state, startDistance);
+  const bonus = destinationBonus(state, startDistance) * destinationBonusMultiplier(state);
   player.cash += bonus;
   player.goals += 1;
   fx.push({ t: 'goal', playerId: player.id, cityId, bonus });
@@ -671,6 +719,7 @@ function processLanding(data: GameData, state: GameState, fx: Fx[]): void {
       let amount = randInt(state, 8, 20) * yearScale(state);
       if (node.realm) amount *= REALMS[node.realm].blueMult;
       if (characterPerk(data, state, player.id) === 'lucky') amount *= 1.3;
+      amount *= finalYearBlueMultiplier(data, state, player.id);
       player.cash += amount;
       fx.push({ t: 'cash', playerId: player.id, delta: amount, reason: '青マス' });
       sayCharacterLine(data, state, player.id, 'blue', fx);
@@ -843,6 +892,25 @@ function onEventChoice(data: GameData, state: GameState, fx: Fx[], action: Actio
   if (action.t !== 'choose') illegal(`action ${action.t} is not legal during an event`);
   const phase = state.phase;
   if (phase.t !== 'event') illegal('not resolving an event');
+  // 取り立て屋の示談（1回休みの 2 択）は専用の解決。event 定義は data.events にも入るが、
+  // テスト用 fixture でも動くよう id で先に分岐する。
+  if (phase.eventId === PIPER_DEAL_EVENT_ID) {
+    if (!Number.isInteger(action.index) || action.index < 0 || action.index > 1) {
+      illegal('invalid piper deal choice');
+    }
+    const outcome = applyPiperDeal(data, state, fx, action.index);
+    fx.push({ t: 'event_close' });
+    state.activeEventId = null;
+    if (outcome === 'rest') {
+      const player = state.players[state.current];
+      player.skipTurns = Math.max(0, player.skipTurns - 1);
+      fx.push({ t: 'skip', playerId: player.id });
+      advanceTurn(data, state, fx);
+      return;
+    }
+    state.phase = { t: 'turn_start' };
+    return;
+  }
   const event = data.events.find((e) => e.id === phase.eventId);
   if (!event) illegal('event not found');
   if (!event.choices || !Number.isInteger(action.index) || action.index < 0 || action.index >= event.choices.length) {
@@ -922,6 +990,19 @@ function finishTurnSegment(data: GameData, state: GameState, fx: Fx[]): void {
   endTurn(data, state, fx);
 }
 
+function onSkillTarget(data: GameData, state: GameState, fx: Fx[], action: Action): void {
+  const phase = state.phase;
+  if (phase.t !== 'skill_target') illegal('not choosing a skill target');
+  if (action.t === 'cancel') {
+    state.phase = { t: 'turn_start' };
+    fx.push({ t: 'toast', text: '固有技の発動を取りやめた。' });
+    return;
+  }
+  if (action.t !== 'skill_target') illegal(`action ${action.t} is not legal while choosing a skill target`);
+  if (!phase.options.includes(action.target)) illegal('target is not one of the skill options');
+  fireSkill(data, state, fx, Number(action.target));
+}
+
 function onCardTarget(data: GameData, state: GameState, fx: Fx[], action: Action): void {
   const phase = state.phase;
   if (phase.t !== 'card_target') illegal('not choosing a card target');
@@ -957,7 +1038,9 @@ function onCardTarget(data: GameData, state: GameState, fx: Fx[], action: Action
         resolveRoll(data, state, fx, 1);
         return;
       }
-      transferPiper(state, fx, target.id, `${player.name} は取り立て屋を ${target.name} に押し付けた！`);
+      transferPiper(state, fx, target.id, `${player.name} は取り立て屋を ${target.name} に押し付けた！`, {
+        keepForm: true,
+      });
       sayCharacterLine(data, state, target.id, 'piper_get', fx);
       resolveRoll(data, state, fx, 1);
       return;
@@ -1078,7 +1161,13 @@ function onBuy(data: GameData, state: GameState, fx: Fx[], action: Action): void
     endTurn(data, state, fx);
     return;
   }
-  if (action.t !== 'buy') illegal(`action ${action.t} is not legal while buying`);
+  if (action.t !== 'buy') {
+    if (action.t === 'buyout') {
+      resolveBuyout(data, state, fx, phase, player, action.propertyId);
+      return;
+    }
+    illegal(`action ${action.t} is not legal while buying`);
+  }
 
   const city = data.cities.find((c) => c.id === phase.cityId);
   const property = city?.properties.find((p) => p.id === action.propertyId);
@@ -1097,6 +1186,28 @@ function onBuy(data: GameData, state: GameState, fx: Fx[], action: Action): void
     fx.push({ t: 'toast', text: `${city.nameJa} を独占！ 決算収益が2倍になる。` });
     sayCharacterLine(data, state, player.id, 'monopoly', fx);
   }
+}
+
+/** `buy` フェーズの買収。1 訪問 1 回まで。手番は終わらない（同じ駅で空き物件も買える）。 */
+function resolveBuyout(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  phase: Extract<GameState['phase'], { t: 'buy' }>,
+  player: PlayerState,
+  propertyId: string,
+): void {
+  const check = checkBuyout(
+    data,
+    state,
+    player.id,
+    phase.cityId,
+    propertyId,
+    phase.boughtOut === true,
+  );
+  if (!check.ok) illegal(check.reason);
+  applyBuyout(data, state, fx, player.id, check.quote);
+  phase.boughtOut = true;
 }
 
 function onSell(data: GameData, state: GameState, fx: Fx[], action: Action): void {
@@ -1170,6 +1281,8 @@ function advanceTurn(data: GameData, state: GameState, fx: Fx[]): void {
       state.round += 1;
       state.assetHistory.push(state.players.map((p) => netWorth(data, state, p.id)));
       fx.push({ t: 'month', year: state.year, month: state.month });
+      fx.push(...finalYearFx(state));
+      runPiperMonthStart(state, fx);
       if (maybeStartMonthlyEvent(data, state, fx)) return;
     }
     const player = state.players[state.current];
@@ -1198,7 +1311,7 @@ function beginTurn(data: GameData, state: GameState, fx: Fx[]): void {
   }
   state.phase = { t: 'turn_start' };
   fx.push({ t: 'turn', playerId: player.id });
-  sayCharacterLine(data, state, player.id, 'turn', fx);
+  sayTurnLine(data, state, player.id, fx);
 
   const skip = runPiperTurnStart(data, state, fx);
   if (skip === 'skip') {
@@ -1227,6 +1340,7 @@ function settleYear(data: GameData, state: GameState, fx: Fx[]): void {
   state.industryMods = state.industryMods
     .map((m) => ({ ...m, yearsLeft: m.yearsLeft - 1 }))
     .filter((m) => m.yearsLeft > 0);
+  tickCityMods(data, state, fx);
 
   const assets: YearReport['assets'] = state.players.map((p) => ({
     playerId: p.id,
@@ -1240,6 +1354,7 @@ function settleYear(data: GameData, state: GameState, fx: Fx[]): void {
     })
     .map((p) => p.id);
   const headline = satiricalHeadline(data, state, ranking[0]);
+  grantUnderdogCard(state, fx, ranking);
   const report: YearReport = { year, income, assets, headline };
   state.assetHistory.push(assets.map((a) => a.total));
   state.round += 1;
@@ -1271,5 +1386,6 @@ function onAck(data: GameData, state: GameState, fx: Fx[], action: Action): void
   state.month = 4;
   state.current = 0;
   fx.push({ t: 'month', year: state.year, month: 4 });
+  fx.push(...finalYearFx(state));
   if (!maybeStartMonthlyEvent(data, state, fx)) beginTurn(data, state, fx);
 }

@@ -96,11 +96,15 @@ export class TitleScreen implements ScreenHandle {
       text: 'はじめてのタップで音声が有効になります ・ 世界は横につながっています',
     });
 
+    // メニュー（主要＋サブ）は1つのコンテナにまとめる。PC は display:contents で従来どおり
+    // 個別に絶対配置し、スマホは下部に縦積みして「つづきから」が増えても重ならないようにする。
+    const menu = h('div', { class: 'title-menu' }, primary, secondary);
+
     const desktopLogo = h('img', {
       class: 'title-logo-desktop',
       attrs: { src: assetUrl('assets/ui/logo.webp'), alt: '', draggable: 'false' },
     });
-    this.el.append(keyart, shade, clouds, parade, mobileSky, mobileLogo, desktopLogo, logo, primary, secondary, footnote);
+    this.el.append(keyart, shade, clouds, parade, mobileSky, mobileLogo, desktopLogo, logo, menu, footnote);
 
     const startBgm = () => {
       Audio.bgm('title');

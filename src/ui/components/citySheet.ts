@@ -6,6 +6,7 @@ import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import { rubyName } from '../ruby';
 import { LANDMARK_FILES } from '../assetManifest';
 import { cityTileUrl, hasCityTile, tileThumb } from '../squareInfo';
+import { buildBuyoutPanel } from './buyoutPanel';
 import {
   assetUrl,
   citiesById,
@@ -31,6 +32,8 @@ export interface CitySheetOptions {
   ownerWillAct?: boolean;
   onBuy: (propertyId: string) => void;
   onBuyAll?: (propertyIds: string[]) => void;
+  /** 他プレイヤーの物件を買い取る（buy フェーズのみ）。 */
+  onBuyout?: (propertyId: string) => void;
   onEndBuy: () => void;
   onClose?: () => void;
 }
@@ -214,22 +217,31 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
     const sorted = [...city.properties].sort((a, b) => purchasePrice(GAME_DATA, state, state.current, a.id) - purchasePrice(GAME_DATA, state, state.current, b.id));
     for (const property of sorted) list.append(propertyRow(property));
 
-    body.replaceChildren(
-      header,
-      monopoly,
-      h(
-        'div',
-        { class: 'property-table-head' },
-        h('span', { class: 'property-table-spacer', attrs: { 'aria-hidden': 'true' } }),
-        h('span', { text: '物件' }),
-        h('span', { text: '価格' }),
-        h('span', { text: '年間収益' }),
-        h('span', { text: '収益率' }),
-        h('span', { text: '所有者' }),
-      ),
-      list,
-      footer,
+    const buyout =
+      options.buyMode && state.phase.t === 'buy' && state.phase.cityId === city.id
+        ? buildBuyoutPanel({
+            state,
+            cityId: city.id,
+            canAct,
+            boughtOut: state.phase.t === 'buy' && state.phase.boughtOut === true,
+            onBuyout: (propertyId) => options.onBuyout?.(propertyId),
+          })
+        : null;
+
+    const tableHead = h(
+      'div',
+      { class: 'property-table-head' },
+      h('span', { class: 'property-table-spacer', attrs: { 'aria-hidden': 'true' } }),
+      h('span', { text: '物件' }),
+      h('span', { text: '価格' }),
+      h('span', { text: '年間収益' }),
+      h('span', { text: '収益率' }),
+      h('span', { text: '所有者' }),
     );
+    const sections: HTMLElement[] = [header, monopoly, tableHead, list];
+    if (buyout) sections.push(buyout);
+    sections.push(footer);
+    body.replaceChildren(...sections);
     previousOwners = new Map(city.properties.map((property) => [property.id, state.owner[property.id]]));
     renderFooter(actorCash);
 

@@ -1,10 +1,13 @@
 import type { PublicState } from '../../core/engine';
-import type { EventChoice, GameEventDef } from '../../core/types';
+import type { Effect, EventChoice, GameEventDef } from '../../core/types';
+import { peekCityTarget } from '../../core/cityMods';
+import { GAME_DATA } from '../../data/index';
 import { h } from '../dom';
 import { describeEffect } from '../eventEffects';
 import { eventFootnoteText, splitChoiceDetail } from '../eventPanelNote';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
-import { assetUrl, KIND_ICON, KIND_JA } from '../format';
+import { assetUrl, citiesById, KIND_ICON, KIND_JA } from '../format';
+import { rubyName } from '../ruby';
 
 export interface EventPanelOptions {
   onChoose: (index: number) => void;
@@ -136,6 +139,7 @@ export class EventPanel {
 
   show(event: GameEventDef, state: PublicState, playerName: string): void {
     this.event = event;
+    this.state = state;
     this.chosen = false;
     this.open = true;
     this.el.hidden = false;
@@ -270,8 +274,45 @@ export class EventPanel {
         { class: 'event-choice-main' },
         h('span', { class: 'event-choice-label', text: choice.label }),
         h('span', { class: 'event-choice-detail' }, ...choiceDetailParts(choice.detail)),
+        ...this.cityTargetChips(choice.effects),
       ),
     );
+  }
+
+  /**
+   * 「どの街の話か」をルビ付きで示すチップ。対象がランダムなときは出さない
+   * （イベント詳細文には「ランダムな都市」と書いてある）。
+   */
+  private cityTargetChips(effects: Effect[] | undefined): HTMLElement[] {
+    const state = this.state;
+    if (!state) return [];
+    const ids: string[] = [];
+    const collect = (list: Effect[]): void => {
+      for (const effect of list) {
+        if (effect.op === 'city_mod') {
+          const cityId = peekCityTarget(GAME_DATA, state, effect.city, state.current);
+          if (cityId && !ids.includes(cityId)) ids.push(cityId);
+        } else if (effect.op === 'gamble') {
+          collect(effect.win);
+          collect(effect.lose);
+        }
+      }
+    };
+    collect(effects ?? []);
+    const chips: HTMLElement[] = [];
+    for (const cityId of ids) {
+      const city = citiesById.get(cityId);
+      if (!city) continue;
+      chips.push(
+        h(
+          'span',
+          { class: 'event-city-chip' },
+          h('span', { class: 'event-city-chip-icon', text: '📍', attrs: { 'aria-hidden': 'true' } }),
+          rubyName(city.nameJa, city.nameKana),
+        ),
+      );
+    }
+    return chips;
   }
 
   private renderImage(event: GameEventDef): void {
@@ -310,9 +351,11 @@ export class EventPanel {
       return;
     }
     this.effectSummary.hidden = false;
+    const chips = this.cityTargetChips(effects);
     this.effectSummary.replaceChildren(
       h('h4', { class: 'event-effect-title', text: '自動で適用される効果' }),
       h('ul', { class: 'event-effect-list' }, ...effects.map((effect) => h('li', { text: describeEffect(effect) }))),
+      ...chips,
     );
   }
 

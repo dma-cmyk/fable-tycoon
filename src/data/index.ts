@@ -1,5 +1,5 @@
 // Assembles the static GameData from the JSON files. Shared by the browser client and the servers.
-import type { Board, CardDef, Character, City, EmoteDef, GameData, GameEventDef, NpcDef } from '../core/types';
+import type { Board, CardDef, Character, City, EmoteDef, GameData, GameEventDef, NpcDef, TurnLines } from '../core/types';
 import board from './board.json';
 import cards from './cards.json';
 import characters from './characters.json';
@@ -8,14 +8,18 @@ import emotes from './emotes.json';
 import events from './events.json';
 import npcs from './npcs.json';
 import realms from './realms.json';
+import turnLines from './turnLines.json';
+import { PIPER_DEAL_EVENT } from '../core/piperLines';
 
 export const GAME_DATA: GameData = {
   // 異世界の駅（realm 付き City）も物件・独占・収益の対象なので同じ配列に含める
   cities: [...(cities as City[]), ...(realms as City[])],
   board: board as Board,
   characters: characters as Character[],
-  events: events as GameEventDef[],
+  // 取り立て屋の示談イベントはコード定義（抽選対象外）なので、抽選用の events.json には置かない。
+  events: [...(events as GameEventDef[]), PIPER_DEAL_EVENT],
   cards: cards as CardDef[],
   npcs: npcs as NpcDef[],
   emotes: emotes as unknown as EmoteDef[],
+  turnLines: turnLines as Record<string, TurnLines>,
 };

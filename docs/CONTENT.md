@@ -304,11 +304,46 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 | `move` | `who`, `to` | `destination_near` / `random_city` / `nearest_port` / cityId |
 | `skip` | `who`, `turns` | 休み |
 | `piper` | `to` | 取り立て屋を押し付ける |
+| `realm` | `who`, `realm` | 天国・地獄・宇宙へ飛ばす（`world` で地上へ） |
+| `city_mod` | `city`, `mult`, `years`, `label`, `kind` | 都市単位の物件価格・収益倍率（地図にバッジが出る） |
 | `gamble` | `chance`, `win`, `lose` | 確率分岐（入れ子可） |
 
 `who`: `self` `all` `others` `richest` `poorest` `random_other`。
+**`target` はキャラクター固有技専用**で、イベントでは使えない（バリデーターがエラーにする）。
 `industry`: `agri` `food` `tourism` `industry` `tech` `finance` `energy` `shipping` `media`。
 追加後: `npm run validate` → `npm run voice`。
+
+### 都市イベント（`city_mod`）
+
+イベントの効果を「地図の上の街」に落とすための op。`mult < 1` は災害・封鎖、`> 1` はバブル・好況。
+
+```json
+{ "op": "city_mod", "city": "shenzhen", "mult": 1.6, "years": 2, "label": "AIバブル", "kind": "bubble" }
+```
+
+- `city`: 実在の cityId、または次の決め方。
+  - `here` = 手番プレイヤーの現在地（都市にいなければ最寄りの都市）
+  - `destination` = 現在の目的地
+  - `random` = 地上のランダムな都市（state の乱数だけを使う）
+  - `richest_best` = 首位が最も多く物件を持つ都市
+  - `self_best` = 手番プレイヤーが最も多く物件を持つ都市
+- `kind`: `bubble`（泡と金のオーラ）`boom`（緑のきらめき）`damage`（暗いベールとひび）`blockade`（青い破線の結界）。
+- `mult` は **0.3〜3.0 にクランプ**して積み上げる（複数は乗算）。同じ都市・同じ `label` を重ねると倍率が掛かり、年数は長い方を残す。
+- 効果はその都市の **物件の現在価格（資産価値・購入価格・売却価格）と決算収益**に掛かる。年は決算で1つ減り、0 で消える（消えるときにトーストが出る）。
+- **`choices[].detail` は効果と完全一致させる**。文言は `src/ui/eventEffects.ts` の `describeEffect` の出力をそのまま含めること
+  （`都市名のバブル（物件価格・収益 ×1.60、2年）`）。テストが同期を検証する。
+- 地図ではバッジ（📈/✨/💥/🚧 + 実効倍率）とオーラが出る。都市のツールチップには残り年数が並ぶ。
+
+### `finalYear`（最終年イベント）
+
+`"finalYear": true` を付けたイベントは、最終年だけ抽選される。判定は `src/core/showdown.ts` の
+`isFinalYearActive`（3年以上のゲームは最終年、1年制は1〜3月の「最終盤」）。最終年は重みが3倍になり、
+最終月（3月）はそのゲームで初出のイベントがさらに2倍になる。首位狙い撃ち・最下位救済・逆転の道具に使う。
+
+### イベントの再登場
+
+`state.recentEvents` に抽選履歴（古い順）を残し、**直近12件に出たイベントは抽選から外す**
+（候補が尽きたら全候補に戻す）。乱数を引く回数は変えないので、シード固定の再現性は保たれる。
 
 ---
 
@@ -365,8 +400,9 @@ npm run validate
     air 辺の都市端は airport=true の都市のみ、air マスは air 辺だけにつながり、他の路線の線分上にないこと。square が絡むノード間60未満はエラー、駅–駅のみ警告。
   - characters: 48 id、12 LineKey、voice、perk、role、spriteパス。
   - npcs: 許可id、voice。
-  - events: kind/fact/sources、speaker（self禁止）、char/npc参照、Effectのopとフィールド（realm 含む）、
-    card参照、industry、choices/effects、realms/months/monthly。
+  - events: kind/fact/sources、speaker（self禁止）、char/npc参照、Effectのopとフィールド（realm・city_mod 含む）、
+    card参照、industry、choices/effects、realms/months/monthly、finalYear（boolean）、
+    city_mod の city（都市id or 決め方キーワード）・mult・years・label・kind、who: 'target' の禁止。
   - cards: 14 id、kind、weight、price。
   - emotes: id、category、anim、targeted、cooldown、lines/hitLines の参照。
   - land.json: 形式、偶数長リング、閉路、seamジャンプなし、600KB未満。

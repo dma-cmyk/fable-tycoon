@@ -57,4 +57,11 @@ export const FX_MS = {
   year_end: 950,
   game_over: 1300,
   toast: 450,
+  piper_roulette: 2600,
+  piper_disaster: 2400,
+  piper_gift: 1600,
+  buyout: 900,
+  city_mod: 1500,
+  skill: 2200,
+  final_year: 3000,
 } as const;

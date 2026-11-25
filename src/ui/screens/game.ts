@@ -27,6 +27,7 @@ import {
   nodesById,
   nodeLabel,
   playerColor,
+  propertiesById,
   realmLabel,
   realmOfNode,
   transportSummary,
@@ -45,6 +46,9 @@ import { raceWithTimeout, voiceBudgetMs, voicePlaybackRate } from '../../audio/v
 import { ChatPanel } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { DiceOverlay } from '../components/diceOverlay';
+import { PiperShow } from '../components/piperShow';
+import { SkillCutin, openSkillCommand, openSkillTargetDialog } from '../components/skillCutin';
+import { PIPER_FORMS } from '../../core/piperLines';
 import { TurnTimer } from '../components/turnTimer';
 import { EventPanel } from '../components/eventPanel';
 import { MessageWindow } from '../components/messageWindow';
@@ -56,6 +60,8 @@ import { openInfoDialog, type NewsLogEntry } from '../components/infoDialog';
 import { openSquareLegendDialog } from '../components/squareLegend';
 import { openYearEndDialog, type YearEndHandle } from '../components/yearEndDialog';
 import { openShopDialog, type ShopHandle } from '../components/shopDialog';
+import { showFinalYearBanner, type FinalYearBannerHandle } from '../components/finalYearBanner';
+import { canUseUnderdog, finalYearNarration, isFinalYearActive } from '../../core/showdown';
 import { describeBoardNode, squareInfoOf, squareTileUrl, tileThumb } from '../squareInfo';
 import { JOY_SPRITE_IDS, LANDMARK_FILES, SAD_SPRITE_IDS } from '../assetManifest';
 import { animateCounter, confettiBurst, motionReduced, watchMotionPreference } from '../motion';
@@ -71,6 +77,8 @@ import { openPlayerMenu, openPlayerRoster, type PlayerView } from '../components
 import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { ResultScreen } from './result';
 import { FxPlayer, type PlaybackControl } from '../fxPlayer';
+import { isRoutineCpuSay } from '../cpuPacing';
+import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, type CityMoveInfo } from '../moveChipInfo';
 import type { App } from '../app';
 import type { ScreenHandle } from './types';
 
@@ -79,7 +87,7 @@ export interface GameScreenOptions {
   session: Session;
 }
 
-type TransientKind = 'target' | 'discard' | 'sell';
+type TransientKind = 'target' | 'skill' | 'discard' | 'sell';
 
 interface TransientModal {
   kind: TransientKind;
@@ -136,6 +144,9 @@ export class GameScreen implements ScreenHandle {
   private flaggedSeats = new Set<number>();
   private readonly fxPlayer: FxPlayer;
   private readonly dice: DiceOverlay;
+  private readonly piperShow: PiperShow;
+  private readonly skillCutin: SkillCutin;
+  private skillButton: HTMLButtonElement | null = null;
   private readonly timer: TurnTimer;
   private readonly chat: ChatPanel;
   private readonly emotes: EmotePalette;
@@ -220,6 +231,8 @@ export class GameScreen implements ScreenHandle {
   private moveRemain = new Map<string, number | null>();
   /** 距離の向き先。異世界では最寄りの出口。 */
   private moveRemainTarget: 'destination' | 'exit' = 'destination';
+  /** 駅チップの価格・所有者情報（候補ノードID → 情報）。候補か所持金が変わったときだけ作り直す。 */
+  private moveChipInfoCache = new Map<string, CityMoveInfo>();
   private recommendedMoveNodeId: string | null = null;
   private readonly loading: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -238,6 +251,9 @@ export class GameScreen implements ScreenHandle {
   private readonly handoffStartBtn: HTMLButtonElement;
   private readonly skipHint: HTMLElement;
   private readonly commDock: HTMLElement;
+  private readonly commMergedButton: HTMLButtonElement;
+  private commChooser: HTMLElement | null = null;
+  private commChooserOutside: ((event: PointerEvent) => void) | null = null;
   private readonly hudIcons: HTMLElement;
   private readonly timerHost: HTMLElement;
   private readonly bottomBar: HTMLElement;
@@ -253,6 +269,8 @@ export class GameScreen implements ScreenHandle {
   private readonly playerPlateDestName: HTMLElement;
   private readonly playerPlateDestSteps: HTMLElement;
   private readonly realmChip: HTMLButtonElement;
+  private readonly finalYearChip: HTMLElement;
+  private finalYearBanner: FinalYearBannerHandle | null = null;
   private readonly turnBanner: HTMLElement;
   private readonly turnBannerAvatar: HTMLElement;
   private readonly turnBannerName: HTMLElement;
@@ -333,6 +351,15 @@ export class GameScreen implements ScreenHandle {
     this.realmChip = h(
       'button',
       { class: 'chip realm-chip', attrs: { type: 'button', hidden: 'hidden' }, on: { click: () => this.openMapViewDialog() } },
+    );
+    this.finalYearChip = h(
+      'span',
+      {
+        class: 'chip chip-final-year',
+        attrs: { hidden: 'hidden', 'aria-live': 'polite' },
+      },
+      h('span', { text: '🔥', attrs: { 'aria-hidden': 'true' } }),
+      h('span', { class: 'final-year-chip-text', text: '最終年！目的地ボーナス×2' }),
     );
 
     this.turnBannerAvatar = h('span', { class: 'turn-banner-avatar' });
@@ -437,7 +464,7 @@ export class GameScreen implements ScreenHandle {
         h('span', { class: 'logo-mini-crown', text: '👑' }),
         h('span', { class: 'logo-mini-text', text: '寓話大富豪' }),
       ),
-      h('div', { class: 'game-chips' }, this.yearChip, this.statusChip, this.destChip, this.stepsCounter, this.turnChip, this.realmChip),
+      h('div', { class: 'game-chips' }, this.yearChip, this.finalYearChip, this.statusChip, this.destChip, this.stepsCounter, this.turnChip, this.realmChip),
       this.timerHost,
       this.pcRankingSlot,
       h(
@@ -503,8 +530,32 @@ export class GameScreen implements ScreenHandle {
     mapButton.setAttribute('aria-pressed', 'false');
     mapButton.append(h('kbd', { class: 'pc-key-hint', text: '5' }));
     this.mapButton = mapButton;
+    const skillButton = h(
+      'button',
+      {
+        class: 'icon-btn hud-icon hud-cmd-skill',
+        attrs: { type: 'button', 'aria-label': '固有技', title: '固有技（1 年 1 回）' },
+        on: { click: () => this.openSkill() },
+      },
+      uiIcon('skill', '✨', 'icon-btn-icon'),
+      h('span', { class: 'icon-btn-label', text: '固有技' }),
+      h('kbd', { class: 'pc-key-hint', text: '6' }),
+    );
+    this.skillButton = skillButton;
     const otherButton = iconButton('treasure', 'その他', () => this.openOtherMenu(), { class: 'hud-icon hud-other-btn' });
     this.commDock = h('div', { class: 'hud-comm' });
+    // スマホはチャットとエモートを 1 ボタンに統合する（固有技を足して 8 個になり、
+    // 下部バーが 2 行にはみ出していたため）。PC では CSS で非表示。
+    this.commMergedButton = h(
+      'button',
+      {
+        class: 'icon-btn hud-icon hud-comm-button hud-comm-merged',
+        attrs: { type: 'button', 'aria-label': 'チャットとエモート', title: 'チャット・エモート' },
+        on: { click: () => this.toggleCommChooser() },
+      },
+      uiIcon('chat', '💬', 'icon-btn-icon'),
+      h('span', { class: 'icon-btn-label', text: 'チャット' }),
+    );
     const iconRow = h(
       'div',
       { class: 'hud-icons' },
@@ -512,6 +563,7 @@ export class GameScreen implements ScreenHandle {
       propertyButton,
       destButton,
       mapButton,
+      skillButton,
       otherButton,
       this.commDock,
     );
@@ -638,6 +690,8 @@ export class GameScreen implements ScreenHandle {
     });
 
     this.dice = new DiceOverlay();
+    this.piperShow = new PiperShow();
+    this.skillCutin = new SkillCutin();
     this.emoteHost = h('div', { class: 'game-emote-bubble-host' });
 
     this.loadingText = h('p', { class: 'loading-text', text: '世界地図をひらいています…' });
@@ -722,7 +776,7 @@ export class GameScreen implements ScreenHandle {
     this.skipHint = h('div', { class: 'skip-hint', attrs: { hidden: 'hidden' }, text: 'タップでスキップ ▶▶' });
     this.chat.fab.classList.add('hud-comm-button');
     this.emotes.fab.classList.add('hud-comm-button');
-    this.commDock.append(this.chat.fab, this.emotes.fab);
+    this.commDock.append(this.chat.fab, this.emotes.fab, this.commMergedButton);
 
     this.el = h(
       'div',
@@ -741,6 +795,8 @@ export class GameScreen implements ScreenHandle {
       this.eventPanel.el,
       this.emoteHost,
       this.dice.el,
+      this.piperShow.el,
+      this.skillCutin.el,
       this.connBanner,
       this.gameBanner,
       this.handoffBackdrop,
@@ -804,6 +860,11 @@ export class GameScreen implements ScreenHandle {
     document.addEventListener('fable:audio-unlocked', onUnlocked);
     this.unsubscribeFns.push(() => document.removeEventListener('fable:audio-unlocked', onUnlocked));
     this.unsubscribeFns.push(watchMotionPreference(() => this.map?.setReducedMotion(motionReduced())));
+    if (import.meta.env.DEV) {
+      // 開発時だけのテスト seams（本番ビルドでは丸ごと削除される）。UI には出さない。
+      // スクリーンショット検証が実 UI 上で取り立て屋の演出を強制再生するために使う。
+      (globalThis as { __fableGame?: GameScreen }).__fableGame = this;
+    }
   }
 
   async init(): Promise<void> {
@@ -818,6 +879,11 @@ export class GameScreen implements ScreenHandle {
     this.fxPlayer.destroy();
     this.timer.destroy();
     this.dice.destroy();
+    this.piperShow.hide();
+    this.skillCutin.hide();
+    this.closeCommChooser();
+    this.finalYearBanner?.close();
+    this.finalYearBanner = null;
     this.msgWindow.destroy();
     this.chat.destroy();
     this.emotes.destroy();
@@ -953,6 +1019,11 @@ export class GameScreen implements ScreenHandle {
   private interruptInFlightFx(): void {
     Audio.stopVoice();
     this.dice.cancel();
+    this.piperShow.hide();
+    this.skillCutin.hide();
+    this.closeCommChooser();
+    this.finalYearBanner?.close();
+    this.finalYearBanner = null;
     this.cancelRoulette();
     this.resolveHandoff();
     this.pendingPhaseEnd = null;
@@ -1236,6 +1307,14 @@ export class GameScreen implements ScreenHandle {
     const privateSeat = this.privateSeat();
 
     this.yearChip.textContent = `${state.year}年目 ${state.month}月`;
+    const finalYear = isFinalYearActive(state);
+    this.finalYearChip.hidden = !finalYear;
+    if (finalYear) {
+      const label = state.config.years <= 1 ? '最終盤！目的地ボーナス×2' : '最終年！目的地ボーナス×2';
+      const textEl = this.finalYearChip.querySelector('.final-year-chip-text');
+      if (textEl && textEl.textContent !== label) textEl.textContent = label;
+      this.finalYearChip.setAttribute('aria-label', `${label}。青マスは首位以外+50%`);
+    }
     this.turnChip.textContent = `ターン ${formatTurnLabel(state.round, state.config.years)}`;
     const focusPlayer = actor !== null ? state.players[actor] : undefined;
     const actorRealm = realmOfNode(focusPlayer?.nodeId);
@@ -1518,17 +1597,22 @@ export class GameScreen implements ScreenHandle {
     }
     const options = state.phase.options;
     if (this.moveSelection && !options.some((option) => option.nodeId === this.moveSelection)) this.moveSelection = null;
-    const key = `${state.destination}#${this.playerRealm}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
+    const moverId = actor ?? 0;
+    const moverCash = state.players[moverId]?.cash ?? 0;
+    const key = `${state.destination}#${this.playerRealm}#${moverId}:${moverCash}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
     const freshOptions = key !== this.moveOptionsKey;
     if (freshOptions) {
       this.moveOptionsKey = key;
       this.moveOnlyCities = false;
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
+      this.moveChipInfoCache.clear();
       for (const option of options) {
         const info = this.map?.getMoveOptionDistanceInfo(option.nodeId) ?? null;
         this.moveRemain.set(option.nodeId, info?.hops ?? null);
         if (info) this.moveRemainTarget = info.target;
+        const city = cityOfNode(option.nodeId);
+        if (city) this.moveChipInfoCache.set(city.id, cityMoveInfo(GAME_DATA, state, moverId, city));
       }
       const anyKnown = options.some((option) => typeof this.moveRemain.get(option.nodeId) === 'number');
       const ranked = options.map((option, index) => ({
@@ -1554,7 +1638,14 @@ export class GameScreen implements ScreenHandle {
         numbers: this.moveOptionsCache.map((_, index) => index + 1),
         onSelect,
       });
-      this.recommendedMoveNodeId = this.map?.getRecommendedMoveOption() ?? null;
+      // 目的地順の推奨を基本に、レースが遠いときだけ「買える駅」を最大2歩の寄り道で優先する。
+      this.recommendedMoveNodeId =
+        biasedMoveRecommendation({
+          options: this.moveOptionsCache,
+          remainOf: (nodeId) => this.moveRemain.get(nodeId) ?? null,
+          cityOf: (nodeId) => cityOfNode(nodeId) ?? null,
+          infoFor: (city) => this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city),
+        }) ?? this.map?.getRecommendedMoveOption() ?? null;
       // 候補が出た時点で「おすすめ」を選択済みにし、主ボタンを即有効化する（未選択の金枠で迷わせない）。
       const preferred = this.recommendedMoveNodeId ?? this.moveOptionsCache[0]?.nodeId ?? null;
       if (preferred && this.moveOptionsCache.some((option) => option.nodeId === preferred)) {
@@ -1592,6 +1683,18 @@ export class GameScreen implements ScreenHandle {
       const topNear = many && !recommended && index < 3;
       const selected = this.moveSelection === option.nodeId;
       const city = cityOfNode(option.nodeId);
+      const chipInfo = city
+        ? this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city)
+        : null;
+      const priceLabel = chipInfo ? moveChipPriceLabel(chipInfo) : null;
+      const ownerNames = chipInfo ? chipInfo.otherOwnerIds.map((id) => this.playerName(id)) : [];
+      const priceClass = !chipInfo
+        ? ''
+        : chipInfo.cheapest === null
+          ? 'is-sold-out'
+          : chipInfo.affordable
+            ? 'is-ok'
+            : 'is-over';
       const nameContent = city ? rubyName(city.nameJa, city.nameKana) : info.name;
       const fullAriaName = city ? `${city.nameJa}（駅）` : info.name;
       const tileSrc = squareTileUrl(nodeKind, true, city);
@@ -1602,7 +1705,7 @@ export class GameScreen implements ScreenHandle {
           dataset: { nodeId: option.nodeId, kind: nodeKind },
           attrs: {
             type: 'button',
-            'aria-label': `${index + 1}: ${fullAriaName} を選ぶ。${remainText}`,
+            'aria-label': `${index + 1}: ${fullAriaName} を選ぶ。${remainText}${priceLabel ? `。${priceLabel}` : ''}${ownerNames.length > 0 ? `。${ownerNames.join('・')}が所有` : ''}`,
             'aria-pressed': String(selected),
             style: `--kind-color:${kind.color}`,
           },
@@ -1630,9 +1733,25 @@ export class GameScreen implements ScreenHandle {
           h(
             'span',
             { class: 'move-chip-vehicle' },
-            summary.rail > 0 ? h('span', { text: `電車 ${summary.rail}マス` }) : null,
-            summary.sea > 0 ? h('span', { text: `船 ${summary.sea}マス` }) : null,
-            summary.air > 0 ? h('span', { text: `✈ 空路 ${summary.air}マス` }) : null,
+            summary.rail > 0 ? h('span', { class: 'move-chip-transport', text: `電車 ${summary.rail}マス` }) : null,
+            summary.sea > 0 ? h('span', { class: 'move-chip-transport', text: `船 ${summary.sea}マス` }) : null,
+            summary.air > 0 ? h('span', { class: 'move-chip-transport', text: `✈ 空路 ${summary.air}マス` }) : null,
+            chipInfo && chipInfo.otherOwnerIds.length > 0
+              ? h(
+                  'span',
+                  {
+                    class: 'move-chip-owners',
+                    attrs: { title: `${ownerNames.join('・')}が所有`, 'aria-label': `${ownerNames.join('・')}が所有` },
+                  },
+                  ...chipInfo.otherOwnerIds.map((id) =>
+                    h('span', {
+                      class: 'move-chip-owner-dot',
+                      attrs: { style: `--owner-color:${playerColor(state.players[id])}`, 'aria-hidden': 'true' },
+                    }),
+                  ),
+                )
+              : null,
+            priceLabel ? h('span', { class: `move-chip-price ${priceClass}`.trim(), text: priceLabel }) : null,
           ),
         ),
         h(
@@ -1825,6 +1944,10 @@ export class GameScreen implements ScreenHandle {
           label = 'カードの対象を選択中';
           icon = '🎴';
           break;
+        case 'skill_target':
+          label = '固有技の対象を選択中';
+          icon = '✨';
+          break;
         case 'discard':
           label = '手札を調整中';
           icon = '🃏';
@@ -1856,6 +1979,16 @@ export class GameScreen implements ScreenHandle {
     const waitingTurn = !isGameOver && (!mine || this.fxBusy || this.actionPending);
     this.bottomBar.classList.toggle('is-my-turn', isMyTurn);
     this.bottomBar.classList.toggle('is-waiting-turn', waitingTurn);
+
+    // 固有技ボタン: 自分の手番開始で未使用のときだけ光らせる。
+    if (this.skillButton) {
+      const actorPlayer = actor !== null ? state.players[actor] : undefined;
+      const used = actorPlayer !== undefined && actorPlayer.skillUsedYear === state.year;
+      const ready = isMyTurn && !this.fxBusy && !this.actionPending && state.phase.t === 'turn_start' && !used;
+      this.skillButton.classList.toggle('is-ready', ready);
+      this.skillButton.classList.toggle('is-used', used);
+      this.skillButton.disabled = isGameOver;
+    }
   }
 
   private updateTimer(state: PublicState, actor: number | null): void {
@@ -1903,7 +2036,16 @@ export class GameScreen implements ScreenHandle {
       this.shop = null;
     }
     if (this.transient) {
-      const expected: TransientKind | null = phase.t === 'card_target' ? 'target' : phase.t === 'discard' ? 'discard' : phase.t === 'sell' ? 'sell' : null;
+      const expected: TransientKind | null =
+        phase.t === 'card_target'
+          ? 'target'
+          : phase.t === 'skill_target'
+            ? 'skill'
+            : phase.t === 'discard'
+              ? 'discard'
+              : phase.t === 'sell'
+                ? 'sell'
+                : null;
       if (terminal || !actorIsMine || expected !== this.transient.kind) this.closeTransientDialog();
     }
     if (this.eventPanel.isOpen) {
@@ -1958,6 +2100,7 @@ export class GameScreen implements ScreenHandle {
           canAct,
           ownerWillAct: this.myPlayerIds().includes(state.current),
           onBuy: (propertyId) => this.sendAction({ t: 'buy', propertyId }),
+          onBuyout: (propertyId) => this.sendAction({ t: 'buyout', propertyId }),
           onBuyAll: (propertyIds) => {
             this.bulkBuyCityId = cityId;
             const current = this.state;
@@ -2081,7 +2224,15 @@ export class GameScreen implements ScreenHandle {
       this.clearCityPick();
     }
     const wanted: TransientKind | null =
-      phase.t === 'card_target' ? 'target' : phase.t === 'discard' ? 'discard' : phase.t === 'sell' ? 'sell' : null;
+      phase.t === 'card_target'
+        ? 'target'
+        : phase.t === 'skill_target'
+          ? 'skill'
+          : phase.t === 'discard'
+            ? 'discard'
+            : phase.t === 'sell'
+              ? 'sell'
+              : null;
     if (!wanted) {
       if (this.transient) {
         this.transient.handle.close();
@@ -2113,6 +2264,16 @@ export class GameScreen implements ScreenHandle {
         },
       });
       this.transient = { kind: 'target', cardId: phase.cardId, handle };
+    } else if (wanted === 'skill' && phase.t === 'skill_target') {
+      const handle = openSkillTargetDialog({
+        modal: this.app.modal,
+        state,
+        options: phase.options,
+        canAct,
+        onTarget: (target) => this.sendAction({ t: 'skill_target', target }),
+        onCancel: () => this.sendAction({ t: 'cancel' }),
+      });
+      this.transient = { kind: 'skill', cardId: null, handle };
     } else if (wanted === 'discard' && phase.t === 'discard') {
       const handle = openDiscardDialog({
         modal: this.app.modal,
@@ -2411,6 +2572,63 @@ export class GameScreen implements ScreenHandle {
       this.pcCommDrawer.hidden = true;
     }
     this.syncPcCommUi();
+  }
+
+  /** スマホ用: 統合ボタンからチャット/エモートを選ぶ小さなポップオーバー。 */
+  private toggleCommChooser(): void {
+    if (this.commChooser) {
+      this.closeCommChooser();
+      return;
+    }
+    const choose = (kind: 'chat' | 'emote'): void => {
+      this.closeCommChooser();
+      if (kind === 'chat') this.chat.openPanel();
+      else this.emotes.openPalette();
+    };
+    const chooser = h(
+      'div',
+      { class: 'hud-comm-chooser', attrs: { role: 'menu', 'aria-label': 'チャットとエモート' } },
+      h(
+        'button',
+        {
+          class: 'hud-comm-choice hud-comm-choice-chat',
+          attrs: { type: 'button', role: 'menuitem' },
+          on: { click: () => choose('chat') },
+        },
+        uiIcon('chat', '💬', 'hud-comm-choice-icon'),
+        h('span', { text: 'チャット' }),
+      ),
+      h(
+        'button',
+        {
+          class: 'hud-comm-choice hud-comm-choice-emote',
+          attrs: { type: 'button', role: 'menuitem' },
+          on: { click: () => choose('emote') },
+        },
+        uiIcon('emote', '😆', 'hud-comm-choice-icon'),
+        h('span', { text: 'エモート' }),
+      ),
+    );
+    this.el.append(chooser);
+    this.commChooser = chooser;
+    this.commMergedButton.setAttribute('aria-expanded', 'true');
+    const onDown = (event: PointerEvent): void => {
+      if (!(event.target instanceof Node)) return;
+      if (chooser.contains(event.target) || this.commMergedButton.contains(event.target)) return;
+      this.closeCommChooser();
+    };
+    this.commChooserOutside = onDown;
+    document.addEventListener('pointerdown', onDown, true);
+  }
+
+  private closeCommChooser(): void {
+    this.commChooser?.remove();
+    this.commChooser = null;
+    if (this.commChooserOutside) {
+      document.removeEventListener('pointerdown', this.commChooserOutside, true);
+      this.commChooserOutside = null;
+    }
+    this.commMergedButton.setAttribute('aria-expanded', 'false');
   }
 
   private togglePcComm(): void {
@@ -2855,6 +3073,20 @@ export class GameScreen implements ScreenHandle {
     });
   }
 
+  /** 「マスの種類」+ 継続中の都市効果の一覧。都市を選ぶと地図がその都市へ寄る。 */
+  private openCityLegend(): void {
+    openSquareLegendDialog(this.app.modal, {
+      cityMods: this.state?.cityMods,
+      onLocateCity: (cityId) => {
+        this.app.modal.closeAll();
+        this.manualView = false;
+        this.viewRealm = 'world';
+        this.map?.setView?.('world');
+        void this.map?.focusNode(cityNodeId(cityId), { zoom: 1.4, ms: 620 }).then(() => this.syncOverviewUi());
+      },
+    });
+  }
+
   private openOtherMenu(): void {
     let handle: ModalHandle | null = null;
     const item = (icon: string, label: string, desc: string, action: () => void): HTMLElement =>
@@ -2883,8 +3115,9 @@ export class GameScreen implements ScreenHandle {
       'div',
       { class: 'game-menu' },
       item('property', '持ち物', '所有している物件の一覧', () => this.openOwned()),
+      item('skill', '固有技', 'キャラクター固有技（1 年 1 回）', () => this.openSkill()),
       item('chart', '情報', '業種の相場・ニュース・行動ログ', () => this.openInfo()),
-      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => openSquareLegendDialog(this.app.modal)),
+      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => this.openCityLegend()),
       item('globe', '全体マップ', '地上のマップを引いて見る', () => {
         this.manualView = true;
         this.viewRealm = 'world';
@@ -2897,6 +3130,28 @@ export class GameScreen implements ScreenHandle {
       item('trophy', 'クレジット', 'キャラクターと素材の出典', () => this.app.openCredits()),
     );
     handle = this.app.modal.open(body, { title: 'その他', subtitle: '持ち物・情報・マスの種類・設定' });
+  }
+
+  /** HUD・キーボード 6・その他メニューから開く固有技パネル。 */
+  private openSkill(): void {
+    const state = this.state;
+    if (!state) return;
+    const actor = actorOf(state);
+    const mine = actor !== null && this.myPlayerIds().includes(actor);
+    const viewer = state.players.find((player) => this.myPlayerIds().includes(player.id)) ?? state.players[state.current];
+    const canAct = mine && this.interactiveNow() && !this.actionPending;
+    let handle: ModalHandle | null = null;
+    handle = openSkillCommand({
+      modal: this.app.modal,
+      state,
+      playerId: mine ? (actor as number) : (viewer?.id ?? state.current),
+      canAct,
+      waitingForTarget: mine && state.phase.t === 'skill_target',
+      onUse: () => {
+        handle?.close();
+        this.sendAction({ t: 'use_skill' });
+      },
+    });
   }
 
 
@@ -3156,6 +3411,7 @@ export class GameScreen implements ScreenHandle {
       state,
       seat,
       canAct: canUse,
+      canUseCard: (cardId) => cardId !== 'underdog' || canUseUnderdog(GAME_DATA, state, seat),
       onUse: (cardId) => {
         handle?.close();
         this.sendAction({ t: 'use_card', cardId });
@@ -3351,7 +3607,7 @@ export class GameScreen implements ScreenHandle {
       }),
       item('property', '持ち物', '所有している物件の一覧と収益見込み', () => this.openOwned()),
       item('chart', '情報', '業種倍率・目的地・経済ニュース・行動ログ', () => this.openInfo()),
-      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => openSquareLegendDialog(this.app.modal)),
+      item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => this.openCityLegend()),
       item('gear', '設定', '音量・演出速度・チャット表示・ミュート', () => this.app.openSettings()),
       item('help', '遊び方', 'ルール・マスの種類・キーボード操作', () => this.app.openHelp()),
       item('trophy', 'クレジット', 'キャラクターと素材の出典', () => this.app.openCredits()),
@@ -3523,7 +3779,10 @@ export class GameScreen implements ScreenHandle {
       }
       case 'cash': {
         const player = pending.players[fx.playerId];
-        if (player) {
+        // The `goal` fx already floats the same 「+N億」 over the destination node; repeating
+        // it from the cash bookkeeping looked like the bonus was paid twice (Sol playtest
+        // fx-025 / fx-081). The goal popup keeps the number.
+        if (player && fx.reason !== '目的地ボーナス') {
           this.map?.floatText(player.nodeId, formatDelta(fx.delta), fx.delta >= 0 ? '#8affb0' : '#ff8a8a');
         }
         Audio.sfx(fx.delta >= 0 ? 'coin_gain' : 'coin_loss');
@@ -3585,6 +3844,33 @@ export class GameScreen implements ScreenHandle {
         await control.wait(FX_MS.card_use);
         return;
       }
+      case 'skill': {
+        const character = charsById.get(fx.characterId);
+        const target = fx.targetId !== undefined ? pending.players[fx.targetId] : undefined;
+        const targetCharacter = target ? charsById.get(target.characterId) : undefined;
+        Audio.sfx('goal_fanfare');
+        this.portraitMood('joy', fx.playerId);
+        this.portraitMotion('jump');
+        this.map?.setMood(fx.playerId, 'joy', 6000);
+        this.map?.celebrate(fx.playerId, 'goal');
+        this.confetti(10);
+        this.addLog(`✨ ${this.playerName(fx.playerId)} が固有技「${fx.name}」を発動！`);
+        if (character) {
+          await this.skillCutin.play(
+            fx,
+            {
+              character,
+              targetName: target ? `${target.name}（${targetCharacter?.nameJa ?? ''}）` : undefined,
+              targetColor: targetCharacter?.color,
+            },
+            control,
+          );
+        } else {
+          this.showGameBanner(`✨ ${fx.name}`);
+          await control.wait(FX_MS.skill);
+        }
+        return;
+      }
       case 'say': {
         await this.playSay(fx, pending, control);
         return;
@@ -3626,6 +3912,7 @@ export class GameScreen implements ScreenHandle {
       }
       case 'piper': {
         Audio.sfx('piper');
+        const piperSpeaker = `npc:piper${Math.min(3, Math.max(1, fx.level))}`;
         if (fx.holder !== null) {
           this.portraitMood('sad', fx.holder);
           this.portraitMotion('shake');
@@ -3634,10 +3921,10 @@ export class GameScreen implements ScreenHandle {
         }
         this.transientMsgPending = true;
         void this.msgWindow.show({
-          speaker: 'npc:piper1',
-          name: '取り立て屋',
+          speaker: piperSpeaker,
+          name: PIPER_FORMS[Math.min(3, Math.max(1, fx.level)) - 1].nameJa,
           text: fx.message,
-          sprite: speakerSprite('npc:piper1'),
+          sprite: speakerSprite(piperSpeaker),
           color: '#ff8a8a',
           speed: control.speed,
         }).then(() => { this.transientMsgPending = false; });
@@ -3645,11 +3932,72 @@ export class GameScreen implements ScreenHandle {
         await control.wait(FX_MS.piper);
         return;
       }
+      case 'piper_roulette': {
+        Audio.sfx(fx.to > fx.from ? 'roulette_stop' : 'roulette_tick');
+        if (fx.to === 3) {
+          this.map?.shake(0.6);
+          this.portraitMood('sad', fx.holder);
+        }
+        this.addLog(`🎺 取り立て屋ルーレット: Lv${fx.from} → Lv${fx.to}`);
+        await this.piperShow.playRoulette(fx, control);
+        return;
+      }
+      case 'piper_disaster': {
+        Audio.sfx('bad');
+        this.map?.shake(1.1);
+        this.portraitMood('sad', fx.holder);
+        this.portraitMotion('shake');
+        this.map?.setMood(fx.holder, 'sad', 7000);
+        this.portraitMood('sad', fx.holder);
+        const victim = pending.players[fx.holder];
+        const victimCharacter = victim ? charsById.get(victim.characterId) : undefined;
+        this.addLog(
+          `👑 ${fx.title}（${this.playerName(fx.holder)} ▲${formatOkuShort(fx.amount)}）`,
+        );
+        await this.piperShow.playDisaster(
+          fx,
+          {
+            name: victim ? displayPlayerName(victim) : this.playerName(fx.holder),
+            sprite: victimCharacter ? characterSprite(victimCharacter) : undefined,
+          },
+          control,
+        );
+        return;
+      }
+      case 'piper_gift': {
+        Audio.sfx('coin_gain');
+        this.map?.celebrate(fx.holder, 'buy');
+        this.map?.setMood(fx.holder, 'joy', 6000);
+        this.portraitMood('joy', fx.holder);
+        this.portraitMotion('jump');
+        this.addLog(`🎁 ${fx.title}（${this.playerName(fx.holder)} +${formatOkuShort(fx.amount)}）`);
+        await this.piperShow.playGift(fx, control);
+        return;
+      }
       case 'industry': {
         Audio.sfx('event');
         this.showGameBanner(`${fx.label}: 収益 ×${fx.mult.toFixed(2)}`);
         this.addLog(`📈 ${fx.label} 収益 ×${fx.mult.toFixed(2)}`);
         await control.wait(FX_MS.industry);
+        return;
+      }
+      case 'city_mod': {
+        const city = citiesById.get(fx.cityId);
+        const name = city?.nameJa ?? fx.cityId;
+        const up = fx.kind === 'bubble' || fx.kind === 'boom';
+        const icon = up ? (fx.kind === 'bubble' ? '📈' : '✨') : fx.kind === 'blockade' ? '🚧' : '💥';
+        Audio.sfx(up ? 'event' : 'bad');
+        this.showGameBanner(`${icon} ${name}に${fx.label}（${up ? '▲' : '▼'}×${fx.mult.toFixed(2)}・${fx.years}年）`);
+        this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 1.35, ms: 620 });
+        this.map?.cityModBurst(fx.cityId);
+        this.map?.floatText(
+          cityNodeId(fx.cityId),
+          `×${fx.mult.toFixed(2)}`,
+          up ? '#ffd23f' : '#ff8a8a',
+        );
+        if (!up) this.map?.shake(0.35);
+        this.addLog(`${icon} ${name}の物件価格・収益 ×${fx.mult.toFixed(2)}（${fx.years}年）`);
+        await control.wait(FX_MS.city_mod);
         return;
       }
       case 'skip': {
@@ -3676,6 +4024,54 @@ export class GameScreen implements ScreenHandle {
       case 'game_over': {
         this.setBgm('result');
         await control.wait(FX_MS.game_over);
+        return;
+      }
+      case 'final_year': {
+        Audio.sfx('goal_fanfare');
+        this.finalYearBanner?.close();
+        this.finalYearBanner = showFinalYearBanner({
+          host: document.body,
+          title: pending.config.years <= 1 ? '最終盤' : '最終年',
+          year: fx.year,
+          rules: fx.rules,
+          narration: finalYearNarration(pending),
+        });
+        this.app.toasts.show('🔥 最終年！目的地ボーナス×2', 'good', 4200);
+        this.addLog(`🔥 最終年（第 ${fx.year} 年）: ${fx.rules.join(' / ')}`);
+        await control.wait(FX_MS.final_year);
+        return;
+      }
+      case 'buyout': {
+        // 買収の掛け合いを見せるため、いったん街のシートを閉じる（演出後に最新状態で開き直る）。
+        this.closeCitySheet();
+        const ref = propertiesById.get(fx.propertyId);
+        Audio.sfx('buy');
+        Audio.sfx('coin_loss');
+        this.portraitMood('joy', fx.playerId);
+        this.portraitMood('sad', fx.fromId);
+        this.portraitMotion('shake');
+        this.map?.setMood(fx.playerId, 'joy', 6000);
+        this.map?.setMood(fx.fromId, 'sad', 6000);
+        this.map?.shake(fx.brokeMonopoly ? 0.7 : 0.4);
+        if (ref) {
+          const nodeId = cityNodeId(ref.city.id);
+          this.map?.focusNode(nodeId, { zoom: 1.05, ms: 500 });
+          this.map?.floatText(nodeId, `買収 ${formatOkuShort(fx.amount)}`, '#ffd23f');
+        }
+        this.showGameBanner(`🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の物件を買収！`);
+        this.app.toasts.show(
+          `🤝 ${ref?.property.name ?? fx.propertyId} を ${formatOku(fx.amount)} で買収`,
+          'good',
+          3600,
+        );
+        if (fx.brokeMonopoly) {
+          this.app.toasts.show('👑 都市独占が崩れた！', 'warn', 3800);
+          this.confetti(12);
+        }
+        this.addLog(
+          `🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の ${ref?.property.name ?? fx.propertyId} を ${formatOku(fx.amount)} で買収${fx.brokeMonopoly ? '（独占崩壊）' : ''}`,
+        );
+        await control.wait(FX_MS.buyout);
         return;
       }
       case 'toast': {
@@ -3738,12 +4134,15 @@ export class GameScreen implements ScreenHandle {
     const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
     const speed = control.speed;
     const autoAdvance = uiSettings().autoAdvance;
+    // A CPU's routine quips are scenery. Play their clip only as colour; never block the turn
+    // on it, otherwise the ×3 CPU pacing waits on 1.2x voice for every line.
+    const routineCpu = isRoutineCpuSay(fx, state);
     // Voice playback rate is intentionally capped at 1.2x for intelligibility; at 4x/8x or while
     // catching up on queued updates, do not block message advancement on 1.2x audio playback.
-    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0;
+    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routineCpu;
     let voiceStarted = false;
     const voicePromise =
-      muted || control.backlog > 0
+      muted || routineCpu || control.backlog > 0
         ? Promise.resolve()
         : Audio.playVoice(voiceKey, fx.text, {
             rate: speed,
@@ -4246,7 +4645,7 @@ export class GameScreen implements ScreenHandle {
         }
         return;
       }
-      if (!this.eventPanel.isOpen && !this.fxBusy && !this.bottomBar.classList.contains('is-waiting-turn') && /^[1-5]$/.test(event.key)) {
+      if (!this.eventPanel.isOpen && !this.fxBusy && !this.bottomBar.classList.contains('is-waiting-turn') && /^[1-6]$/.test(event.key)) {
         event.preventDefault();
         switch (event.key) {
           case '1':
@@ -4263,6 +4662,9 @@ export class GameScreen implements ScreenHandle {
             break;
           case '5':
             this.openMapViewDialog();
+            break;
+          case '6':
+            this.openSkill();
             break;
         }
         return;

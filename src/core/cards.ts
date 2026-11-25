@@ -19,6 +19,7 @@ export const CARD_IDS = [
   'golden_egg',
   'insider',
   'shield',
+  'underdog',
 ] as const;
 
 export type CardId = (typeof CARD_IDS)[number];
@@ -43,6 +44,7 @@ export const CARD_TARGETS: Readonly<Record<CardId, CardTargetKind>> = {
   golden_egg: null,
   insider: null,
   shield: null,
+  underdog: null,
 };
 
 export function isCardId(id: string): id is CardId {
@@ -55,7 +57,10 @@ export function handLimitFor(perk: PerkId): number {
 
 /** Draws one weighted card from the deck (unknown ids are ignored). */
 export function drawCard(data: GameData, state: GameState): string | null {
-  const candidates = data.cards.filter((c) => isCardId(c.id) && c.weight > 0);
+  const candidates = data.cards.filter(
+    // 下剋上の豆は年末に最下位へ直接配る専用カード。山扎からは引かない。
+    (c) => isCardId(c.id) && c.weight > 0 && c.id !== 'underdog',
+  );
   const picked = weightedPick(state, candidates, (c) => c.weight);
   return picked?.id ?? null;
 }

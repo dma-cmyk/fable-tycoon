@@ -24,6 +24,7 @@ import {
   ALLOWED_YEARS,
 } from '../core/engine';
 import { COMM, MAX_SEATS, PROTOCOL_VERSION } from './protocol';
+import { routineFxDuration } from '../core/fxPacing';
 import type {
   AllowedYears,
   ChatLine,
@@ -122,6 +123,14 @@ export function fxDuration(fx: Fx): number {
       return FX_MS.game_over;
     case 'toast':
       return FX_MS.toast;
+    case 'piper_roulette':
+    case 'piper_disaster':
+    case 'piper_gift':
+    case 'buyout':
+    case 'city_mod':
+    case 'skill':
+    case 'final_year':
+      return FX_MS[fx.t];
     default: {
       const never: never = fx;
       void never;
@@ -1424,7 +1433,17 @@ export class RoomController {
       this.deadlineActor = actorNow;
     }
     this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
-    this.turnFxMs = sumFxDuration(fx) * this.fxScale;
+    // CPU routine fx are scheduled with the same shortened duration the client plays them at
+    // (`src/core/fxPacing.ts`); everything else — human fx, goals, piper, buyouts, events,
+    // monopolies — keeps the nominal budget. `lastBy` is the acting player of this update.
+    const pacing = {
+      actor: this.lastBy,
+      isCpu: (playerId: number | null | undefined) =>
+        this.state?.players[playerId ?? -1]?.isCpu === true,
+    };
+    this.turnFxMs =
+      fx.reduce((sum, item) => sum + routineFxDuration(fxDuration(item), item, pacing), 0) *
+      this.fxScale;
 
     if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
       return;

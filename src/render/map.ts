@@ -5,6 +5,7 @@
 // handled by always projecting through wrapDx(), so no drawing code needs seam special cases.
 
 import { MAP_H, MAP_W, project, wrapDx, wrapX } from '../core/geo';
+import { activeCityMods, cityModMultiplier } from '../core/economy';
 import { REALMS, REALM_H, REALM_W } from '../core/realm';
 import realmCitiesData from '../data/realms.json';
 import {
@@ -518,6 +519,8 @@ export class MapView {
   private readonly labelFade = new LabelFade();
   /** Last resolved box offset per priority city label, frozen while a token animates. */
   private readonly priorityLabelSlots = new Map<string, { offX: number; offY: number; w: number; h: number }>();
+  /** city_mod 発生時の「オーラが広がる」演出の開始時刻（cityId → performance.now()）。 */
+  private readonly cityModBursts = new Map<string, number>();
   private overviewMode = false;
   private overviewCallback: ((overview: boolean) => void) | null = null;
   private lastOverviewFlag = false;
@@ -849,6 +852,207 @@ export class MapView {
       const cy = py + radiusPx * 1.35 + sz * 0.55;
       if (img) ctx.drawImage(img, cx - sz / 2, cy - sz * 0.62, sz, sz);
       else drawStampFallback(ctx, kind, cx, cy, sz);
+    }
+  }
+
+  /**
+   * 都市の city_mod（バブル・好況・災害・封鎖）を地図上に大きく見せる。
+   * 都市タイルの約3倍の半径でゆっくり脈動し、種類ごとに光の柱・もや・バリケードを描く。
+   * 文字ラベルは drawCityLabels 側（既存のラベル回避に乗せる）。
+   */
+  private drawCityMods(
+    ctx: CanvasRenderingContext2D,
+    visible: CityVis[],
+    radius: number,
+    now: number,
+  ): void {
+    const state = this.state;
+    if (!state || !state.cityMods || state.cityMods.length === 0) return;
+    for (const v of visible) {
+      const mods = activeCityMods(state, v.entry.city.id);
+      if (mods.length === 0) continue;
+      const cityId = v.entry.city.id;
+      const kind = mods[mods.length - 1].kind;
+      const up = kind === 'bubble' || kind === 'boom';
+      const channels =
+        kind === 'bubble'
+          ? '255,206,66'
+          : kind === 'boom'
+            ? '74,226,160'
+            : kind === 'blockade'
+              ? '126,196,255'
+              : '255,96,74';
+      const rgba = (alpha: number): string => `rgba(${channels},${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+      const seed = hashString(cityId);
+      const pulse = this.reducedMotion ? 0.75 : 0.7 + 0.3 * Math.sin(now / 520 + (seed % 11));
+      const x = v.x;
+      const y = v.y;
+      // 最低 34px は確保する（ズームアウト・広域でも気づける大きさ）。
+      const auraR = Math.max(radius * (2.75 + 0.45 * pulse), 34);
+      ctx.save();
+      // 外側グロー
+      const grad = ctx.createRadialGradient(x, y, radius * 0.4, x, y, auraR);
+      grad.addColorStop(0, rgba(0.56 + 0.16 * pulse));
+      grad.addColorStop(0.5, rgba(0.34 + 0.14 * pulse));
+      grad.addColorStop(1, rgba(0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, auraR, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = rgba(0.85 + 0.15 * pulse);
+      ctx.lineWidth = Math.max(2.5, radius * 0.16);
+      if (kind === 'blockade') ctx.setLineDash([radius * 0.45, radius * 0.3]);
+      ctx.beginPath();
+      ctx.arc(x, y, auraR * 0.92, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (up) {
+        // 光の柱
+        const pillar = ctx.createLinearGradient(x, y - auraR * 2.1, x, y + radius * 0.4);
+        pillar.addColorStop(0, rgba(0));
+        pillar.addColorStop(0.55, rgba(0.2 + 0.12 * pulse));
+        pillar.addColorStop(1, rgba(0.5));
+        ctx.fillStyle = pillar;
+        ctx.beginPath();
+        ctx.moveTo(x - radius * 0.85, y + radius * 0.2);
+        ctx.lineTo(x - radius * 0.34, y - auraR * 1.85);
+        ctx.lineTo(x + radius * 0.34, y - auraR * 1.85);
+        ctx.lineTo(x + radius * 0.85, y + radius * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        if (!this.reducedMotion) {
+          // 浮かぶ泡とコイン
+          for (let i = 0; i < 7; i++) {
+            const t = ((now / 1700 + i * 0.143 + (seed % 13) / 13) % 1);
+            const bx = x + Math.sin(t * 6.28 + i * 2.1) * radius * (0.7 + (i % 3) * 0.25);
+            const by = y + radius * 0.5 - t * auraR * 1.9;
+            const a = 0.85 * (1 - t);
+            if (i % 2 === 0) {
+              ctx.fillStyle = rgba(a);
+              ctx.beginPath();
+              ctx.arc(bx, by, Math.max(1.8, radius * (0.13 + 0.05 * (i % 3)) * (1 - t * 0.4)), 0, TAU);
+              ctx.fill();
+            } else {
+              // コイン
+              ctx.strokeStyle = rgba(a);
+              ctx.lineWidth = Math.max(1.4, radius * 0.09);
+              ctx.beginPath();
+              ctx.ellipse(bx, by, Math.max(2.2, radius * 0.16), Math.max(3, radius * 0.2), 0, 0, TAU);
+              ctx.stroke();
+            }
+          }
+          // きらめき
+          ctx.strokeStyle = rgba(0.65 + 0.35 * pulse);
+          ctx.lineWidth = Math.max(1.4, radius * 0.1);
+          for (let i = 0; i < 4; i++) {
+            const sx = x + Math.cos(now / 950 + i * 2.4) * radius * 2.2;
+            const sy = y + Math.sin(now / 760 + i * 1.7) * radius * 1.1;
+            const sz = radius * 0.22;
+            ctx.beginPath();
+            ctx.moveTo(sx - sz, sy);
+            ctx.lineTo(sx + sz, sy);
+            ctx.moveTo(sx, sy - sz);
+            ctx.lineTo(sx, sy + sz);
+            ctx.stroke();
+          }
+        }
+      } else if (kind === 'damage') {
+        // 黒〜赤のもや
+        const haze = ctx.createRadialGradient(x, y, radius * 0.3, x, y, auraR);
+        haze.addColorStop(0, 'rgba(24,6,6,0.62)');
+        haze.addColorStop(0.55, 'rgba(70,10,10,0.42)');
+        haze.addColorStop(1, 'rgba(90,12,12,0)');
+        ctx.fillStyle = haze;
+        ctx.beginPath();
+        ctx.arc(x, y, auraR, 0, TAU);
+        ctx.fill();
+        // ひび割れ
+        ctx.strokeStyle = rgba(0.95);
+        ctx.lineWidth = Math.max(1.6, radius * 0.12);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const base = ((seed >> (i * 4)) % 360) * (Math.PI / 180);
+          const r0 = radius * 0.35;
+          const r1 = radius * (1.45 + 0.55 * ((seed >> (i * 3)) % 3));
+          const mid = (r0 + r1) / 2;
+          const bend = base + 0.18 + ((seed >> (i * 2)) % 7) * 0.03;
+          ctx.moveTo(x + Math.cos(base) * r0, y + Math.sin(base) * r0);
+          ctx.lineTo(x + Math.cos(bend) * mid, y + Math.sin(bend) * mid);
+          ctx.lineTo(x + Math.cos(base - 0.1) * r1, y + Math.sin(base - 0.1) * r1);
+        }
+        ctx.stroke();
+        // 下向きの矢印
+        if (!this.reducedMotion) {
+          ctx.fillStyle = rgba(0.9);
+          for (let i = 0; i < 3; i++) {
+            const t = ((now / 1250 + i * 0.33) % 1);
+            const ax = x + (i - 1) * radius * 0.85;
+            const ay = y - radius * 0.6 + t * radius * 1.6;
+            const sz = Math.max(3.2, radius * 0.22);
+            ctx.globalAlpha = 1 - t;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay + sz);
+            ctx.lineTo(ax - sz * 0.7, ay);
+            ctx.lineTo(ax + sz * 0.7, ay);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillRect(ax - sz * 0.2, ay - sz * 1.3, sz * 0.4, sz * 1.1);
+          }
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        // 封鎖: 太いバリケードの帯と標識
+        ctx.strokeStyle = rgba(0.95);
+        ctx.lineWidth = Math.max(4, radius * 0.3);
+        ctx.beginPath();
+        ctx.moveTo(x - radius * 1.35, y - radius * 0.55);
+        ctx.lineTo(x + radius * 1.35, y - radius * 0.55);
+        ctx.moveTo(x - radius * 1.35, y + radius * 0.55);
+        ctx.lineTo(x + radius * 1.35, y + radius * 0.55);
+        ctx.stroke();
+        ctx.lineWidth = Math.max(2, radius * 0.1);
+        ctx.strokeStyle = 'rgba(9,20,34,0.9)';
+        for (let i = -1; i <= 1; i++) {
+          const bx = x + i * radius * 0.85;
+          ctx.beginPath();
+          ctx.moveTo(bx - radius * 0.1, y - radius * 0.55);
+          ctx.lineTo(bx + radius * 0.1, y + radius * 0.55);
+          ctx.stroke();
+        }
+      }
+
+      // 発生演出: 外へ広がる波紋
+      const burstAt = this.cityModBursts.get(cityId);
+      if (burstAt !== undefined) {
+        const p = (now - burstAt) / 1100;
+        if (p >= 1) {
+          this.cityModBursts.delete(cityId);
+        } else {
+          const ease = 1 - (1 - p) ** 3;
+          for (let i = 0; i < 2; i++) {
+            const ringP = Math.max(0, ease - i * 0.18);
+            if (ringP <= 0) continue;
+            ctx.strokeStyle = rgba((1 - p) * (i === 0 ? 0.95 : 0.55));
+            ctx.lineWidth = (i === 0 ? 6 : 3) * (1 - p * 0.5);
+            ctx.beginPath();
+            ctx.arc(x, y, radius + ringP * auraR * 2.4, 0, TAU);
+            ctx.stroke();
+          }
+          // 発生直後は中心を強く光らせる
+          const flash = Math.max(0, 1 - p * 1.6);
+          if (flash > 0) {
+            const fg = ctx.createRadialGradient(x, y, 0, x, y, auraR * 1.2);
+            fg.addColorStop(0, rgba(0.6 * flash));
+            fg.addColorStop(1, rgba(0));
+            ctx.fillStyle = fg;
+            ctx.beginPath();
+            ctx.arc(x, y, auraR * 1.2, 0, TAU);
+            ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
     }
   }
 
@@ -1270,6 +1474,16 @@ export class MapView {
       start: performance.now(),
       intensity: Math.max(0.1, Math.min(2, intensity)) * (this.reducedMotion ? 0.35 : 1),
     };
+    this.requestRender();
+  }
+
+  /** city_mod 発生演出: その都市のオーラを約1秒かけて外へ広げる。 */
+  cityModBurst(cityId: string, ms = 1100): void {
+    this.cityModBursts.set(cityId, performance.now());
+    window.setTimeout(() => {
+      const started = this.cityModBursts.get(cityId);
+      if (started !== undefined && performance.now() - started >= ms) this.cityModBursts.delete(cityId);
+    }, ms + 60);
     this.requestRender();
   }
 
@@ -2675,12 +2889,26 @@ export class MapView {
 
   /** True when a blocker rect is a token sprite box (as opposed to HUD chrome). */
   private isTokenBlocker(rect: Rect, now: number): boolean {
+    const piper = this.state?.piper ?? null;
     for (const token of this.tokens) {
       const world = this.tokenWorldPosition(token.playerId, now);
       if (!world) continue;
-      const box = this.tokenScreenBox(this.camera.screenX(world.x), this.camera.screenY(world.y));
+      const sx = this.camera.screenX(world.x);
+      const sy = this.camera.screenY(world.y);
+      const box = this.tokenScreenBox(sx, sy);
       if (Math.abs(rect.x - box.x) < 0.5 && Math.abs(rect.y - box.y) < 0.5 && Math.abs(rect.h - box.h) < 0.5) {
         return true;
+      }
+      if (piper && piper.holder === token.playerId) {
+        const form = Math.min(3, Math.max(1, piper.level)) as 1 | 2 | 3;
+        const piperBox = this.piperScreenBox(sx, sy, this.tokenHeight(), form);
+        if (
+          Math.abs(rect.x - piperBox.x) < 0.5 &&
+          Math.abs(rect.y - piperBox.y) < 0.5 &&
+          Math.abs(rect.h - piperBox.h) < 0.5
+        ) {
+          return true;
+        }
       }
     }
     return false;
@@ -2716,10 +2944,18 @@ export class MapView {
       }
     }
     const th = this.tokenHeight();
+    const piper = this.state?.piper ?? null;
     for (const token of this.tokens) {
       const world = this.tokenWorldPosition(token.playerId, now);
       if (!world) continue;
-      out.push(this.tokenScreenBox(cam.screenX(world.x), cam.screenY(world.y), th));
+      const sx = cam.screenX(world.x);
+      const sy = cam.screenY(world.y);
+      out.push(this.tokenScreenBox(sx, sy, th));
+      // 取り立て屋の立ち絵（王冠・段階バッジ込み）も都市名ラベルの回避対象にする。
+      if (piper && piper.holder === token.playerId) {
+        const form = Math.min(3, Math.max(1, piper.level)) as 1 | 2 | 3;
+        out.push(this.piperScreenBox(sx, sy, th, form));
+      }
     }
     const r = this.tileRadius();
     for (const option of this.moveOptions ?? []) {
@@ -3365,6 +3601,7 @@ export class MapView {
     }
 
     // Labels are placed statically; sprites over them only fade the name out.
+    this.drawCityMods(ctx, visible, radius, now);
     this.drawCityLabels(ctx, visible, detail);
   }
 
@@ -3810,6 +4047,9 @@ export class MapView {
     const now = performance.now();
     const currentCityId = this.state ? this.cityNodeIdOfPlayer(this.state.current) : null;
     const tokenNodeIds = new Set(this.tokens.map((t) => t.nodeId));
+    const modCityIds = new Set(
+      (this.state?.cityMods ?? []).filter((m) => m.yearsLeft > 0).map((m) => m.cityId),
+    );
     const optionCities = new Set(
       (this.moveOptions ?? []).filter((o) => this.nodeById.get(o.nodeId)?.kind === 'city').map((o) => o.nodeId),
     );
@@ -3840,7 +4080,8 @@ export class MapView {
       || v.entry.node.id === currentCityId
       || tokenNodeIds.has(v.entry.node.id)
       || optionCities.has(v.entry.node.id)
-      || routeCities.has(v.entry.node.id);
+      || routeCities.has(v.entry.node.id)
+      || modCityIds.has(v.entry.city.id);
     const blockers = this.dynamicLabelBlockers(now);
     // Slot dodging only reacts to fixed chrome (HUD panels, portrait, minimap,
     // overview markers), never to a walking token that would make a priority
@@ -4004,7 +4245,112 @@ export class MapView {
         alpha,
         isPriority,
       );
+      if (modCityIds.has(city.id)) {
+        const tagRect = this.drawCityModTag(
+          ctx,
+          rect,
+          city.id,
+          plan,
+          ratio,
+          alpha,
+          isPriority,
+          now,
+          fixedBlockers.concat(priorityLabelRects, priorityTokenRects),
+        );
+        if (tagRect) {
+          priorityLabelRects.push(tagRect);
+          this.cityLabelGrid.add(tagRect, { cityId: city.id, rect: tagRect });
+        }
+      }
     }
+  }
+
+  /**
+   * 都市名の札に添える都市効果の吹き出し（都市名と同じか少し大きい文字）。
+   * 既存のラベル回避に乗せるため、都市名の札の上→下→左右の順で空きを探す。
+   */
+  private drawCityModTag(
+    ctx: CanvasRenderingContext2D,
+    labelRect: Rect,
+    cityId: string,
+    plan: CityLabelPlan,
+    ratio: number,
+    alpha: number,
+    isPriority: boolean,
+    now: number,
+    avoid: Rect[],
+  ): Rect | null {
+    const state = this.state;
+    const mods = state ? activeCityMods(state, cityId) : [];
+    if (!state || mods.length === 0) return null;
+    const last = mods[mods.length - 1];
+    const mult = cityModMultiplier(state, cityId);
+    const up = last.kind === 'bubble' || last.kind === 'boom';
+    const color =
+      last.kind === 'bubble' ? '#ffd23f' : last.kind === 'boom' ? '#4ce0a1' : last.kind === 'blockade' ? '#7fc4ff' : '#ff8a7a';
+    const icon = last.kind === 'bubble' ? '▲' : last.kind === 'boom' ? '✦' : last.kind === 'blockade' ? '×' : '▼';
+    const extra = mods.length > 1 ? ` +${mods.length - 1}` : '';
+    const text = `${icon} ${last.label} ×${mult.toFixed(1)}${extra}`;
+    const fs = Math.max(13, (isPriority ? plan.fsPriority : plan.fs) * ratio);
+    ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+    const tw = ctx.measureText(text).width;
+    const padX = fs * 0.55;
+    const h = fs + 10;
+    const w = tw + padX * 2;
+    const candidates: Array<{ x: number; y: number }> = [
+      { x: labelRect.x + labelRect.w / 2 - w / 2, y: labelRect.y - h - 5 },
+      { x: labelRect.x + labelRect.w / 2 - w / 2, y: labelRect.y + labelRect.h + 5 },
+      { x: labelRect.x + labelRect.w + 6, y: labelRect.y + labelRect.h / 2 - h / 2 },
+      { x: labelRect.x - w - 6, y: labelRect.y + labelRect.h / 2 - h / 2 },
+    ];
+    const board = this.freeBoardBox();
+    let pick: Rect | null = null;
+    for (const cand of candidates) {
+      const rect = { x: cand.x, y: cand.y, w, h };
+      if (rect.x < board.x + 2 || rect.y < board.y + 2) continue;
+      if (rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) continue;
+      if (avoid.some((r) => rectsOverlap(rect, r, 2))) continue;
+      pick = rect;
+      break;
+    }
+    if (!pick) {
+      pick = {
+        x: Math.max(board.x + 2, Math.min(board.x + board.w - w - 2, candidates[0].x)),
+        y: Math.max(board.y + 2, labelRect.y - h - 5),
+        w,
+        h,
+      };
+    }
+    // 影 + 本体
+    ctx.fillStyle = 'rgba(6,14,28,0.55)';
+    ctx.beginPath();
+    ctx.roundRect(pick.x + 1, pick.y + 3, pick.w, pick.h, h / 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(9,20,34,0.94)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(pick.x, pick.y, pick.w, pick.h, h / 2);
+    ctx.fill();
+    ctx.stroke();
+    // 脈動する縁
+    if (!this.reducedMotion) {
+      ctx.globalAlpha = alpha * (0.25 + 0.25 * Math.sin(now / 420 + (hashString(cityId) % 9)));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(pick.x - 1.5, pick.y - 1.5, pick.w + 3, pick.h + 3, (h + 3) / 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    }
+    ctx.fillStyle = up ? color : '#ffe3dd';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pick.x + pick.w / 2, pick.y + pick.h / 2 + 0.5);
+    ctx.restore();
+    return pick;
   }
 
   private cityNodeIdOfPlayer(playerId: number): string | null {
@@ -5585,32 +5931,162 @@ export class MapView {
     if (p > 0.84) this.drawPoof(ctx, groundX, groundY, (p - 0.84) / 0.16, h * 0.7, layout.playerId);
   }
 
-  private drawPiper(ctx: CanvasRenderingContext2D, holder: TokenLayout, level: number, now: number): void {
-    const img = this.assets.npcs?.get(`piper${Math.min(3, Math.max(1, level))}`);
-    if (!img) return;
-    const h = holder.height * 0.64;
-    const w = h * (img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 0.88);
-    const bob = Math.sin(now / 420) * 1.6;
-    const x = holder.x - holder.height * 0.78;
-    const y = holder.y + 6 + bob;
+  /**
+   * 取り立て屋の立ち絵サイズ（screen px）。段階が上がるほど大きくし、広域ズームでも
+   * 点にならないよう下限を設ける。Lv2 は駒の約 0.8 倍、Lv3 は駒以上。
+   */
+  private piperSpriteSize(tokenHeight: number, form: 1 | 2 | 3): { h: number; w: number } {
+    const img = this.assets.npcs?.get(`piper${form}`);
+    const aspect =
+      img && img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 0.88;
+    const scale = form === 3 ? 1.15 : form === 2 ? 0.8 : 0.64;
+    const floor = form === 3 ? 78 : form === 2 ? 52 : 34;
+    const h = Math.max(floor, tokenHeight * scale);
+    return { h, w: h * aspect };
+  }
+
+  /** 取り立て屋の立ち絵の画面矩形（ラベル回避用）。バッジも含める。 */
+  private piperScreenBox(sx: number, sy: number, th: number, form: 1 | 2 | 3): Rect {
+    const { h, w } = this.piperSpriteSize(th, form);
+    const x = sx - Math.max(th * 0.82, w * 0.52);
+    // 立ち絵 + 王冠 + 段階バッジぶん上に伸ばす。
+    const top = sy + 6 - h - (form === 3 ? 44 : 32);
+    return { x: x - w / 2 - 12, y: top, w: w + 24, h: sy + 8 - top };
+  }
+
+  /** 段階バッジ (Lv1/Lv2/👑Lv3)。憑いている駒の頭上に出す。 */
+  private drawPiperBadge(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    topY: number,
+    form: 1 | 2 | 3,
+    now: number,
+  ): void {
+    const label = form === 3 ? '👑 Lv3' : `Lv${form}`;
+    const fill = form === 3 ? '#ffcf3f' : form === 2 ? '#8a56ff' : '#ff5b6e';
+    const textColor = form === 3 ? '#3a1300' : '#ffffff';
+    const y = topY - 22 - (form === 3 ? Math.sin(now / 220) * 1.6 : 0);
     ctx.save();
-    ctx.globalAlpha = 0.22;
+    ctx.font = `800 11px ${LABEL_FONT}`;
+    const width = Math.max(34, ctx.measureText(label).width + 14);
+    ctx.globalAlpha = 0.96;
+    ctx.fillStyle = 'rgba(4, 10, 26, 0.72)';
+    ctx.beginPath();
+    ctx.roundRect(cx - width / 2 - 1.5, y - 1.5, width + 3, 21, 11);
+    ctx.fill();
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.roundRect(cx - width / 2, y, width, 18, 9);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.roundRect(cx - width / 2, y, width, 18, 9);
+    ctx.stroke();
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, y + 9.5);
+    ctx.restore();
+  }
+
+  /** ブラックの紫の煙。 */
+  private drawPiperSmoke(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    topY: number,
+    h: number,
+    now: number,
+  ): void {
+    ctx.save();
+    for (let i = 0; i < 7; i += 1) {
+      const t = ((now / 1600) + i / 7) % 1;
+      const px = x + Math.sin(i * 2.1 + now / 800) * h * 0.34;
+      const py = topY + h * 0.3 - t * h * 1.05;
+      const r = Math.max(3, h * (0.12 + 0.06 * Math.sin(i + now / 600)));
+      ctx.globalAlpha = (1 - t) * 0.52;
+      ctx.fillStyle = i % 2 === 0 ? '#b07bff' : '#5c2bb8';
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  private drawPiper(ctx: CanvasRenderingContext2D, holder: TokenLayout, level: number, now: number): void {
+    const form = Math.min(3, Math.max(1, level)) as 1 | 2 | 3;
+    const img = this.assets.npcs?.get(`piper${form}`);
+    if (!img) return;
+    // 姿が上がるほど大きく、禍々しく。キングは駒以上の立ち絵 + 脈動する赤いオーラ + 王冠。
+    const { h, w } = this.piperSpriteSize(holder.height, form);
+    const bob = Math.sin(now / (form === 3 ? 260 : 420)) * (form === 3 ? 2.8 : 1.6);
+    const x = holder.x - Math.max(holder.height * 0.82, w * 0.52);
+    const y = holder.y + 6 + bob;
+    const centerY = y - h * 0.52;
+
+    if (form >= 2) {
+      // 脈動するオーラ。キングは半径を駒の約 2 倍にし、外周のリングも脈打たせる。
+      const pulse = 0.5 + Math.sin(now / (form === 3 ? 170 : 320)) * 0.5;
+      const radius = form === 3 ? Math.max(holder.height * 1.05, h * 0.9) : h * 0.95;
+      const color = form === 3 ? '255, 44, 44' : '138, 86, 255';
+      const glow = ctx.createRadialGradient(x, centerY, h * 0.06, x, centerY, radius);
+      glow.addColorStop(0, `rgba(${color}, ${0.42 + pulse * 0.34})`);
+      glow.addColorStop(0.45, `rgba(${color}, ${0.2 + pulse * 0.2})`);
+      glow.addColorStop(1, `rgba(${color}, 0)`);
+      ctx.save();
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, centerY, radius, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${color}, ${0.3 + pulse * 0.4})`;
+      ctx.lineWidth = form === 3 ? 3.5 : 2;
+      ctx.beginPath();
+      ctx.arc(x, centerY, radius * (0.82 + pulse * 0.14), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      // 足元の色光（地面に色が落ちて、遠目でも段階が分かる）。
+      const ground = ctx.createRadialGradient(x, holder.y + 2, 2, x, holder.y + 2, h * 0.55);
+      ground.addColorStop(0, `rgba(${color}, ${0.34 + pulse * 0.2})`);
+      ground.addColorStop(1, `rgba(${color}, 0)`);
+      ctx.save();
+      ctx.fillStyle = ground;
+      ctx.beginPath();
+      ctx.ellipse(x, holder.y + 3, h * 0.55, h * 0.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 足元の影（キングは特に濃く広く）。
+    ctx.save();
+    ctx.globalAlpha = form === 3 ? 0.34 : 0.22;
     ctx.fillStyle = '#06253d';
     ctx.beginPath();
-    ctx.ellipse(x, holder.y + 4, h * 0.3, h * 0.1, 0, 0, TAU);
+    ctx.ellipse(x, holder.y + 4, h * (form === 3 ? 0.42 : 0.3), h * 0.1, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
+
+    if (form === 2) this.drawPiperSmoke(ctx, x, y - h, h, now);
+
     ctx.save();
-    ctx.globalAlpha = 0.92;
+    ctx.globalAlpha = 0.96;
     ctx.drawImage(img, x - w / 2, y - h, w, h);
     ctx.restore();
+
     ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.font = `800 11px ${LABEL_FONT}`;
+    ctx.globalAlpha = 0.9;
+    ctx.font = `800 ${form === 3 ? 15 : 11}px ${LABEL_FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ff5b6e';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = form === 3 ? '#ff2d2d' : form === 2 ? '#b49bff' : '#ff5b6e';
     ctx.fillText('♪', x + w * 0.45, y - h + 6 - Math.abs(Math.sin(now / 300)) * 4);
+    if (form === 3) {
+      ctx.globalAlpha = 0.98;
+      ctx.font = `800 ${Math.max(18, Math.round(h * 0.24))}px ${LABEL_FONT}`;
+      ctx.fillText('👑', x, y - h - 4 + Math.sin(now / 200) * 2);
+    }
     ctx.restore();
+
+    this.drawPiperBadge(ctx, x, y - h, form, now);
   }
 
   private drawPoof(ctx: CanvasRenderingContext2D, x: number, y: number, p: number, h: number, seed: number): void {
@@ -5751,6 +6227,54 @@ export class MapView {
     const destCity = this.cityEntries.find((e) => e.city.id === state.destination);
     if (destCity) {
       markerName(cam.screenX(destCity.node.x), cam.screenY(destCity.node.y), destCity.city.nameJa, '#ffd23f', 'destination');
+    }
+    // 広域表示でも都市効果を見失わないよう、効果中の都市にリングと短い札を出す。
+    for (const entry of this.cityEntries) {
+      const mods = activeCityMods(state, entry.city.id);
+      if (mods.length === 0) continue;
+      const last = mods[mods.length - 1];
+      const x = cam.screenX(entry.node.x);
+      const y = cam.screenY(entry.node.y);
+      if (x < -60 || x > cam.vw + 60 || y < -60 || y > cam.vh + 60) continue;
+      const color =
+        last.kind === 'bubble' ? '#ffd23f' : last.kind === 'boom' ? '#4ce0a1' : last.kind === 'blockade' ? '#7fc4ff' : '#ff8a7a';
+      const pulse = this.reducedMotion ? 0.7 : 0.65 + 0.35 * Math.sin(performance.now() / 500 + (hashString(entry.city.id) % 9));
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.6;
+      ctx.globalAlpha = 0.55 + 0.4 * pulse;
+      ctx.beginPath();
+      ctx.arc(x, y, 13 + 4 * pulse, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      const fs = 13;
+      ctx.font = `800 ${fs}px ${LABEL_FONT}`;
+      const text = `${last.label} ×${cityModMultiplier(state, entry.city.id).toFixed(1)}`;
+      const tw = ctx.measureText(text).width + 14;
+      const th = 20;
+      const rect = {
+        x: Math.max(board.x + 3, Math.min(board.x + board.w - tw - 3, x - tw / 2)),
+        y: Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, y - 34)),
+        w: tw,
+        h: th,
+      };
+      const blocked = used.some((r) => rectsOverlap(rect, r, 2)) || dots.some((d) => rectsOverlap(rect, d, 2));
+      if (blocked) {
+        rect.y = Math.max(board.y + 3, Math.min(board.y + board.h - th - 3, y + 20));
+      }
+      used.push(rect);
+      ctx.fillStyle = 'rgba(9,20,34,0.92)';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 9);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, rect.x + rect.w / 2, rect.y + rect.h / 2 + 0.5);
+      ctx.restore();
     }
   }
 

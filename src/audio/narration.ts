@@ -19,6 +19,13 @@ export const NARRATION = {
   news: '世界ニュースイベントです！',
   gameOver: 'ゲーム終了！',
   winner: '世界一の大富豪が決まりました！',
+  // --- fun overhaul 2026-11-26 (Showdown) ---
+  finalYear: '最終年です。目的地ボーナスは二倍。ここからが本番です！',
+  finalStretch: '最終盤です。目的地ボーナスは二倍。逆転はここからです！',
+  underdogGrant: '最下位に、下剋上の豆を授けます。形勢逆転なるか。',
+  underdog: '下剋上の豆が爆ぜました。最下位が首位から搾り取ります！',
+  buyout: '買収成立。持ち主の悲鳴が世界に響きます。',
+  monopolyBreak: '独占が、買収によって崩れました！',
 } as const;
 
 export type NarrationKey = keyof typeof NARRATION;

@@ -243,7 +243,8 @@ describe('piper', () => {
     state.phase = { t: 'choose_dest', roll: 2, options: [option as MoveOption] };
     const result = step(data, state, 0, { t: 'move', nodeId: (option as MoveOption).nodeId });
     expect(result.state.piper.holder).toBe(1);
-    expect(result.state.piper.level).toBe(1);
+    // 2026-11 fun overhaul: すれ違いでは憑いた姿（フォルム）がそのまま移動する。
+    expect(result.state.piper.level).toBe(2);
     expect(result.state.piper.heldTurns).toBe(1); // P1's turn started after the transfer
     expect(result.fx.some((f) => f.t === 'piper' && f.holder === 1)).toBe(true);
   });
@@ -262,17 +263,17 @@ describe('piper', () => {
     expect(result.state.piper.holder).toBe(2);
   });
 
-  it('levels at 12 and 24 held turns', () => {
-    expect(piperLevelForHeldTurns(11)).toBe(1);
-    expect(piperLevelForHeldTurns(12)).toBe(2);
-    expect(piperLevelForHeldTurns(23)).toBe(2);
-    expect(piperLevelForHeldTurns(24)).toBe(3);
+  it('forcibly levels at 8 and 16 held turns', () => {
+    expect(piperLevelForHeldTurns(7)).toBe(1);
+    expect(piperLevelForHeldTurns(8)).toBe(2);
+    expect(piperLevelForHeldTurns(15)).toBe(2);
+    expect(piperLevelForHeldTurns(16)).toBe(3);
     const state = fresh([1, 1], 3, 12);
     state.current = 0;
-    state.piper = { holder: 0, level: 1, heldTurns: 11 };
+    state.piper = { holder: 0, level: 1, heldTurns: 7 };
     const fx: Parameters<typeof runPiperTurnStart>[2] = [];
     const outcome = runPiperTurnStart(data, state, fx);
-    expect(state.piper.heldTurns).toBe(12);
+    expect(state.piper.heldTurns).toBe(8);
     expect(state.piper.level).toBe(2);
     expect(['continue', 'skip']).toContain(outcome);
   });

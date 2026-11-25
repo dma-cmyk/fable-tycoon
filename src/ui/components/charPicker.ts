@@ -219,6 +219,10 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
         h('span', { class: 'char-detail-perk-label', text: `${perk.icon} ${perk.label}` }),
         h('p', { class: 'char-detail-perk-desc', text: perk.desc }),
       ),
+      h('div', { class: 'char-detail-perk char-detail-skill' },
+        h('span', { class: 'char-detail-perk-label', text: `✨ 固有技 ${character.skill.name}` }),
+        h('p', { class: 'char-detail-perk-desc', text: `${character.skill.desc}（1 年 1 回）` }),
+      ),
       confirm,
     );
   };
@@ -351,5 +355,6 @@ function characterCard(
     h('span', { class: 'char-card-name', text: character.nameJa }),
     h('span', { class: 'char-card-origin', text: `${character.origin} ・ ${character.originRegion}` }),
     h('span', { class: 'char-card-perk-label', text: `${perk.icon} ${perk.label}` }),
+    h('span', { class: 'char-card-skill', text: `✨ ${character.skill.name}` }),
   );
 }

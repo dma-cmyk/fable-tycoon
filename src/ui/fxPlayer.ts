@@ -2,6 +2,7 @@ import type { PublicState } from '../core/engine';
 import type {Fx} from '../core/types';
 import { FX_MS } from '../net/session-types';
 import type { UiSettings } from './settings';
+import { CpuTurnPacer, MAX_PACED_SPEED } from './cpuPacing';
 
 /**
  * Plays ServerMsg.update fx sequentially, then adopts the authoritative state.
@@ -41,6 +42,13 @@ export function estimateFxDurationMs(fx: Fx): number {
     case 'year_end': return FX_MS.year_end;
     case 'game_over': return FX_MS.game_over;
     case 'toast': return FX_MS.toast;
+    case 'piper_roulette': return FX_MS.piper_roulette;
+    case 'piper_disaster': return FX_MS.piper_disaster;
+    case 'piper_gift': return FX_MS.piper_gift;
+    case 'buyout': return FX_MS.buyout;
+    case 'city_mod': return FX_MS.city_mod;
+    case 'skill': return FX_MS.skill;
+    case 'final_year': return FX_MS.final_year;
     default: return 800;
   }
 }
@@ -56,6 +64,8 @@ export interface PlaybackControl {
   onSkip(callback: () => void): () => void;
   readonly skipped: boolean;
   readonly speed: number;
+  /** Extra multiplier applied to `speed` because the current fx is routine CPU bookkeeping. */
+  readonly accel: number;
   /** Number of newer updates waiting behind the currently playing head. */
   readonly backlog: number;
 }
@@ -89,6 +99,9 @@ export class FxPlayer {
   private watchdogTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private watchdogPaused = false;
   private activeUpdate: { update: FxUpdate; epoch: number; budgetMs: number } | null = null;
+  /** CPU routine fx are painted at `fxSpeed × CPU_ROUTINE_BOOST`. */
+  private readonly pacer = new CpuTurnPacer();
+  private activeBoost = 1;
 
   constructor(private readonly host: FxPlayerHost) {}
 
@@ -129,6 +142,8 @@ export class FxPlayer {
     this.runSkipCallbacks();
     this.queue = [];
     this.finishActive();
+    this.pacer.reset();
+    this.activeBoost = 1;
     this.skipRequested = false;
     this.skipUpdateRequested = false;
     this.running = false;
@@ -265,7 +280,9 @@ export class FxPlayer {
     const settings = this.host.settings();
     const backlog = this.queue.length;
     // DESIGN/UI: once two or more updates are waiting, play at 2x even if the setting is 1x.
-    return Math.max(settings.fxSpeed, backlog >= 2 ? 2 : 1);
+    const base = Math.max(settings.fxSpeed, backlog >= 2 ? 2 : 1);
+    // Routine CPU bookkeeping plays ~3x faster so the human is not forced to watch it.
+    return Math.min(MAX_PACED_SPEED, base * this.activeBoost);
   }
 
   private controlFor(epoch: number): PlaybackControl {
@@ -274,6 +291,9 @@ export class FxPlayer {
     return {
       get speed() {
         return player.speedFactor();
+      },
+      get accel() {
+        return player.activeBoost;
       },
       get backlog() {
         return Math.max(0, player.queue.length - 1);
@@ -333,6 +353,8 @@ export class FxPlayer {
           if (this.destroyed || this.epoch !== epoch || this.skipUpdateRequested) break;
           this.skipCallbacks.clear();
           this.skipRequested = false;
+          // CPU routine bookkeeping plays faster; `turn` fx also update the paced actor.
+          this.activeBoost = this.pacer.speedFor(fx, update.state);
           this.host.setSkippable(true);
           try {
             await this.host.handleFx(fx, update.state, this.controlFor(epoch));
@@ -342,6 +364,7 @@ export class FxPlayer {
             if (this.epoch === epoch) this.setManualWait(false);
           }
         }
+        this.activeBoost = 1;
         if (this.epoch !== epoch) return;
         this.skipUpdateRequested = false;
         this.clearWatchdog();

@@ -5365,3 +5365,98 @@
     font-size: 9.5px;
   }
 }
+
+/* ============================================================================
+   行き先チップの情報バッジ（最安値・買える/予算外・他プレイヤーの所有ドット）
+   名前行は一切触らない（2段レイアウトの駅名表示を維持する）。輸送情報の行に
+   相乗りし、スマホでは輸送情報だけを畳んで価格を残す。
+   ============================================================================ */
+.move-chip-owners {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.move-chip-owner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--owner-color, #9fb3d9);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.move-chip-price {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.14);
+  color: #e8f2ff;
+}
+
+.move-chip-price.is-ok {
+  background: linear-gradient(180deg, #c9f7d4, #6fe39a 70%, #2fae62);
+  color: #0f3d20;
+}
+
+.move-chip-price.is-over {
+  background: rgba(255, 138, 138, 0.22);
+  border: 1px solid rgba(255, 138, 138, 0.45);
+  color: #ffc9c9;
+}
+
+.move-chip-price.is-sold-out {
+  background: rgba(255, 255, 255, 0.1);
+  color: #b9c6d8;
+}
+
+.move-chip.is-selected .move-chip-price.is-ok {
+  background: #b9f0c6;
+  color: #14502c;
+}
+
+.move-chip.is-selected .move-chip-price.is-over {
+  background: rgba(160, 60, 30, 0.14);
+  border-color: rgba(138, 43, 18, 0.35);
+  color: #8a2b12;
+}
+
+.move-chip.is-selected .move-chip-price.is-sold-out {
+  background: rgba(24, 45, 86, 0.12);
+  color: #55607a;
+}
+
+@media (max-width: 899px) {
+  /* 価格バッジを残すため、輸送情報の行そのものは畳まない */
+  .move-chip-vehicle {
+    display: flex;
+  }
+
+  .move-chip-vehicle .move-chip-transport {
+    display: none;
+  }
+
+  .move-chip-price {
+    padding: 0 4px;
+    font-size: 8.5px;
+    line-height: 12px;
+  }
+
+  .move-chip-owner-dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* 横向きの低い画面は今の高さを維持する（価格は駅シートで読める）。 */
+@media (max-height: 520px) {
+  .move-chip-price,
+  .move-chip-owners {
+    display: none;
+  }
+}

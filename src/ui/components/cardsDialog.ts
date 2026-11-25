@@ -9,6 +9,8 @@ export interface CardsDialogOptions {
   state: PublicState;
   seat: number;
   canAct: boolean;
+  /** 手札のうち、いま使えるカードか（下剋上の豆は最下位のみ）。未指定ならすべて可。 */
+  canUseCard?: (cardId: string) => boolean;
   onUse: (cardId: string) => void;
 }
 
@@ -62,7 +64,10 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
     for (const [cardId, count] of sorted) {
       const def = cardsById.get(cardId);
       if (!def) continue;
-      const usable = options.canAct && options.state.phase.t === 'turn_start';
+      const usable =
+        options.canAct &&
+        options.state.phase.t === 'turn_start' &&
+        (options.canUseCard?.(cardId) ?? true);
       list.append(
         h(
           'div',
@@ -83,7 +88,11 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
             { class: 'card-item-actions' },
             h('span', {
               class: 'card-item-note',
-              text: def.needsTarget ? '使用後に相手・都市を選びます' : '',
+              text: def.needsTarget
+                ? '使用後に相手・都市を選びます'
+                : options.canUseCard?.(cardId) === false
+                  ? 'いまは条件を満たしていません（最下位のときだけ使えます）'
+                  : '',
             }),
             h('button', {
               class: 'btn btn-gold btn-small',

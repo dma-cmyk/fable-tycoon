@@ -178,6 +178,13 @@
         "industry": "tech",
         "price": 350,
         "yieldPct": 6
+      },
+      {
+        "id": "kyoto-4",
+        "name": "一見さんお断り食堂",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 46
       }
     ]
   },
@@ -437,6 +444,13 @@
         "industry": "tourism",
         "price": 110,
         "yieldPct": 12
+      },
+      {
+        "id": "kanazawa-3",
+        "name": "金箔貼り観光バス",
+        "industry": "tourism",
+        "price": 45,
+        "yieldPct": 14
       }
     ]
   },
@@ -642,6 +656,13 @@
         "industry": "tech",
         "price": 700,
         "yieldPct": 6
+      },
+      {
+        "id": "shenzhen-4",
+        "name": "小人が組み立てる基板工房",
+        "industry": "industry",
+        "price": 55,
+        "yieldPct": 18
       }
     ]
   },
@@ -802,6 +823,13 @@
         "industry": "tourism",
         "price": 180,
         "yieldPct": 11
+      },
+      {
+        "id": "seoul-5",
+        "name": "虎の推し活スタジオ",
+        "industry": "media",
+        "price": 50,
+        "yieldPct": 16
       }
     ]
   },
@@ -840,6 +868,13 @@
         "industry": "finance",
         "price": 240,
         "yieldPct": 5.5
+      },
+      {
+        "id": "busan-4",
+        "name": "夜市のひとり鍋屋台",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 46
       }
     ]
   },
@@ -1926,6 +1961,13 @@
         "industry": "shipping",
         "price": 300,
         "yieldPct": 9
+      },
+      {
+        "id": "dubai-5",
+        "name": "ラクダの自動販売機",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 15
       }
     ]
   },
@@ -1956,6 +1998,13 @@
         "industry": "tourism",
         "price": 180,
         "yieldPct": 10
+      },
+      {
+        "id": "abu-dhabi-3",
+        "name": "石油王の記念写真館",
+        "industry": "tourism",
+        "price": 55,
+        "yieldPct": 20
       }
     ]
   },
@@ -1986,6 +2035,13 @@
         "industry": "tourism",
         "price": 200,
         "yieldPct": 8
+      },
+      {
+        "id": "doha-3",
+        "name": "空飛ぶ絨毯の洗濯屋",
+        "industry": "tourism",
+        "price": 42,
+        "yieldPct": 16
       }
     ]
   },
@@ -2023,6 +2079,13 @@
         "industry": "tech",
         "price": 700,
         "yieldPct": 7
+      },
+      {
+        "id": "riyadh-4",
+        "name": "砂嵐サウナ",
+        "industry": "tourism",
+        "price": 38,
+        "yieldPct": 15
       }
     ]
   },
@@ -2053,6 +2116,13 @@
         "industry": "tourism",
         "price": 220,
         "yieldPct": 12
+      },
+      {
+        "id": "jeddah-3",
+        "name": "紅海の浮き倉庫",
+        "industry": "shipping",
+        "price": 48,
+        "yieldPct": 14
       }
     ]
   },
@@ -2090,6 +2160,13 @@
         "industry": "finance",
         "price": 220,
         "yieldPct": 7
+      },
+      {
+        "id": "tehran-4",
+        "name": "値段の変わるケバブ屋",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 52
       }
     ]
   },
@@ -2127,6 +2204,13 @@
         "industry": "finance",
         "price": 900,
         "yieldPct": 4.5
+      },
+      {
+        "id": "istanbul-4",
+        "name": "二大陸またぎの屋台船",
+        "industry": "tourism",
+        "price": 45,
+        "yieldPct": 17
       }
     ]
   },
@@ -2157,6 +2241,13 @@
         "industry": "tech",
         "price": 450,
         "yieldPct": 7
+      },
+      {
+        "id": "jerusalem-3",
+        "name": "三宗教ツアーの受付",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 16
       }
     ]
   },
@@ -2353,6 +2444,13 @@
         "industry": "finance",
         "price": 700,
         "yieldPct": 5
+      },
+      {
+        "id": "berlin-4",
+        "name": "壁の落書き配信所",
+        "industry": "media",
+        "price": 50,
+        "yieldPct": 18
       }
     ]
   },
@@ -2624,6 +2722,13 @@
         "industry": "tech",
         "price": 260,
         "yieldPct": 8
+      },
+      {
+        "id": "warsaw-3",
+        "name": "再建ピエロの街歩き",
+        "industry": "tourism",
+        "price": 36,
+        "yieldPct": 15
       }
     ]
   },
@@ -3020,6 +3125,13 @@
         "industry": "finance",
         "price": 210,
         "yieldPct": 6
+      },
+      {
+        "id": "venice-3",
+        "name": "沈む前にどうぞ舟",
+        "industry": "tourism",
+        "price": 58,
+        "yieldPct": 20
       }
     ]
   },
@@ -3291,6 +3403,13 @@
         "industry": "tech",
         "price": 280,
         "yieldPct": 6.5
+      },
+      {
+        "id": "novosibirsk-3",
+        "name": "シベリア鉄道の待合所",
+        "industry": "shipping",
+        "price": 44,
+        "yieldPct": 13
       }
     ]
   },
@@ -3613,6 +3732,13 @@
         "industry": "media",
         "price": 120,
         "yieldPct": 12
+      },
+      {
+        "id": "casablanca-4",
+        "name": "名台詞レンタル映画館",
+        "industry": "media",
+        "price": 40,
+        "yieldPct": 16
       }
     ]
   },
@@ -3890,6 +4016,13 @@
         "industry": "energy",
         "price": 600,
         "yieldPct": 6
+      },
+      {
+        "id": "johannesburg-4",
+        "name": "金鉱の見学ツアー",
+        "industry": "tourism",
+        "price": 46,
+        "yieldPct": 15
       }
     ]
   },
@@ -4477,6 +4610,13 @@
         "industry": "tourism",
         "price": 120,
         "yieldPct": 11
+      },
+      {
+        "id": "las-vegas-4",
+        "name": "負けても笑うディーラー養成所",
+        "industry": "media",
+        "price": 52,
+        "yieldPct": 19
       }
     ]
   },
@@ -4745,6 +4885,13 @@
         "industry": "shipping",
         "price": 220,
         "yieldPct": 9
+      },
+      {
+        "id": "panama-city-4",
+        "name": "運河の渡し舟食堂",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 44
       }
     ]
   },
@@ -5169,6 +5316,13 @@
         "industry": "energy",
         "price": 400,
         "yieldPct": 6.5
+      },
+      {
+        "id": "la-paz-3",
+        "name": "標高四千メートルの酸素バー",
+        "industry": "tourism",
+        "price": 34,
+        "yieldPct": 15
       }
     ]
   },
@@ -5245,6 +5399,13 @@
         "industry": "finance",
         "price": 900,
         "yieldPct": 4
+      },
+      {
+        "id": "sydney-5",
+        "name": "カモメと分け合うフィッシュ＆チップス",
+        "industry": "food",
+        "price": 30,
+        "yieldPct": 48
       }
     ]
   },
@@ -5312,6 +5473,13 @@
         "industry": "energy",
         "price": 320,
         "yieldPct": 8
+      },
+      {
+        "id": "brisbane-3",
+        "name": "サンタンの日に焼けるビーチ",
+        "industry": "tourism",
+        "price": 38,
+        "yieldPct": 15
       }
     ]
   },
@@ -6138,6 +6306,13 @@
         "industry": "tech",
         "price": 320,
         "yieldPct": 8
+      },
+      {
+        "id": "dalian-3",
+        "name": "軍港見学の遊覧船",
+        "industry": "tourism",
+        "price": 47,
+        "yieldPct": 16
       }
     ]
   },
@@ -6312,6 +6487,13 @@
         "industry": "media",
         "price": 120,
         "yieldPct": 13
+      },
+      {
+        "id": "changchun-3",
+        "name": "車を組み立てる小人たち",
+        "industry": "industry",
+        "price": 54,
+        "yieldPct": 17
       }
     ]
   },
@@ -6343,6 +6525,13 @@
         "industry": "industry",
         "price": 220,
         "yieldPct": 11
+      },
+      {
+        "id": "shenyang-3",
+        "name": "古い工場の記念カフェ",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 45
       }
     ]
   },
@@ -6554,6 +6743,13 @@
         "industry": "shipping",
         "price": 150,
         "yieldPct": 9
+      },
+      {
+        "id": "balikpapan-3",
+        "name": "油田の見える露天風呂",
+        "industry": "tourism",
+        "price": 36,
+        "yieldPct": 14
       }
     ]
   },
@@ -6584,6 +6780,13 @@
         "industry": "finance",
         "price": 220,
         "yieldPct": 8
+      },
+      {
+        "id": "phuket-3",
+        "name": "雨季限定の屋根付きビーチ",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 17
       }
     ]
   },
@@ -6651,6 +6854,13 @@
         "industry": "tourism",
         "price": 130,
         "yieldPct": 13
+      },
+      {
+        "id": "da-nang-3",
+        "name": "地主のいない貸しビーチ",
+        "industry": "tourism",
+        "price": 35,
+        "yieldPct": 16
       }
     ]
   },
@@ -6755,6 +6965,13 @@
         "industry": "tech",
         "price": 300,
         "yieldPct": 8
+      },
+      {
+        "id": "pune-3",
+        "name": "IT土建の詰め所",
+        "industry": "industry",
+        "price": 45,
+        "yieldPct": 16
       }
     ]
   },
@@ -7188,6 +7405,13 @@
         "industry": "tech",
         "price": 240,
         "yieldPct": 8
+      },
+      {
+        "id": "kazan-4",
+        "name": "タタールの昼寝ホテル",
+        "industry": "tourism",
+        "price": 38,
+        "yieldPct": 15
       }
     ]
   },
@@ -7218,6 +7442,13 @@
         "industry": "finance",
         "price": 220,
         "yieldPct": 8
+      },
+      {
+        "id": "sochi-3",
+        "name": "夏だけ開くスキー場",
+        "industry": "tourism",
+        "price": 44,
+        "yieldPct": 17
       }
     ]
   },
@@ -7248,6 +7479,13 @@
         "industry": "energy",
         "price": 320,
         "yieldPct": 6
+      },
+      {
+        "id": "irkutsk-3",
+        "name": "バイカル湖の氷売り場",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 16
       }
     ]
   },
@@ -7442,6 +7680,13 @@
         "industry": "finance",
         "price": 300,
         "yieldPct": 7
+      },
+      {
+        "id": "nice-3",
+        "name": "有名人の空き椅子",
+        "industry": "tourism",
+        "price": 48,
+        "yieldPct": 17
       }
     ]
   },
@@ -7629,6 +7874,13 @@
         "industry": "shipping",
         "price": 150,
         "yieldPct": 10
+      },
+      {
+        "id": "liverpool-3",
+        "name": "ビートルズの物まね港",
+        "industry": "tourism",
+        "price": 42,
+        "yieldPct": 16
       }
     ]
   },
@@ -7853,6 +8105,13 @@
         "industry": "shipping",
         "price": 160,
         "yieldPct": 10
+      },
+      {
+        "id": "bilbao-3",
+        "name": "美術館の荷役所",
+        "industry": "shipping",
+        "price": 46,
+        "yieldPct": 14
       }
     ]
   },
@@ -8010,6 +8269,13 @@
         "industry": "industry",
         "price": 280,
         "yieldPct": 12
+      },
+      {
+        "id": "geneva-3",
+        "name": "時計の針を売る店",
+        "industry": "industry",
+        "price": 52,
+        "yieldPct": 15
       }
     ]
   },
@@ -8220,6 +8486,13 @@
         "industry": "shipping",
         "price": 110,
         "yieldPct": 12
+      },
+      {
+        "id": "split-3",
+        "name": "宮殿の貸しベッド",
+        "industry": "tourism",
+        "price": 38,
+        "yieldPct": 16
       }
     ]
   },
@@ -8520,6 +8793,13 @@
         "industry": "tech",
         "price": 380,
         "yieldPct": 8
+      },
+      {
+        "id": "phoenix-3",
+        "name": "砂漠の日陰カフェ",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 48
       }
     ]
   },
@@ -8550,6 +8830,13 @@
         "industry": "tech",
         "price": 300,
         "yieldPct": 8
+      },
+      {
+        "id": "san-diego-3",
+        "name": "動物園の夜勤バイト",
+        "industry": "tourism",
+        "price": 44,
+        "yieldPct": 16
       }
     ]
   },
@@ -8610,6 +8897,13 @@
         "industry": "tech",
         "price": 300,
         "yieldPct": 8
+      },
+      {
+        "id": "minneapolis-3",
+        "name": "湖の上の小さな食堂",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 50
       }
     ]
   },
@@ -8700,6 +8994,13 @@
         "industry": "finance",
         "price": 200,
         "yieldPct": 9
+      },
+      {
+        "id": "nashville-3",
+        "name": "カントリー自慢スタジオ",
+        "industry": "media",
+        "price": 40,
+        "yieldPct": 18
       }
     ]
   },
@@ -8852,6 +9153,13 @@
         "industry": "tourism",
         "price": 160,
         "yieldPct": 13
+      },
+      {
+        "id": "niagara-falls-3",
+        "name": "滝の裏側の喫茶店",
+        "industry": "tourism",
+        "price": 50,
+        "yieldPct": 19
       }
     ]
   },
@@ -8912,6 +9220,13 @@
         "industry": "tourism",
         "price": 110,
         "yieldPct": 14
+      },
+      {
+        "id": "calgary-3",
+        "name": "ロデオ保険の窓口",
+        "industry": "tourism",
+        "price": 36,
+        "yieldPct": 15
       }
     ]
   },
@@ -8942,6 +9257,13 @@
         "industry": "finance",
         "price": 200,
         "yieldPct": 8
+      },
+      {
+        "id": "edmonton-3",
+        "name": "屋内遊園地の屋台",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 50
       }
     ]
   },
@@ -9062,6 +9384,13 @@
         "industry": "finance",
         "price": 220,
         "yieldPct": 8
+      },
+      {
+        "id": "orlando-3",
+        "name": "行列のできる行列",
+        "industry": "tourism",
+        "price": 46,
+        "yieldPct": 20
       }
     ]
   },
@@ -9092,6 +9421,13 @@
         "industry": "tech",
         "price": 320,
         "yieldPct": 8
+      },
+      {
+        "id": "austin-3",
+        "name": "音の鳴らないライブハウス",
+        "industry": "media",
+        "price": 42,
+        "yieldPct": 17
       }
     ]
   },
@@ -9152,6 +9488,13 @@
         "industry": "tech",
         "price": 220,
         "yieldPct": 9
+      },
+      {
+        "id": "monterrey-3",
+        "name": "給水塔の見学コース",
+        "industry": "industry",
+        "price": 38,
+        "yieldPct": 14
       }
     ]
   },
@@ -9212,6 +9555,13 @@
         "industry": "tech",
         "price": 260,
         "yieldPct": 8
+      },
+      {
+        "id": "san-juan-3",
+        "name": "要塞の日傘レンタル",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 17
       }
     ]
   },
@@ -9369,6 +9719,13 @@
         "industry": "shipping",
         "price": 170,
         "yieldPct": 10
+      },
+      {
+        "id": "cartagena-3",
+        "name": "城壁の夕日待ち列",
+        "industry": "tourism",
+        "price": 36,
+        "yieldPct": 16
       }
     ]
   },
@@ -9496,6 +9853,13 @@
         "industry": "industry",
         "price": 180,
         "yieldPct": 11
+      },
+      {
+        "id": "manaus-4",
+        "name": "アマゾン川の渋滞船",
+        "industry": "shipping",
+        "price": 44,
+        "yieldPct": 15
       }
     ]
   },
@@ -9557,6 +9921,13 @@
         "industry": "energy",
         "price": 400,
         "yieldPct": 6
+      },
+      {
+        "id": "foz-do-iguacu-3",
+        "name": "滝のしぶき売り場",
+        "industry": "tourism",
+        "price": 34,
+        "yieldPct": 16
       }
     ]
   },
@@ -9781,6 +10152,13 @@
         "industry": "tech",
         "price": 220,
         "yieldPct": 9
+      },
+      {
+        "id": "abuja-3",
+        "name": "官僚の昼休みそば",
+        "industry": "food",
+        "price": 25,
+        "yieldPct": 50
       }
     ]
   },
@@ -9968,6 +10346,13 @@
         "industry": "finance",
         "price": 220,
         "yieldPct": 8
+      },
+      {
+        "id": "luanda-3",
+        "name": "石油臭のしない食堂",
+        "industry": "food",
+        "price": 27,
+        "yieldPct": 48
       }
     ]
   },
@@ -10180,6 +10565,13 @@
         "industry": "energy",
         "price": 240,
         "yieldPct": 7
+      },
+      {
+        "id": "wellington-3",
+        "name": "風の強い日のマイク",
+        "industry": "media",
+        "price": 38,
+        "yieldPct": 17
       }
     ]
   },
@@ -10247,6 +10639,13 @@
         "industry": "shipping",
         "price": 160,
         "yieldPct": 9
+      },
+      {
+        "id": "omsk-3",
+        "name": "シベリアの荷物預かり",
+        "industry": "shipping",
+        "price": 40,
+        "yieldPct": 13
       }
     ]
   },
@@ -10307,6 +10706,13 @@
         "industry": "shipping",
         "price": 130,
         "yieldPct": 9
+      },
+      {
+        "id": "perm-3",
+        "name": "大砲の町の平和記念品",
+        "industry": "industry",
+        "price": 42,
+        "yieldPct": 14
       }
     ]
   },
@@ -10337,6 +10743,13 @@
         "industry": "industry",
         "price": 300,
         "yieldPct": 10
+      },
+      {
+        "id": "samara-3",
+        "name": "宇宙船の部品屋",
+        "industry": "industry",
+        "price": 46,
+        "yieldPct": 15
       }
     ]
   },
@@ -10397,6 +10810,13 @@
         "industry": "industry",
         "price": 180,
         "yieldPct": 10
+      },
+      {
+        "id": "arkhangelsk-3",
+        "name": "白海の漁具小屋",
+        "industry": "shipping",
+        "price": 36,
+        "yieldPct": 13
       }
     ]
   },
@@ -10427,6 +10847,13 @@
         "industry": "shipping",
         "price": 120,
         "yieldPct": 10
+      },
+      {
+        "id": "norilsk-3",
+        "name": "ニッケルの小さな桟橋",
+        "industry": "shipping",
+        "price": 48,
+        "yieldPct": 14
       }
     ]
   },
@@ -10457,6 +10884,13 @@
         "industry": "energy",
         "price": 300,
         "yieldPct": 6
+      },
+      {
+        "id": "tomsk-3",
+        "name": "学生食堂の二番煎じ",
+        "industry": "food",
+        "price": 22,
+        "yieldPct": 52
       }
     ]
   },
@@ -10487,6 +10921,13 @@
         "industry": "shipping",
         "price": 180,
         "yieldPct": 9
+      },
+      {
+        "id": "krasnoyarsk-3",
+        "name": "シベリア川の荷下ろし場",
+        "industry": "shipping",
+        "price": 40,
+        "yieldPct": 13
       }
     ]
   },
@@ -10517,6 +10958,13 @@
         "industry": "shipping",
         "price": 140,
         "yieldPct": 9
+      },
+      {
+        "id": "chita-3",
+        "name": "国境の露店",
+        "industry": "shipping",
+        "price": 34,
+        "yieldPct": 13
       }
     ]
   },
@@ -10607,6 +11055,13 @@
         "industry": "tech",
         "price": 260,
         "yieldPct": 7
+      },
+      {
+        "id": "yakutsk-3",
+        "name": "永久凍土の冷やし麺",
+        "industry": "food",
+        "price": 24,
+        "yieldPct": 54
       }
     ]
   },
@@ -10757,6 +11212,13 @@
         "industry": "industry",
         "price": 110,
         "yieldPct": 10
+      },
+      {
+        "id": "vorkuta-3",
+        "name": "廃炭鉱の観光坑道",
+        "industry": "industry",
+        "price": 32,
+        "yieldPct": 14
       }
     ]
   },
@@ -10787,6 +11249,13 @@
         "industry": "industry",
         "price": 250,
         "yieldPct": 10
+      },
+      {
+        "id": "chelyabinsk-3",
+        "name": "隕石記念グッズ工場",
+        "industry": "industry",
+        "price": 38,
+        "yieldPct": 15
       }
     ]
   },
@@ -10847,6 +11316,13 @@
         "industry": "tech",
         "price": 200,
         "yieldPct": 9
+      },
+      {
+        "id": "nizhny-novgorod-3",
+        "name": "市場の屋根付き露店",
+        "industry": "industry",
+        "price": 40,
+        "yieldPct": 14
       }
     ]
   },
@@ -10967,6 +11443,13 @@
         "industry": "energy",
         "price": 260,
         "yieldPct": 7
+      },
+      {
+        "id": "regina-3",
+        "name": "平原のまっすぐ食堂",
+        "industry": "food",
+        "price": 26,
+        "yieldPct": 48
       }
     ]
   },
@@ -10997,6 +11480,13 @@
         "industry": "industry",
         "price": 120,
         "yieldPct": 10
+      },
+      {
+        "id": "thunder-bay-3",
+        "name": "五大湖の小荷役所",
+        "industry": "shipping",
+        "price": 36,
+        "yieldPct": 13
       }
     ]
   },
@@ -11057,6 +11547,13 @@
         "industry": "tech",
         "price": 220,
         "yieldPct": 8
+      },
+      {
+        "id": "ottawa-3",
+        "name": "議会食堂の二番煎じ",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 50
       }
     ]
   },
@@ -11327,6 +11824,13 @@
         "industry": "shipping",
         "price": 200,
         "yieldPct": 10
+      },
+      {
+        "id": "bergen-3",
+        "name": "雨の日の傘レンタル",
+        "industry": "tourism",
+        "price": 40,
+        "yieldPct": 18
       }
     ]
   },
@@ -11357,6 +11861,13 @@
         "industry": "industry",
         "price": 180,
         "yieldPct": 9
+      },
+      {
+        "id": "rovaniemi-3",
+        "name": "サンタの夏休み小屋",
+        "industry": "tourism",
+        "price": 44,
+        "yieldPct": 19
       }
     ]
   },
@@ -11657,6 +12168,13 @@
         "industry": "industry",
         "price": 120,
         "yieldPct": 13
+      },
+      {
+        "id": "fort-mcmurray-3",
+        "name": "オイルサンドの見学台",
+        "industry": "industry",
+        "price": 46,
+        "yieldPct": 15
       }
     ]
   },
@@ -12077,6 +12595,13 @@
         "industry": "tech",
         "price": 200,
         "yieldPct": 6
+      },
+      {
+        "id": "tiksi-3",
+        "name": "北極海の小さな波止場",
+        "industry": "shipping",
+        "price": 34,
+        "yieldPct": 13
       }
     ]
   },
@@ -12137,6 +12662,13 @@
         "industry": "tech",
         "price": 200,
         "yieldPct": 6
+      },
+      {
+        "id": "mirny-3",
+        "name": "ダイヤの町のかき氷",
+        "industry": "food",
+        "price": 28,
+        "yieldPct": 50
       }
     ]
   },
@@ -12167,6 +12699,13 @@
         "industry": "energy",
         "price": 300,
         "yieldPct": 7
+      },
+      {
+        "id": "pevek-3",
+        "name": "流氷待合所",
+        "industry": "shipping",
+        "price": 32,
+        "yieldPct": 13
       }
     ]
   },
@@ -12257,6 +12796,13 @@
         "industry": "industry",
         "price": 180,
         "yieldPct": 12
+      },
+      {
+        "id": "bratsk-3",
+        "name": "ダムの見張り小屋",
+        "industry": "industry",
+        "price": 40,
+        "yieldPct": 14
       }
     ]
   },
@@ -12347,6 +12893,13 @@
         "industry": "tech",
         "price": 200,
         "yieldPct": 7
+      },
+      {
+        "id": "syktyvkar-3",
+        "name": "森の製紙小屋",
+        "industry": "industry",
+        "price": 36,
+        "yieldPct": 14
       }
     ]
   },
@@ -12377,6 +12930,13 @@
         "industry": "tourism",
         "price": 120,
         "yieldPct": 14
+      },
+      {
+        "id": "longyearbyen-3",
+        "name": "世界最北の郵便局",
+        "industry": "tourism",
+        "price": 42,
+        "yieldPct": 18
       }
     ]
   }

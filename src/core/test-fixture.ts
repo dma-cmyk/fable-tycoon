@@ -376,6 +376,7 @@ const ALL_LINE_KEYS: readonly LineKey[] = [
   'piper_hit',
   'win',
   'lose',
+  'skill',
 ];
 
 function lines(text: Partial<Record<LineKey, string>>): Record<LineKey, string> {
@@ -397,6 +398,7 @@ export const CHARACTERS: Character[] = [
     perk: 'agri_boost',
     voice: { speaker: 10, speed: 1, pitch: 0, intonation: 1 },
     lines: lines({ turn: '出陣じゃ！', buy: 'この物件、もらった！', win: '桃の国は私のものだ！' }),
+    skill: { name: 'きびだんご外交', desc: 'ほかの全員から5億円ずつ受け取る', effects: [{ op: 'cash', who: 'others', amount: -5 }, { op: 'cash', who: 'self', amount: 15 }], cpuHint: 'anytime' },
   },
   {
     id: 'sinbad',
@@ -410,6 +412,7 @@ export const CHARACTERS: Character[] = [
     perk: 'sailor',
     voice: { speaker: 11, speed: 1, pitch: 0, intonation: 1 },
     lines: lines({ turn: '船を出せ！', buy: 'この港はわしのもんじゃ！', blue: '宝を拾ったぞ！' }),
+    skill: { name: '七つの航海', desc: '海運の収益 ×1.5（1年）', effects: [{ op: 'industry_mod', industry: 'shipping', mult: 1.5, years: 1, label: '七つの航海' }], cpuHint: 'early' },
   },
   {
     id: 'alice',
@@ -423,6 +426,7 @@ export const CHARACTERS: Character[] = [
     perk: 'card_shark',
     voice: { speaker: 12, speed: 1, pitch: 0, intonation: 1 },
     lines: lines({ turn: '行きましょう、白ウサギを追って。', card: 'このカード、使い道があるわ。' }),
+    skill: { name: '白ウサギの近道', desc: '選んだ相手を1回休みにする', target: 'player', effects: [{ op: 'skip', who: 'target', turns: 1 }], cpuHint: 'ahead' },
   },
   {
     id: 'red_hood',
@@ -436,6 +440,7 @@ export const CHARACTERS: Character[] = [
     perk: 'piper_charm',
     voice: { speaker: 13, speed: 1, pitch: 0, intonation: 1 },
     lines: lines({ turn: 'おばあさまの家はこっちよ。', piper_hit: 'この程度の取り立て、想定内よ。' }),
+    skill: { name: 'おばあさまの見舞い', desc: '自分の所持金 +20億円', effects: [{ op: 'cash', who: 'self', amount: 20 }], cpuHint: 'anytime' },
   },
 ];
 

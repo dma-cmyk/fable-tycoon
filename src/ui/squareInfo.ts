@@ -1,4 +1,5 @@
 import { REALMS } from '../core/realm';
+import { activeCityMods, cityModMultiplier } from '../core/economy';
 import type { PublicState } from '../core/engine';
 import type { BoardEdge, BoardNode, City, RealmId, SquareKind } from '../core/types';
 import { GAME_DATA } from '../data/index';
@@ -281,12 +282,28 @@ export function describeBoardNode(node: BoardNode, state?: PublicState | null): 
         }
       }
       const badge = isDest ? '🎯 目的地・駅（都市）' : city.realm ? `${REALMS[city.realm].nameJa}の駅` : '駅（都市）';
+      const mods = state ? activeCityMods(state, city.id) : [];
+      const modLine =
+        mods.length === 0
+          ? null
+          : mods
+              .map((mod) => {
+                const icon =
+                  mod.kind === 'bubble' ? '📈' : mod.kind === 'boom' ? '✨' : mod.kind === 'blockade' ? '🚧' : '💥';
+                return `${icon}${mod.label} ×${mod.mult.toFixed(2)}（残り${mod.yearsLeft}年）`;
+              })
+              .join(' ／ ');
+      const cityMult = state ? cityModMultiplier(state, city.id) : 1;
+      const modNote =
+        mods.length === 0
+          ? ''
+          : `いま実効 ×${cityMult.toFixed(2)}（物件価格・決算収益）。`;
       return {
         title: `${city.nameJa}（${city.countryJa}）`,
         badge,
         iconUrl: cityTileUrl(city, true),
-        description: `${status}。止まると物件を買えます（独占で決算収益 2 倍）。`,
-        extra: 'タップで物件シートを見る',
+        description: `${status}。止まると物件を買えます（独占で決算収益 2 倍）。${modNote}`,
+        extra: modLine ? `${modLine} ・ タップで物件シートを見る` : 'タップで物件シートを見る',
       };
     }
   }

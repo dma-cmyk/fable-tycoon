@@ -128,6 +128,10 @@
   text-shadow: 0 2px 0 rgba(80, 0, 10, 0.55);
 }
 
+.title-menu {
+  display: contents;
+}
+
 .title-primary {
   position: absolute;
   right: clamp(18px, 5vw, 72px);
@@ -249,9 +253,35 @@
 }
 
 .title-btn-resume {
-  background: linear-gradient(180deg, #ffef9a, #ffc12b);
+  background: linear-gradient(180deg, #fff7c0 0%, #ffd23f 52%, #ffb01f 100%);
   border-color: #fff6c8;
   color: #5a2b00;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 6px 18px;
+  animation: title-resume-glow 2.6s ease-in-out infinite;
+}
+
+@keyframes title-resume-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px rgba(255, 210, 63, 0.3),
+      0 4px 14px rgba(255, 176, 31, 0.4),
+      0 3px 0 #a45d00;
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(255, 210, 63, 0.52),
+      0 4px 22px rgba(255, 176, 31, 0.75),
+      0 3px 0 #a45d00;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-btn-resume {
+    animation: none;
+  }
 }
 
 .title-footnote {
@@ -301,13 +331,22 @@
     padding: 3px 14px;
   }
 
-  .title-primary {
-    top: auto;
-    right: 0;
-    bottom: calc(82px + var(--safe-bottom));
+  .title-menu {
+    position: absolute;
     left: 0;
-    width: auto;
+    right: 0;
+    bottom: calc(14px + var(--safe-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     padding: 0 16px;
+    z-index: 2;
+  }
+
+  .title-primary {
+    position: static;
+    width: auto;
+    padding: 0;
     transform: none;
     gap: 9px;
   }
@@ -329,13 +368,20 @@
   }
 
   .title-secondary {
-    left: 0;
-    right: 0;
-    bottom: calc(16px + var(--safe-bottom));
+    position: static;
     max-width: none;
     justify-content: center;
     gap: 6px;
-    padding: 0 10px;
+    padding: 0 2px;
+  }
+
+  /* セーブがあるときは「つづきから」を全幅の主役にする。 */
+  .title-btn-resume {
+    flex: 1 0 100%;
+    justify-content: center;
+    min-height: 48px;
+    font-size: 14.5px;
+    letter-spacing: 0.04em;
   }
 
   .title-small-btn {
@@ -369,6 +415,7 @@
   }
 
   .title-primary {
+    position: absolute;
     top: 50%;
     right: 20px;
     bottom: auto;
@@ -398,7 +445,13 @@
     font-size: 20px;
   }
 
+  /* 横向きは PC と同じ「個別の絶対配置」に戻す（下部スタックのままだと潰れる）。 */
+  .title-menu {
+    display: contents;
+  }
+
   .title-secondary {
+    position: absolute;
     left: 20px;
     right: auto;
     bottom: 12px;
@@ -408,6 +461,13 @@
   .title-small-btn {
     min-height: 40px;
     font-size: 11px;
+  }
+
+  .title-btn-resume {
+    flex: 0 0 auto;
+    min-height: 40px;
+    font-size: 12.5px;
+    padding: 5px 14px;
   }
 
   .title-footnote {
