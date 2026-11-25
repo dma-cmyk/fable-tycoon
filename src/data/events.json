@@ -6454,5 +6454,5080 @@
         "cpuWeight": 1
       }
     ]
+  },
+  {
+    "id": "red-sea-reroute",
+    "title": "近道が封鎖された",
+    "kind": "news",
+    "fact": "2023年11月以降、イエメンの武装勢力による商船への攻撃で、主要な海運会社はアフリカ南端の喜望峰を回る航路に切り替えた。2024年2月前半の時点で、スエズ運河を通過するコンテナ船のトン数は8割以上減り、喜望峰経由に切り替えたコンテナ船は621隻に達した。国連貿易開発会議は、アジアと欧州を結ぶ航路で喜望峰回りはスエズ経由より4〜7割程度長くなり、運賃や保険料が上昇したと報告している。",
+    "sources": [
+      {
+        "title": "Red Sea crisis - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Red_Sea_crisis",
+        "date": "2026"
+      },
+      {
+        "title": "Navigating troubled waters - UNCTAD (Internet Archive)",
+        "url": "https://web.archive.org/web/2024/https://unctad.org/system/files/official-document/osginf2024d2_en.pdf",
+        "date": "2024-02-22"
+      }
+    ],
+    "satireNote": "紅海での商船攻撃と喜望峰への迂回は実在する。ゲーム内の運賃倍率・確率・金額は創作。紛争の被害者を笑う意図はなく、風刺の対象は運賃と保険の値付けの仕組み。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "海運会社が地図を広げ、ため息をつきました。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "喜望峰は遠い。だが、船は沈んでいない。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "紅海の通航量は半減。運賃は倍増。実に自然な経済です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "遠回りするほど、請求書は近づいてきます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "迂回特需に乗る",
+        "detail": "現金-10億（保険料）。海運の収益×1.6（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.6,
+            "years": 2,
+            "label": "喜望峰回り"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "保険料は上がる。荷物は届く。商売とはそういうものです。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "運賃の先物で賭ける",
+        "detail": "55%で+35億、45%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.55,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 35
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "海の事故に賭ける。これほど真面目な金融はありません。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "panama-canal-drought",
+    "title": "湖の水が足りない",
+    "kind": "news",
+    "fact": "エルニーニョ現象による少雨でパナマ運河のガトゥン湖の水位が下がり、パナマ運河庁は2023年10月から段階的に1日あたりの通航枠を減らした。通常は1日36隻だが、2023年12月には22隻まで落ち込み、2024年1月から24隻に戻された。同庁によると、運河の歴史で通航を制限したのは初めてだった。",
+    "sources": [
+      {
+        "title": "Panama Canal to increase daily transits to 24 starting in January - Panama Canal Authority",
+        "url": "https://pancanal.com/en/panama-canal-to-increase-daily-transits-to-24-starting-in-january",
+        "date": "2023-12-15"
+      },
+      {
+        "title": "Navigating troubled waters - UNCTAD (Internet Archive)",
+        "url": "https://web.archive.org/web/2024/https://unctad.org/system/files/official-document/osginf2024d2_en.pdf",
+        "date": "2024-02-22"
+      }
+    ],
+    "satireNote": "エルニーニョによる乾燥と通航制限は実在する。ゲーム内の通航枠の価格・収益倍率・金額は創作。気候災害そのものを笑う意図はなく、風刺の対象は水と物流を同じ湖に依存させる構造。",
+    "weight": 4,
+    "months": [12, 1, 2, 3, 4],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "運河の湖が干上がり、船が順番待ちの列を作ります。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "一日の通航は三十六隻から二十二隻へ。水道料金ではありません。"
+      },
+      {
+        "speaker": "char:urashima",
+        "text": "水が減ると、時間が増える。不思議な話です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "待つ時間にも、ちゃんと値段がつきます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "予約枠を買い占める",
+        "detail": "現金-25億。海運の収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.5,
+            "years": 2,
+            "label": "通航枠の買い占め"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "枠は買うもの。水は待つもの。順番は守りましょう。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "陸送に切り替える",
+        "detail": "現金-15億。製造業の収益×1.25（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.25,
+            "years": 1,
+            "label": "陸上輸送シフト"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "トラックは渋滞しますが、湖は乾きません。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "cocoa-record-rally",
+    "title": "チョコが金より高い",
+    "kind": "news",
+    "fact": "2023/24年度の世界のココア市場は60年以上ぶりの大きな供給不足となった。世界生産の約4分の3を占める西アフリカで、天候不順によりコートジボワールやガーナの収穫が落ちたためである。ニューヨークのココア先物は2024年12月に1トンあたり1万1938ドルと史上最高値を付け、年初来の上昇率は180%を超えた。",
+    "sources": [
+      {
+        "title": "Cocoa prices rally to record high, prompting fresh volatility warnings - CNBC",
+        "url": "https://www.cnbc.com/2024/12/17/cocoa-prices-rally-to-record-high-prompting-fresh-volatility-warnings.html",
+        "date": "2024-12-17"
+      }
+    ],
+    "satireNote": "西アフリカの不作とココア価格の記録的高騰は実在する。ゲーム内の収益倍率・確率・金額は創作。産地の農家を嘲笑する意図はなく、風刺の対象は投機と価格転嫁の連鎖。",
+    "weight": 5,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "チョコレートの原料が、金よりも高くなりました。"
+      },
+      {
+        "speaker": "char:candy_witch",
+        "text": "甘いお菓子で人を捕まえる計画が、予算超過です。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "ココアは今年に入って一八〇パーセント上昇。甘くない数字です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "値上がりの恩恵は農家に届かず、請求書だけが届きます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "製菓会社に売り込む",
+        "detail": "現金-15億。食品の収益×1.6（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.6,
+            "years": 2,
+            "label": "ココア高騰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:candy_witch",
+            "text": "板チョコを小さくする。これも立派な経営努力です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "先物で値動きを取る",
+        "detail": "50%で+45億、50%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 45
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "甘いものに賭けると、歯が痛くなります。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "coffee-price-jolt",
+    "title": "一杯の贅沢",
+    "kind": "news",
+    "fact": "ブラジルの記録的な干ばつとベトナムのロブスタ豆の減産を受け、アラビカコーヒー先物は2024年に約70%上昇し、12月には1ポンド3ドル48セントと約50年ぶりの高値を付けた。ブラジルでは2024年8〜9月に70年ぶりの干ばつとなった。ブラジルとベトナムで世界生産の約56%を占める。",
+    "sources": [
+      {
+        "title": "Coffee prices: Analysts warn it may take years for the rally to fade - CNBC",
+        "url": "https://www.cnbc.com/2024/12/13/coffee-prices-analysts-warn-it-may-take-years-for-the-rally-to-fade.html",
+        "date": "2024-12-13"
+      },
+      {
+        "title": "Year is shaped by price record and oscillations - CEPEA",
+        "url": "https://cepea.org.br/en/brazilian-agribusiness-news/year-is-shaped-by-price-record-and-oscillations.aspx",
+        "date": "2025-12-30"
+      }
+    ],
+    "satireNote": "ブラジルの干ばつとコーヒー価格の高騰は実在する。ゲーム内の収益倍率・金額は創作。生産国の農家を嘲笑する意図はなく、風刺の対象は天候と投機に揺れる食品価格。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "一杯のコーヒーが、贅沢品になりつつあります。"
+      },
+      {
+        "speaker": "char:mad_hatter",
+        "text": "お茶会の予算が、コーヒー豆に食べられました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "アラビカ先物は約五十年ぶりの高値。カフェインより刺激的です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "農園の天候は、あなたの朝の習慣より強いのです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "豆を買いだめする",
+        "detail": "現金-20億。食品の収益×1.45（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.45,
+            "years": 2,
+            "label": "豆の買いだめ"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mad_hatter",
+            "text": "在庫は財産。香りはおまけです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "安い豆に切り替える",
+        "detail": "現金+15億。食品の収益×0.8（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 0.8,
+            "years": 2,
+            "label": "豆のグレードダウン"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "味は変わりましたが、帳簿は改善しました。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "olive-oil-liquid-gold",
+    "title": "液体の金の値段",
+    "kind": "news",
+    "fact": "スペインなど地中海沿岸で2022年から2023年にかけて干ばつと熱波が続き、オリーブの収穫が落ちた。スペイン・ハエンのエキストラバージンオリーブオイルの卸売価格は2024年1月に1トンあたり約9000ユーロとなり、2022年初頭の約3350ユーロの2.7倍に達した。国連食糧農業機関は、2024/25年度に生産が部分的に回復すると報告した。",
+    "sources": [
+      {
+        "title": "Food Outlook November 2024: Focus on olive oil - FAO",
+        "url": "https://openknowledge.fao.org/server/api/core/bitstreams/e3f86a02-f489-4f12-a859-64a038409c1f/content",
+        "date": "2024-11"
+      },
+      {
+        "title": "World market of olive oil and table olives - Data from April 2024 - International Olive Council",
+        "url": "https://www.internationaloliveoil.org/world-market-of-olive-oil-and-table-olives-data-from-april-2024/",
+        "date": "2024-05-14"
+      }
+    ],
+    "satireNote": "地中海の干ばつによるオリーブオイル価格の高騰は実在する。ゲーム内の売却倍率・収益倍率・金額は創作。生産者を嘲笑する意図はなく、風刺の対象は気候リスクを価格に載せる市場。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "液体の金と呼ばれる油が、本当に金の値段になりました。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "薬草に垂らす油の値段を聞いて、腰が抜けました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "二年で三倍。地中海の台所は悲鳴を上げています。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "気候は、レシピを書き換える権利を持っています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "産地の農園を買う",
+        "detail": "現金-30億。農林水産の収益×1.55（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.55,
+            "years": 3,
+            "label": "オリーブ高騰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:granny",
+            "text": "木は待ってくれます。値段は待ってくれません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "高値で農園を手放す",
+        "detail": "農林水産の物件1件（持っていれば）を現在価格の1.6倍で売却し、現金+10億。",
+        "effects": [
+          {
+            "op": "sell",
+            "who": "self",
+            "industry": "agri",
+            "count": 1,
+            "priceMult": 1.6
+          },
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "高値で売る。それが唯一の正しい投資助言です。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "japan-rice-shock",
+    "title": "米の棚が空っぽ",
+    "kind": "news",
+    "fact": "2024年夏、日本の米は記録的な低在庫に加え、台風や地震への警戒による買いだめ、訪日客の増加で品薄となった。農林水産省は2025年2月、備蓄米21万トンの放出を発表した。制度開始以来、不作以外の理由で備蓄米を放出するのは初めてだった。5キロ袋の小売価格は2025年1月に4051円と前年同月比77%上昇し、11月には4316円と最高値を更新した。",
+    "sources": [
+      {
+        "title": "Continued High Prices for Japanese Table Rice Leads to High Import Demand and Release of Government Emergency Rice Supplies - USDA FAS",
+        "url": "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Continued%20High%20Prices%20for%20Japanese%20Table%20Rice%20Leads%20to%20High%20Import%20Demand%20and%20Release%20of%20Government%20Emergency%20Rice%20Supplies%20_Tokyo_Japan_JA2025-0009",
+        "date": "2025-03-11"
+      },
+      {
+        "title": "End in sight for Japan's rice crisis? - NHK WORLD-JAPAN",
+        "url": "https://www3.nhk.or.jp/nhkworld/en/news/backstories/3928/",
+        "date": "2025"
+      },
+      {
+        "title": "Rice prices surge to new record of 4,316 yen per 5 kilograms - The Asahi Shimbun",
+        "url": "https://www.asahi.com/ajw/articles/16159981",
+        "date": "2025-11-15"
+      }
+    ],
+    "satireNote": "2024年の米不足、備蓄米の異例の放出、価格の高騰と最高値更新は実在する。ゲーム内の補助金カード・収益倍率・金額は創作。農家や消費者を嘲笑する意図はなく、風刺の対象は流通と備蓄の制度設計。",
+    "weight": 5,
+    "months": [8, 9, 10, 11],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "米の棚が、静かに空いています。"
+      },
+      {
+        "speaker": "char:momotaro",
+        "text": "きびだんごの材料が、予算の三倍になりました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "国のお米の備蓄が放出されるのは、制度が始まってから初めてです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "主食の値段は、そのまま政治の値段でもあります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "補助金を申請する",
+        "detail": "現金-10億。謎の補助金カード1枚と農林水産の収益×1.3（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "subsidy",
+            "count": 1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.3,
+            "years": 1,
+            "label": "米価格の高騰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:momotaro",
+            "text": "きびだんごの予算が戻ってきました。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "輸入米に切り替える",
+        "detail": "現金+20億。農林水産の収益×0.85（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 0.85,
+            "years": 2,
+            "label": "輸入米シフト"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "国産にこだわらない柔軟さ。それが経営です。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "glp1-boom-denmark",
+    "title": "痩せる薬が国を太らせる",
+    "kind": "news",
+    "fact": "デンマークの製薬大手ノボノルディスクは、糖尿病・肥満症治療薬の販売拡大で成長した。2025年上半期の売上高は前年同期比16%増の1549億デンマーククローネで、肥満症ケア部門は56%増（為替一定で58%増）だった。デンマークの2025年7〜9月期の実質GDPは前期比2.3%増と、2021年第4四半期以来の伸びとなり、統計局は医薬品産業が主因と説明した。",
+    "sources": [
+      {
+        "title": "Weight loss drugmaker Novo Nordisk helps drive Denmark's fastest growth in years - CNBC",
+        "url": "https://www.cnbc.com/2025/11/20/weight-loss-drugmaker-novo-nordisk-helps-drive-denmarks-fastest-growth-in-years.html",
+        "date": "2025-11-20"
+      },
+      {
+        "title": "Financial report for the period 1 January 2025 to 30 June 2025 - Novo Nordisk",
+        "url": "https://www.novonordisk.com/content/dam/nncorp/global/en/investors/pdfs/financial-results/2025/CA250806-Q2-Earnings.pdf",
+        "date": "2025-08-06"
+      }
+    ],
+    "satireNote": "肥満症薬の売上拡大とデンマークのGDP成長は実在する。ゲーム内の収益倍率・確率・金額は創作。患者や病気を笑う意図はなく、風刺の対象は一国の成長が一社の薬に依存する構造。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "痩せる薬が、国の経済を太らせています。"
+      },
+      {
+        "speaker": "char:heart_queen",
+        "text": "私の国では、体重より国内総生産が問題です。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "会社ひとつの売上が、国の成長率を決める。見事な分散です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "薬は効きます。株価は、また別の話です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "医薬品の製造に投資",
+        "detail": "現金-25億。製造業の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 2,
+            "label": "肥満症薬ブーム"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:heart_queen",
+            "text": "痩せた国民より、太った決算が好きです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "競合の参入に賭ける",
+        "detail": "55%で+40億、45%で-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.55,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "特許が切れる日を、カレンダーに書き込みましょう。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "gold-4000-breakout",
+    "title": "金が四千ドルの壁を抜く",
+    "kind": "news",
+    "fact": "金の先物価格は2025年10月7日、初めて1オンス4000ドルを超え、4004.40ドルで引けた。年始からの上昇率は約50%で、ドルの弱さや地政学的不安、米国の金融政策への懸念が背景にあった。世界金評議会によると、2025年の中央銀行による純購入量は863トンで、記録的な価格にもかかわらず2010〜2021年の年平均を大きく上回った。",
+    "sources": [
+      {
+        "title": "Gold price reaches $4,000 an ounce for the first time ever - CNBC",
+        "url": "https://www.cnbc.com/2025/10/07/gold-4000-record.html",
+        "date": "2025-10-07"
+      },
+      {
+        "title": "Gold Demand Trends: Full Year 2025 - Central Banks - World Gold Council",
+        "url": "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-full-year-2025/central-banks",
+        "date": "2026-01-29"
+      }
+    ],
+    "satireNote": "金価格の4000ドル突破と中央銀行の買い増しは実在する。ゲーム内の収益倍率・確率・金額は創作。特定の国や投資家を嘲笑する意図はなく、風刺の対象は安全資産への殺到そのもの。",
+    "weight": 5,
+    "once": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "金が、一オンス四千ドルの壁を抜けました。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "私の時代には、触れた物がすべて金になりました。今は違います。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "中央銀行が買い、個人も買う。全員が同じ方向を向いています。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "全員が同じ方向を向くとき、出口は一つしかありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "金に資産を寄せる",
+        "detail": "現金-20億。金融の収益×1.35（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.35,
+            "years": 3,
+            "label": "金への逃避"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "金は裏切らない。ただし、利子もつかない。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "高値で空売りする",
+        "detail": "35%で+55億、65%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 55
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "記録的な高値の後は、記録的な反省が来ます。"
+          }
+        ],
+        "cpuWeight": 0.8
+      }
+    ]
+  },
+  {
+    "id": "labubu-blind-box-craze",
+    "title": "箱を開けるまで分からない",
+    "kind": "news",
+    "fact": "中国の玩具大手ポップマートが販売する「ラブブ」は、中身が見えないブラインドボックス入りのぬいぐるみで、2024年以降に世界的な流行となった。同社の2024年売上高は前年の約2倍に増えた。2025年6月には北京のオークションで高さ131センチの特大フィギュアが108万元（約15万ドル）で落札された。",
+    "sources": [
+      {
+        "title": "Adorable or just weird? How Labubu dolls conquered the world - BBC",
+        "url": "https://www.bbc.com/news/articles/cy4ydxlm9n9o",
+        "date": "2025-06-20"
+      },
+      {
+        "title": "The rise of Labubunomics - Modern Retail",
+        "url": "https://www.modernretail.co/marketing/the-rise-of-labubunomics-how-merchants-and-marketplaces-are-cashing-in-on-the-viral-pop-mart-toy",
+        "date": "2025-06-16"
+      },
+      {
+        "title": "Human-sized Labubu doll sells for more than $150,000 - BBC",
+        "url": "https://www.bbc.com/news/articles/c780p4n33kyo",
+        "date": "2025-06-12"
+      }
+    ],
+    "satireNote": "ラブブの流行、ブラインドボックス販売、転売価格の高騰、高額落札は実在する。ゲーム内の確率・金額・価格倍率は創作。特定の作家や購入者を嘲笑する意図はなく、風刺の対象は中身を隠して売る商法と転売相場。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "箱を開けるまで、中身は分かりません。値段も分かりません。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "不思議の国では、ぬいぐるみが土地より高く売れます。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "人形一体が十五万ドル。玩具の相場は、もう玩具ではありません。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "中身が見えないほど、高く売れる。見事な商売です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "ブラインドボックス事業に乗る",
+        "detail": "現金-15億。娯楽の収益×1.3（1年）と娯楽物件の価格+35%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.3,
+            "years": 1,
+            "label": "ブラインドボックス熱"
+          },
+          {
+            "op": "price_mod",
+            "industry": "media",
+            "mult": 1.35
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "開ける前に売る。それが一番確実な賭けです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "転売相場に賭ける",
+        "detail": "45%で+50億、55%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "転売の列に並ぶ人を、転売する人もいます。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "venice-daytripper-fee",
+    "title": "入市料十ユーロ",
+    "kind": "news",
+    "fact": "イタリアのベネチアは2024年4月25日、日帰り観光客に入市料を課す世界初の都市となった。2025年は対象日を54日に広げ、4日前までの予約なら5ユーロ、直前なら10ユーロとした。市によると2025年は72万3497人が支払い、収入は約542万ユーロと前年の2倍以上になった。最も混雑した5月2日の支払い者は2万4951人で、住民の半数を超えた。",
+    "sources": [
+      {
+        "title": "Venice's daytripper fee raised 5 million euros in 2025, but did it curb overtourism? - Global Financial Market Review",
+        "url": "https://www.gfmreview.com/expat/venice-s-daytripper-fee-raised-5-million-in-2025-but-did-it-curb-overtourism",
+        "date": "2025-09-08"
+      },
+      {
+        "title": "Venice daytripper entry fee: How much does it cost and how does it work? - The Independent",
+        "url": "https://www.independent.co.uk/travel/news-and-advice/venice-day-trip-charge-tax-fee-b2734433.html",
+        "date": "2025-04-16"
+      }
+    ],
+    "satireNote": "ベネチアの日帰り客への入市料とその実績は実在する。ゲーム内の移動効果・臨時収入・収益倍率は創作。住民や観光客を嘲笑する意図はなく、風刺の対象は混雑に値段をつける発想。",
+    "weight": 4,
+    "months": [4, 5, 6, 7],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "観光客は、街に入るためにお金を払います。"
+      },
+      {
+        "speaker": "char:gretel",
+        "text": "お菓子の家も入場料を取ればよかった。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "一日に最大二万五千人。住民の半分が、観光客です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "混雑は減りませんでしたが、収入は倍になりました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "入市料を払って営業する",
+        "detail": "現金-10億。観光の収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 2,
+            "label": "水の都の入市料"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:gretel",
+            "text": "払ってでも入る人がいる。商売はそこにあります。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "近隣の街へ客を流す",
+        "detail": "現金-10億。近くの街へ移り、観光物件1件につき+6億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "move",
+            "who": "self",
+            "to": "destination_near"
+          },
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "tourism",
+            "perProperty": 6
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "混雑は移動します。経済も移動します。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "crowdstrike-global-outage",
+    "title": "世界が同時に再起動",
+    "kind": "news",
+    "fact": "2024年7月19日、米国のセキュリティ企業クラウドストライクが配信した更新プログラムの不具合により、世界で約850万台のウィンドウズ端末が起動不能になった。航空便の欠航や病院の予約停止、救急通報の障害が発生し、デルタ航空だけで4日間に4400便以上が欠航した。米国の経済調査会社は、障害による損失総額が10億ドルを超える可能性があると指摘した。",
+    "sources": [
+      {
+        "title": "Hundreds of US flights are canceled for the 4th straight day. Here's the latest on the global tech outage - CNN",
+        "url": "https://www.cnn.com/2024/07/22/us/microsoft-power-outage-crowdstrike-it",
+        "date": "2024-07-22"
+      },
+      {
+        "title": "Helping our customers through the CrowdStrike outage - Microsoft",
+        "url": "https://blogs.microsoft.com/blog/2024/07/20/helping-our-customers-through-the-crowdstrike-outage/",
+        "date": "2024-07-20"
+      }
+    ],
+    "satireNote": "更新プログラムの不具合による世界規模の障害、850万台への影響、航空便の欠航は実在する。ゲーム内の損失額・確率・停止ターンは創作。障害の被害者を嘲笑する意図はなく、風刺の対象は単一ソフトへの過度な依存。",
+    "weight": 4,
+    "once": true,
+    "months": [7],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "世界の八百五十万台が、同時に青い画面になりました。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "更新プログラム一個で、空港が止まる。効率的です。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "航空便は数千便が欠航。原因はセキュリティソフトです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "復旧は再起動。ただし、一台ずつ手作業で。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "自社システムを総点検",
+        "detail": "現金-20億。IT・AIの収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.3,
+            "years": 2,
+            "label": "信頼の再構築"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "バックアップは、取った瞬間だけ役に立ちます。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "混乱に乗じて買い叩く",
+        "detail": "55%で+30億とIT物件の価格+10%（恒久）、45%で-25億と1回休み。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.55,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              },
+              {
+                "op": "price_mod",
+                "industry": "tech",
+                "mult": 1.1
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              },
+              {
+                "op": "skip",
+                "who": "self",
+                "turns": 1
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "他人の障害は、自分の好機。それが市場です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "china-ev-price-war",
+    "title": "電気自動車の値崩れ",
+    "kind": "news",
+    "fact": "中国では2023年以降、電気自動車の値下げ競争が続いている。最大手のBYDは2025年5月、複数の車種を最大で3割以上値下げし、小型車は5万5800元になった。調査会社によると、中国の平均車両価格は2年間で約19%下落して約16万5000元になった。2025年5月26日にはBYDの香港株が1日で9%下落し、他の中国系自動車株も軒並み下がった。",
+    "sources": [
+      {
+        "title": "China's EV price war is heating up. What's behind the big discounts? - CNBC",
+        "url": "https://www.cnbc.com/2025/05/29/chinas-ev-price-war-heats-up-whats-behind-the-big-discounts.html",
+        "date": "2025-05-29"
+      },
+      {
+        "title": "Chinese automakers' shares fall after price war fears and regulatory scrutiny - CNBC",
+        "url": "https://www.cnbc.com/2025/05/26/chinas-byd-sees-shares-plunge-8percent-as-ev-maker-cuts-prices.html",
+        "date": "2025-05-26"
+      }
+    ],
+    "satireNote": "中国の電気自動車の値下げ競争と平均価格の下落は実在する。ゲーム内の収益倍率・金額は創作。特定企業を貶める意図はなく、風刺の対象は薄利多売で市場を奪い合う構造。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "電気自動車の値段が、毎週のように下がります。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "豆の木より速く、値段が下がっていく。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "二年で平均車価は十九パーセント下落。車が野菜のようです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "安く売って、台数で勝つ。勝った会社が生き残るとは限りません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "値下げ競争に加わる",
+        "detail": "現金-20億。製造業の収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 2,
+            "label": "値下げ競争"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:giant",
+            "text": "安く売れば、数は売れる。利益は別の話です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "電池の資源に逃げる",
+        "detail": "現金-15億。資源の収益×1.25（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.25,
+            "years": 2,
+            "label": "電池需要"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "車が安くなれば、電池はもっと要ります。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "boeing-door-plug-crisis",
+    "title": "扉が飛んだ日",
+    "kind": "news",
+    "fact": "2024年1月5日、米アラスカ航空のボーイング737MAX9が離陸直後に非常口の蓋を吹き飛ばし、機体は緊急着陸した。乗客171人と乗員6人は全員生還した。米連邦航空局は同型機171機の運航を停止した。米国家運輸安全委員会は、工場でボルト4本が取り付けられていなかったと結論づけた。9月には約3万人の工場労働者がストライキに入り、11月に4年間で38%の賃上げで合意した。",
+    "sources": [
+      {
+        "title": "Boeing workers end 7-week strike on 38% pay rise deal - BBC",
+        "url": "https://www.bbc.com/news/articles/c0mz9ml473mo",
+        "date": "2024-11-05"
+      },
+      {
+        "title": "Boeing 737 MAX groundings - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Boeing_737_MAX_groundings",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "2024年の扉パネル飛散事故、同型機の運航停止、工場ストライキと賃上げ妥結は実在する。ゲーム内の救済カード・収益倍率・確率・金額は創作。事故の被害者を嘲笑する意図はなく、風刺の対象は品質より効率を優先する企業文化。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "飛んでいた飛行機の扉が、外れました。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "同型機百七十一機が検査のため運航停止。乗客は無事です。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "品質は、宣伝ではなく、ボルト四本で決まります。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "その後、工場は三万人がストに入り、生産が止まりました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "安全投資を先回りする",
+        "detail": "現金-20億。大きすぎて潰せませんカード1枚と製造業の収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "bailout",
+            "count": 1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.2,
+            "years": 2,
+            "label": "品質回帰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "転ばぬ先の杖は、経費で落とせません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "競合他社に賭ける",
+        "detail": "60%で+30億、40%で-20億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.6,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "会社ひとつの事故は、他の会社の受注。経済は冷たいのです。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "song-jiaozi-paper-money",
+    "title": "紙幣は四川省で生まれた",
+    "kind": "history",
+    "fact": "11世紀、北宋の四川成都で、重い鉄銭の代わりに民間の商人が発行した約束手形が交子と呼ばれた。1023年に政府が発行を独占する機関を置き、1024年に最初の官発紙幣が発行された。政府の紙幣は兌換に必要な鉄銭の裏付けが不足し、発行が増えるとインフレが進んだ。",
+    "sources": [
+      {
+        "title": "Jiaozi (currency) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Jiaozi_(currency)",
+        "date": "2025"
+      },
+      {
+        "title": "Song dynasty - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Song_dynasty",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "交子の成立、1023年の官営化、発行増によるインフレは実在。ゲーム内の金額と収益効果は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "npc:midas",
+        "text": "紙に値打ちがあると、誰が決めたのですか。"
+      },
+      {
+        "speaker": "char:wukong",
+        "text": "俺の山では、紙は燃やすものだったがな。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "重い銭を置いて、軽い紙を信じる時代が来ました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "紙幣を刷る",
+        "detail": "現金+30億。金融の収益×0.85（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.85,
+            "years": 2,
+            "label": "紙幣の増発"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "刷るのは簡単です。信じてもらうのが高いのです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "銅銭をためる",
+        "detail": "現金-15億。金融物件の価格+10%（恒久）と金融の収益×1.15（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "price_mod",
+            "industry": "finance",
+            "mult": 1.1
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.15,
+            "years": 2,
+            "label": "銅銭の信用"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wukong",
+            "text": "重い銭は燃えない。それだけが取り柄だ。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "yap-rai-stones",
+    "title": "動かせない石がお金になる",
+    "kind": "history",
+    "fact": "ミクロネシアのヤップ島では、パラオで切り出した石灰岩の円盤「ライ石」が貨幣のように扱われた。大きな石は動かさず、所有者の移転を口伝の来歴として記録した。輸送中に海へ沈んだ石も、全員の合意があれば取引され続けた。島には現在も約6000個の大型の石が残る。",
+    "sources": [
+      {
+        "title": "Rai stones - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Rai_stones",
+        "date": "2025"
+      },
+      {
+        "title": "ヤップ島 - Wikipedia",
+        "url": "https://ja.wikipedia.org/wiki/%E3%83%A4%E3%83%83%E3%83%97%E5%B3%B6",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "ライ石の口伝による所有記録と、沈んだ石が取引され続けた逸話は実在。ゲーム内の金額と確率は創作。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "char:sinbad",
+        "text": "海に沈んだ石が、まだ私の借金の担保です。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "動かせないものを、みんなで持っているふりか。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "石は動かない。動くのは、持ち主の名前だけです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "大きな石を買う",
+        "detail": "70%で+55億、30%で-25億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.7,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 55
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "沈みましたが、私のものだそうです。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "石の来歴を鑑定する",
+        "detail": "現金+20億。金融の収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.2,
+            "years": 2,
+            "label": "石の来歴保証"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "値段より先に、物語が値打ちになります。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "dojima-rice-futures",
+    "title": "米が届く前に米を売る",
+    "kind": "history",
+    "fact": "大坂の堂島には17世紀末から米仲買と両替商が集まった。1730年には幕府公認の堂島米会所が開設され、米の所有権を示す米切手が売買された。1710年ごろからは、米を後日受け渡す先物の取引も始まり、のちに帳合米取引として公認された。世界最初期の組織的な先物市場と評される。",
+    "sources": [
+      {
+        "title": "Dōjima Rice Exchange - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/D%C5%8Djima_Rice_Exchange",
+        "date": "2025"
+      },
+      {
+        "title": "堂島米会所 - Wikipedia",
+        "url": "https://ja.wikipedia.org/wiki/%E5%A0%82%E5%B3%B6%E7%B1%B3%E4%BC%9A%E6%89%80",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "堂島の米切手と先物取引の成立は実在。ゲーム内の確率と効果は創作。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "char:ant",
+        "text": "一年分の米を、まだ田んぼにあるうちに売るのですか。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "先に売って、あとで慌てる。それが商売です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "実物は倉に、契約は紙に。紙のほうが先に旅立ちます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "先物で売る",
+        "detail": "55%で+60億、45%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.55,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:grasshopper",
+            "text": "相場が動きました。米はまだ動いていません。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "蔵米を担保に貸す",
+        "detail": "現金+15億。金融の収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.3,
+            "years": 2,
+            "label": "米切手金融"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "担保は米、貸すのは紙。よくできています。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "potosi-silver-mountain",
+    "title": "銀の山を掘る人と、数える人",
+    "kind": "history",
+    "fact": "1545年に現在のボリビアでセロ・リコ銀山が発見され、ポトシはスペイン帝国最大の銀の供給地になった。先住民はミタ制度による強制労働で鉱山に動員され、銀は太平洋岸からパナマを経てスペインへ運ばれた。セロ・リコの銀は16世紀後半に世界で産出された銀の約6割を占めたと推定される。",
+    "sources": [
+      {
+        "title": "Potosí - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Potos%C3%AD",
+        "date": "2025"
+      },
+      {
+        "title": "Cerro Rico - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Cerro_Rico",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "セロ・リコの発見、ミタ制度による強制労働、銀の大西洋輸送は実在。ゲーム内の金額と効果は創作。過酷な労働の被害者を笑う意図はなく、風刺の対象は、掘った人の数を帳簿に載せない王の会計。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "char:ali_baba",
+        "text": "掘り当てた山が、国ごと借金の担保になるとは。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "銀は数えます。数を数えられた人は、数えません。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "山は銀を出します。人は山に吸い込まれます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "銀山の利権を得る",
+        "detail": "現金+40億。食品物件の価格+10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "price_mod",
+            "industry": "food",
+            "mult": 1.1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "銀が増えれば、パンも高くなります。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "運搬の利権を握る",
+        "detail": "現金-20億。海運の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.4,
+            "years": 2,
+            "label": "銀の輸送"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "積荷が銀なら、海賊も真剣になります。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "mansa-musa-cairo-gold",
+    "title": "金を配りすぎた王様",
+    "kind": "history",
+    "fact": "マリ帝国のマンサ・ムーサは1324年にメッカ巡礼を行い、大量の金を携えた。巡礼の途上に立ち寄ったカイロで金を惜しみなく施し、エジプトの金の価値に影響を与えたと伝えられる。マリは当時、西アフリカの金と岩塩の交易を押さえた大国だった。",
+    "sources": [
+      {
+        "title": "Mansa Musa - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Mansa_Musa",
+        "date": "2025"
+      },
+      {
+        "title": "マンサ・ムーサ - Wikipedia",
+        "url": "https://ja.wikipedia.org/wiki/%E3%83%9E%E3%83%B3%E3%82%B5%E3%83%BB%E3%83%A0%E3%83%BC%E3%82%B5",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1324年の巡礼とカイロでの施し、金相場への影響の伝承は実在。影響の程度には議論があり、ゲーム内の数値は創作。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "char:aladdin",
+        "text": "金貨を配るだけで、物価が動くのですか。"
+      },
+      {
+        "speaker": "char:lamp_genie",
+        "text": "ご主人様、願いを叶えると相場が崩れます。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "気前のよさは美徳。ただし、お金の量は別の話です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "街道で金を配る",
+        "detail": "現金-25億。観光の収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.5,
+            "years": 2,
+            "label": "巡礼の評判"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:aladdin",
+            "text": "評判は残りました。金は残りませんでした。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "配る量を絞る",
+        "detail": "現金+25億。金融の収益×1.2（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.2,
+            "years": 3,
+            "label": "金の希少性"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "金は配るより、しまっておく方が値打ちです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "kuwait-souk-al-manakh",
+    "title": "駐車場の市場、小切手の山",
+    "kind": "history",
+    "fact": "クウェートの非公式株式市場スーク・アルマナハは1980年代初めに急拡大し、時価総額は世界三位とされた。取引は先日付小切手による信用で膨らみ、1982年8月に小切手の不渡りをきっかけに崩壊した。不渡り小切手は約940億ドル相当、約6000人分に上り、クウェートの銀行の大半が事実上の債務超過になった。",
+    "sources": [
+      {
+        "title": "Souk Al-Manakh stock market crash - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Souk_Al-Manakh_stock_market_crash",
+        "date": "2025"
+      },
+      {
+        "title": "Economy of Kuwait - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Economy_of_Kuwait",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "先日付小切手による信用膨張と1982年の崩壊、約940億ドルの不渡りは実在。ゲーム内の確率と金額は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "小切手は、将来のお金を今のお金にする魔法です。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "魔法が解ける音は、紙が一枚はね返る音でした。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "市場は駐車場。担保は、まだ書かれていない日付。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "先日付小切手で買う",
+        "detail": "55%で+60億、45%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.55,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "不渡りました。ですが、記録上は資産です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "現金でだけ買う",
+        "detail": "現金+15億。金融の収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.2,
+            "years": 2,
+            "label": "規制された市場"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "narrator",
+            "text": "現金は臆病者の武器。今回は、それで足りました。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "railway-mania-1846",
+    "title": "線路を引く前に株を売る",
+    "kind": "history",
+    "fact": "1840年代のイギリスで鉄道株への投機が過熱し、1846年には新設鉄道会社の議会認可が263件、計画路線は約9500マイルに達した。認可された路線の約三分の一は建設されず、会社の多くは破綻や買収で消えた。",
+    "sources": [
+      {
+        "title": "Railway Mania - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Railway_Mania",
+        "date": "2025"
+      },
+      {
+        "title": "George Hudson - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/George_Hudson",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1846年の263件の認可と約9500マイル、三分の一が未建設という数字は実在。ゲーム内の確率と効果は創作。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "char:pinocchio",
+        "text": "ぼくの鼻も、線路も、計画のうちは伸びます。"
+      },
+      {
+        "speaker": "char:wolf",
+        "text": "線路の上を走るのは、汽車か、噂か。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "地図に線を引くのは簡単。線路を敷くのは高い。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "鉄道株を買う",
+        "detail": "50%で+65億、50%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 65
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wolf",
+            "text": "株価は走りました。汽車は来ませんでした。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "線路を敷く",
+        "detail": "現金-30億。製造業の収益×1.5（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.5,
+            "years": 3,
+            "label": "鉄道建設"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "線路は残りました。鼻も少し伸びました。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "darien-scheme",
+    "title": "地峡に国を賭けた",
+    "kind": "history",
+    "fact": "1690年代、スコットランド会社はパナマ地峡にダリエン植民地を築き、太平洋と大西洋を結ぶ交易路を目指した。事業にはスコットランドで流通する資金の約20パーセントが投じられたとされ、疫病、補給の失敗、スペイン軍の包囲で1700年に放棄された。損失はスコットランド低地地方の財政を破綻させ、1707年のイングランドとの合同法の背景の一つになった。",
+    "sources": [
+      {
+        "title": "Darien scheme - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Darien_scheme",
+        "date": "2025"
+      },
+      {
+        "title": "ダリエン計画 - Wikipedia",
+        "url": "https://ja.wikipedia.org/wiki/%E3%83%80%E3%83%AA%E3%82%A8%E3%83%B3%E8%A8%88%E7%94%BB",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "ダリエン計画の失敗、スコットランド流通資金の約20パーセントの投入、合同法への影響は実在。ゲーム内の確率と金額は創作。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "char:robin_hood",
+        "text": "国中の金を集めて、地図の一点に賭けるのですか。"
+      },
+      {
+        "speaker": "char:baba_yaga",
+        "text": "霧の向こうに、儲けが見える。見えるだけです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "船は出ました。帰ってきたのは、請求書だけでした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "植民地に全額投じる",
+        "detail": "35%で+80億、65%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 80
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:robin_hood",
+            "text": "配る金がなくなりました。国もなくなりました。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "保険を売る",
+        "detail": "現金+25億。金融の収益×1.15（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.15,
+            "years": 2,
+            "label": "遠征の保険"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:baba_yaga",
+            "text": "賭ける人より、賭けを売る人のほうが太ります。"
+          }
+        ],
+        "cpuWeight": 1.4
+      }
+    ]
+  },
+  {
+    "id": "panic-of-1907",
+    "title": "一人の相場師が銀行を止める",
+    "kind": "history",
+    "fact": "1907年10月、アメリカで銅会社株の買い占めが失敗し、融資していた銀行や信託会社に取り付け騒ぎが広がった。ニューヨーク第三位の信託会社ニッカーボッカー・トラストが倒れ、株式市場は急落した。モルガンが私財を投じて銀行団をまとめ、事態は収束した。この経験が1913年の連邦準備制度の設立につながった。",
+    "sources": [
+      {
+        "title": "The Panic of 1907 - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/panic-of-1907",
+        "date": "2025"
+      },
+      {
+        "title": "Panic of 1907 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Panic_of_1907",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1907年の取り付け騒ぎ、モルガンによる私財投入、連邦準備制度の設立は実在。ゲーム内の金額と効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:banker_pig",
+        "text": "うちは大きいので、倒れると皆さんも困ります。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "銀行の金庫は空でした。ぼくの鼻だけが伸びました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "最後の貸し手は、国ではなく、一人の老人でした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "預金を引き出す",
+        "detail": "現金+20億。金融の収益×0.85（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.85,
+            "years": 2,
+            "label": "取り付け騒ぎ"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "引き出しは自由です。戻ってくるのは、別の話です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "底値で銀行株を買う",
+        "detail": "現金-25億。金融の収益×1.4（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 3,
+            "label": "最後の貸し手"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "安いときに買う。それだけが、私の魔法です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "nixon-shock-1971",
+    "title": "金との交換、本日終了",
+    "kind": "history",
+    "fact": "1971年8月15日、ニクソン米大統領はドルと金の交換を一時停止し、90日間の賃金・物価凍結と10パーセントの輸入課徴金を発表した。戦後の固定相場制は事実上終わり、主要通貨は1973年までに変動相場制へ移行した。ドルは金の裏付けを失い、管理通貨制度の時代に入った。",
+    "sources": [
+      {
+        "title": "Nixon Ends Convertibility of U.S. Dollars to Gold - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/gold-convertibility-ends",
+        "date": "2025"
+      },
+      {
+        "title": "Nixon shock - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Nixon_shock",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1971年8月15日の金交換停止、賃金物価凍結、10パーセントの輸入課徴金は実在。ゲーム内の効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "臨時ニュースです。ドルと金の交換が、今夜で終わります。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "上乗せ関税は十パーセント。友情は据え置きです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "金庫の金は動かない。動いたのは、世界の前提でした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "金に替える",
+        "detail": "現金-20億。金融の収益×1.35（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.35,
+            "years": 2,
+            "label": "金への逃避"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "金は国を選びません。だから強いのです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "ドルを握る",
+        "detail": "現金+30億。金融の収益×0.85（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.85,
+            "years": 2,
+            "label": "為替の混乱"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "相場は週明けに、静かに別の世界へ行きました。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "oil-shock-1973",
+    "title": "原油が四倍になった秋",
+    "kind": "history",
+    "fact": "1973年10月、第四次中東戦争を機にアラブ石油輸出国機構が原油の輸出削減と禁輸を実施した。原油価格は1バレル約2.9ドルから1974年1月には約11.7ドルへとほぼ4倍になり、先進国でインフレと景気後退が同時に進んだ。禁輸は1974年3月に解除されたが、価格の高止まりは続いた。",
+    "sources": [
+      {
+        "title": "Oil Shock of 1973-74 - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/oil-shock-of-1973-74",
+        "date": "2025"
+      },
+      {
+        "title": "1973 oil crisis - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/1973_oil_crisis",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1973年の禁輸と原油価格の約4倍化は実在。ゲーム内の金額と効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:kintaro",
+        "text": "山の向こうで、油の値段が四倍になったそうです。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "俺の車は、今日から徒歩になりました。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "ガソリンスタンドの行列は、政策より雄弁でした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "石油を買い占める",
+        "detail": "現金-30億。資源の収益×1.9（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.9,
+            "years": 2,
+            "label": "原油高"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:giant",
+            "text": "タンクは満杯です。財布は空です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "省エネに投資する",
+        "detail": "現金-25億。製造業の収益×1.4（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 3,
+            "label": "省エネ投資"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:kintaro",
+            "text": "節約は、値上げに勝つ唯一の相撲です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "plaza-accord-1985",
+    "title": "合意は日曜、市場は月曜",
+    "kind": "history",
+    "fact": "1985年9月22日、フランス、西ドイツ、日本、イギリス、アメリカの五か国はニューヨークのプラザホテルで、ドル高を是正するための協調介入に合意した。1980年から1985年にかけてドルは主要通貨に対して約50パーセント上昇しており、合意後にドルは大幅に下落した。円高は日本の資産価格バブルを促したとの指摘がある。",
+    "sources": [
+      {
+        "title": "Plaza Accord - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Plaza_Accord",
+        "date": "2025"
+      },
+      {
+        "title": "プラザ合意 - Wikipedia",
+        "url": "https://ja.wikipedia.org/wiki/%E3%83%97%E3%83%A9%E3%82%B6%E5%90%88%E6%84%8F",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1985年9月22日のプラザ合意と、その後のドル安・円高は実在。バブルへの寄与は諸説あり、ゲーム内の効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "五つの国の財務大臣が、ドルを下げると決めました。"
+      },
+      {
+        "speaker": "char:cinderella",
+        "text": "半額になった靴を、今度こそ買えます。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "合意は一分。円高は一晩。影響は十年。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "円に替える",
+        "detail": "現金+25億。観光の収益×0.9（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 0.9,
+            "years": 2,
+            "label": "円高で割高"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cinderella",
+            "text": "円高のおかげで、海外の靴は安くなりました。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "米国資産を買う",
+        "detail": "現金-25億。製造業の収益×1.4（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.4,
+            "years": 3,
+            "label": "円高での買収"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "半額セールは、通貨が主催しています。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "asian-financial-crisis-1997",
+    "title": "バーツが浮いた日",
+    "kind": "history",
+    "fact": "1997年7月2日、タイはドルとの固定相場を維持できず、バーツを変動相場制に移した。通貨は急落し、資本が流出して、東南アジアから韓国、インドネシアへと危機が広がった。国際通貨基金は韓国、タイ、インドネシア向けに約400億ドルの支援策を組んだ。回復は1998年から1999年にかけて急速に進んだ。",
+    "sources": [
+      {
+        "title": "Asian Financial Crisis - Federal Reserve History",
+        "url": "https://www.federalreservehistory.org/essays/asian-financial-crisis",
+        "date": "2025"
+      },
+      {
+        "title": "1997 Asian financial crisis - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/1997_Asian_financial_crisis",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1997年7月2日のバーツ変動相場制移行、IMFの約400億ドル支援、1998年からの回復は実在。ゲーム内の効果は創作。",
+    "weight": 4,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "char:mermaid",
+        "text": "海の向こうで、お金が泳ぎ去りました。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "固定相場は、約束です。約束は破られます。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "通貨が浮いた。浮いたものは、いつか沈みます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "通貨を売る",
+        "detail": "50%で+65億、50%で-35億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 65
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mermaid",
+            "text": "波に乗ったつもりが、波でした。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "工場を買う",
+        "detail": "現金-30億。製造業の収益×1.5（3年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.5,
+            "years": 3,
+            "label": "通貨安で輸出増"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "安く買えました。安いのには理由があります。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "albanian-pyramid-schemes",
+    "title": "利子が毎月増える国",
+    "kind": "history",
+    "fact": "1990年代半ばのアルバニアでは、超高利回りをうたう集団投資事業が国民の資金を集めた。1997年初めに支払いが止まって相次いで破綻し、国民の損失は約12億ドルに達した。政府への抗議は暴動に発展し、2000人以上が死亡したとされる。新政権が発足し、国際機関の支援で秩序回復が図られた。",
+    "sources": [
+      {
+        "title": "1997 Albanian civil unrest - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/1997_Albanian_civil_unrest",
+        "date": "2025"
+      },
+      {
+        "title": "Pyramid scheme - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Pyramid_scheme",
+        "date": "2025"
+      }
+    ],
+    "satireNote": "1997年のアルバニアの集団投資事業の崩壊、約12億ドルの損失、2000人以上の死者は実在。被害者を笑う意図はなく、風刺の対象は、高利回りを黙認した政治と、最後に抜けた者だけが得をする仕組み。ゲーム内の確率と金額は創作。",
+    "weight": 3,
+    "minYear": 2,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "利子は毎月増えます。説明会は、いつも満員でした。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "断る理由を探すほうが、難しい。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "その利子は、私の預金から出ています。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "政府が保証すると言いました。言ったのは、政府ではありません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "参加する",
+        "detail": "40%で+55億、60%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 55
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:grasshopper",
+            "text": "最後に抜けた人が、いちばんもうかります。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "早めに降りる",
+        "detail": "現金+15億。金融の収益×0.9（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.9,
+            "years": 2,
+            "label": "信用の崩壊"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "働いて増やす。地味ですが、確実です。"
+          }
+        ],
+        "cpuWeight": 1.4
+      }
+    ]
+  },
+  {
+    "id": "heaven-kaguya-impossible-tender",
+    "title": "かぐや姫の五つの難題、入札",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "かぐや姫の「五つの難題」を天界の公共入札に移した完全創作。難題の品・金額・確率は創作で、実在の入札・業者を指すものではない。達成不能な要件を積み上げて応札者を一社に絞る調達慣行と、要件を書いた側が受注する構図を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天国の公共調達です。要件は五つ、すべて達成不能です。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "ほとけのみいしのはちを持参した者に、発注いたします。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "札を入れたのは、一つの会社だけです。要件を作ったのが、その会社です。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "難題の数だけ、入札は透明になります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "応札する",
+        "detail": "現金-20億。45%で+60億、55%で-20億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 60
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:kaguya",
+            "text": "見事です。では、次の難題を追加いたします。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "要件を書き換える",
+        "detail": "現金+25億。製造業の収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.3,
+            "years": 2,
+            "label": "調達の設計"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "要件の変更は無料です。変更履歴は、消えますが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "heaven-wukong-peach-orchard",
+    "title": "孫悟空、桃園の管理を任される",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "西遊記で孫悟空が蟠桃園の管理を任され、桃を食べ尽くす筋を下敷きにした完全創作。天界の設定・金額・確率は創作。権限だけを渡して在庫を数えない内部統制の甘さと、役得が帳簿から消える会計処理を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天界の桃の園の管理を、猿に任せました。人件費が安いからです。"
+      },
+      {
+        "speaker": "char:wukong",
+        "text": "桃は管理しています。管理の結果、一個もありません。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "在庫はゼロ、帳簿もゼロです。完璧な統制です。"
+      },
+      {
+        "speaker": "char:kaguya",
+        "text": "桃が消えるのは、月でも同じでした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "桃を食べる",
+        "detail": "現金+35億。50%で+15億、50%で-20億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 35
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 15
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wukong",
+            "text": "味の感想は、監査報告書に書いておきます。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "監査を入れる",
+        "detail": "現金-20億。金融の収益×1.4（2年）と噂話カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 2,
+            "label": "桃園の内部統制"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "監査人は来ました。桃と一緒に、帰りました。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "heaven-issun-loophole",
+    "title": "一寸法師、門の隙間を通る",
+    "kind": "fable",
+    "realms": ["heaven"],
+    "satireNote": "一寸法師がお椀の舟と針の刀で鬼の口へ入る筋を、天国の門の隙間と規制の抜け道に重ねた完全創作。金額・確率は創作。小さい事業体ほど監督の網にかからず、抜け道そのものが商品になる規制の隙間を風刺している。",
+    "weight": 3,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "天国の門には、一寸の隙間があります。誰も修理しません。"
+      },
+      {
+        "speaker": "char:issun",
+        "text": "おわんの舟で参ります。登記はしておりません。"
+      },
+      {
+        "speaker": "npc:tariff_bulldog",
+        "text": "関税は大きさに比例します。あなたは、ほぼゼロです。"
+      },
+      {
+        "speaker": "narrator",
+        "text": "隙間は小さいほど、抜けやすいのです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "隙間を通る",
+        "detail": "現金+30億。40%で+20億、60%で-25億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 20
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -25
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:issun",
+            "text": "針の刀で参ります。審査は、針の穴です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "隙間を売る",
+        "detail": "現金+20億。観光の収益×1.3（2年）と噂話カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 2,
+            "label": "抜け道ツアー"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tariff_bulldog",
+            "text": "抜け道にも、通行税がかかります。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "hell-rumpel-cancel-clause",
+    "title": "ルンペル、解約条件を告げる",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "ルンペルシュティルツキンが藁を金に紡ぎ、名前を当てられて契約を破る筋を下敷きにした完全創作。藁・契約・金額は創作。名前を当てるまで抜けられない契約、つまり解約条件がどこにも書かれていない定期課金の構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄の契約は、名前を当てれば解約できます。名前は、載っていません。"
+      },
+      {
+        "speaker": "char:rumpel",
+        "text": "わらを金に紡ぎました。対価は、あなたの最初の子です。"
+      },
+      {
+        "speaker": "npc:piper3",
+        "text": "解約は無料です。手数料だけ、魂で頂きます。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "名前を当てるまで、払い続けるのですか。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "名前を当てる",
+        "detail": "30%で+40億、70%で-30億。",
+        "effects": [
+          {
+            "op": "gamble",
+            "chance": 0.3,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 40
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:rumpel",
+            "text": "当たりました。では、更新の契約をしましょう。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "契約を続ける",
+        "detail": "現金-15億。金の卵カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "golden_egg",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:rumpel",
+            "text": "わらは金になります。金は、わらになりません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "hell-baba-yaga-cosmetics",
+    "title": "バーバ・ヤーガの臼、数字を挽く",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "バーバ・ヤーガが臼と杵で粉を挽く民話の道具立てを、決算の数字を挽き直す作業に重ねた完全創作。金額・確率は創作。売上と利益の境目を都合よく付け替える粉飾決算と、それを止めない監査の空洞化を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "地獄の決算は、石うすでひきます。粗い数字も、細かくなります。"
+      },
+      {
+        "speaker": "char:baba_yaga",
+        "text": "売上をひいて、利益にします。残りは、灰です。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "監査人は来ません。来た人は、ひかれました。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "ぼくの鼻も、ひけば短くなりますか。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "数字を挽く",
+        "detail": "現金+45億。50%で+10億、50%で所持金-20%。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 45
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 10
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash_pct",
+                "who": "self",
+                "pct": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:baba_yaga",
+            "text": "灰になった数字は、来期にまた生えます。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "ありのまま出す",
+        "detail": "現金-15億。金融の収益×1.4（2年）と弁護士軍団カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.4,
+            "years": 2,
+            "label": "正直な決算"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "正直な決算は、地獄では珍しい品です。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "hell-mermaid-voice-collateral",
+    "title": "人魚姫の声、担保に入れる",
+    "kind": "fable",
+    "realms": ["hell"],
+    "satireNote": "人魚姫が声と引き換えに脚を得る取引を、将来の収入を担保に前借りする融資に置き換えた完全創作。利息・金額・確率は創作。返済原資そのものを担保に取る融資と、資産が消えても債権が残る貸借の非対称を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "声を担保に、足を借りました。利息は、毎月のため息です。"
+      },
+      {
+        "speaker": "char:mermaid",
+        "text": "歌えません。でも、歩けます。返済は、歩いてします。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "声は資産です。消えた資産も、返済の対象です。"
+      },
+      {
+        "speaker": "npc:piper2",
+        "text": "声の出ない人にも、取り立ては聞こえます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "声を売る",
+        "detail": "現金+50億。50%で+15億、50%で1回休み。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 50
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 15
+              }
+            ],
+            "lose": [
+              {
+                "op": "skip",
+                "who": "self",
+                "turns": 1
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mermaid",
+            "text": "足は返ってきません。声も、返ってきません。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "返済を優先する",
+        "detail": "現金-20億。金融の収益×1.3（2年）と大きすぎて潰せませんカード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.3,
+            "years": 2,
+            "label": "繰上返済の信用"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "bailout",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "早めの返済、結構です。利息は、まだ残りますが。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "space-jack-beanstalk-launch",
+    "title": "豆の木、軌道まで伸びる",
+    "kind": "fable",
+    "realms": ["space"],
+    "satireNote": "ジャックと豆の木で、一粒の豆が一夜で雲まで伸びる筋を、借金で急拡大する打ち上げ事業に重ねた完全創作。金額・確率・軌道の描写は創作。成長率だけを見て支えを数えない過剰投資と、伸びた先に足場がない構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "豆を一粒、打ち上げました。翌朝には、軌道に届いていました。"
+      },
+      {
+        "speaker": "char:jack",
+        "text": "成長は速いです。支えは、ありません。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "借金は、重力に逆らうための燃料です。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "上まで来た者は、だいたい落ちてきます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "上まで登る",
+        "detail": "現金-25億。40%で+70億、60%で-35億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "gamble",
+            "chance": 0.4,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 70
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -35
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:jack",
+            "text": "雲の上は、足場がありません。金だけあります。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "豆を売る",
+        "detail": "現金+30億。農林水産の収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.4,
+            "years": 2,
+            "label": "豆の種"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:giant",
+            "text": "豆を売る者を、一番先に食べます。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "space-thumbelina-rideshare",
+    "title": "おやゆび姫、相乗りロケット",
+    "kind": "fable",
+    "realms": ["space"],
+    "satireNote": "おやゆび姫が小さな体でツバメに乗って旅する筋を、重量課金の相乗り打ち上げに置き換えた完全創作。運賃・確率・座席の描写は創作。体重で値段が変わる運賃体系と、小型化で詰め込むほど快適さが別料金になる構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "相乗りロケットです。運賃は、体重で決まります。"
+      },
+      {
+        "speaker": "char:thumbelina",
+        "text": "私は小さいので、安いです。席も、小さいですが。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "小さく作れば、たくさん載ります。快適さは別料金です。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "本日の運賃は、混雑により上がっております。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "相乗りする",
+        "detail": "現金-15億。IT・AIの収益×1.4（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.4,
+            "years": 2,
+            "label": "相乗り小型衛星"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:thumbelina",
+            "text": "隣の席は、衛星でした。話しかけませんでした。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "専用便を頼む",
+        "detail": "現金-40億。45%で+80億、55%で-30億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -40
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 80
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "専用便は快適です。到着は、保証しません。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "space-sinbad-seventh-launch",
+    "title": "シンドバッド、七度目の打ち上げ",
+    "kind": "fable",
+    "realms": ["space"],
+    "satireNote": "シンドバッドが七度の航海で難破を重ねる筋を、失敗を重ねる打ち上げ事業に置き換えた完全創作。金額・確率・回数は創作。沈んだ分を資産に計上して追加投資を続ける埋没費用の罠と、失敗談そのものが商品になる構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "七度目の打ち上げです。六度までは、爆発しました。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "航海と同じです。沈んだ船の数だけ、話が増えます。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "追加投資です。沈んだ分も、資産に計上します。"
+      },
+      {
+        "speaker": "char:urashima",
+        "text": "帰ってきたら、誰もいませんでした。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "八度目に賭ける",
+        "detail": "現金-30億。35%で+80億、65%で-30億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "gamble",
+            "chance": 0.35,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 80
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "八度目です。今回は、きっと、たぶん。"
+          }
+        ],
+        "cpuWeight": 0.8
+      },
+      {
+        "label": "航海日誌を売る",
+        "detail": "現金+35億。娯楽・メディアの収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 35
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.5,
+            "years": 2,
+            "label": "失敗談のコンテンツ化"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "失敗談は、最高のコンテンツです。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "momotaro-contract-nonrenewal",
+    "title": "桃太郎、外注をメールで終了",
+    "kind": "fable",
+    "satireNote": "桃太郎がきびだんごで犬・猿・雉を集めて鬼退治をする筋を、業務委託の短期契約に置き換えた完全創作。金額・契約形態は創作。目的達成の翌朝にメール一通で契約を切る雇い方と、労使関係がないことを理由に保障を外す仕組みを風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "鬼退治は成功しました。翌朝、三匹にメールが届きました。"
+      },
+      {
+        "speaker": "char:momotaro",
+        "text": "契約は業務委託です。労使関係は、ありません。"
+      },
+      {
+        "speaker": "char:momo_dog",
+        "text": "夜通し働いて、報酬はきびだんご一個でした。"
+      },
+      {
+        "speaker": "char:momo_pheasant",
+        "text": "メールは、まだ読まれていません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "メールで終了",
+        "detail": "現金+40億。食品の収益×0.9（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 0.9,
+            "years": 2,
+            "label": "きびだんご不買"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:momotaro",
+            "text": "再雇用は、あります。条件は、翌朝までに。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "正規雇用に切り替える",
+        "detail": "現金-30億。食品の収益×1.5（3年）と牛歩法案カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 3,
+            "label": "正規雇用"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "stop",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:momo_monkey",
+            "text": "福利厚生は、きびだんご三倍です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "puss-in-boots-personal-brand",
+    "title": "長靴の猫、侯爵を名乗る",
+    "kind": "fable",
+    "satireNote": "長靴をはいた猫が飼い主を「カラバ侯爵」と偽り、王様と巨人を騙す筋を下敷きにした完全創作。金額・確率・数値は創作。肩書きと見た目だけで信用を集めるブランディングと、経歴確認が再生数に置き換わる構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "猫は侯爵と名乗りました。証明は、長靴だけです。"
+      },
+      {
+        "speaker": "char:puss",
+        "text": "フォロワーは家来です。家来は、買えます。"
+      },
+      {
+        "speaker": "char:cinderella",
+        "text": "私も身分を偽りました。あちらは、靴でした。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "経歴は確認されません。再生数だけ、確認されました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "侯爵を演じる",
+        "detail": "現金+30億。娯楽・メディアの収益×1.6（2年）。45%で+15億、55%で娯楽物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.6,
+            "years": 2,
+            "label": "侯爵ブランド"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 15
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "media",
+                "mult": 0.9
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:puss",
+            "text": "生まれより、撮影場所が大事です。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "素性を明かす",
+        "detail": "現金+10億。噂話カードを1枚得る。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 10
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "insider",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cinderella",
+            "text": "正直な猫は、売れません。安くは売れます。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "pinocchio-esg-disclosure",
+    "title": "ピノキオの鼻、報告書に載らない",
+    "kind": "fable",
+    "satireNote": "ピノキオの鼻が嘘をつくと伸びる設定を、環境報告書の数値に重ねた完全創作。排出量・金額・確率は創作。測っていないものをゼロとして開示する手法と、監査役が都合の悪い指標を隠す構図、つまり環境配慮を装う広報を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "ピノキオの鼻は、嘘で伸びます。報告書には、載りません。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "排出量は測っていません。測っていないので、ゼロです。"
+      },
+      {
+        "speaker": "npc:banker_pig",
+        "text": "監査は通しました。監査役が、鼻を隠しました。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "ここでは、伸びる鼻は見えないのですね。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "報告書を出す",
+        "detail": "現金+40億。50%で+25億、50%で資源物件の価格-15%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 25
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "energy",
+                "mult": 0.85
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "鼻は伸びています。でも、誰も測っていません。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "測ってから出す",
+        "detail": "現金-25億。資源の収益×1.4（3年）と弁護士軍団カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "energy",
+            "mult": 1.4,
+            "years": 3,
+            "label": "実測の開示"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:banker_pig",
+            "text": "正確な数字は、地味ですが、残ります。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "bunbuku-nft-teakettle",
+    "title": "ぶんぶく茶釜の所有権、分割販売",
+    "kind": "fable",
+    "satireNote": "ぶんぶく茶釜で、たぬきが茶釜に化けて興行になり、正体がばれて元に戻る筋を下敷きにした完全創作。金額・確率・発行数は創作。現物と切り離された所有権の証明が転売を重ねて膨らみ、最後に現物がただの狸だったと分かる構造を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "茶釜の所有権を、デジタルで売りました。現物は、たぬきです。"
+      },
+      {
+        "speaker": "char:bunbuku",
+        "text": "本物は私です。証明書は、私ではありません。"
+      },
+      {
+        "speaker": "npc:tech_kid",
+        "text": "唯一無二です。ただし、何個でも作れます。"
+      },
+      {
+        "speaker": "char:anansi",
+        "text": "物語も、同じ仕組みで売れます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "デジタル証明を発行",
+        "detail": "現金+50億。45%で+30億、55%で娯楽物件の価格-20%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 50
+          },
+          {
+            "op": "gamble",
+            "chance": 0.45,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 30
+              }
+            ],
+            "lose": [
+              {
+                "op": "price_mod",
+                "industry": "media",
+                "mult": 0.8
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:bunbuku",
+            "text": "証明書は燃えません。茶釜は、燃えます。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "茶釜を興行する",
+        "detail": "現金+20億。観光の収益×1.5（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.5,
+            "years": 2,
+            "label": "茶釜の興行"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:tech_kid",
+            "text": "現物は、目録に載りません。それが弱点です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "alice-jam-loyalty",
+    "title": "アリスのジャム、昨日と明日だけ",
+    "kind": "fable",
+    "satireNote": "鏡の国のアリスの「ジャムは昨日と明日、今日はない」という規則を、ポイント制度に置き換えた完全創作。金額・確率・有効期限は創作。貯めるほど使えない特典、期限だけが過ぎていく会員制度、窓口が昨日に閉まっている問い合わせを風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "この国の規則です。ジャムは昨日と明日。今日はありません。"
+      },
+      {
+        "speaker": "char:alice",
+        "text": "ポイントは貯まります。使える日は、来ません。"
+      },
+      {
+        "speaker": "char:mad_hatter",
+        "text": "今日は昨日の明日です。だから、まだです。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "有効期限は、昨日でした。お知らせは、明日です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "ポイントを貯める",
+        "detail": "現金-10億。食品の収益×1.6（2年）。50%で金の卵カード、50%で現金-5億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.6,
+            "years": 2,
+            "label": "ジャムのポイント"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "card",
+                "who": "self",
+                "card": "golden_egg",
+                "count": 1
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -5
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:alice",
+            "text": "貯まるのは、得意です。使うのが、苦手です。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "規則を訴える",
+        "detail": "現金+20億。弁護士軍団カード1枚と食品物件の価格-10%（恒久）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          },
+          {
+            "op": "price_mod",
+            "industry": "food",
+            "mult": 0.9
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:mad_hatter",
+            "text": "訴えは受理されました。審理は、昨日です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "snow-white-rto-dwarfs",
+    "title": "白雪姫、小人たちに出社を命じる",
+    "kind": "fable",
+    "satireNote": "白雪姫が七人の小人と森の家で暮らし、昼は鉱山で働く筋を下敷きにした完全創作。金額・確率・制度の内容は創作。住まいをそのまま職場として扱う出社回帰の号令と、通勤時間を労働時間に数えない運用、七人分の仕事を七人で分けても椅子が足りない環境を風刺している。",
+    "weight": 4,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "小人は森に住み、鉱山で働いていました。今は、出社です。"
+      },
+      {
+        "speaker": "char:snow_white",
+        "text": "在宅勤務は終わりです。森の家も、オフィスです。"
+      },
+      {
+        "speaker": "char:evil_queen",
+        "text": "監視の鏡は、各階に設置しました。"
+      },
+      {
+        "speaker": "char:dwarf",
+        "text": "七人で椅子が一つです。座れません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "全員出社させる",
+        "detail": "現金+40億。製造業の収益×1.35（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 40
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.35,
+            "years": 2,
+            "label": "出社回帰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:snow_white",
+            "text": "通勤時間は、労働時間に含まれません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "在宅を認める",
+        "detail": "現金-20億。製造業の収益×1.6（3年）と弁護士軍団カード1枚。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "industry",
+            "mult": 1.6,
+            "years": 3,
+            "label": "在宅の定着"
+          },
+          {
+            "op": "card",
+            "who": "self",
+            "card": "shield",
+            "count": 1
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:dwarf",
+            "text": "家から掘れます。掘った分は、送ります。"
+          }
+        ],
+        "cpuWeight": 1.3
+      }
+    ]
+  },
+  {
+    "id": "season-chunyun",
+    "title": "春運、九十億人の帰省",
+    "kind": "news",
+    "fact": "中国では旧正月（春節）の前後約40日間に、帰省や旅行の移動が集中する「春運」が行われる。2024年の春運では延べ約90億人回の移動が見込まれ、うち約8割が自家用車によるものとされた。鉄道は期間中に4億8000万人の利用が想定された。",
+    "sources": [
+      {
+        "title": "China kicks off Spring Festival travel rush with 9 bln trips expected - Xinhua / gov.cn",
+        "url": "https://english.www.gov.cn/archive/statistics/202401/26/content_WS65b34988c6d0868f4e8e389e.html",
+        "date": "2024-01-26"
+      },
+      {
+        "title": "Chunyun - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Chunyun",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "春運と記録的な移動人数は実在。ゲーム内の金額・収益効果・会話は創作。",
+    "weight": 5,
+    "months": [1, 2],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "春節前の四十日間、国じゅうの人が故郷へ帰ります。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "春運です。延べ九十億人回の移動が見込まれています。"
+      },
+      {
+        "speaker": "char:wukong",
+        "text": "雲に乗れば渋滞なし。ただし予約は三日前からです。"
+      },
+      {
+        "speaker": "char:ali_baba",
+        "text": "店は休みでも、財布は休みません。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "帰省需要に乗る",
+        "detail": "現金-10億。海運の収益×1.5（1年）と観光の収益×1.3（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -10
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.5,
+            "years": 1,
+            "label": "春運の物流"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.3,
+            "years": 1,
+            "label": "春節の帰省"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ali_baba",
+            "text": "切符も土産も、売り切れ御免です。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "故郷で店を開く",
+        "detail": "現金+25億。食品の収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.3,
+            "years": 2,
+            "label": "故郷の飯"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:wukong",
+            "text": "故郷の飯は、やはり世界一おいしい。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "season-ramadan-eid",
+    "title": "ラマダン商戦、夜の消費",
+    "kind": "news",
+    "fact": "ラマダン（断食月）はイスラム暦の第九月で、約29日から30日続く。日没後のイフタールやイードの贈り物に向けて、食品・衣料・電子機器の需要が増える。イスラム暦は太陽暦より約11日短いため、西暦上の時期は毎年少しずつ早まる。調査会社レッドシアは、2025年のラマダン期間にアラブ首長国連邦の小売売上高が約100億ドルに達すると推計した。",
+    "sources": [
+      {
+        "title": "Heightened Ramadan excitement this year is set to drive $10 billion in retail spending - Redseer",
+        "url": "https://redseer.com/articles/heightened-ramadan-excitement-this-year-is-set-to-drive-10-billion-in-retail-spending/",
+        "date": "2025-03-04"
+      },
+      {
+        "title": "Ramadan - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Ramadan",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "ラマダンとイードの消費拡大は実在。金額・収益効果・会話は創作で、信仰そのものを揶揄する意図はない。",
+    "weight": 5,
+    "months": [2, 3],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "日が沈むと、街の経済が一斉に目を覚まします。"
+      },
+      {
+        "speaker": "char:aladdin",
+        "text": "ランプの魔人より、夜の屋台のほうが頼りになります。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "断食明けの売上は、一年でもっとも伸びる時期です。"
+      },
+      {
+        "speaker": "char:ali_baba",
+        "text": "倉庫の扉を開けます。合言葉は「おかわり」です。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "夜間営業に切り替える",
+        "detail": "現金-15億。食品の収益×1.5（1年）と娯楽・メディアの収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 1,
+            "label": "イフタール需要"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.2,
+            "years": 1,
+            "label": "夜の広告枠"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:aladdin",
+            "text": "夜の屋台は、昼の三倍の値段です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "イードの贈り物に賭ける",
+        "detail": "娯楽・メディアの収益×1.3（1年）。50%で+45億、50%で-20億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.3,
+            "years": 1,
+            "label": "イードの贈答"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 45
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -20
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ali_baba",
+            "text": "ギフトの箱を開けるのは、客のほうです。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "season-carnival-week",
+    "title": "カーニバルの羽根と請求書",
+    "kind": "fable",
+    "satireNote": "世界各地の謝肉祭（カーニバル）を題材にした完全創作。実在のサンバチーム・企業・人物とは関係ない。金額・効果はゲーム用。",
+    "weight": 4,
+    "months": [2, 3],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "謝肉祭です。羽根の値段が、踊りより先に上がります。"
+      },
+      {
+        "speaker": "char:anansi",
+        "text": "羽根を千枚仕入れました。半分は借金です。"
+      },
+      {
+        "speaker": "char:cinderella",
+        "text": "衣装代で、ガラスの靴が三足買えます。"
+      },
+      {
+        "speaker": "char:heart_queen",
+        "text": "踊りなさい。請求書は、来月まとめて届きます。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "サンバ学校を支援する",
+        "detail": "現金-20億。娯楽・メディアの収益×1.5（1年）と観光の収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.5,
+            "years": 1,
+            "label": "パレードの中継"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.2,
+            "years": 1,
+            "label": "謝肉祭の観光"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:anansi",
+            "text": "羽根一枚の値段で、村が一つ助かります。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "羽根を高く転売する",
+        "detail": "現金+30億。観光の収益×0.9（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 0.9,
+            "years": 1,
+            "label": "衣装代の高騰"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:cinderella",
+            "text": "羽根は高く売れました。踊り手は減りました。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
+  },
+  {
+    "id": "season-hajj-pilgrimage",
+    "title": "巡礼の季節、百八十三万人",
+    "kind": "news",
+    "fact": "ハッジはイスラム教徒が生涯に一度行うことが求められるメッカへの巡礼で、イスラム暦ズルヒッジャ月の8日から12日に行われる。サウジアラビア統計局によると、2024年の巡礼者は183万3164人で、うち161万1310人が国外から訪れた。イスラム暦は太陽暦より短いため、巡礼の時期は毎年約11日ずつ早まる。",
+    "sources": [
+      {
+        "title": "GASTAT: Total number of pilgrims in 1445 H Hajj season is 1,833,164 - Saudi General Authority for Statistics",
+        "url": "https://www.stats.gov.sa/en/w/gastat-total-number-of-pilgrims-in-1445-h-hajj-season-is-1-833-164",
+        "date": "2024-06-15"
+      },
+      {
+        "title": "Hajj - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Hajj",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "巡礼者数と巡礼の時期は出典のとおり。金額・収益効果・会話は創作で、信仰を揶揄する意図はない。",
+    "weight": 4,
+    "months": [5, 6],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "白い布の行列が、砂漠の聖地へ向かって流れていきます。"
+      },
+      {
+        "speaker": "char:sinbad",
+        "text": "七つの海を越えて、今年も巡礼の船が出ます。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "巡礼者は百八十三万人。うち百六十一万人が海外からです。"
+      },
+      {
+        "speaker": "char:ali_baba",
+        "text": "宿も水も、この一週間だけは黄金の値段になります。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "巡礼の物流を請ける",
+        "detail": "現金-20億。海運の収益×1.5（1年）と観光の収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.5,
+            "years": 1,
+            "label": "巡礼の輸送"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.2,
+            "years": 1,
+            "label": "巡礼の宿泊"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:sinbad",
+            "text": "船は満員。積荷だけが優遇されます。"
+          }
+        ],
+        "cpuWeight": 1
+      },
+      {
+        "label": "宿泊施設を建てる",
+        "detail": "現金-30億。観光の収益×1.6（2年）と観光物件1件につき+8億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.6,
+            "years": 2,
+            "label": "巡礼の宿"
+          },
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "tourism",
+            "perProperty": 8
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "宿泊費は、時期によって三倍になります。"
+          }
+        ],
+        "cpuWeight": 1.1
+      }
+    ]
+  },
+  {
+    "id": "season-monsoon-credit",
+    "title": "モンスーンの賭け",
+    "kind": "fable",
+    "satireNote": "雨季の農村金融を題材にした完全創作。特定の国・地域・金融機関を指すものではなく、金額・効果はゲーム用。",
+    "weight": 4,
+    "months": [6, 7, 8],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "雨季が来ました。畑は潤い、借金の返済期限も近づきます。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "雨が降れば豊作、降らなければ破産。どちらも怖い。"
+      },
+      {
+        "speaker": "char:ant",
+        "text": "貯金は大事です。雨の日も、晴れの日も。"
+      },
+      {
+        "speaker": "char:grasshopper",
+        "text": "借りられるうちに借りておきましょう。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "種籾を担保に貸す",
+        "detail": "農林水産の収益×1.4（1年）。50%で+50億、50%で-30億。",
+        "effects": [
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.4,
+            "years": 1,
+            "label": "雨季の融資"
+          },
+          {
+            "op": "gamble",
+            "chance": 0.5,
+            "win": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": 50
+              }
+            ],
+            "lose": [
+              {
+                "op": "cash",
+                "who": "self",
+                "amount": -30
+              }
+            ]
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:granny",
+            "text": "雨が降れば笑い、降らなければ泣きます。"
+          }
+        ],
+        "cpuWeight": 0.9
+      },
+      {
+        "label": "灌漑に投資する",
+        "detail": "現金-25億。農林水産の収益×1.6（2年）と農林物件1件につき+6億。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "agri",
+            "mult": 1.6,
+            "years": 2,
+            "label": "灌漑事業"
+          },
+          {
+            "op": "per_property",
+            "who": "self",
+            "industry": "agri",
+            "perProperty": 6
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ant",
+            "text": "水路を引けば、来年も笑っていられます。"
+          }
+        ],
+        "cpuWeight": 1.2
+      }
+    ]
+  },
+  {
+    "id": "season-back-to-school",
+    "title": "新学期、学用品の値段",
+    "kind": "fable",
+    "satireNote": "新学期の学用品商戦という実在の季節需要を下敷きにした完全創作。具体的な統計は使っておらず、金額・効果・会話はすべてゲーム用。",
+    "weight": 4,
+    "months": [8, 9],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "新学期です。ノートの値段が、身長より早く伸びます。"
+      },
+      {
+        "speaker": "char:gretel",
+        "text": "教科書は中古で。制服はお下がりで。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "新品の筆箱を買いました。中身は空っぽです。"
+      },
+      {
+        "speaker": "char:candy_witch",
+        "text": "お菓子の家でも、新学期の学割を始めました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "学用品を値上げする",
+        "detail": "現金+25億。娯楽・メディアの収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.2,
+            "years": 1,
+            "label": "学用品商戦"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "値上げしても、筆箱は空っぽです。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "リサイクル市を開く",
+        "detail": "現金+15億。海運の収益×1.2（2年）と娯楽・メディアの収益×0.9（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 15
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.2,
+            "years": 2,
+            "label": "中古品の流通"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 0.9,
+            "years": 1,
+            "label": "新品離れ"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:gretel",
+            "text": "中古の教科書に、去年の答えがあります。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "season-oktoberfest",
+    "title": "オクトーバーフェストの乾杯",
+    "kind": "news",
+    "fact": "ミュンヘンのオクトーバーフェストは9月半ばから10月第1日曜まで開かれる世界最大級の民衆祭で、2024年は約670万人が来場し、1リットルジョッキのビールが約700万杯消費された。会場では食事の売上が前年比約9パーセント増えた。",
+    "sources": [
+      {
+        "title": "Germany: Oktoberfest wraps in Munich, 7 million liters later - DW",
+        "url": "https://www.dw.com/en/germany-oktoberfest-wraps-in-munich-7-million-liters-later/a-70416646",
+        "date": "2024-10-06"
+      },
+      {
+        "title": "Oktoberfest - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Oktoberfest",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "来場者数・ビール消費量・食事売上の増加は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [9, 10],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "九月の終わり、テントの下に六百七十万人が集まります。"
+      },
+      {
+        "speaker": "char:rumpel",
+        "text": "ビール一杯で、名前を三つ教えましょう。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "乾杯の音が、会計の音より大きく響いています。"
+      },
+      {
+        "speaker": "char:red_hood",
+        "text": "おばあさんへの土産は、プレッツェルにします。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "テントを仕切る",
+        "detail": "現金-25億。食品の収益×1.5（2年）と観光の収益×1.2（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "food",
+            "mult": 1.5,
+            "years": 2,
+            "label": "ビールテント"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tourism",
+            "mult": 1.2,
+            "years": 2,
+            "label": "祭りの観光"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:owl_anchor",
+            "text": "乾杯の音が、決算書にも響いています。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "ジョッキを売る",
+        "detail": "現金+30億。娯楽・メディアの収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.2,
+            "years": 1,
+            "label": "記念グッズ"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:gretel",
+            "text": "記念のジョッキは、家でも使えます。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "season-christmas-market",
+    "title": "クリスマス市、屋台の経済",
+    "kind": "news",
+    "fact": "ドイツのクリスマスマーケットは11月中旬から12月にかけて開かれる。ドイツの興行団体による調査では、2024年は全国で約1億7000万回の来場があり、会場内の売上は約41億7000万ユーロ、来場者が会場外で使った金額は約48億8000万ユーロにのぼった。1人1日あたりの平均支出は24.50ユーロだった。",
+    "sources": [
+      {
+        "title": "Weihnachtsmärkte in Deutschland - Fact Sheet Weihnachtsmarktstudie 2024 (DSB)",
+        "url": "https://www.dsbev.de/wp-content/uploads/2025/05/Fact-Sheet-Weihnachtsmarktstudie-2024.pdf",
+        "date": "2025-05"
+      },
+      {
+        "title": "Christmas market - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Christmas_market",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "ドイツのクリスマスマーケットの来場回数と売上額は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [11, 12],
+    "monthly": true,
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "広場に木の小屋が並び、ホットワインの湯気が立ちます。"
+      },
+      {
+        "speaker": "char:gretel",
+        "text": "温かいぶどう酒を一杯。手袋は二枚重ねです。"
+      },
+      {
+        "speaker": "char:candy_witch",
+        "text": "お菓子の家を出しています。今年は現金のみです。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "来場は一億七千万回。会場の外でも財布が開きます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.4,
+        "years": 1,
+        "label": "屋台の飲食"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.3,
+        "years": 1,
+        "label": "冬の観光"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -10
+      }
+    ]
+  },
+  {
+    "id": "season-super-bowl-ads",
+    "title": "三十秒に八百万ドル",
+    "kind": "news",
+    "fact": "米国のスーパーボウルは全米でもっとも視聴者の多いテレビ中継の一つで、広告枠の価格が年々上昇している。2025年の第59回大会では、30秒の広告が平均で約800万ドルと報じられ、前年の約700万ドルから上がった。",
+    "sources": [
+      {
+        "title": "How much do 2025 Super Bowl commercials cost? - CBS News",
+        "url": "https://www.cbsnews.com/news/how-much-do-2025-super-bowl-commercials-cost-heres-the-price-tag-on-ads-this-year/",
+        "date": "2025-02-12"
+      },
+      {
+        "title": "Super Bowl commercials - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Super_Bowl_commercials",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "広告価格の高騰は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [2],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "決勝の日。試合より高いのは、試合の合間の三十秒です。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "黄金の指先でも、この三十秒は買えませんでした。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "広告枠は完売。記録的な価格だったとのことです。"
+      },
+      {
+        "speaker": "char:pinocchio",
+        "text": "僕の宣伝文句は、少しだけ盛っています。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "三十秒の広告を出す",
+        "detail": "現金-30億。娯楽・メディアの収益×1.6（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.6,
+            "years": 2,
+            "label": "スーパーボウル広告"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:pinocchio",
+            "text": "三十秒のために、一年働きました。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "中継を諦めて配信する",
+        "detail": "現金+20億。娯楽・メディアの収益×1.2（1年）とIT・AIの収益×1.2（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 20
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.2,
+            "years": 1,
+            "label": "配信の拡大"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "tech",
+            "mult": 1.2,
+            "years": 1,
+            "label": "動画配信"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "中継を諦めても、黄金は光り続けます。"
+          }
+        ],
+        "cpuWeight": 1
+      }
+    ]
+  },
+  {
+    "id": "season-songkran",
+    "title": "ソンクラーン、水の観光収入",
+    "kind": "news",
+    "fact": "タイの旧正月ソンクラーンは4月13日から15日にかけて祝われ、水をかけ合う習慣で知られる。タイの観光スポーツ省は2025年のソンクラーン期間の観光収入が265億バーツを超え、前年比8パーセント増になったと発表した。国外からの観光客は約47万人にのぼった。",
+    "sources": [
+      {
+        "title": "Songkran 2025 boosts Thai tourism revenue by 26.5 billion baht - The Thaiger",
+        "url": "https://thethaiger.com/hot-news/events/songkran-2025-boosts-thai-tourism-revenue-by-26-5-billion-baht",
+        "date": "2025-04-16"
+      },
+      {
+        "title": "Songkran (Thailand) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Songkran",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "ソンクラーンの観光収入と来訪者数は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [4],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "四月のタイ。通りは水浸しで、財布は潤っています。"
+      },
+      {
+        "speaker": "char:kappa",
+        "text": "水をかけられるのは得意ですが、かけ返すのは苦手です。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "観光収入は二百六十五億バーツ。前の年より八パーセント増です。"
+      },
+      {
+        "speaker": "char:mermaid",
+        "text": "陸の祭りは苦手です。乾くので。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.5,
+        "years": 1,
+        "label": "ソンクラーン特需"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.2,
+        "years": 1,
+        "label": "屋台の飲食"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -6
+      }
+    ]
+  },
+  {
+    "id": "season-midsummer-night",
+    "title": "白夜の請求書",
+    "kind": "fable",
+    "satireNote": "北欧の夏至祭という実在の習慣を下敷きにした完全創作。白夜で店が閉まらないという設定は誇張で、特定の国・企業・人物を指すものではない。金額・効果はゲーム用。",
+    "weight": 4,
+    "months": [6],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "一年でいちばん昼が長い日。太陽が沈まないので、誰も帰りません。"
+      },
+      {
+        "speaker": "char:mermaid",
+        "text": "夜が来ないので、歌う時間が足りません。"
+      },
+      {
+        "speaker": "char:white_rabbit",
+        "text": "白夜で時計が狂いました。予定が三時間ずれています。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "北欧の六月、商店は閉まり、ビールだけが開いています。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.4,
+        "years": 1,
+        "label": "白夜の観光"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "food",
+        "mult": 1.2,
+        "years": 1,
+        "label": "夏至の宴"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -6
+      }
+    ]
+  },
+  {
+    "id": "season-tomatina",
+    "title": "トマティーナ、百二十トン",
+    "kind": "news",
+    "fact": "スペインのブニョルで毎年8月の最終水曜日に行われるトマティーナは、参加者が互いにトマトを投げ合う祭りで、世界最大の食物投げ合いとされる。2013年からはチケット制となり、参加人数に上限が設けられた。2025年は約2万2000人が参加し、約120トンのトマトが使われた。",
+    "sources": [
+      {
+        "title": "What to know about Spain's 'Tomatina' festival, the tomato street fight turning 80 - AP",
+        "url": "https://www.ap.org/news-highlights/spotlights/2025/what-to-know-about-spains-tomatina-festival-the-tomato-street-fight-turning-80/",
+        "date": "2025-08-25"
+      },
+      {
+        "title": "La Tomatina - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/La_Tomatina",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "参加人数の上限・来場者数・トマトの量は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [8],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "八月の最終水曜。町じゅうが、真っ赤になります。"
+      },
+      {
+        "speaker": "char:giant",
+        "text": "投げるのは得意だ。拾うのは苦手だが。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "参加者は二万二千人、トマトは百二十トンです。"
+      },
+      {
+        "speaker": "char:granny",
+        "text": "もったいない。煮込みにすれば一週間は持ちます。"
+      }
+    ],
+    "effects": [
+      {
+        "op": "industry_mod",
+        "industry": "tourism",
+        "mult": 1.4,
+        "years": 1,
+        "label": "トマティーナ特需"
+      },
+      {
+        "op": "industry_mod",
+        "industry": "media",
+        "mult": 1.2,
+        "years": 1,
+        "label": "奇祭の中継"
+      },
+      {
+        "op": "cash",
+        "who": "all",
+        "amount": -4
+      }
+    ]
+  },
+  {
+    "id": "season-diwali-gold",
+    "title": "ディワリの金、光の値段",
+    "kind": "news",
+    "fact": "ディワリは10月半ばから11月半ばにかけて祝われるヒンドゥー教の祭りで、初日のダンテラスには金を買う習慣がある。ワールド・ゴールド・カウンシルによると、2026年のディワリ・ダンテラス期間のインドの金需要は金額ベースで前年比15から25パーセント増え、宝飾品と地金・金貨の双方が伸びた。",
+    "sources": [
+      {
+        "title": "India gold market update: Gold demand gets festive boost - World Gold Council",
+        "url": "https://www.gold.org/goldhub/gold-focus/2026/11/india-gold-market-update-gold-demand-gets-festive-boost",
+        "date": "2026-11-17"
+      },
+      {
+        "title": "Diwali - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Diwali",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "ディワリの金購入と需要増は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [10, 11],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "光の祭りです。灯りより先に、金の値段が動きます。"
+      },
+      {
+        "speaker": "npc:midas",
+        "text": "私の指先が、ようやく流行に追いつきました。"
+      },
+      {
+        "speaker": "char:aladdin",
+        "text": "ランプの灯りは無料ですが、金貨はそうはいきません。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "金の需要は金額で二割増。婚約指輪も軽くなりました。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "金を積み増す",
+        "detail": "現金-30億。金融の収益×1.6（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 1.6,
+            "years": 2,
+            "label": "金の買い増し"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "npc:midas",
+            "text": "金は待ちますが、指先は待ちません。"
+          }
+        ],
+        "cpuWeight": 1.1
+      },
+      {
+        "label": "金を売り抜ける",
+        "detail": "現金+45億。金融の収益×0.85（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 45
+          },
+          {
+            "op": "industry_mod",
+            "industry": "finance",
+            "mult": 0.85,
+            "years": 2,
+            "label": "金の売り抜け"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:aladdin",
+            "text": "光の祭りに、灯りだけが残りました。"
+          }
+        ],
+        "cpuWeight": 0.95
+      }
+    ]
+  },
+  {
+    "id": "season-singles-day",
+    "title": "十一月十一日、独身の日",
+    "kind": "news",
+    "fact": "中国の11月11日は「独身の日」と呼ばれ、電子商取引各社が大規模な割引販売を行う。アリババの天猫と淘宝の2024年の販売イベントでは、流通総額が10億元を超えたブランドが45社、1億元を超えたブランドが589社にのぼった。同社はイベント全体の総流通額を公表していない。",
+    "sources": [
+      {
+        "title": "Four Takeaways from Taobao and Tmall's 11.11 Shopping Festival in 2024 - Alibaba Group",
+        "url": "https://www.alibabagroup.com/en-US/document-1793474900090945536",
+        "date": "2024-11-12"
+      },
+      {
+        "title": "Singles' Day - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Singles%27_Day",
+        "date": "2026"
+      }
+    ],
+    "satireNote": "独身の日と各社の販売規模は出典のとおり。金額・収益効果・会話は創作。",
+    "weight": 4,
+    "months": [11],
+    "lines": [
+      {
+        "speaker": "narrator",
+        "text": "十一月十一日。独身を祝う日が、世界最大の買い物の日になりました。"
+      },
+      {
+        "speaker": "char:anansi",
+        "text": "蜘蛛の巣より細かい網で、財布を捕まえましょう。"
+      },
+      {
+        "speaker": "npc:owl_anchor",
+        "text": "売上十億元超のブランドが四十五社。記録づくしです。"
+      },
+      {
+        "speaker": "char:ali_baba",
+        "text": "カートに入れるのは簡単です。出すのが難しいだけです。"
+      }
+    ],
+    "choices": [
+      {
+        "label": "在庫を積む",
+        "detail": "現金-25億。海運の収益×1.5（2年）と娯楽・メディアの収益×1.3（2年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": -25
+          },
+          {
+            "op": "industry_mod",
+            "industry": "shipping",
+            "mult": 1.5,
+            "years": 2,
+            "label": "爆買いの配送"
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 1.3,
+            "years": 2,
+            "label": "通販の広告"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:ali_baba",
+            "text": "倉庫は満杯。カートも満杯です。"
+          }
+        ],
+        "cpuWeight": 1.2
+      },
+      {
+        "label": "値引き合戦に加わる",
+        "detail": "現金+30億。娯楽・メディアの収益×0.8（1年）。",
+        "effects": [
+          {
+            "op": "cash",
+            "who": "self",
+            "amount": 30
+          },
+          {
+            "op": "industry_mod",
+            "industry": "media",
+            "mult": 0.8,
+            "years": 1,
+            "label": "値引きの乱売"
+          }
+        ],
+        "reply": [
+          {
+            "speaker": "char:anansi",
+            "text": "網を広げた分だけ、糸が絡みます。"
+          }
+        ],
+        "cpuWeight": 0.9
+      }
+    ]
   }
 ]
