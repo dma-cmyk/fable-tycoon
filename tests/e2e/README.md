@@ -45,7 +45,9 @@ Everything is written under `.tmp/e2e/`:
   console/page errors, and screenshot paths. It also records
   `maxModals`/`maxModalsNonActor` (visible `.modal-backdrop` depth sampled
   during play), `canvasLimitWarnings` (browser `Canvas area exceeds` messages),
-  and `mobileDpr`.
+  `mobileDpr`, `events.byClient`/`events.unique` (event ids seen), and
+  `fxObserved` (counts of `piper_roulette` / `piper_disaster` / `skill` /
+  `buyout` / `final_year`).
 
 ## Environment
 

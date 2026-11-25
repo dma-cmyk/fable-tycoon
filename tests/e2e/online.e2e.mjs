@@ -649,6 +649,57 @@ function stopLiveScreenshots() {
   }
 }
 
+async function installFxObserver(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return;
+  await page
+    .evaluate(() => {
+      const win = window;
+      if (win.__e2eFx) return;
+      const counts = {
+        piper_roulette: 0,
+        piper_disaster: 0,
+        skill: 0,
+        buyout: 0,
+        final_year: 0,
+      };
+      const prev = {};
+      const selectors = {
+        piper_roulette: '.piper-show-panel',
+        piper_disaster: '.piper-show-disaster',
+        skill: '.skill-cutin',
+        buyout: '.buyout-panel',
+        final_year: '.final-year-overlay',
+      };
+      const shown = (selector) => {
+        const el = document.querySelector(selector);
+        return !!el && el.getClientRects().length > 0;
+      };
+      const check = () => {
+        for (const [kind, selector] of Object.entries(selectors)) {
+          const visible = shown(selector);
+          if (visible && !prev[kind]) counts[kind] += 1;
+          prev[kind] = visible;
+        }
+      };
+      win.__e2eFx = { counts, check };
+      new MutationObserver(check).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['hidden', 'class', 'style'],
+      });
+      check();
+    })
+    .catch(() => undefined);
+}
+
+async function readFxCounts(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return null;
+  return page.evaluate(() => window.__e2eFx?.counts ?? null).catch(() => null);
+}
+
 async function sampleModalDepth(client) {
   const page = client.page;
   if (!page || page.isClosed() || client.stopped) return;
@@ -662,7 +713,25 @@ async function sampleModalDepth(client) {
       const status = (document.querySelector('.status-chip')?.textContent || '').trim();
       const banner = (document.querySelector('.game-banner')?.textContent || '').trim();
       const eventTitle = (document.querySelector('.event-panel.is-open .event-title')?.textContent || '').trim();
-      return { visibleModals, status, banner, eventTitle };
+      const visible = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el || el.hidden) return false;
+        const style = getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      };
+      return {
+        visibleModals,
+        status,
+        banner,
+        eventTitle,
+        fx: {
+          piper_roulette: visible('.piper-show-panel'),
+          piper_disaster: visible('.piper-show-disaster'),
+          skill: visible('.skill-cutin'),
+          buyout: visible('.buyout-panel'),
+          final_year: visible('.final-year-overlay'),
+        },
+      };
     })
     .catch(() => null);
   if (!sample) return;
@@ -670,6 +739,14 @@ async function sampleModalDepth(client) {
   if (sample.eventTitle) {
     client.eventTitles = client.eventTitles || new Set();
     if (client.eventTitles.size < 200) client.eventTitles.add(sample.eventTitle);
+  }
+  if (sample.fx) {
+    client.fxSeen = client.fxSeen || {};
+    client.fxCounts = client.fxCounts || {};
+    for (const [kind, present] of Object.entries(sample.fx)) {
+      if (present && !client.fxSeen[kind]) client.fxCounts[kind] = (client.fxCounts[kind] || 0) + 1;
+      client.fxSeen[kind] = present;
+    }
   }
   if (/通信待ち/.test(sample.banner) || /通信待ち/.test(sample.status)) {
     client.commWaitUi = (client.commWaitUi || 0) + 1;
@@ -1071,6 +1148,15 @@ async function ensureResumedSeat(client, inviteUrl) {
   throw new Error(`${client.id} could not reclaim its seat after reopening`);
 }
 
+async function mergePageFxCounts(client) {
+  const counts = await readFxCounts(client);
+  if (!counts) return;
+  client.fxCounts = client.fxCounts || {};
+  for (const [kind, value] of Object.entries(counts)) {
+    client.fxCounts[kind] = Math.max(client.fxCounts[kind] ?? 0, value);
+  }
+}
+
 async function recoverClient(client) {
   if (client.recovering) return client.recovering;
   if (client.role !== 'guest' || !client.inviteUrl) {
@@ -1079,6 +1165,7 @@ async function recoverClient(client) {
   client.paused = true;
   client.recovering = (async () => {
     log(`${client.id} recovering after renderer crash`);
+    await mergePageFxCounts(client);
     await client.page?.close().catch(() => undefined);
     await newPage(client);
     await client.page.goto(client.inviteUrl, { waitUntil: 'domcontentloaded' });
@@ -1096,6 +1183,7 @@ async function recoverClient(client) {
       label: `${client.id} crash rejoin game`,
     });
     await ensureResumedSeat(client, client.inviteUrl);
+    await installFxObserver(client);
     client.crashed = false;
     log(`${client.id} recovered its seat after the crash`);
   })().finally(() => {
@@ -1110,10 +1198,21 @@ async function openChat(client) {
   if (!(await isVisible(page.locator('.chat-panel.is-open')))) {
     const pcFab = page.locator('.pc-comm-fab').first();
     const pcChatTab = page.locator('.pc-comm-tab[data-tab="chat"]').first();
+    const merged = page.locator('.hud-comm-merged').first();
     try {
       if (await isVisible(pcFab)) {
         if (!(await isVisible(pcChatTab))) await press(client, pcFab);
         if (await isVisible(pcChatTab)) await press(client, pcChatTab);
+      } else if (await isVisible(merged)) {
+        // Phone bottom bar: one button opens a chooser popover.
+        if (!(await isVisible(page.locator('.hud-comm-chooser')))) {
+          try {
+            await press(client, merged);
+          } catch (error) {
+            if (!(await isVisible(page.locator('.hud-comm-chooser')))) throw error;
+          }
+        }
+        await press(client, page.locator('.hud-comm-choice-chat').first());
       } else {
         await press(client, page.locator('.chat-fab').first());
       }
@@ -1144,10 +1243,20 @@ async function openEmoteTab(client, tabName) {
   if (!(await isVisible(page.locator('.emote-palette.is-open')))) {
     const pcFab = page.locator('.pc-comm-fab').first();
     const pcEmoteTab = page.locator('.pc-comm-tab[data-tab="emote"]').first();
+    const merged = page.locator('.hud-comm-merged').first();
     try {
       if (await isVisible(pcFab)) {
         if (!(await isVisible(pcEmoteTab))) await press(client, pcFab);
         if (await isVisible(pcEmoteTab)) await press(client, pcEmoteTab);
+      } else if (await isVisible(merged)) {
+        if (!(await isVisible(page.locator('.hud-comm-chooser')))) {
+          try {
+            await press(client, merged);
+          } catch (error) {
+            if (!(await isVisible(page.locator('.hud-comm-chooser')))) throw error;
+          }
+        }
+        await press(client, page.locator('.hud-comm-choice-emote').first());
       } else {
         await press(client, page.locator('.emote-fab').first());
       }
@@ -1236,6 +1345,32 @@ async function actOnce(client) {
     client.fxBusySince = 0;
   }
 
+  // Final-year banner: a full-screen tap-to-continue overlay.
+  if (await isVisible(page.locator('.final-year-overlay'))) {
+    await press(client, page.locator('.final-year-overlay').first());
+    return 'final_year_dismiss';
+  }
+
+  // Skill command modal opened by this bot: fire it if ready, otherwise close it.
+  if (await isVisible(page.locator('.skill-command'))) {
+    const useSkill = page.getByRole('button', { name: /この固有技を発動する/ }).first();
+    if (await isVisible(useSkill) && (await useSkill.isEnabled().catch(() => false))) {
+      await press(client, useSkill);
+      return 'skill_use';
+    }
+    const closeSkill = page.locator('.skill-command').locator('xpath=ancestor::*[contains(@class,"modal-backdrop")]').locator('.modal-close').first();
+    if (await isVisible(closeSkill)) {
+      await domClick(closeSkill);
+      return 'skill_close';
+    }
+    const genericClose = page.locator('.modal-backdrop .modal-close').first();
+    if (await isVisible(genericClose)) {
+      await domClick(genericClose);
+      return 'skill_close';
+    }
+    return false;
+  }
+
   // Year-end acknowledgement. A stale city-buy modal can sit above it, so use a
   // DOM click to reach the enabled ack (reported UI bug).
   const ack = page.locator('.yearend-ack:not([disabled])').first();
@@ -1264,6 +1399,21 @@ async function actOnce(client) {
       client.cityBought = false;
     }
     const endBuy = page.locator('.city-end-buy:not([disabled])').first();
+    // Buyout flow lives inside the city sheet: arm a quote, then confirm.
+    const buyoutGo = page.locator('.buyout-go').first();
+    if (await isVisible(buyoutGo) && (await buyoutGo.isEnabled().catch(() => false))) {
+      await press(client, buyoutGo);
+      client.buyoutDone = (client.buyoutDone || 0) + 1;
+      return 'buyout_confirm';
+    }
+    if (!client.buyoutTried && client.cityVisit % 3 === 0) {
+      const buyoutButton = page.locator('.buyout-button:not([hidden])').first();
+      if (await isVisible(buyoutButton) && (await buyoutButton.isEnabled().catch(() => false))) {
+        client.buyoutTried = true;
+        await press(client, buyoutButton);
+        return 'buyout_arm';
+      }
+    }
     if (client.cityBought) {
       if (await isVisible(endBuy)) {
         await press(client, endBuy);
@@ -1304,6 +1454,7 @@ async function actOnce(client) {
   if (client.cityOpen) {
     client.cityOpen = false;
     client.cityBought = false;
+    client.buyoutTried = false;
   }
 
   // Card shop.
@@ -1316,10 +1467,10 @@ async function actOnce(client) {
     return false;
   }
 
-  // Card target dialog.
+  // Card / skill target dialog (both use .target-dialog).
   if (await isVisible(page.locator('.target-dialog'))) {
     const target = page.locator('.target-item:not([disabled])').first();
-    if (await isVisible(target)) {
+    if (await isVisible(target) && (await target.isEnabled().catch(() => false))) {
       await press(client, target);
       return 'target';
     }
@@ -1360,6 +1511,19 @@ async function actOnce(client) {
   const primary = page.locator('.dice-primary:not([disabled])').first();
   if (await isVisible(primary)) {
     const text = ((await primary.textContent()) || '').trim();
+    const isTurnStart = /サイコロ/.test(text);
+    // Once every few own turns, try the character skill before rolling.
+    if (isTurnStart) {
+      client.turnStarts = (client.turnStarts || 0) + 1;
+      if (client.turnStarts % 4 === 2 && (client.skillAttempts || 0) < 4) {
+        const skillButton = page.locator('.hud-cmd-skill:not([disabled])').first();
+        if (await isVisible(skillButton)) {
+          client.skillAttempts = (client.skillAttempts || 0) + 1;
+          await press(client, skillButton);
+          return 'skill_open';
+        }
+      }
+    }
     await press(client, primary);
     return /ここへ移動|移動/.test(text) ? 'confirm_move' : 'primary';
   }
@@ -1591,6 +1755,9 @@ async function main() {
   );
   // Sort by spec order for deterministic reports.
   clients.sort((a, b) => selectedSpecs.findIndex((spec) => spec.id === a.id) - selectedSpecs.findIndex((spec) => spec.id === b.id));
+  // The SPA never reloads between screens, so install the observer on the title
+  // screen; it survives into the game and catches short 8x-speed cutscenes.
+  for (const client of clients) await installFxObserver(client);
   if (HEADFUL) startLiveScreenshots();
   const host = clients.find((client) => client.role === 'host');
   const webkitClient = clients.find((client) => client.id === 'webkit-iphone');
@@ -1811,6 +1978,9 @@ async function main() {
     async () => (await startButton.count()) > 0 && (await startButton.isEnabled().catch(() => false)),
     { timeout: 25_000, label: 'start button enabled' },
   );
+  // The lobby and the game share one document (no reload after joining), so
+  // install before Start to catch opening cutscenes such as the final-year banner.
+  for (const client of clients) await installFxObserver(client);
   await domClick(startButton);
 
   await Promise.all(
@@ -1848,6 +2018,7 @@ async function main() {
   );
   timings.gameStartAtMs = nowMs();
   phase('game_playing');
+  for (const client of clients) await installFxObserver(client);
 
   const resultHolders = [];
   for (const client of clients) {
@@ -1877,6 +2048,7 @@ async function main() {
   if (!firefoxClient) {
     log('Firefox not selected; skipping close/reopen check');
   } else {
+  await mergePageFxCounts(firefoxClient);
   await firefoxClient.page.close();
   await sleep(2500);
   firefoxClient.page = null;
@@ -1905,6 +2077,7 @@ async function main() {
   timings.firefoxRejoinMs = nowMs();
   phase('firefox_rejoined', { seatBefore: firefoxSeatBefore, atMs: nowMs() });
   await screenshot(firefoxClient, 'firefox-rejoined');
+  await installFxObserver(firefoxClient);
   await installBannerRecorder(firefoxClient);
   await waitFor(
     async () =>
@@ -2158,6 +2331,23 @@ try {
       byClient[client.id] = ids;
     }
     report.events = { byClient, unique: [...all].sort() };
+  }
+  {
+    const kinds = ['piper_roulette', 'piper_disaster', 'skill', 'buyout', 'final_year'];
+    const totals = Object.fromEntries(kinds.map((kind) => [kind, 0]));
+    const perClient = {};
+    for (const client of clients) {
+      const pageCounts = await readFxCounts(client);
+      perClient[client.id] = {};
+      for (const kind of kinds) {
+        const sampled = client.fxCounts?.[kind] ?? 0;
+        const observed = pageCounts?.[kind] ?? 0;
+        const count = Math.max(sampled, observed);
+        perClient[client.id][kind] = count;
+        totals[kind] += count;
+      }
+    }
+    report.fxObserved = { totals, perClient, buyoutsConfirmed: Object.fromEntries(clients.map((c) => [c.id, c.buyoutDone || 0])) };
   }
   report.cutscene = {
     skipAfterMs: SKIP_AFTER_MS,
