@@ -1216,15 +1216,18 @@ async function actOnce(client) {
           client.skipLog.push({ atMs: nowMs(), busyFor, primary: ((await page.locator('.dice-primary').textContent().catch(() => '')) || '').trim() });
         }
         log(`${client.id}: skipped a ${Math.round(busyFor / 1000)}s cutscene`);
+        client.fxBusyTotalMs = (client.fxBusyTotalMs || 0) + busyFor;
         client.fxBusySince = 0;
         return 'skip_fx';
       }
     }
   } else if (client.fxBusySince) {
+    const duration = Date.now() - client.fxBusySince;
     client.fxDurations = client.fxDurations || [];
     if (client.fxDurations.length < 500) {
-      client.fxDurations.push(Date.now() - client.fxBusySince);
+      client.fxDurations.push(duration);
     }
+    client.fxBusyTotalMs = (client.fxBusyTotalMs || 0) + duration;
     client.fxBusySince = 0;
   }
 
@@ -2128,6 +2131,7 @@ try {
         {
           skips: client.stuckSkips || 0,
           maxBusyMs: client.fxBusyMaxSeen || 0,
+          totalBusyMs: Math.round(client.fxBusyTotalMs || 0) + (client.fxBusySince ? Date.now() - client.fxBusySince : 0),
           normalFxCount: (client.fxDurations || []).length,
           normalFxMaxMs: Math.max(0, ...(client.fxDurations || [])),
         },
@@ -2162,6 +2166,7 @@ try {
     maxModalsNonActor: client.maxModalsNonActor || 0,
     stuckSkips: client.stuckSkips || 0,
     fxBusyMaxMs: client.fxBusyMaxSeen || 0,
+    fxBusyTotalMs: Math.round(client.fxBusyTotalMs || 0) + (client.fxBusySince ? Date.now() - client.fxBusySince : 0),
     skipLog: client.skipLog || [],
     fxDurationsMs: client.fxDurations || [],
     brokersConnected: client.brokersConnected || [],
