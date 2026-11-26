@@ -128,8 +128,9 @@
    ],
    "sheet": "ev_03",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/final-shareholder-suit.webp"
+   "status": "done",
+   "output": "public/assets/events/final-shareholder-suit.webp",
+   "generator": "agy"
   },
   {
    "eventId": "final-tax-haven-raid",
@@ -143,8 +144,9 @@
    ],
    "sheet": "ev_03",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/final-tax-haven-raid.webp"
+   "status": "done",
+   "output": "public/assets/events/final-tax-haven-raid.webp",
+   "generator": "agy"
   },
   {
    "eventId": "ai-bubble-again",
@@ -188,8 +190,9 @@
    ],
    "sheet": "ev_02",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/bank-run-2023.webp"
+   "status": "done",
+   "output": "public/assets/events/bank-run-2023.webp",
+   "generator": "agy"
   },
   {
    "eventId": "chip-shortage",

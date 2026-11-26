@@ -544,6 +544,7 @@
   },
   {
     "id": "bank-run-2023",
+    "image": "assets/events/bank-run-2023.webp",
     "title": "行列のできる銀行",
     "kind": "news",
     "fact": "2023年3月10日、米国の地方銀行が取り付け騒ぎで破綻した。顧客は1日で約420億ドルを引き出し、同行は米史上3位の銀行破綻となった。預金の約9割が保険対象外だった。",
@@ -13047,6 +13048,7 @@
   },
   {
     "id": "final-shareholder-suit",
+    "image": "assets/events/final-shareholder-suit.webp",
     "title": "株主代表訴訟、最終法廷",
     "kind": "fable",
     "satireNote": "株主代表訴訟と最終年の法廷劇を誇張した創作。実在の訴訟・人物とは関係ない。",
@@ -13319,6 +13321,7 @@
   },
   {
     "id": "final-tax-haven-raid",
+    "image": "assets/events/final-tax-haven-raid.webp",
     "title": "タックスヘイブンに灯りがつく",
     "kind": "fable",
     "satireNote": "タックスヘイブン摘発と資金引き上げを誇張した創作。実在の国・機関を名指しするものではない。",

@@ -78,3 +78,7 @@
 {"job": "final-public-backlash", "generator": "agy", "secs": 198, "file": "art/agy/final-public-backlash.png"}
 {"job": "final-shareholder-suit", "generator": "agy", "quota": "画像生成ツールのクォータ上限（HTTP 429）に達しているため、画像を生成できませんでした。`/home/dma/プロジェクト/fable-tycoon/art/agy/final-shareholder-suit.png` は作成されていません。"}
 {"job": "bank-run-2023", "generator": "agy", "quota": "- **エラー**: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 3h42m59s.`"}
+{"job": "ev_03", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "final-shareholder-suit", "generator": "agy", "secs": 170, "file": "art/agy/final-shareholder-suit.png"}
+{"job": "final-tax-haven-raid", "generator": "agy", "secs": 149, "file": "art/agy/final-tax-haven-raid.png"}
+{"job": "bank-run-2023", "generator": "agy", "secs": 210, "file": "art/agy/bank-run-2023.png"}
