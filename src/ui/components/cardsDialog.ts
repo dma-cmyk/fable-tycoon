@@ -1,7 +1,10 @@
 import type { PublicState } from '../../core/engine';
+import { shortestDistance } from '../../core/graph';
 import type {} from '../../core/types';
+import { GAME_DATA } from '../../data/index';
 import { h, uiIcon, type ModalHandle, type ModalHost } from '../dom';
-import { cardsById } from '../format';
+import { cardsById, cityNodeId } from '../format';
+import { insiderNotice } from '../warpInfo';
 import { cardVehicle, vehicleBadge } from '../vehicles';
 
 export interface CardsDialogOptions {
@@ -26,6 +29,12 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
   const player = options.state.players[options.seat];
   if (!player) return null;
   const handLimit = player.characterId === 'momo_monkey' ? 10 : 8;
+  const destinationSteps = shortestDistance(
+    GAME_DATA,
+    player.nodeId,
+    cityNodeId(options.state.destination),
+  );
+  const insider = insiderNotice(Number.isFinite(destinationSteps) ? destinationSteps : null);
   const body = h('div', { class: 'cards-dialog' });
 
   body.append(
@@ -83,16 +92,34 @@ export function openCardsDialog(options: CardsDialogOptions): ModalHandle | null
             h('span', { class: 'badge badge-kind', text: KIND_LABEL[def.kind] }),
           ),
           h('p', { class: 'card-item-desc', text: def.desc }),
+          cardId === 'insider'
+            ? h(
+                'div',
+                { class: `card-item-insight${insider.warn ? ' is-warn' : ''}` },
+                h('span', { class: 'insight-distance', text: insider.distanceText }),
+                h('span', { class: 'insight-rule', text: insider.ruleText }),
+                insider.warnText
+                  ? h('strong', { class: 'insight-warn', text: `⚠ ${insider.warnText}` })
+                  : null,
+              )
+            : null,
           h(
             'div',
             { class: 'card-item-actions' },
             h('span', {
-              class: 'card-item-note',
-              text: def.needsTarget
-                ? '使用後に相手・都市を選びます'
-                : options.canUseCard?.(cardId) === false
-                  ? 'いまは条件を満たしていません（最下位のときだけ使えます）'
-                  : '',
+              class: `card-item-note${cardId === 'insider' && insider.warn ? ' is-warn' : ''}`,
+              text:
+                cardId === 'insider'
+                  ? insider.steps === null
+                    ? insider.distanceText
+                    : insider.warn
+                      ? `⚠ ${insider.warnText}（あと ${insider.steps} マス）`
+                      : `あと ${insider.steps} マスで目的地`
+                  : def.needsTarget
+                    ? '使用後に相手・都市を選びます'
+                    : options.canUseCard?.(cardId) === false
+                      ? 'いまは条件を満たしていません（最下位のときだけ使えます）'
+                      : '',
             }),
             h('button', {
               class: 'btn btn-gold btn-small',

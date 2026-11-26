@@ -266,37 +266,6 @@
   display: none;
 }
 
-.map-recenter {
-  position: absolute;
-  top: calc(82px + var(--safe-top));
-  left: 50%;
-  z-index: 26;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 4px 13px;
-  transform: translateX(-50%);
-  font-size: 12px;
-  border-width: 1.5px;
-  background: rgba(7, 20, 47, 0.92);
-}
-
-.map-recenter[hidden] {
-  display: none;
-}
-
-.map-recenter-icon img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
-.event-open .map-recenter,
-.app-root:has(.modal-backdrop) .map-recenter {
-  display: none;
-}
-
 /* ---------------------------------------------------------------- move selection */
 .move-options {
   display: flex;
@@ -467,10 +436,6 @@
 .choosing-dest .dice-primary:not(:disabled) {
   min-height: 56px;
   font-size: 18px;
-}
-
-.choosing-dest .map-recenter {
-  display: none;
 }
 
 /* ---------------------------------------------------------------- cards */
@@ -1180,10 +1145,6 @@
     font-size: 17px;
   }
 
-  .map-recenter {
-    top: calc(150px + var(--safe-top));
-  }
-
   .choosing-dest .money-panel {
     display: none;
   }
@@ -1405,16 +1366,6 @@
     font-size: 9px;
   }
 
-  .map-recenter {
-    top: calc(46px + var(--safe-top));
-    left: auto;
-    right: calc(6px + var(--safe-right));
-    transform: none;
-    min-height: 38px;
-    padding: 3px 9px;
-    font-size: 10.5px;
-  }
-
   .game-minimap {
     display: none;
   }
@@ -1537,17 +1488,6 @@
 
 .game-menu-item.is-danger .game-menu-arrow {
   color: #ffd3d9;
-}
-
-.map-view-tab {
-  border: 1px solid var(--panel-line);
-  background: var(--panel-bg);
-  box-shadow: var(--panel-shadow);
-}
-
-.map-view-tab.is-selected {
-  border: 2px solid var(--gold);
-  box-shadow: 0 0 0 1px rgba(255, 210, 63, 0.28);
 }
 
 /* Keep chat/emote reachable while the mobile event panel covers the board. */
@@ -2578,80 +2518,9 @@
 
 /* ================================================================ 新UIレビュー第1回 (GameUI担当分) */
 
-/* 必須1: 全体地図モードの表示・復帰導線と「地図」ボタンの選択状態。 */
-.map-overview-banner {
-  position: absolute;
-  top: calc(82px + var(--safe-top));
-  left: 50%;
-  z-index: 27;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 4px 15px;
-  border-radius: 999px;
-  border: 2px solid var(--gold);
-  background: rgba(7, 20, 47, 0.92);
-  color: #fff7d6;
-  font-size: 12px;
-  font-weight: 800;
-  box-shadow: 0 4px 12px rgba(3, 10, 25, 0.4);
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
-.map-overview-banner[hidden] {
-  display: none;
-}
-
-.map-overview-banner-icon {
-  font-size: 17px;
-  line-height: 1;
-}
-
-.map-overview-banner:hover {
-  background: rgba(22, 43, 82, 0.95);
-}
-
 .hud-icon.is-active {
   border-color: var(--gold) !important;
   box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.35), 0 3px 0 rgba(4, 12, 30, 0.35);
-}
-
-.map-recenter.is-overview {
-  border-color: var(--gold);
-  color: #fff3c4;
-}
-
-@media (max-width: 899px) {
-  .map-overview-banner {
-    top: calc(154px + var(--safe-top));
-    max-width: calc(100vw - 24px);
-    font-size: 11px;
-    padding: 3px 12px;
-  }
-
-  .map-recenter {
-    top: calc(202px + var(--safe-top));
-    bottom: auto;
-    font-size: 11.5px;
-    padding: 4px 11px;
-  }
-}
-
-@media (max-height: 520px) and (min-width: 700px) {
-  .map-overview-banner {
-    top: calc(96px + var(--safe-top));
-    font-size: 10.5px;
-    min-height: 40px;
-    padding: 3px 11px;
-  }
-
-  .map-recenter {
-    top: calc(146px + var(--safe-top));
-    bottom: auto;
-    font-size: 10.5px;
-  }
 }
 
 /* 必須2: キャラ選択PCの右カラム切断を止め、1280x600 でも確定ボタンまで見せる。 */
@@ -2941,13 +2810,6 @@
 
 .status-chip.is-mine {
   animation-iteration-count: 2;
-}
-
-/* 全体地図バナーと復帰ボタンが重ならないよう、復帰ボタンだけ下段へ逃がす。 */
-@media (min-width: 900px) {
-  .overview-mode .map-recenter {
-    top: calc(134px + var(--safe-top));
-  }
 }
 
 /* `.btn-gold { position: relative }` was beating `.char-confirm { position: sticky }`,
@@ -3299,12 +3161,7 @@
   }
 }
 
-/* 必須8(b): 金バナー表示中は復帰ボタン/トーストを重ねない。 */
-.game-screen:has(.game-banner.is-visible) .map-recenter,
-.game-screen:has(.game-banner.is-visible) .map-overview-banner {
-  display: none;
-}
-
+/* 必須8(b): 金バナー表示中はトーストを重ねない。 */
 .app-root:has(.game-banner.is-visible) .toast-host {
   top: calc(150px + var(--safe-top));
 }
@@ -3385,57 +3242,6 @@
 }
 
 /* ---------------------------------------------------------------- その他メニューの見やすさ */
-/* 全体マップ切替: 地上タブ（紺地）は明るい文字、異世界タブ（クリーム地）は濃い文字。 */
-.map-view-tab {
-  color: #eaf2ff;
-}
-
-.map-view-tab .map-view-icon,
-.map-view-tab .map-view-name {
-  color: inherit;
-}
-
-.map-view-tab .map-view-count {
-  background: rgba(255, 255, 255, 0.16);
-  color: #eaf2ff;
-  font-weight: 800;
-}
-
-.map-view-tab.is-selected .map-view-name {
-  color: #fff4b8;
-}
-
-.map-view-tab.is-selected .map-view-count {
-  background: rgba(255, 210, 63, 0.22);
-  color: #fff4b8;
-}
-
-/* 異世界タブは明るい背景のままなので、濃色文字へ戻す。 */
-.map-view-tab.realm-heaven,
-.map-view-tab.realm-hell,
-.map-view-tab.realm-space {
-  color: #1c2a44;
-}
-
-.map-view-tab.realm-heaven .map-view-count,
-.map-view-tab.realm-hell .map-view-count,
-.map-view-tab.realm-space .map-view-count {
-  background: #efe6d0;
-  color: #2f3a52;
-}
-
-.map-view-tab.realm-heaven.is-selected .map-view-name,
-.map-view-tab.realm-hell.is-selected .map-view-name,
-.map-view-tab.realm-space.is-selected .map-view-name {
-  color: #1c2a44;
-}
-
-.map-view-tab.realm-heaven.is-selected .map-view-count,
-.map-view-tab.realm-hell.is-selected .map-view-count,
-.map-view-tab.realm-space.is-selected .map-view-count {
-  background: #f3e2b8;
-  color: #2f3a52;
-}
 
 /* ロビーのルームコードは濃紺地に白なので、影だけ残して可読性を保つ。 */
 .lobby-room-left .lobby-room-code {
@@ -5057,14 +4863,6 @@
     display: none !important;
   }
 
-  /* 手番のコマへ戻るボタンも左上・上バー下へスッキリ配置（モバイル用 translateX(-50%) を解除） */
-  .game-screen .map-recenter {
-    top: calc(78px + var(--safe-top));
-    left: calc(16px + var(--safe-left));
-    right: auto;
-    transform: none !important;
-  }
-
   /* イベントパネルが PC 右端からチャット丸ボタンと被らないように位置調整 */
   .game-screen.event-open .pc-comm-fab {
     right: calc(490px + var(--safe-right));
@@ -5458,5 +5256,75 @@
   .move-chip-price,
   .move-chip-owners {
     display: none;
+  }
+}
+
+/* 360px 幅でも上段チップ 4 個（年月・手番・目的地・依頼）を 1 行に収める。
+   依頼チップは「📜 あと12」まで、目的地は残り幅いっぱいに伸ばす。 */
+@media (max-width: 430px) {
+  .game-screen .game-topbar .game-chips {
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .game-screen .game-topbar .game-chips .chip {
+    min-height: 34px;
+    padding: 2px 6px;
+    border-width: 2px;
+    font-size: 10px;
+  }
+
+  .game-screen .game-topbar .game-year-chip {
+    flex: 0 0 auto;
+    padding: 2px 6px !important;
+    font-size: 9.5px !important;
+    white-space: nowrap;
+  }
+
+  .game-screen .game-topbar .status-chip {
+    flex: 0 0 auto;
+    max-width: none;
+    padding: 2px 6px;
+    overflow: visible;
+    font-size: 9.5px;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .game-screen .game-topbar .dest-chip {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+    gap: 3px;
+  }
+
+  .game-screen .game-topbar .dest-name {
+    font-size: 10px;
+  }
+
+  .game-screen .game-topbar .dest-distance {
+    padding: 0 3px;
+    font-size: 8.5px;
+  }
+
+  .game-screen .game-topbar .errand-chip {
+    flex: 0 0 auto;
+    max-width: none;
+    padding: 2px 6px;
+    gap: 3px;
+  }
+
+  .game-screen .game-topbar .errand-icon {
+    font-size: 12px;
+  }
+
+  .game-screen .game-topbar .errand-bonus {
+    display: none;
+  }
+
+  .game-screen .game-topbar .errand-steps {
+    padding: 1px 3px;
+    font-size: 9px;
+    white-space: nowrap;
   }
 }

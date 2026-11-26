@@ -433,6 +433,21 @@ export interface GameState {
   pendingTurnStart?: boolean;
   /** 都市単位の価格・収益倍率（バブル・災害など）。years で失効 */
   cityMods: CityModState[];
+  /**
+   * 寄り道依頼（目的地とは別の小目標）。遠い目的地を追う間の単調さを減らす。
+   * 最初に止まった人が報酬を受け取り、次の依頼が出る。null = 今は依頼なし
+   */
+  errand?: ErrandState | null;
+}
+
+export interface ErrandState {
+  cityId: string;
+  /** 達成報酬（億円、発表時に確定） */
+  bonus: number;
+  requester: string; // character id
+  title: string; // 依頼名（例: 「赤ずきんのお使い：ワインを届けて」）
+  /** 発表したときの `state.round`。8 ラウンド経っても誰も達成しなければ引き直す */
+  drawnRound: number;
 }
 
 /** State safe to broadcast: no rng state and no input seed. */
@@ -506,7 +521,11 @@ export type Fx =
   /** キャラクター固有技の発動（カットイン演出）。台詞は Character.lines.skill */
   | { t: 'skill'; playerId: number; characterId: string; name: string; targetId?: number }
   /** 最終年の開幕（ルール変更の告知演出） */
-  | { t: 'final_year'; year: number; rules: string[] };
+  | { t: 'final_year'; year: number; rules: string[] }
+  /** 寄り道依頼（小目標）の発表。requester = 依頼主のキャラ id（演出と台詞用） */
+  | { t: 'errand'; cityId: string; bonus: number; requester: string; title: string }
+  /** 寄り道依頼の達成 */
+  | { t: 'errand_done'; playerId: number; cityId: string; bonus: number };
 
 export interface StepResult {
   state: GameState;

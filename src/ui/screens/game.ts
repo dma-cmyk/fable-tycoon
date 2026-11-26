@@ -1,5 +1,5 @@
 import { Audio, bgmForEvent, voiceKeyOf, type BgmName } from '../../audio/audio';
-import { destination as destinationNarration } from '../../audio/narration';
+import { destination as destinationNarration, errandNarration, NARRATION } from '../../audio/narration';
 import {  actorOf, annualIncome, distance, netWorth, type PublicState } from '../../core/engine';
 import { REALMS } from '../../core/realm';
 import { wrapDx } from '../../core/geo';
@@ -7,7 +7,7 @@ import type {Action, Fx, MoveOption, RealmId, SpeakerRef} from '../../core/types
 import { GAME_DATA } from '../../data/index';
 import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
-import { MapView, moveKindChip, type SquareInspectEvent } from '../../render/map';
+import { MapView, moveKindChip, type MapAssets, type MapCameraState, type SquareInspectEvent } from '../../render/map';
 import { loadMapAssets, type AssetProgress } from '../../render/assets';
 import {
   assetUrl,
@@ -61,6 +61,9 @@ import { openSquareLegendDialog } from '../components/squareLegend';
 import { openYearEndDialog, type YearEndHandle } from '../components/yearEndDialog';
 import { openShopDialog, type ShopHandle } from '../components/shopDialog';
 import { showFinalYearBanner, type FinalYearBannerHandle } from '../components/finalYearBanner';
+import { showErrandCutin, type ErrandCutinHandle } from '../components/errandCutin';
+import { MapScreen } from '../components/mapScreen';
+import { isPointOutsideBox, placeEdgeHint } from '../edgeHint';
 import { canUseUnderdog, finalYearNarration, isFinalYearActive } from '../../core/showdown';
 import { describeBoardNode, squareInfoOf, squareTileUrl, tileThumb } from '../squareInfo';
 import { JOY_SPRITE_IDS, LANDMARK_FILES, SAD_SPRITE_IDS } from '../assetManifest';
@@ -181,7 +184,14 @@ export class GameScreen implements ScreenHandle {
   private currentBgm: BgmName | null = null;
   private bannerTimer = 0;
   private handoffTimer = 0;
-  private overviewTimer = 0;
+  private hudTimer = 0;
+  private returnToActorTimer = 0;
+  private mapAssets: MapAssets | null = null;
+  private mapScreen: MapScreen | null = null;
+  private mapScreenOpen = false;
+  private playCameraSnapshot: MapCameraState | null = null;
+  private lastActionableMine = false;
+  private lastActionableActor = -1;
   private emoteQueue: EmoteEvent[] = [];
   private emotePlaying = false;
   private endedVoicePlayed = false;
@@ -189,6 +199,7 @@ export class GameScreen implements ScreenHandle {
   private suppressMapTapUntil = 0;
   private pendingPhaseEnd: 'end_buy' | 'end_shop' | null = null;
   private handoffResolve: (() => void) | null = null;
+  private errandCutin: ErrandCutinHandle | null = null;
   private moveOnlyCities = false;
 
   private readonly yearChip: HTMLElement;
@@ -196,6 +207,10 @@ export class GameScreen implements ScreenHandle {
   private readonly destChip: HTMLButtonElement;
   private readonly destText: HTMLElement;
   private readonly destDistance: HTMLElement;
+  private readonly errandChip: HTMLButtonElement;
+  private readonly errandName: HTMLElement;
+  private readonly errandSteps: HTMLElement;
+  private readonly errandBonus: HTMLElement;
   private readonly rankingHost: HTMLElement;
   private readonly portraitHost: HTMLElement;
   private readonly portraitImage: HTMLImageElement;
@@ -212,7 +227,13 @@ export class GameScreen implements ScreenHandle {
   private readonly statusChip: HTMLElement;
   private readonly miniMapCanvas: HTMLCanvasElement;
   private readonly recenterButton: HTMLButtonElement;
-  private readonly overviewBanner: HTMLButtonElement;
+  private readonly recenterPortrait: HTMLElement;
+  private readonly actorRecenterButton: HTMLButtonElement;
+  private readonly recenterDock: HTMLElement;
+  private readonly edgeHint: HTMLButtonElement;
+  private readonly edgeHintPortrait: HTMLElement;
+  private readonly edgeHintArrow: HTMLElement;
+  private recenterPortraitId = -1;
   private readonly mapButton: HTMLButtonElement;
   private readonly pcRankingSlot: HTMLElement;
   private readonly pcCommFab: HTMLButtonElement;
@@ -318,6 +339,26 @@ export class GameScreen implements ScreenHandle {
       this.destText,
       this.destDistance,
     );
+    this.errandName = h('span', { class: 'errand-name', text: '依頼' });
+    this.errandSteps = h('span', { class: 'errand-steps', text: 'あと—' });
+    this.errandBonus = h('span', { class: 'errand-bonus', text: '—' });
+    this.errandChip = h(
+      'button',
+      {
+        class: 'chip errand-chip',
+        attrs: {
+          type: 'button',
+          hidden: 'hidden',
+          'aria-label': '寄り道の依頼をマップで表示',
+          'aria-live': 'polite',
+        },
+        on: { click: () => this.focusErrand() },
+      },
+      h('span', { class: 'errand-icon', text: '📜', attrs: { 'aria-hidden': 'true' } }),
+      this.errandName,
+      this.errandSteps,
+      this.errandBonus,
+    );
     this.statusChip = h('span', { class: 'chip chip-small status-chip game-turn-label', text: '' });
 
     this.timer = new TurnTimer();
@@ -350,7 +391,7 @@ export class GameScreen implements ScreenHandle {
     );
     this.realmChip = h(
       'button',
-      { class: 'chip realm-chip', attrs: { type: 'button', hidden: 'hidden' }, on: { click: () => this.openMapViewDialog() } },
+      { class: 'chip realm-chip', attrs: { type: 'button', hidden: 'hidden' }, on: { click: () => this.openMapScreen(this.viewRealm) } },
     );
     this.finalYearChip = h(
       'span',
@@ -428,29 +469,49 @@ export class GameScreen implements ScreenHandle {
       class: 'game-minimap',
       attrs: { 'aria-label': 'ミニマップ。タップで now その地点へ移動' },
     });
+    this.recenterPortrait = h('span', { class: 'map-home-portrait' });
     this.recenterButton = h(
       'button',
       {
-        class: 'btn btn-ghost map-recenter',
+        class: 'btn btn-gold map-home-button',
+        attrs: { type: 'button', hidden: 'hidden', 'aria-label': '自分のコマへ戻る' },
+        on: { click: () => this.recenterOnOwn() },
+      },
+      this.recenterPortrait,
+      h(
+        'span',
+        { class: 'map-home-text' },
+        h('span', { class: 'map-home-label', text: '📍 自分のコマへ' }),
+        h('kbd', { class: 'pc-key-hint map-home-key', text: 'Home / C' }),
+      ),
+    );
+    this.actorRecenterButton = h(
+      'button',
+      {
+        class: 'btn btn-ghost map-home-actor',
         attrs: { type: 'button', hidden: 'hidden' },
         on: { click: () => this.recenterOnActor() },
       },
-      uiIcon('flag', '🎯', 'map-recenter-icon'),
-      h('span', { text: '手番のコマへ戻る' }),
+      uiIcon('flag', '🎯', 'map-home-actor-icon'),
+      h('span', { text: '手番のコマへ' }),
     );
-    this.overviewBanner = h(
+    this.recenterDock = h(
+      'div',
+      { class: 'map-home-dock', attrs: { hidden: 'hidden' } },
+      this.actorRecenterButton,
+      this.recenterButton,
+    );
+    this.edgeHintPortrait = h('span', { class: 'map-edge-hint-portrait' });
+    this.edgeHintArrow = h('span', { class: 'map-edge-hint-arrow', text: '➤', attrs: { 'aria-hidden': 'true' } });
+    this.edgeHint = h(
       'button',
       {
-        class: 'map-overview-banner',
-        attrs: {
-          type: 'button',
-          hidden: 'hidden',
-          'aria-label': '全体地図を表示中。タップで手番のコマへ拡大',
-        },
-        on: { click: () => this.recenterOnActor() },
+        class: 'map-edge-hint',
+        attrs: { type: 'button', hidden: 'hidden', 'aria-label': '自分のコマは画面の外。タップで戻る' },
+        on: { click: () => this.recenterOnOwn() },
       },
-      h('span', { class: 'map-overview-banner-icon', text: '🌍', attrs: { 'aria-hidden': 'true' } }),
-      h('span', { text: '全体地図 ・ タップで拡大' }),
+      this.edgeHintPortrait,
+      this.edgeHintArrow,
     );
 
     this.pcRankingSlot = h('div', { class: 'pc-topbar-ranking' });
@@ -464,7 +525,7 @@ export class GameScreen implements ScreenHandle {
         h('span', { class: 'logo-mini-crown', text: '👑' }),
         h('span', { class: 'logo-mini-text', text: '寓話大富豪' }),
       ),
-      h('div', { class: 'game-chips' }, this.yearChip, this.finalYearChip, this.statusChip, this.destChip, this.stepsCounter, this.turnChip, this.realmChip),
+      h('div', { class: 'game-chips' }, this.yearChip, this.finalYearChip, this.statusChip, this.destChip, this.errandChip, this.stepsCounter, this.turnChip, this.realmChip),
       this.timerHost,
       this.pcRankingSlot,
       h(
@@ -526,7 +587,7 @@ export class GameScreen implements ScreenHandle {
     propertyButton.append(h('kbd', { class: 'pc-key-hint', text: '3' }));
     const destButton = iconButton('flag', '目的地', () => this.openDestination(), { class: 'hud-icon hud-secondary hud-cmd-dest' });
     destButton.append(h('kbd', { class: 'pc-key-hint', text: '4' }));
-    const mapButton = iconButton('globe', '地図', () => this.openMapViewDialog(), { class: 'hud-icon hud-secondary hud-cmd-map' });
+    const mapButton = iconButton('globe', '世界地図', () => this.openMapScreen(), { class: 'hud-icon hud-secondary hud-cmd-map', title: '世界地図をひらく' });
     mapButton.setAttribute('aria-pressed', 'false');
     mapButton.append(h('kbd', { class: 'pc-key-hint', text: '5' }));
     this.mapButton = mapButton;
@@ -784,8 +845,8 @@ export class GameScreen implements ScreenHandle {
       this.mapWrap,
       h('div', { class: 'map-vignette', attrs: { 'aria-hidden': 'true' } }),
       this.topbar,
-      this.recenterButton,
-      this.overviewBanner,
+      this.recenterDock,
+      this.edgeHint,
       this.miniMapCanvas,
       this.rankingHost,
       this.portraitHost,
@@ -892,14 +953,18 @@ export class GameScreen implements ScreenHandle {
     this.shop?.close();
     this.transient?.handle.close();
     this.citySheet?.close();
-    this.map?.setOverviewCallback(null);
+    this.mapScreen?.destroy();
+    this.mapScreen = null;
+    this.mapScreenOpen = false;
+    window.removeEventListener('popstate', this.onMapScreenPop);
     this.map?.setMiniMap(null);
     this.map?.destroy();
     for (const unsub of this.unsubscribeFns) unsub();
     window.clearTimeout(this.pendingTimer);
     window.clearTimeout(this.bannerTimer);
     window.clearTimeout(this.handoffTimer);
-    window.clearInterval(this.overviewTimer);
+    window.clearInterval(this.hudTimer);
+    window.clearTimeout(this.returnToActorTimer);
     window.clearTimeout(this.portraitVariantTimer);
     window.clearTimeout(this.turnBannerTimer);
     window.clearTimeout(this.monthFlipTimer);
@@ -931,22 +996,24 @@ export class GameScreen implements ScreenHandle {
         this.loadingText.textContent = `世界地図をひらいています… ${progress.label}`;
       });
       if (this.destroyed) return;
+      this.mapAssets = assets;
       this.map?.setMiniMap(null);
       this.map?.destroy();
       this.map = new MapView(this.canvas, GAME_DATA, assets);
       this.map.setReducedMotion(motionReduced());
+      // The play view never becomes the whole-world overview; that is the map screen's job.
+      this.map.setOverviewEnabled(false);
       this.map.onCityTap((cityId) => this.onCityTap(cityId));
       this.map.onSquareInspect((info) => this.renderSquareInspect(info));
       this.map.setMiniMap(this.miniMapCanvas);
       this.map.resize();
-      this.map.setOverviewCallback(() => this.syncOverviewUi());
-      this.syncOverviewUi();
-      // The renderer only flips its overview flag on drawn frames; poll lightly so the
-      // banner/recenter button still appear if the final tween frame is coalesced.
-      window.clearInterval(this.overviewTimer);
-      this.overviewTimer = window.setInterval(() => {
-        if (!this.destroyed) this.syncOverviewUi();
-      }, 350);
+      this.syncRecenterUi();
+      // The map may finish a camera tween on a coalesced frame; poll lightly so the
+      // 「自分のコマへ」 button and edge indicator always track the final camera.
+      window.clearInterval(this.hudTimer);
+      this.hudTimer = window.setInterval(() => {
+        if (!this.destroyed) this.syncRecenterUi();
+      }, 180);
       this.canvas.addEventListener('pointerdown', this.onMapInteract, { passive: true });
       this.canvas.addEventListener('pointerup', this.onMapInteract, { passive: true });
       this.canvas.addEventListener('wheel', this.onMapInteract, { passive: true });
@@ -1220,10 +1287,12 @@ export class GameScreen implements ScreenHandle {
     this.loading.hidden = true;
     this.map?.setState(state);
     this.map?.setMonth(state.month);
+    if (state.phase.t !== 'card_target') this.map?.clearWarpPreview();
     this.enforcePhaseDialogs(state);
     this.renderHud();
     this.updateAutoDialogs();
     this.updateBgm();
+    this.syncMapScreen(state);
     if (!this.initialFocused) {
       this.initialFocused = true;
       const actor = actorOf(state);
@@ -1349,6 +1418,7 @@ export class GameScreen implements ScreenHandle {
     fitTextOneLine(this.playerPlateDestName, { minPx: 11 });
     this.playerPlateDestSteps.textContent = stepsLabel;
     this.playerPlateDest.classList.toggle('is-realm', inRealm);
+    this.renderErrandChip(state, distanceSeat);
     this.updateDestArrow(state, actor, destNode);
     this.updateStatusChip(state, actor);
 
@@ -1371,7 +1441,7 @@ export class GameScreen implements ScreenHandle {
     this.cardBadge.hidden = hand === 0;
     requestAnimationFrame(() => {
       this.updateMapSafeArea();
-      this.syncOverviewUi();
+      this.syncRecenterUi();
     });
   }
 
@@ -1599,7 +1669,7 @@ export class GameScreen implements ScreenHandle {
     if (this.moveSelection && !options.some((option) => option.nodeId === this.moveSelection)) this.moveSelection = null;
     const moverId = actor ?? 0;
     const moverCash = state.players[moverId]?.cash ?? 0;
-    const key = `${state.destination}#${this.playerRealm}#${moverId}:${moverCash}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
+    const key = `${state.destination}#${state.errand?.cityId ?? ''}#${this.playerRealm}#${moverId}:${moverCash}#${options.map((option) => `${option.nodeId}:${option.path.join(',')}`).join('|')}`;
     const freshOptions = key !== this.moveOptionsKey;
     if (freshOptions) {
       this.moveOptionsKey = key;
@@ -1638,6 +1708,17 @@ export class GameScreen implements ScreenHandle {
         numbers: this.moveOptionsCache.map((_, index) => index + 1),
         onSelect,
       });
+      // 移動先リストが開いたら、自分のコマが画面の外なら一度だけカメラを戻す
+      // （候補のフィットを邪魔しないよう、フレーミングの tween が終わってから見る）。
+      if (canAct && actor !== null) {
+        window.setTimeout(() => {
+          if (this.destroyed || this.fxBusy || this.mapScreenOpen) return;
+          if (this.state?.phase.t !== 'choose_dest') return;
+          const box = this.boardBoxOnScreen();
+          if (!box || !this.awayFromBoard(actor, box)) return;
+          this.recenterOnPlayer(actor, { zoom: 0.92, ms: 360 });
+        }, 500);
+      }
       // 目的地順の推奨を基本に、レースが遠いときだけ「買える駅」を最大2歩の寄り道で優先する。
       this.recommendedMoveNodeId =
         biasedMoveRecommendation({
@@ -1645,6 +1726,8 @@ export class GameScreen implements ScreenHandle {
           remainOf: (nodeId) => this.moveRemain.get(nodeId) ?? null,
           cityOf: (nodeId) => cityOfNode(nodeId) ?? null,
           infoFor: (city) => this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city),
+          errandCityId: state.errand?.cityId ?? null,
+          errandBonus: state.errand?.bonus ?? 0,
         }) ?? this.map?.getRecommendedMoveOption() ?? null;
       // 候補が出た時点で「おすすめ」を選択済みにし、主ボタンを即有効化する（未選択の金枠で迷わせない）。
       const preferred = this.recommendedMoveNodeId ?? this.moveOptionsCache[0]?.nodeId ?? null;
@@ -1683,6 +1766,7 @@ export class GameScreen implements ScreenHandle {
       const topNear = many && !recommended && index < 3;
       const selected = this.moveSelection === option.nodeId;
       const city = cityOfNode(option.nodeId);
+      const isErrandCity = city !== undefined && state.errand?.cityId === city.id;
       const chipInfo = city
         ? this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city)
         : null;
@@ -1705,7 +1789,7 @@ export class GameScreen implements ScreenHandle {
           dataset: { nodeId: option.nodeId, kind: nodeKind },
           attrs: {
             type: 'button',
-            'aria-label': `${index + 1}: ${fullAriaName} を選ぶ。${remainText}${priceLabel ? `。${priceLabel}` : ''}${ownerNames.length > 0 ? `。${ownerNames.join('・')}が所有` : ''}`,
+            'aria-label': `${index + 1}: ${fullAriaName}${isErrandCity ? '（寄り道の依頼の街）' : ''} を選ぶ。${remainText}${priceLabel ? `。${priceLabel}` : ''}${ownerNames.length > 0 ? `。${ownerNames.join('・')}が所有` : ''}`,
             'aria-pressed': String(selected),
             style: `--kind-color:${kind.color}`,
           },
@@ -1729,6 +1813,7 @@ export class GameScreen implements ScreenHandle {
             { class: 'move-chip-name-row' },
             h('span', { class: 'move-chip-name' }, nameContent),
             city ? h('span', { class: 'move-chip-type', text: '駅' }) : null,
+            isErrandCity ? h('span', { class: 'move-chip-type is-errand', text: '依頼' }) : null,
           ),
           h(
             'span',
@@ -2253,6 +2338,20 @@ export class GameScreen implements ScreenHandle {
         options: phase.options,
         onTarget: (target) => this.sendAction({ t: 'card_target', target }),
         onCancel: () => this.sendAction({ t: 'cancel' }),
+        onPreview: (target) => {
+          if (!this.isPcLayout() || !this.map) return;
+          if (!target) {
+            this.map.clearWarpPreview();
+            this.scheduleReturnToActor(400);
+            return;
+          }
+          const panel = document.querySelector('.warp-target-modal');
+          const panelRect = panel?.getBoundingClientRect();
+          this.map.previewWarpTarget(target, cityNodeId(state.destination), {
+            insetRight: panelRect ? Math.max(0, window.innerWidth - panelRect.left + 16) : 0,
+          });
+          this.scheduleReturnToActor(3000);
+        },
         onPickOnMap: () => {
           const cityTargets = phase.options.filter((target) => nodesById.get(target)?.kind === 'city');
           this.cityPick = { cardId: phase.cardId, options: new Set(cityTargets) };
@@ -2358,6 +2457,7 @@ export class GameScreen implements ScreenHandle {
         this.portraitHost.after(this.msgWindow.el);
       }
     }
+    if (this.map) this.syncRecenterUi();
   }
 
   // ---------------------------------------------------------------- turn / actions
@@ -2506,7 +2606,7 @@ export class GameScreen implements ScreenHandle {
       h('span', { class: 'realm-chip-name', text: realmLabel(viewing) }),
       h('span', { class: 'realm-chip-tag', text: '表示中' }),
     );
-    this.realmChip.setAttribute('aria-label', `${realmLabel(viewing)}を表示中。マップ切替を開く`);
+    this.realmChip.setAttribute('aria-label', `${realmLabel(viewing)}を表示中。世界地図を開く`);
   }
 
   private applyMapView(): void {
@@ -2524,7 +2624,8 @@ export class GameScreen implements ScreenHandle {
   }
 
   private readonly onMapInteract = (): void => {
-    this.syncOverviewUi();
+    this.cancelReturnToActor();
+    this.syncRecenterUi();
     // ドラッグやホイールの直後に矢印の位置を合わせ直す（次フレームの描画後）。
     if (this.state) {
       const state = this.state;
@@ -2750,41 +2851,360 @@ export class GameScreen implements ScreenHandle {
     }
   }
 
-  private recenterOnActor(): void {
+  /** The human seat the camera should treat as “mine” (hot-seat: the acting human). */
+  private ownPlayerId(): number | null {
+    const state = this.state;
+    if (!state) return null;
+    const mine = this.myPlayerIds();
+    if (this.session.mode === 'online') return mine[0] ?? null;
+    const actor = actorOf(state);
+    if (actor !== null && mine.includes(actor)) return actor;
+    return mine[0] ?? null;
+  }
+
+  private recenterOnActor(opts: { zoom?: number; ms?: number } = {}): void {
     const state = this.state;
     const actor = state ? actorOf(state) : null;
-    if (!state || actor === null) return;
-    const player = state.players[actor];
+    if (actor === null) return;
+    this.recenterOnPlayer(actor, opts);
+  }
+
+  private recenterOnOwn(): void {
+    const own = this.ownPlayerId();
+    if (own === null) {
+      this.recenterOnActor();
+      return;
+    }
+    this.closeMapScreen();
+    this.recenterOnPlayer(own, {});
+  }
+
+  private recenterOnOwnToken(): void {
+    const own = this.ownPlayerId();
+    if (own === null) {
+      this.recenterOnActor();
+      return;
+    }
+    this.recenterOnPlayer(own, { ms: 460 });
+  }
+
+  private recenterOnPlayer(
+    playerId: number,
+    opts: { zoom?: number; ms?: number },
+    actor: number | null = this.state ? actorOf(this.state) : null,
+  ): void {
+    const state = this.state;
+    const player = state?.players[playerId];
     const node = player ? nodesById.get(player.nodeId) : undefined;
-    if (!node) return;
-    this.manualView = false;
-    this.viewRealm = realmOfNode(node.id);
-    this.map?.setView?.(this.viewRealm);
-    this.map?.follow(actor);
+    if (!state || !player || !node) return;
+    this.cancelReturnToActor();
+    const realm = realmOfNode(node.id);
+    // Recentring on somebody who is not the actor is the user's own detour; keep
+    // renderHud from snapping the view back to the actor until the next turn.
+    this.manualView = playerId !== actor;
+    this.viewRealm = realm;
+    this.map?.setView(realm);
+    this.map?.follow(playerId);
     void this.map
-      ?.focusNode(node.id, { zoom: realmOfNode(node.id) === 'world' ? 0.92 : 0.9, ms: 420 })
-      .then(() => this.syncOverviewUi());
+      ?.focusNode(node.id, { zoom: opts.zoom ?? (realm === 'world' ? 0.92 : 0.9), ms: opts.ms ?? 420 })
+      .then(() => this.syncRecenterUi());
     this.renderHud();
   }
 
-  private syncOverviewUi(): void {
-    const map = this.map;
-    if (!map) return;
-    const overview = map.isOverviewMode();
-    this.overviewBanner.hidden = !overview;
-    this.el.classList.toggle('overview-mode', overview);
-    this.mapButton.classList.toggle('is-active', overview);
-    this.mapButton.setAttribute('aria-pressed', String(overview));
-    const state = this.state;
-    const actor = state ? actorOf(state) : null;
-    const node = actor !== null ? state?.players[actor]?.nodeId : undefined;
-    if (!node || this.viewRealm !== 'world') {
-      this.recenterButton.hidden = !overview;
+  /** Camera pans made by fx must not strand the player away from the active token. */
+  private panAndReturn(nodeId: string, zoom: number, ms: number, holdMs: number): void {
+    this.map?.focusNode(nodeId, { zoom, ms });
+    this.scheduleReturnToActor(ms + holdMs);
+  }
+
+  private scheduleReturnToActor(delayMs: number): void {
+    window.clearTimeout(this.returnToActorTimer);
+    this.returnToActorTimer = window.setTimeout(() => {
+      this.returnToActorTimer = 0;
+      if (this.destroyed || this.mapScreenOpen) return;
+      this.map?.clearWarpPreview();
+      this.recenterOnActor({ ms: 520 });
+    }, Math.max(300, Math.round(delayMs)));
+  }
+
+  private cancelReturnToActor(): void {
+    window.clearTimeout(this.returnToActorTimer);
+    this.returnToActorTimer = 0;
+  }
+
+  // ---------------------------------------------------------------- world map screen
+
+  private syncMapScreen(state: PublicState): void {
+    const actor = actorOf(state);
+    const myActionable = actor !== null && this.myPlayerIds().includes(actor) && state.phase.t !== 'game_over';
+    const becameMine = myActionable && (!this.lastActionableMine || this.lastActionableActor !== actor);
+    this.lastActionableMine = myActionable;
+    this.lastActionableActor = actor ?? -1;
+    if (!this.mapScreenOpen) {
+      this.mapScreen?.update(state);
       return;
     }
-    const actorVisible = map.isNodeVisible(node) === true;
-    this.recenterButton.hidden = !(overview || !actorVisible);
-    this.recenterButton.classList.toggle('is-overview', overview);
+    if (state.phase.t === 'game_over') {
+      this.closeMapScreen();
+    } else if (becameMine) {
+      this.closeMapScreen();
+      this.app.toasts.show('あなたの番です', 'good', 2800);
+      this.recenterOnOwnToken();
+    }
+    this.mapScreen?.update(state);
+  }
+
+  private createMapScreen(): void {
+    if (this.mapScreen || !this.mapAssets) return;
+    this.mapScreen = new MapScreen({
+      host: this.el,
+      data: GAME_DATA,
+      assets: this.mapAssets,
+      state: () => this.state,
+      myPlayerIds: () => this.myPlayerIds(),
+      reducedMotion: () => motionReduced(),
+      openCitySheet: (cityId) => this.openReadOnlyCitySheet(cityId),
+      onRequestClose: () => this.requestCloseMapScreen(),
+    });
+  }
+
+  private openMapScreen(realm: MapViewId = 'world'): void {
+    if (this.mapScreenOpen || this.destroyed || !this.state) return;
+    this.createMapScreen();
+    if (!this.mapScreen) return;
+    this.cancelReturnToActor();
+    this.mapScreenOpen = true;
+    this.playCameraSnapshot = this.map?.captureCameraState() ?? null;
+    this.mapScreen.open(realm);
+    this.el.classList.add('map-screen-open');
+    this.mapButton.classList.add('is-active');
+    this.mapButton.setAttribute('aria-pressed', 'true');
+    const actor = actorOf(this.state);
+    this.lastActionableMine = actor !== null && this.myPlayerIds().includes(actor) && this.state.phase.t !== 'game_over';
+    this.lastActionableActor = actor ?? -1;
+    try {
+      const previous = typeof history.state === 'object' && history.state !== null ? history.state : {};
+      history.pushState({ ...previous, fableMapScreen: true }, '');
+    } catch {
+      /* sandboxed documents cannot push state; Esc and the close button still work */
+    }
+    window.addEventListener('popstate', this.onMapScreenPop);
+    this.hideRecenterUi();
+  }
+
+  private readonly onMapScreenPop = (): void => {
+    if (!this.mapScreenOpen) return;
+    this.closeMapScreen();
+  };
+
+  private requestCloseMapScreen(): void {
+    if (!this.mapScreenOpen) return;
+    const historyState = history.state as { fableMapScreen?: boolean } | null;
+    if (historyState?.fableMapScreen) history.back();
+    else this.closeMapScreen();
+  }
+
+  private closeMapScreen(): void {
+    if (!this.mapScreenOpen) return;
+    this.mapScreenOpen = false;
+    window.removeEventListener('popstate', this.onMapScreenPop);
+    this.mapScreen?.close();
+    this.el.classList.remove('map-screen-open');
+    this.mapButton.classList.remove('is-active');
+    this.mapButton.setAttribute('aria-pressed', 'false');
+    this.cancelReturnToActor();
+    if (this.playCameraSnapshot) {
+      this.map?.restoreCameraState(this.playCameraSnapshot);
+      this.playCameraSnapshot = null;
+    }
+    this.syncRecenterUi();
+  }
+
+  /** Read-only city sheet used by the map screen (never opens buying). */
+  private openReadOnlyCitySheet(cityId: string): void {
+    const state = this.state;
+    if (!state) return;
+    if (!citiesById.has(cityId)) {
+      this.app.toasts.show('この駅は開業準備中です', 'warn');
+      return;
+    }
+    this.citySheet?.close();
+    this.citySheetCityId = cityId;
+    this.citySheetBuyMode = false;
+    this.citySheet = openCitySheet({
+      modal: this.app.modal,
+      cityId,
+      state,
+      buyMode: false,
+      canAct: false,
+      onBuy: () => undefined,
+      onEndBuy: () => undefined,
+      onClose: () => {
+        this.citySheet = null;
+        this.citySheetCityId = null;
+        this.citySheetBuyMode = false;
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------- recenter UI
+
+  private boardBoxOnScreen(): { left: number; top: number; right: number; bottom: number } | null {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 40) return null;
+    return this.destArrowBox(rect);
+  }
+
+  private awayFromBoard(playerId: number, box: { left: number; top: number; right: number; bottom: number }): boolean {
+    const player = this.state?.players[playerId];
+    if (!player) return false;
+    const point = this.map?.screenPositionOfNode(player.nodeId) ?? null;
+    if (!point) return true; // another realm than the one on screen
+    return isPointOutsideBox(box, point.x, point.y, 4);
+  }
+
+  private hideRecenterUi(): void {
+    this.recenterButton.hidden = true;
+    this.actorRecenterButton.hidden = true;
+    this.recenterDock.hidden = true;
+    this.edgeHint.hidden = true;
+  }
+
+  private syncRecenterUi(): void {
+    if (this.destroyed) return;
+    const state = this.state;
+    if (!state || !this.map || this.mapScreenOpen) {
+      this.hideRecenterUi();
+      return;
+    }
+    const box = this.boardBoxOnScreen();
+    if (!box) {
+      this.hideRecenterUi();
+      return;
+    }
+    const actor = actorOf(state);
+    const ownId = this.ownPlayerId();
+    const ownAway = ownId !== null && this.awayFromBoard(ownId, box);
+    const actorAway = actor !== null && actor !== ownId && this.awayFromBoard(actor, box);
+    this.recenterButton.hidden = !ownAway;
+    this.actorRecenterButton.hidden = !actorAway;
+    this.updateRecenterDock();
+    this.updateEdgeHint(state, ownId, box);
+  }
+
+  private updateRecenterDock(): void {
+    const dock = this.recenterDock;
+    dock.hidden = this.recenterButton.hidden && this.actorRecenterButton.hidden;
+    if (dock.hidden) return;
+    const root = this.el.getBoundingClientRect();
+    const dockWidth = dock.offsetWidth || 220;
+    const bandLeft = root.width / 2 - dockWidth / 2;
+    const bandRight = root.width / 2 + dockWidth / 2;
+    let top = root.height;
+    for (const el of [this.msgWindow.el, this.moveOptionsHost, this.bottomBar, this.moneyHost]) {
+      if (!this.isLayoutVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      const left = rect.left - root.left;
+      const right = rect.right - root.left;
+      // 横に重ならないパネル（横長画面の右寄せ所持金など）は高さの基準にしない。
+      if (right <= bandLeft || left >= bandRight) continue;
+      top = Math.min(top, rect.top - root.top);
+    }
+    dock.style.bottom = `${Math.max(10, Math.round(root.height - top + 10))}px`;
+  }
+
+  private syncRecenterPortrait(playerId: number, state: PublicState): void {
+    if (playerId === this.recenterPortraitId) return;
+    this.recenterPortraitId = playerId;
+    const player = state.players[playerId];
+    const src = characterSprite(player ? charsById.get(player.characterId) : undefined);
+    this.recenterPortrait.replaceChildren();
+    this.edgeHintPortrait.replaceChildren();
+    if (!src) return;
+    this.recenterPortrait.append(h('img', { attrs: { src, alt: '', draggable: 'false' } }));
+    this.edgeHintPortrait.append(h('img', { attrs: { src, alt: '', draggable: 'false' } }));
+  }
+
+  private updateEdgeHint(
+    state: PublicState,
+    ownId: number | null,
+    box: { left: number; top: number; right: number; bottom: number },
+  ): void {
+    const player = ownId !== null ? state.players[ownId] : undefined;
+    const node = player ? nodesById.get(player.nodeId) : undefined;
+    if (ownId === null || !player || !node) {
+      this.edgeHint.hidden = true;
+      return;
+    }
+    const point = this.map?.screenPositionOfNode(node.id) ?? null;
+    if (point && !isPointOutsideBox(box, point.x, point.y, 4)) {
+      this.edgeHint.hidden = true;
+      return;
+    }
+    this.syncRecenterPortrait(ownId, state);
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const rootRect = this.el.getBoundingClientRect();
+    const offsetX = canvasRect.left - rootRect.left;
+    const offsetY = canvasRect.top - rootRect.top;
+    this.edgeHint.hidden = false;
+    if (!point) {
+      // Own token is in another realm: park the chip near the top-right of the board.
+      this.edgeHint.classList.add('is-other-realm');
+      this.edgeHint.style.left = `${Math.round(offsetX + box.right - 30)}px`;
+      this.edgeHint.style.top = `${Math.round(offsetY + box.top + 30)}px`;
+      this.edgeHintArrow.hidden = true;
+      this.edgeHint.setAttribute('aria-label', `${realmLabel(realmOfNode(node.id))}にいる自分のコマへ戻る`);
+      return;
+    }
+    const placement = placeEdgeHint({
+      box,
+      dx: point.x - (box.left + box.right) / 2,
+      dy: point.y - (box.top + box.bottom) / 2,
+      width: 52,
+      height: 52,
+      margin: 4,
+    });
+    if (!placement) {
+      this.edgeHint.hidden = true;
+      return;
+    }
+    this.edgeHint.classList.remove('is-other-realm');
+    this.edgeHint.style.left = `${Math.round(offsetX + placement.x)}px`;
+    this.edgeHint.style.top = `${Math.round(offsetY + placement.y)}px`;
+    this.edgeHintArrow.hidden = false;
+    const reach = 26;
+    const ax = Math.cos(placement.angle) * reach;
+    const ay = Math.sin(placement.angle) * reach;
+    this.edgeHintArrow.style.transform =
+      `translate(-50%, -50%) translate(${ax.toFixed(1)}px, ${ay.toFixed(1)}px) rotate(${placement.angle}rad)`;
+    this.edgeHint.setAttribute('aria-label', '自分のコマは画面の外。タップで戻る');
+    this.liftEdgeHintAbovePanels(box);
+  }
+
+  /** The chip sits on the board edge, which can run under HUD panels (money / portrait). Lift it above them. */
+  private liftEdgeHintAbovePanels(box: { left: number; top: number; right: number; bottom: number }): void {
+    if (this.edgeHint.hidden) return;
+    const root = this.el.getBoundingClientRect();
+    const hint = this.edgeHint.getBoundingClientRect();
+    for (const panel of [this.moneyHost, this.portraitHost]) {
+      if (!this.isLayoutVisible(panel)) continue;
+      const rect = panel.getBoundingClientRect();
+      const intersects =
+        hint.right > rect.left + 4 && hint.left < rect.right - 4 && hint.bottom > rect.top + 4 && hint.top < rect.bottom - 4;
+      if (!intersects) continue;
+      const stackedTop = rect.top - hint.height / 2 - 6 - root.top;
+      const minTop = box.top + hint.height / 2 + 4;
+      if (stackedTop >= minTop) {
+        this.edgeHint.style.top = `${Math.round(stackedTop)}px`;
+        return;
+      }
+      const leftOfPanel = rect.left - hint.width / 2 - 6 - root.left;
+      const minLeft = box.left + hint.width / 2 + 4;
+      if (leftOfPanel >= minLeft) {
+        this.edgeHint.style.left = `${Math.round(leftOfPanel)}px`;
+      }
+      return;
+    }
   }
 
   /** CSS-hidden elements (display:none, visibility:hidden, no boxes) must not shape the map viewport. */
@@ -2873,8 +3293,8 @@ export class GameScreen implements ScreenHandle {
     addObstacle(this.emotes.panel, this.emotes.isOpen);
     addObstacle(this.pcCommFab);
     addObstacle(this.pcCommDrawer, !this.pcCommDrawer.hidden);
-    addObstacle(this.recenterButton, !this.recenterButton.hidden);
-    addObstacle(this.overviewBanner, !this.overviewBanner.hidden);
+    addObstacle(this.recenterDock, !this.recenterDock.hidden);
+    addObstacle(this.edgeHint, !this.edgeHint.hidden);
     map.setLabelObstacles(obstacles);
   }
 
@@ -2974,103 +3394,8 @@ export class GameScreen implements ScreenHandle {
     if (this.rankingHost.parentElement !== this.pcRankingSlot) add(this.rankingHost);
     add(this.pcCommFab);
     add(this.pcCommDrawer, !this.pcCommDrawer.hidden);
-    add(this.recenterButton, !this.recenterButton.hidden);
+    add(this.recenterDock, !this.recenterDock.hidden);
     return out;
-  }
-
-  private openMapViewDialog(): void {
-    const state = this.state;
-    if (!state) return;
-    const counts = new Map<MapViewId, number>();
-    for (const player of state.players) {
-      const realm = realmOfNode(player.nodeId);
-      counts.set(realm, (counts.get(realm) ?? 0) + 1);
-    }
-    let handle: ModalHandle | null = null;
-    const views: MapViewId[] = ['world', 'heaven', 'hell', 'space'];
-    const body = h(
-      'div',
-      { class: 'map-view-dialog' },
-      h('p', {
-        class: 'map-view-copy',
-        text: '手番プレイヤーのいる世界を自動で表示します。タブで覗き見もできます。',
-      }),
-    );
-    const grid = h('div', { class: 'map-view-grid' });
-    for (const view of views) {
-      const selected = this.viewRealm === view;
-      grid.append(
-        h(
-          'button',
-          {
-            class: `map-view-tab ${selected ? 'is-selected' : ''} realm-${view}`.trim(),
-            attrs: { type: 'button', 'aria-pressed': String(selected) },
-            on: {
-              click: () => {
-                handle?.close();
-                this.manualView = true;
-                this.viewRealm = view;
-                this.applyMapView();
-                this.renderHud();
-                this.app.toasts.show(`${realmLabel(view)}を表示しています`, 'info');
-              },
-            },
-          },
-          h('span', { class: 'map-view-icon', text: REALM_ICON[view], attrs: { 'aria-hidden': 'true' } }),
-          h('span', { class: 'map-view-name', text: realmLabel(view) }),
-          h('span', { class: 'map-view-count', text: `${counts.get(view) ?? 0} 人` }),
-        ),
-      );
-    }
-    body.append(grid);
-    body.append(
-      h('button', {
-        class: 'btn btn-gold map-view-overview',
-        text: '🌍 地上を全体表示',
-        attrs: { type: 'button' },
-        on: {
-          click: () => {
-            handle?.close();
-            this.manualView = true;
-            this.viewRealm = 'world';
-            this.applyMapView();
-            this.focusWorld();
-            this.renderHud();
-          },
-        },
-      }),
-      h('button', {
-        class: 'btn btn-ghost map-view-return',
-        text: '🎯 手番プレイヤーを追う',
-        attrs: { type: 'button' },
-        on: {
-          click: () => {
-            handle?.close();
-            this.manualView = false;
-            this.viewRealm = this.playerRealm;
-            this.applyMapView();
-            this.renderHud();
-          },
-        },
-      }),
-      h(
-        'div',
-        { class: 'map-view-legend' },
-        ...views.map((view) =>
-          h(
-            'span',
-            { class: `map-view-legend-item realm-${view}` },
-            h('span', { text: REALM_ICON[view] }),
-            h('span', { text: realmLabel(view) }),
-          ),
-        ),
-      ),
-    );
-    handle = this.app.modal.open(body, {
-      title: '🗺️ 全体マップ',
-      subtitle: '地上・天国・地獄・宇宙を切り替え',
-      className: 'map-view-modal',
-    });
   }
 
   /** 「マスの種類」+ 継続中の都市効果の一覧。都市を選ぶと地図がその都市へ寄る。 */
@@ -3082,7 +3407,7 @@ export class GameScreen implements ScreenHandle {
         this.manualView = false;
         this.viewRealm = 'world';
         this.map?.setView?.('world');
-        void this.map?.focusNode(cityNodeId(cityId), { zoom: 1.4, ms: 620 }).then(() => this.syncOverviewUi());
+        void this.map?.focusNode(cityNodeId(cityId), { zoom: 1.4, ms: 620 });
       },
     });
   }
@@ -3118,12 +3443,8 @@ export class GameScreen implements ScreenHandle {
       item('skill', '固有技', 'キャラクター固有技（1 年 1 回）', () => this.openSkill()),
       item('chart', '情報', '業種の相場・ニュース・行動ログ', () => this.openInfo()),
       item('flag', 'マスの種類', '全 8 種類のアイコンと効果・異世界倍率', () => this.openCityLegend()),
-      item('globe', '全体マップ', '地上のマップを引いて見る', () => {
-        this.manualView = true;
-        this.viewRealm = 'world';
-        this.applyMapView();
-        this.renderHud();
-        this.focusWorld();
+      item('globe', '世界地図', '地上・天国・地獄・宇宙を見わたす（読み取り専用）', () => {
+        this.openMapScreen('world');
       }),
       item('gear', '設定', '演出速度・チャット表示・ミュート', () => this.app.openSettings()),
       item('help', '遊び方', 'ルールと操作の説明', () => this.app.openHelp()),
@@ -3314,9 +3635,10 @@ export class GameScreen implements ScreenHandle {
         this.rouletteName.replaceChildren(rubyName(city.nameJa, city.nameKana));
         this.rouletteCountry.textContent = city.countryJa;
       }
-      if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(cityId), { zoom: 0.8, ms: 700 });
+      if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600);
       this.lastDestinationBannerAt = Date.now();
       await announceDestination();
+
       return;
     }
     const candidates = GAME_DATA.cities
@@ -3370,7 +3692,7 @@ export class GameScreen implements ScreenHandle {
     this.rouletteTimer = window.setTimeout(() => finish(false), spinMs);
     await promise;
     this.lastDestinationBannerAt = Date.now();
-    if (this.playerRealm === 'world') this.map?.focusNode(cityNodeId(cityId), { zoom: 0.8, ms: 700 });
+    if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600);
     if (control.skipped || this.destroyed) {
       this.rouletteOverlay.hidden = true;
       this.rouletteOverlay.classList.remove('is-result');
@@ -3439,8 +3761,51 @@ export class GameScreen implements ScreenHandle {
     openInfoDialog({ modal: this.app.modal, state, newsLog: this.newsLog, logs: this.logs });
   }
 
-  private focusWorld(): void {
-    this.map?.fitWorld(450);
+  /** 目的地チップの隣に出す寄り道依頼のチップ。 */
+  private renderErrandChip(state: PublicState, seat: number): void {
+    const errand = state.errand ?? null;
+    if (!errand) {
+      this.errandChip.hidden = true;
+      return;
+    }
+    const city = citiesById.get(errand.cityId);
+    const name = city?.nameJa ?? errand.cityId;
+    const nodeId = cityNodeId(errand.cityId);
+    const player = state.players[seat];
+    const steps = player ? distance(GAME_DATA, player.nodeId, nodeId) : Number.NaN;
+    const stepsText = Number.isFinite(steps) ? `あと${steps}` : '—';
+    const bonusText = `+${formatOkuShort(errand.bonus)}`;
+    this.errandChip.hidden = false;
+    if (this.errandName.textContent !== name) this.errandName.textContent = name;
+    if (this.errandSteps.textContent !== stepsText) this.errandSteps.textContent = stepsText;
+    if (this.errandBonus.textContent !== bonusText) this.errandBonus.textContent = bonusText;
+    this.errandChip.title = `${errand.title}（${name}・報酬 ${formatOku(errand.bonus)}）`;
+    this.errandChip.setAttribute(
+      'aria-label',
+      Number.isFinite(steps)
+        ? `寄り道の依頼 ${errand.title}。${name}まであと${steps}マス、報酬${formatOku(errand.bonus)}。タップでマップ表示`
+        : `寄り道の依頼 ${errand.title}。${name}、報酬${formatOku(errand.bonus)}。タップでマップ表示`,
+    );
+  }
+
+  /** 寄り道依頼の都市を地図で示す。異世界にいるときは地上へ戻る案内だけ出す。 */
+  private focusErrand(): void {
+    const state = this.state;
+    const errand = state?.errand ?? null;
+    if (!state || !errand) return;
+    const city = citiesById.get(errand.cityId);
+    const name = city?.nameJa ?? errand.cityId;
+    if (this.playerRealm !== 'world') {
+      this.app.toasts.show('📜 依頼の街は地上にある。出口から戻ろう。', 'info', 2800);
+      return;
+    }
+    const nodeId = cityNodeId(errand.cityId);
+    this.map?.focusNode(nodeId, { zoom: 0.95, ms: 500 });
+    const seat = actorOf(state) ?? this.displaySeat() ?? 0;
+    const player = state.players[seat];
+    const steps = player ? distance(GAME_DATA, player.nodeId, nodeId) : Number.NaN;
+    const stepsText = Number.isFinite(steps) ? `（あと ${steps} マス）` : '';
+    this.app.toasts.show(`📜 寄り道の依頼：${name}${stepsText}`, 'info', 2800);
   }
 
   private focusDestination(showToast = true): void {
@@ -3714,6 +4079,10 @@ export class GameScreen implements ScreenHandle {
         this.manualView = false;
         this.syncTurnPresentation(fx.playerId, pending);
         this.map?.follow(fx.playerId);
+        if (this.myPlayerIds().includes(fx.playerId)) {
+          // 自分の番が来たら、演出で動いたカメラを自分のコマへ確実に戻す。
+          this.recenterOnPlayer(fx.playerId, { ms: 460 }, actorOf(pending));
+        }
         this.addLog(`▶ ${this.actorLabel(fx.playerId)} の番`);
         let handoff = false;
         if (this.session.mode === 'local' && this.myPlayerIds().length > 1 && this.myPlayerIds().includes(fx.playerId)) {
@@ -3897,7 +4266,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.celebrate(fx.playerId, 'goal');
         this.map?.setMood(fx.playerId, 'joy', 6000);
         this.confetti(22);
-        this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 1.1, ms: 600 });
+        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 600, 1300);
         this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
         this.app.toasts.show(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り！ +${formatOku(fx.bonus)}`, 'good', 3400);
         this.addLog(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り`);
@@ -3908,6 +4277,75 @@ export class GameScreen implements ScreenHandle {
         const city = citiesById.get(fx.cityId);
         this.addLog(`🎯 目的地が ${city?.nameJa ?? fx.cityId} に決定`);
         await this.showDestinationRoulette(fx.cityId, control);
+        return;
+      }
+      case 'errand': {
+        const city = citiesById.get(fx.cityId);
+        const requester = charsById.get(fx.requester);
+        const cityName = city?.nameJa ?? fx.cityId;
+        Audio.sfx('event');
+        this.panAndReturn(cityNodeId(fx.cityId), 0.85, 500, 1600);
+        this.addLog(`📜 寄り道の依頼：${fx.title}（${cityName}・${formatOku(fx.bonus)}）`);
+        this.errandCutin?.close();
+        const seat = actorOf(pending) ?? pending.players.length - 1;
+        const player = pending.players[seat];
+        const nodeId = cityNodeId(fx.cityId);
+        const steps = player ? distance(GAME_DATA, player.nodeId, nodeId) : Number.NaN;
+        if (requester) {
+          this.errandCutin = showErrandCutin({
+            host: this.el,
+            requester,
+            title: fx.title,
+            cityName,
+            steps: Number.isFinite(steps) ? steps : null,
+            bonus: fx.bonus,
+            narration: errandNarration(fx.requester),
+            durationMs: Math.max(900, FX_MS.errand / control.speed),
+          });
+          control.onSkip(() => {
+            this.errandCutin?.close();
+            Audio.stopVoice();
+          });
+        } else {
+          this.showGameBanner(`📜 ${fx.title}`);
+          // カットインが無いときだけ、トーストでも依頼を伝える（スマホで文字が重なるのを避ける）。
+          this.app.toasts.show(`📜 寄り道の依頼：${cityName}`, 'info', 2600);
+        }
+        await control.wait(FX_MS.errand);
+        return;
+      }
+      case 'errand_done': {
+        const city = citiesById.get(fx.cityId);
+        const cityName = city?.nameJa ?? fx.cityId;
+        Audio.sfx('goal_fanfare');
+        this.portraitMood('joy', fx.playerId);
+        this.portraitMotion('jump');
+        this.map?.celebrate(fx.playerId, 'goal');
+        this.map?.setMood(fx.playerId, 'joy', 6000);
+        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 550, 1300);
+        this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#7ff0d4');
+        this.showCoinFlow(fx.playerId, fx.bonus);
+        this.confetti(20);
+        this.app.toasts.show(
+          `📜 ${this.playerName(fx.playerId)} が ${cityName} の依頼を達成！ +${formatOku(fx.bonus)}`,
+          'good',
+          3600,
+        );
+        this.addLog(`📜 ${this.playerName(fx.playerId)} が寄り道の依頼を達成（+${formatOku(fx.bonus)}）`);
+        // 固定のナレーション。音声は事前生成済み（gen-voice の narration グループ）。
+        this.transientMsgPending = true;
+        const errandVoice = Audio.playVoice('narrator', NARRATION.errandDone, {
+          rate: control.speed,
+        });
+        void this.msgWindow.show({
+          speaker: 'narrator',
+          name: 'ナレーター',
+          text: NARRATION.errandDone,
+          color: '#ffd23f',
+          speed: control.speed,
+          voiceDone: errandVoice,
+        }).then(() => { this.transientMsgPending = false; });
+        await control.wait(FX_MS.errand_done);
         return;
       }
       case 'piper': {
@@ -3988,7 +4426,7 @@ export class GameScreen implements ScreenHandle {
         const icon = up ? (fx.kind === 'bubble' ? '📈' : '✨') : fx.kind === 'blockade' ? '🚧' : '💥';
         Audio.sfx(up ? 'event' : 'bad');
         this.showGameBanner(`${icon} ${name}に${fx.label}（${up ? '▲' : '▼'}×${fx.mult.toFixed(2)}・${fx.years}年）`);
-        this.map?.focusNode(cityNodeId(fx.cityId), { zoom: 1.35, ms: 620 });
+        this.panAndReturn(cityNodeId(fx.cityId), 1.35, 620, 1700);
         this.map?.cityModBurst(fx.cityId);
         this.map?.floatText(
           cityNodeId(fx.cityId),
@@ -4055,7 +4493,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.shake(fx.brokeMonopoly ? 0.7 : 0.4);
         if (ref) {
           const nodeId = cityNodeId(ref.city.id);
-          this.map?.focusNode(nodeId, { zoom: 1.05, ms: 500 });
+          this.panAndReturn(nodeId, 1.05, 500, 1300);
           this.map?.floatText(nodeId, `買収 ${formatOkuShort(fx.amount)}`, '#ffd23f');
         }
         this.showGameBanner(`🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の物件を買収！`);
@@ -4597,6 +5035,11 @@ export class GameScreen implements ScreenHandle {
       const inText = target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
       if (event.key === 'Escape') {
         if (this.app.modal.isOpen()) return;
+        if (this.mapScreenOpen) {
+          this.requestCloseMapScreen();
+          event.preventDefault();
+          return;
+        }
         if (!this.squareInspectCard.hidden) {
           this.hideSquareInspect();
           event.preventDefault();
@@ -4614,6 +5057,19 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       if (inText) return;
+      if (this.app.modal.isOpen()) return;
+      if ((event.key === 'Home' || event.key === 'c' || event.key === 'C') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        if (this.mapScreenOpen) {
+          this.requestCloseMapScreen();
+          this.recenterOnOwnToken();
+        } else {
+          this.recenterOnOwn();
+        }
+        return;
+      }
+      // The world map screen owns its own interactions; game shortcuts stay off while browsing.
+      if (this.mapScreenOpen) return;
       if (this.handoffResolve && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault();
         this.resolveHandoff();
@@ -4624,7 +5080,6 @@ export class GameScreen implements ScreenHandle {
       }
       const active = document.activeElement;
       if (active instanceof HTMLElement && active.closest('button, a, [role="button"], input, textarea, select, .modal-panel, .chat-panel, .emote-palette')) return;
-      if (this.app.modal.isOpen()) return;
       if (this.fxBusy && (event.key === ' ' || event.key === 'Enter')) {
         event.preventDefault();
         // Finish the window reveal / page first; the next press skips the cutscene.
@@ -4661,7 +5116,7 @@ export class GameScreen implements ScreenHandle {
             this.openDestination();
             break;
           case '5':
-            this.openMapViewDialog();
+            this.openMapScreen();
             break;
           case '6':
             this.openSkill();

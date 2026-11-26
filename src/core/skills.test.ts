@@ -164,11 +164,16 @@ describe('固有技: CPU', () => {
       let state = createGame(fixtureData, config(['momotaro', 'sinbad', 'alice', 'red_hood'], 1, seed)).state;
       const usedBy = [0, 0, 0, 0];
       const seenPhase = new Set<string>();
+      /** 2〜3月に自分の turn_start を迎えた席（強制発動のチャンスがあった席）。 */
+      const hadLateTurn = new Set<number>();
       let steps = 0;
       while (state.phase.t !== 'game_over') {
         seenPhase.add(state.phase.t);
         const actor = actorOf(state);
         if (actor === null) throw new Error(`no actor in ${state.phase.t}`);
+        if (state.phase.t === 'turn_start' && (state.month === 2 || state.month === 3)) {
+          hadLateTurn.add(state.current);
+        }
         const result = step(fixtureData, state, actor, cpuDecide(fixtureData, state));
         for (const fx of skillFx(result.fx)) usedBy[fx.playerId] += 1;
         state = result.state;
@@ -177,7 +182,11 @@ describe('固有技: CPU', () => {
       expect(seenPhase.has('skill_target') || usedBy.some((n) => n > 0)).toBe(true);
       expect(usedBy.reduce((a, b) => a + b, 0), `seed ${seed}`).toBeGreaterThanOrEqual(3);
       for (const count of usedBy) expect(count, `seed ${seed}`).toBeLessThanOrEqual(1);
-      for (const player of state.players) expect(player.skillUsedYear).toBe(1);
+      // 2〜3月に手番が一度でも回ってきた席は、必ずその年に技を使っていること。
+      // 手番そのものが来なかった席（skipTurns 等）だけを除外する。
+      for (const player of state.players) {
+        if (hadLateTurn.has(player.id)) expect(player.skillUsedYear, `seed ${seed}`).toBe(1);
+      }
     }
   });
 

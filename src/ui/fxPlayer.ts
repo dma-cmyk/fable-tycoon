@@ -49,6 +49,8 @@ export function estimateFxDurationMs(fx: Fx): number {
     case 'city_mod': return FX_MS.city_mod;
     case 'skill': return FX_MS.skill;
     case 'final_year': return FX_MS.final_year;
+    case 'errand': return FX_MS.errand;
+    case 'errand_done': return FX_MS.errand_done;
     default: return 800;
   }
 }

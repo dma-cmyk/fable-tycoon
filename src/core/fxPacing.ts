@@ -85,6 +85,10 @@ export function isRoutineCpuFx(fx: Fx, ctx: FxPacingContext): boolean {
       );
     case 'card_get':
       return ctx.isCpu(fx.playerId);
+    case 'errand':
+    case 'errand_done':
+      // 寄り道依頼は人間も狙う共有の山場。CPU が達成しても早送りしない。
+      return false;
     default:
       return false;
   }

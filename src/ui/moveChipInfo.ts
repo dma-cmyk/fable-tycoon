@@ -53,6 +53,10 @@ export interface MoveRecommendationInput {
   /** City sitting on a board node, or null for a plain square. */
   cityOf: (nodeId: string) => City | null;
   infoFor: (city: City) => CityMoveInfo;
+  /** 寄り道依頼の都市（依頼なしは null）。 */
+  errandCityId?: string | null;
+  /** 依頼の報酬（億円）。大きいほど遠回りしてでも寄る価値がある。 */
+  errandBonus?: number;
 }
 
 /**
@@ -96,6 +100,23 @@ export function biasedMoveRecommendation(input: MoveRecommendationInput): string
     ) {
       best = { nodeId: option.nodeId, remain, price: info.cheapest };
     }
+  }
+
+  // 寄り道依頼: 報酬の歩数換算（1 歩 ≒ 8 億）ぶんまでは遠回りしてよい。
+  // 目的地がまだ遠いときだけ候補にする（目前のゴールを依頼で潰さない）。
+  const errandId = input.errandCityId ?? null;
+  const errandBonus = input.errandBonus ?? 0;
+  if (errandId && errandBonus > 0 && minRemain >= 8) {
+    const errandDetour = Math.min(4, Math.max(0, Math.round(errandBonus / 8)));
+    let errand: { nodeId: string; remain: number } | null = null;
+    for (const option of input.options) {
+      const city = input.cityOf(option.nodeId);
+      if (!city || city.id !== errandId) continue;
+      const remain = input.remainOf(option.nodeId);
+      if (remain === null || remain - minRemain > errandDetour) continue;
+      if (errand === null || remain < errand.remain) errand = { nodeId: option.nodeId, remain };
+    }
+    if (errand && (best === null || errand.remain <= best.remain)) return errand.nodeId;
   }
   return best?.nodeId ?? null;
 }

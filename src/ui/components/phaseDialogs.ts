@@ -1,5 +1,6 @@
 import {  currentPrice, type PublicState } from '../../core/engine';
-import type {CardDef} from '../../core/types';
+import { shortestDistance } from '../../core/graph';
+import type {CardDef, City} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
 import {
@@ -8,6 +9,7 @@ import {
   characterSprite,
   charsById,
   citiesById,
+  cityNodeId,
   formatOku,
   formatOkuShort,
   INDUSTRY_ICON,
@@ -17,6 +19,15 @@ import {
   playerColor,
   propertiesById,
 } from '../format';
+import { cityMoveInfo, moveChipPriceLabel, type CityMoveInfo } from '../moveChipInfo';
+import {
+  buildWarpCandidates,
+  sortWarpCandidates,
+  warpDestinationRange,
+  warpGainText,
+  type WarpCandidate,
+  type WarpSortMode,
+} from '../warpInfo';
 
 // ---------------------------------------------------------------- card target
 
@@ -29,16 +40,53 @@ export interface CardTargetOptions {
   onTarget: (target: string) => void;
   onCancel: () => void;
   onPickOnMap?: () => void;
+  /** Candidate highlight (PC only): pan the map and draw the warp line. */
+  onPreview?: (target: string | null) => void;
 }
 
 export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
   const def = cardsById.get(options.cardId);
   const portal = options.cardId === 'portal';
   const rocket = options.cardId === 'rocket';
+  const carpet = options.cardId === 'carpet';
   const body = h('div', { class: 'target-dialog' });
   const list = h('div', { class: 'target-list' });
   const actor = options.state.players[options.state.current];
   const cityOptions = options.options.filter((target) => target !== 'r:space' && !/^\d+$/.test(target) && !target.startsWith('p:'));
+  const cityByTarget = new Map<string, City>();
+  for (const target of cityOptions) {
+    const node = nodesById.get(target);
+    const city = node?.cityId ? citiesById.get(node.cityId) : undefined;
+    if (city) cityByTarget.set(target, city);
+  }
+  const cityTargets = [...cityByTarget.entries()].map(([target, city]) => ({ target, city }));
+  const cityPicker =
+    cityTargets.length > 0 &&
+    options.options.every((target) => target === 'r:space' || cityByTarget.has(target));
+  const errand = options.state.errand ?? null;
+  const errandNodeId = errand?.cityId ? cityNodeId(errand.cityId) : null;
+  const destinationNodeId = cityNodeId(options.state.destination);
+  const hereNodeId = actor?.nodeId ?? null;
+  const candidates = cityPicker
+    ? buildWarpCandidates({
+        sources: cityTargets.map(({ target, city }) => ({ nodeId: target, city })),
+        hereNodeId,
+        destinationNodeId,
+        errandNodeId,
+        distance: (from, to) => shortestDistance(GAME_DATA, from, to),
+      })
+    : [];
+  const candidateByNode = new Map(candidates.map((candidate) => [candidate.nodeId, candidate]));
+  const infoByNode = new Map<string, CityMoveInfo>();
+  for (const { target, city } of cityTargets) {
+    infoByNode.set(target, cityMoveInfo(GAME_DATA, options.state, options.state.current, city));
+  }
+  const destinationSteps =
+    hereNodeId !== null ? shortestDistance(GAME_DATA, hereNodeId, destinationNodeId) : Number.NaN;
+  const errandSteps =
+    hereNodeId !== null && errandNodeId !== null
+      ? shortestDistance(GAME_DATA, hereNodeId, errandNodeId)
+      : Number.NaN;
   const search = cityOptions.length > 6
     ? h('input', {
         class: 'input target-search',
@@ -66,7 +114,102 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
             : '対象を選んでください。',
     }),
   );
+
+  const nowDistanceText = Number.isFinite(destinationSteps) ? `いま ${destinationSteps} マス` : 'いまの距離は不明';
+  if (cityPicker) {
+    const destinationCity = citiesById.get(options.state.destination);
+    const range = carpet ? warpDestinationRange(candidates) : null;
+    const rangeText = range
+      ? range.min === range.max
+        ? `${range.min} マス`
+        : `${range.min}〜${range.max} マス`
+      : '—';
+    body.append(
+      h(
+        'div',
+        { class: 'warp-summary' },
+        h(
+          'p',
+          { class: 'warp-summary-line' },
+          h('span', { class: 'warp-summary-label', text: '目的地' }),
+          h('strong', { text: destinationCity?.nameJa ?? options.state.destination }),
+          h('span', {
+            class: 'warp-summary-now',
+            text: Number.isFinite(destinationSteps) ? `まで いま ${destinationSteps} マス` : 'まで —',
+          }),
+        ),
+        errand
+          ? h('p', {
+              class: 'warp-summary-errand',
+              text: `寄り道依頼「${errand.title}」の街まで ${
+                Number.isFinite(errandSteps) ? `${errandSteps} マス` : '—'
+              }`,
+            })
+          : null,
+        carpet
+          ? h('p', {
+              class: 'warp-carpet',
+              text:
+                range && range.min >= 5 && range.max <= 10
+                  ? `じゅうたんは 目的地から ${rangeText}のどこかへ着地する（${nowDistanceText}）。`
+                  : `候補は 目的地から ${rangeText}（${nowDistanceText}）。`,
+            })
+          : null,
+        h('p', {
+          class: 'warp-summary-note',
+          text: '数字は着地した後の目的地までのマス数。小さいほど近い。',
+        }),
+      ),
+    );
+  }
   if (search) body.append(search);
+
+  let sortMode: WarpSortMode = 'distance';
+  const sortButtons: HTMLButtonElement[] = [];
+  const itemByNode = new Map<string, HTMLButtonElement>();
+  const applySort = (): void => {
+    for (const candidate of sortWarpCandidates(candidates, sortMode)) {
+      const item = itemByNode.get(candidate.nodeId);
+      if (item) list.append(item);
+    }
+    for (const button of sortButtons) {
+      button.setAttribute('aria-pressed', String(button.dataset.sort === sortMode));
+    }
+  };
+  if (cityPicker) {
+    const sortSeg = h('div', {
+      class: 'seg warp-sort',
+      attrs: { role: 'group', 'aria-label': '候補の並べ替え' },
+    });
+    for (const [mode, label] of [
+      ['distance', '目的地まで近い順'],
+      ['name', '名前順'],
+    ] as const) {
+      const sortButton = h('button', {
+        class: 'seg-btn',
+        text: label,
+        dataset: { sort: mode },
+        attrs: { type: 'button', 'aria-pressed': String(mode === sortMode) },
+        on: {
+          click: () => {
+            sortMode = mode;
+            applySort();
+          },
+        },
+      });
+      sortButtons.push(sortButton);
+      sortSeg.append(sortButton);
+    }
+    body.append(
+      h(
+        'div',
+        { class: 'warp-toolbar' },
+        sortSeg,
+        h('span', { class: 'warp-count muted', text: `${candidates.length} 都市` }),
+      ),
+    );
+  }
+
   if (options.canAct && options.onPickOnMap && cityOptions.length > 0) {
     body.append(
       h('button', {
@@ -111,15 +254,27 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
 
   for (const target of options.options) {
     if (target === 'r:space') continue;
-    const button = targetButton(options.state, target, () => {
-      if (!options.canAct) return;
-      button.disabled = true;
-      button.classList.add('is-busy');
-      options.onTarget(target);
-    });
+    const candidate = candidateByNode.get(target);
+    const info = infoByNode.get(target);
+    const button =
+      candidate && info
+        ? cityTargetButton(options.state, candidate, info, () => {
+            if (!options.canAct) return;
+            button.disabled = true;
+            button.classList.add('is-busy');
+            options.onTarget(target);
+          }, (nodeId) => options.onPreview?.(nodeId))
+        : targetButton(options.state, target, () => {
+            if (!options.canAct) return;
+            button.disabled = true;
+            button.classList.add('is-busy');
+            options.onTarget(target);
+          });
     button.disabled = !options.canAct;
     list.append(button);
+    if (candidate) itemByNode.set(target, button);
   }
+  if (cityPicker) applySort();
   if (options.options.length === 0) {
     list.append(h('p', { class: 'empty-state', text: '選べる対象がありません。' }));
   }
@@ -151,12 +306,110 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
     body.append(h('p', { class: 'muted center', text: `${actor?.name ?? '手番の人'} が対象を選んでいます…` }));
   }
 
-  return options.modal.open(body, {
+  const handle = options.modal.open(body, {
     title: `🎴 ${def?.name ?? 'カード'} — 対象を選ぶ`,
     subtitle: '対象をえらぶと効果が発動します',
-    className: 'target-modal',
+    className: cityPicker ? 'target-modal warp-target-modal' : 'target-modal',
     dismissible: !options.canAct,
+    onClose: () => {
+      options.onPreview?.(null);
+    },
   });
+  if (cityPicker) handle.root.classList.add('warp-target-backdrop');
+  return handle;
+}
+
+function cityTargetButton(
+  state: PublicState,
+  candidate: WarpCandidate,
+  info: CityMoveInfo,
+  onPick: () => void,
+  onPreview: (nodeId: string | null) => void,
+): HTMLButtonElement {
+  const ownerNames = info.otherOwnerIds
+    .map((id) => state.players[id]?.name)
+    .filter((name): name is string => !!name);
+  const tone =
+    candidate.toDestination === null
+      ? ''
+      : candidate.toDestination <= 10
+        ? 'is-close'
+        : candidate.toDestination <= 22
+          ? 'is-mid'
+          : 'is-far';
+  const gainText = warpGainText(candidate.gain);
+  return h(
+    'button',
+    {
+      class: 'target-item target-item-city',
+      dataset: {
+        search: `${candidate.nameJa} ${candidate.nameEn} ${candidate.countryJa}`.toLowerCase(),
+        node: candidate.nodeId,
+      },
+      attrs: { type: 'button' },
+      on: {
+        click: onPick,
+        pointerenter: () => onPreview(candidate.nodeId),
+        focus: () => onPreview(candidate.nodeId),
+        pointerleave: () => onPreview(null),
+      },
+    },
+    h('span', { class: 'target-icon', text: countryFlag(candidate.country) }),
+    h(
+      'span',
+      { class: 'target-main' },
+      h(
+        'span',
+        { class: 'target-name-row' },
+        h('span', { class: 'target-name', text: candidate.nameJa }),
+        h(
+          'span',
+          { class: `warp-dist ${tone}` },
+          h('span', { class: 'warp-dist-label', text: '目的地まで' }),
+          h('strong', { text: candidate.toDestination === null ? '—' : String(candidate.toDestination) }),
+        ),
+      ),
+      h('span', { class: 'target-meta muted', text: `${candidate.countryJa} ・ ${candidate.nameEn}` }),
+      h(
+        'span',
+        { class: 'warp-tags' },
+        gainText
+          ? h('span', {
+              class: `warp-tag ${
+                candidate.gain !== null && candidate.gain < 0
+                  ? 'is-gain'
+                  : candidate.gain !== null && candidate.gain > 0
+                    ? 'is-loss'
+                    : ''
+              }`,
+              text: gainText,
+            })
+          : null,
+        candidate.fromHere !== null
+          ? h('span', { class: 'warp-tag', text: `現在地から ${candidate.fromHere}` })
+          : null,
+        h('span', {
+          class: `warp-tag ${
+            info.cheapest === null ? '' : info.affordable ? 'is-ok' : 'is-over'
+          }`,
+          text: info.cheapest === null ? '空きなし' : `最安 ${moveChipPriceLabel(info)}`,
+        }),
+        ownerNames.length > 0
+          ? h('span', {
+              class: 'warp-tag is-owner',
+              text:
+                ownerNames.length === 1
+                  ? `${ownerNames[0]}所有`
+                  : `${ownerNames[0]}他${ownerNames.length - 1}人`,
+            })
+          : null,
+        candidate.toErrand !== null
+          ? h('span', { class: 'warp-tag is-errand', text: `依頼まで ${candidate.toErrand}` })
+          : null,
+      ),
+    ),
+    h('span', { class: 'target-go', text: '▶' }),
+  );
 }
 
 function targetButton(state: PublicState, target: string, onClick: () => void): HTMLButtonElement {

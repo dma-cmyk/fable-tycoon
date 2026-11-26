@@ -48,6 +48,8 @@ run('fun metrics (real data)', () => {
       let piperDamage = 0;
       let settlementIncome = 0;
       let piperGifts = 0;
+      let errandClaims = 0;
+      let errandClaimsByNonLeader = 0;
 
       const handle = (fx: Fx[]) => {
         for (const f of fx) {
@@ -62,6 +64,11 @@ run('fun metrics (real data)', () => {
           }
           if (f.t === 'piper_disaster') piperDamage += f.amount;
           if (f.t === 'piper_gift') piperGifts += 1;
+          if (f.t === 'errand_done') {
+            errandClaims += 1;
+            // 直近の月替わり時点の首位（月次スナップショット）と比べる。
+            if (f.playerId !== leader) errandClaimsByNonLeader += 1;
+          }
           if (f.t === 'piper') {
             if (lastHolder !== null && f.holder !== null && f.holder !== lastHolder) piperTransfers++;
             lastHolder = f.holder;
@@ -98,6 +105,9 @@ run('fun metrics (real data)', () => {
       record('leadChanges', leadChanges);
       record('piperTransfers', piperTransfers);
       record('goals', counts.goal ?? 0);
+      record('errands', counts.errand ?? 0);
+      record('errandClaims', errandClaims);
+      record('errandClaimsByNonLeader', errandClaimsByNonLeader);
       record('monopolies', counts.monopoly ?? 0);
       record('buyouts', counts.buyout ?? 0);
       record('skills', counts.skill ?? 0);

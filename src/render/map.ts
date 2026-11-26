@@ -25,7 +25,7 @@ import type {
   MoveOption,
   SquareKind,
 } from '../core/types';
-import { Camera, easeInOutCubic } from './camera';
+import { Camera, captureCamera, easeInOutCubic, OVERVIEW_ZOOM_RATIO, PLAY_MIN_ZOOM_FACTOR, restoreCamera } from './camera';
 import {
   HIT_DURATION_MS,
   drawEmoteFx,
@@ -163,6 +163,22 @@ export interface SafeArea {
   right: number;
   bottom: number;
   left: number;
+}
+
+/** Exact play-camera state a map screen must restore on close. */
+export interface MapCameraState {
+  view: RealmId | 'world';
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** Native map layers a host (the world map screen) can switch off. */
+export interface MapHiddenLayers {
+  destination: boolean;
+  errand: boolean;
+  cityMods: boolean;
+  players: boolean;
 }
 
 /** CSS-pixel rectangle relative to the canvas top-left. */
@@ -460,6 +476,8 @@ export class MapView {
   private playerColors: string[] = [];
   private ownership = new Map<string, { counts: number[]; total: number; monopoly: number }>();
   private destinationNodeId: string | null = null;
+  /** 寄り道依頼の都市ノード（依頼なしは null）。 */
+  private errandNodeId: string | null = null;
   private staticRevision = 0;
   private month = 4;
   private season: Season = seasonForMonth(4);
@@ -505,6 +523,8 @@ export class MapView {
   private edgePinHits: Array<{ nodeId: string; x: number; y: number; r: number }> = [];
   private hoveredOption: string | null = null;
   private selectedOption: string | null = null;
+  /** Dashed line shown while a city-target picker highlights a candidate. */
+  private warpPreview: { from: string; to: string | null } | null = null;
   private lastPickAt = 0;
   private labelObstacles: MapLabelObstacle[] = [];
   private labelObstacleSignature = '';
@@ -522,8 +542,12 @@ export class MapView {
   /** city_mod 発生時の「オーラが広がる」演出の開始時刻（cityId → performance.now()）。 */
   private readonly cityModBursts = new Map<string, number>();
   private overviewMode = false;
-  private overviewCallback: ((overview: boolean) => void) | null = null;
-  private lastOverviewFlag = false;
+  /** 全体地図の見た目を使うか。プレイ画面は false、世界地図画面は true。 */
+  private overviewEnabled = true;
+  /** setState で手番プレイヤーの世界へ勝手に切り替えるか。世界地図画面は false。 */
+  private autoViewFollow = true;
+  /** 世界地図画面のレイヤー表示。プレイ画面ではすべて false のまま。 */
+  private readonly hiddenLayers: MapHiddenLayers = { destination: false, errand: false, cityMods: false, players: false };
   private cityTap: ((cityId: string) => void) | null = null;
   private squareInspectCb: ((info: SquareInspectEvent | null) => void) | null = null;
   private hoveredInspectNodeId: string | null = null;
@@ -1108,6 +1132,7 @@ export class MapView {
       (p, i) => this.characterById.get(p.characterId)?.color ?? SEAT_COLORS[i % SEAT_COLORS.length],
     );
     this.destinationNodeId = this.cityNodeId.get(state.destination) ?? null;
+    this.errandNodeId = state.errand ? this.cityNodeId.get(state.errand.cityId) ?? null : null;
     this.staticRevision += 1;
     this.landLayer.invalidate();
     this.setMonth(state.month);
@@ -1156,7 +1181,7 @@ export class MapView {
     }
     this.rebuildOwnership();
 
-    if (performance.now() > this.manualViewUntil) {
+    if (this.autoViewFollow && performance.now() > this.manualViewUntil) {
       const focusPlayer = this.followId ?? state.current;
       const focusNode = state.players[focusPlayer]?.nodeId;
       const realm = (focusNode ? this.nodeById.get(focusNode)?.realm : undefined) ?? 'world';
@@ -1266,6 +1291,56 @@ export class MapView {
     this.requestRender();
   }
 
+  /**
+   * Presentation-only preview for a city-target picker: ring the candidate and draw a dashed
+   * distance line to the destination, framing both inside the part of the board not covered by
+   * the docked dialog (`insetRight` in CSS px).
+   */
+  previewWarpTarget(
+    fromNodeId: string,
+    toNodeId: string | null,
+    opts?: { insetRight?: number },
+  ): void {
+    const from = this.nodeById.get(fromNodeId);
+    if (!from || (from.realm ?? 'world') !== this.view) return;
+    this.warpPreview = { from: fromNodeId, to: toNodeId };
+    this.frameWarpPreview(fromNodeId, toNodeId, opts?.insetRight ?? 0);
+    this.requestRender();
+  }
+
+  clearWarpPreview(): void {
+    if (!this.warpPreview) return;
+    this.warpPreview = null;
+    this.requestRender();
+  }
+
+  private frameWarpPreview(fromNodeId: string, toNodeId: string | null, insetRight: number): void {
+    const from = this.nodeById.get(fromNodeId);
+    if (!from) return;
+    this.followId = null;
+    this.overviewMode = false;
+    const cam = this.camera;
+    const to = toNodeId ? this.nodeById.get(toNodeId) : null;
+    const free = this.freeBoardBox();
+    const viewX = free.x;
+    const viewY = free.y;
+    const viewW = Math.max(160, free.w - Math.min(free.w * 0.55, Math.max(0, insetRight)));
+    const viewH = Math.max(160, free.h);
+    const dx = to ? wrapDx(from.x, to.x) : 0;
+    const dy = to ? to.y - from.y : 0;
+    const spanX = Math.max(90, Math.abs(dx));
+    const spanY = Math.max(90, Math.abs(dy));
+    const fit = to ? Math.min((viewW - 150) / spanX, (viewH - 170) / spanY) : this.playZoom();
+    const zoom = Math.min(this.playZoom() * 1.7, Math.max(this.playZoom() * 0.35, fit));
+    const centerX = from.x + dx / 2;
+    const centerY = from.y + dy / 2;
+    const targetScreenX = viewX + viewW / 2;
+    const targetScreenY = viewY + viewH / 2;
+    const targetX = cam.x + wrapDx(cam.x, centerX) - (targetScreenX - cam.vw / 2) / zoom;
+    const targetY = cam.clampCenterY(centerY - (targetScreenY - cam.vh / 2) / zoom, zoom);
+    void cam.startTween(targetX, targetY, cam.clampZoom(zoom), 320, this.tweenFloor(cam, zoom));
+  }
+
   focusNode(nodeId: string, opts?: { zoom?: number; ms?: number }): Promise<void> {
     const node = this.nodeById.get(nodeId);
     if (!node) return Promise.resolve();
@@ -1279,11 +1354,12 @@ export class MapView {
 
   fitWorld(ms = 650): Promise<void> {
     this.followId = null;
-    this.overviewMode = true;
+    this.overviewMode = this.overviewEnabled;
     const cam = this.camera;
     const box = this.boardBox();
     const targetZoom = Math.min(box.w / cam.worldW, box.h / cam.worldH);
-    const zoom = Math.min(cam.maxZoom(), Math.max(0.02, targetZoom));
+    const raw = Math.min(cam.maxZoom(), Math.max(0.02, targetZoom));
+    const zoom = this.overviewEnabled ? raw : Math.max(raw, cam.minZoom());
     const offsetX = (this.safeArea.left - this.safeArea.right) / 2;
     const offsetY = (this.safeArea.top - this.safeArea.bottom) / 2;
     const promise = cam.startTween(
@@ -1291,7 +1367,7 @@ export class MapView {
       cam.worldH / 2 - offsetY / zoom,
       zoom,
       ms,
-      Math.min(cam.minZoom(), zoom),
+      this.tweenFloor(cam, zoom),
     );
     this.requestRender();
     return promise;
@@ -1502,6 +1578,25 @@ export class MapView {
   setView(realm: RealmId | 'world'): void {
     this.manualViewUntil = performance.now() + 5000;
     this.switchView(realm);
+  }
+
+  /** Snapshot the play camera exactly so an overlay can hand the same view back on close. */
+  captureCameraState(): MapCameraState {
+    const cam = this.camera;
+    const snap = captureCamera(cam);
+    return { view: this.view, x: snap.x, y: snap.y, zoom: snap.zoom };
+  }
+
+  /** Restore a snapshot from `captureCameraState`, cancelling any tween that started meanwhile. */
+  restoreCameraState(state: MapCameraState): void {
+    this.followId = null;
+    this.manualViewUntil = performance.now() + 5000;
+    if (this.view !== state.view) this.switchView(state.view);
+    const cam = this.camera;
+    cam.setViewport(this.cssW, this.cssH);
+    restoreCamera(cam, { x: state.x, y: state.y, zoom: state.zoom });
+    this.overviewMode = false;
+    this.requestRender();
   }
 
   private switchView(realm: RealmId | 'world'): void {
@@ -2094,7 +2189,7 @@ export class MapView {
     const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
     const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
     this.overviewMode = false;
-    void cam.startTween(targetX, targetY, cam.clampZoom(zoom), 420, Math.min(cam.minZoom(), zoom));
+    void cam.startTween(targetX, targetY, cam.clampZoom(zoom), 420, this.tweenFloor(cam, zoom));
   }
 
   /** Fit the selected option's whole path, including both endpoints, inside the HUD-free board box. */
@@ -2138,11 +2233,19 @@ export class MapView {
     const offsetY = targetScreenY - cam.vh / 2;
     const targetX = cam.x + wrapDx(cam.x, centerX) - offsetX / zoom;
     const targetY = cam.clampCenterY(centerY - offsetY / zoom, zoom);
-    void cam.startTween(targetX, targetY, zoom, 360, Math.min(cam.minZoom(), zoom));
+    void cam.startTween(targetX, targetY, zoom, 360, this.tweenFloor(cam, zoom));
   }
 
   private playZoom(): number {
     return this.camera.clampZoom(MAP_W / 5460);
+  }
+
+  /**
+   * Minimum zoom passed to framing tweens. They may go below the normal fit zoom to fit a
+   * route, but the play view must stay above its raised floor (overview is the map screen's job).
+   */
+  private tweenFloor(cam: Camera, zoom: number): number {
+    return this.overviewEnabled ? Math.min(cam.minZoom(), zoom) : cam.minZoom();
   }
 
   private playZoomNear(nodeId: string | null): number {
@@ -2168,32 +2271,44 @@ export class MapView {
   }
 
   private isOverview(): boolean {
-    return this.view === 'world' && !this.moveAnim && !this.warpAnim && !this.selectedOption
-      && (this.overviewMode || this.camera.zoom <= this.camera.minZoom() * 1.18);
+    return this.overviewEnabled && this.view === 'world' && !this.moveAnim && !this.warpAnim && !this.selectedOption
+      && (this.overviewMode || this.camera.zoom <= this.camera.minZoom() * OVERVIEW_ZOOM_RATIO);
+  }
+
+  /**
+   * Enable or disable the whole-world overview look. The play view turns it off (the
+   * dedicated world map screen owns it) and raises the zoom floor above the overview
+   * threshold, so ordinary panning/pinching can never flip the play view into overview.
+   */
+  setOverviewEnabled(on: boolean): void {
+    if (this.overviewEnabled === on) return;
+    this.overviewEnabled = on;
+    this.overviewMode = false;
+    this.worldCamera.minZoomFactor = on ? 1 : PLAY_MIN_ZOOM_FACTOR;
+    this.worldCamera.setViewport(this.worldCamera.vw, this.worldCamera.vh);
+    this.requestRender();
+  }
+
+  /** Whether `setState` may switch to the actor's realm (default true). The map screen turns it off. */
+  setAutoViewFollow(on: boolean): void {
+    this.autoViewFollow = on;
+  }
+
+  /** Hide native map layers the world map screen exposes as toggles. */
+  setHiddenLayers(hidden: Partial<MapHiddenLayers>): void {
+    let changed = false;
+    for (const key of Object.keys(this.hiddenLayers) as Array<keyof MapHiddenLayers>) {
+      const next = hidden[key] ?? false;
+      if (this.hiddenLayers[key] === next) continue;
+      this.hiddenLayers[key] = next;
+      changed = true;
+    }
+    if (changed) this.requestRender();
   }
 
   /** True while the HUD should present the whole-world overview (全体地図). */
   isOverviewMode(): boolean {
     return this.isOverview();
-  }
-
-  /**
-   * Subscribe to overview-mode flips. Returns an unsubscribe function; pass
-   * null to clear. The current state is not pushed on subscribe.
-   */
-  setOverviewCallback(cb: ((overview: boolean) => void) | null): () => void {
-    this.overviewCallback = cb;
-    return () => {
-      if (this.overviewCallback === cb) this.overviewCallback = null;
-    };
-  }
-
-  /** Emit the callback only when the observable flag actually flips. */
-  private syncOverviewFlag(): void {
-    const now = this.isOverview();
-    if (now === this.lastOverviewFlag) return;
-    this.lastOverviewFlag = now;
-    this.overviewCallback?.(now);
   }
 
   private detailLevel(zoom = this.camera.zoom): number {
@@ -2505,7 +2620,6 @@ export class MapView {
     if (document.hidden) return;
     const animating = this.updateAnimations(now);
     this.draw(now);
-    this.syncOverviewFlag();
     this.lastDrawAt = now;
     if (animating || this.dragging) this.requestRender();
     else this.scheduleAmbient();
@@ -2561,7 +2675,7 @@ export class MapView {
       this.drawCities(ctx, now);
       this.drawSquareShortLabels(ctx);
       this.drawMoveUi(ctx, now);
-      this.drawTokens(ctx, layouts, now);
+      if (!this.hiddenLayers.players) this.drawTokens(ctx, layouts, now);
       this.drawSelectedPathOverlay(ctx);
       this.drawOptionMarkers(ctx, now);
       this.drawCelebrations(ctx, now);
@@ -2571,8 +2685,70 @@ export class MapView {
       this.drawBubbles(ctx, layouts, now);
       this.drawBadge(ctx);
     }
+    this.drawWarpPreview(ctx, now);
     ctx.restore();
     this.drawMiniMap();
+  }
+
+  /**
+   * Dashed flight line from a highlighted target candidate to the destination, plus rings on
+   * both ends. Drawn last so it stays readable over labels and tokens while the picker is open.
+   */
+  private drawWarpPreview(ctx: CanvasRenderingContext2D, now: number): void {
+    const preview = this.warpPreview;
+    if (!preview) return;
+    const from = this.nodeById.get(preview.from);
+    if (!from || (from.realm ?? 'world') !== this.view) return;
+    const cam = this.camera;
+    const sx = cam.screenX(from.x);
+    const sy = cam.screenY(from.y);
+    const pulse = 0.5 + Math.sin(now / 260) * 0.5;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = `rgba(255, 210, 63, ${0.55 + pulse * 0.35})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 20 + pulse * 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (!preview.to) {
+      ctx.restore();
+      return;
+    }
+    const to = this.nodeById.get(preview.to);
+    if (!to || (to.realm ?? 'world') !== this.view || to.id === from.id) {
+      ctx.restore();
+      return;
+    }
+    const ex = sx + cam.screenDeltaX(from.x, to.x);
+    const ey = cam.screenY(to.y);
+    const lift = Math.min(180, 40 + Math.hypot(ex - sx, ey - sy) * 0.22);
+    const cx = (sx + ex) / 2;
+    const cy = (sy + ey) / 2 - lift;
+    ctx.strokeStyle = 'rgba(255, 236, 150, 0.95)';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([10, 9]);
+    ctx.lineDashOffset = -((now / 45) % 19);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(cx, cy, ex, ey);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const angle = Math.atan2(ey - cy, ex - cx);
+    const head = 11;
+    ctx.fillStyle = 'rgba(255, 236, 150, 0.95)';
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - Math.cos(angle - 0.42) * head, ey - Math.sin(angle - 0.42) * head);
+    ctx.lineTo(ex - Math.cos(angle + 0.42) * head, ey - Math.sin(angle + 0.42) * head);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 210, 63, 0.9)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 13 + pulse * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private shakeOffset(now: number): { x: number; y: number } {
@@ -2928,6 +3104,17 @@ export class MapView {
       if (dest) {
         out.push({ x: cam.screenX(dest.node.x) - 40, y: cam.screenY(dest.node.y) - 46, w: 80, h: 60 });
       }
+      const errand = this.errandNodeId
+        ? this.cityEntries.find((entry) => entry.node.id === this.errandNodeId)
+        : null;
+      if (errand) {
+        out.push({ x: cam.screenX(errand.node.x) - 44, y: cam.screenY(errand.node.y) - 52, w: 88, h: 66 });
+      }
+    }
+    // 通常ズームでも依頼バッジの上に都市名を載せない。
+    if (!this.isOverview() && this.view === 'world' && this.errandNodeId) {
+      const errand = this.cityEntries.find((entry) => entry.node.id === this.errandNodeId);
+      if (errand) out.push(this.errandMarkerBox(cam.screenX(errand.node.x), cam.screenY(errand.node.y)));
     }
     // The minimap is renderer-owned chrome; labels must never sit under it
     // even when the HUD forgets to list it as an obstacle.
@@ -3550,7 +3737,9 @@ export class MapView {
     }
 
     const destination = this.view === 'world' ? visible.find((v) => v.entry.node.id === this.destinationNodeId) ?? null : null;
-    if (destination) this.drawDestinationPulse(ctx, destination, radius, now);
+    if (destination && !this.hiddenLayers.destination) this.drawDestinationPulse(ctx, destination, radius, now);
+    const errand = this.view === 'world' ? visible.find((v) => v.entry.node.id === this.errandNodeId) ?? null : null;
+    if (errand && !this.hiddenLayers.errand) this.drawErrandPulse(ctx, errand, radius, now);
 
     for (const v of visible) {
       const hit = {
@@ -3563,7 +3752,8 @@ export class MapView {
       this.cityHitGrid.add({ x: hit.x - hit.r, y: hit.y - hit.r, w: hit.r * 2, h: hit.r * 2 }, hit);
     }
 
-    if (destination) this.drawDestinationFlag(ctx, destination, radius, now);
+    if (destination && !this.hiddenLayers.destination) this.drawDestinationFlag(ctx, destination, radius, now);
+    if (errand && !this.hiddenLayers.errand) this.drawErrandMarker(ctx, errand, radius, now);
     const hasCityTileArt = (this.assets.cityTiles?.size ?? 0) > 0 || (this.assets.cityTilesSmall?.size ?? 0) > 0;
     for (const v of visible) {
       if (!v.entry.city.landmark) continue;
@@ -3601,7 +3791,7 @@ export class MapView {
     }
 
     // Labels are placed statically; sprites over them only fade the name out.
-    this.drawCityMods(ctx, visible, radius, now);
+    if (!this.hiddenLayers.cityMods) this.drawCityMods(ctx, visible, radius, now);
     this.drawCityLabels(ctx, visible, detail);
   }
 
@@ -4041,6 +4231,101 @@ export class MapView {
     return { x: poleX - 3, y: topY - 4, w: fw + 8, h: baseY - topY + 8 };
   }
 
+  /** 寄り道依頼の脈打つリング。目的地の金と混ざらないよう青緑で描く。 */
+  private drawErrandPulse(ctx: CanvasRenderingContext2D, errand: CityVis, radius: number, now: number): void {
+    ctx.save();
+    const color = '#35d6b4';
+    // 都市タイルの約 2.5 倍まで広がる、はっきりした脈動。
+    for (let i = 0; i < 2; i++) {
+      const p = (now / 1400 + i / 2) % 1;
+      const rr = radius * (1.15 + p * 1.35);
+      ctx.globalAlpha = (1 - p) * 0.8;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2.2, 5.5 * (1 - p));
+      ctx.beginPath();
+      ctx.ellipse(errand.x, errand.y, rr * 1.1, rr * 0.72, 0, 0, TAU);
+      ctx.stroke();
+    }
+    // 内側の常時リング（脈が消えても依頼の場所が分かる）。
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.ellipse(errand.x, errand.y, radius * 1.5, radius * 0.98, 0, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * 依頼都市の巻物バッジ。都市の左上に浮かせ、目的地の旗（右上）と重ねない。
+   * 通常ズームでも広域表示でも同じ位置関係になる。駒の頭上バッジ（BADGE_R = 11）と同じ見た目の大きさ。
+   */
+  private drawErrandMarker(ctx: CanvasRenderingContext2D, errand: CityVis, radius: number, now: number): Rect {
+    const s = Math.min(26, Math.max(16, 10 + this.camera.zoom * 7));
+    const bob = this.reducedMotion ? 0 : Math.sin(now / 620) * 1.6;
+    const cx = errand.x - radius * 1.25;
+    const cy = errand.y - radius * 1.75 + bob;
+    const w = s * 1.15;
+    const h = s * 1.5;
+    ctx.save();
+    // 影
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#04231e';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + h * 0.62, w * 0.6, h * 0.18, 0, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // 羊皮紙
+    ctx.fillStyle = '#fff6dc';
+    ctx.strokeStyle = '#0f3b34';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.roundRect(cx - w / 2, cy - h / 2, w, h, s * 0.22);
+    ctx.fill();
+    ctx.stroke();
+    // 上下の巻き取り
+    ctx.fillStyle = '#e6cf9a';
+    ctx.beginPath();
+    ctx.roundRect(cx - w * 0.62, cy - h * 0.62, w * 1.24, h * 0.2, s * 0.16);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(cx - w * 0.62, cy + h * 0.42, w * 1.24, h * 0.2, s * 0.16);
+    ctx.fill();
+    ctx.stroke();
+    // 本文の線
+    ctx.strokeStyle = 'rgba(15, 59, 52, 0.55)';
+    ctx.lineWidth = Math.max(1, s * 0.1);
+    for (let i = 0; i < 3; i++) {
+      const ly = cy - h * 0.16 + i * h * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.3, ly);
+      ctx.lineTo(cx + w * 0.3, ly);
+      ctx.stroke();
+    }
+    // 依頼だと分かる小さなリボン
+    ctx.fillStyle = '#35d6b4';
+    ctx.strokeStyle = '#0f3b34';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(cx + w * 0.44, cy - h * 0.5, s * 0.22, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return { x: cx - w * 0.62, y: cy - h * 0.75, w: w * 1.24, h: h * 1.5 };
+  }
+
+  /** 依頼バッジの当たり判定・ラベル回避に使う矩形（描画と同じ基準）。 */
+  private errandMarkerBox(sx: number, sy: number): Rect {
+    const r = this.cityRadius();
+    const s = Math.min(26, Math.max(16, 10 + this.camera.zoom * 7));
+    const cx = sx - r * 1.25;
+    const cy = sy - r * 1.75;
+    const w = s * 1.15;
+    const h = s * 1.5;
+    return { x: cx - w * 0.62 - 4, y: cy - h * 0.75 - 4, w: w * 1.24 + 8, h: h * 1.5 + 8 };
+  }
+
   private drawCityLabels(ctx: CanvasRenderingContext2D, visible: CityVis[], detail: number): void {
     this.ensureLabelLayout();
     const board = this.freeBoardBox();
@@ -4074,6 +4359,7 @@ export class MapView {
       }
     }
     const routePad = 10;
+    const errandCityId = this.state?.errand?.cityId ?? null;
     // Labels that must never fade out, and whose slot stays clear of chrome and selected route.
     const priority = (v: CityVis): boolean =>
       v.entry.node.id === this.destinationNodeId
@@ -4081,6 +4367,7 @@ export class MapView {
       || tokenNodeIds.has(v.entry.node.id)
       || optionCities.has(v.entry.node.id)
       || routeCities.has(v.entry.node.id)
+      || (errandCityId !== null && v.entry.city.id === errandCityId)
       || modCityIds.has(v.entry.city.id);
     const blockers = this.dynamicLabelBlockers(now);
     // Slot dodging only reacts to fixed chrome (HUD panels, portrait, minimap,
@@ -4262,7 +4549,101 @@ export class MapView {
           this.cityLabelGrid.add(tagRect, { cityId: city.id, rect: tagRect });
         }
       }
+      if (errandCityId !== null && city.id === errandCityId) {
+        const tagRect = this.drawErrandTag(
+          ctx,
+          rect,
+          this.state?.errand?.bonus ?? 0,
+          ratio,
+          alpha,
+          isPriority,
+          now,
+          fixedBlockers.concat(priorityLabelRects, priorityTokenRects),
+        );
+        if (tagRect) {
+          priorityLabelRects.push(tagRect);
+          this.cityLabelGrid.add(tagRect, { cityId: city.id, rect: tagRect });
+        }
+      }
     }
+  }
+
+  /**
+   * 依頼都市の都市名の札に添える「📜 依頼 +20億」の吹き出し。
+   * 都市名と同じ回避リストに載せ、札の上→下→左右の順で空きを探す。
+   */
+  private drawErrandTag(
+    ctx: CanvasRenderingContext2D,
+    labelRect: Rect,
+    bonus: number,
+    ratio: number,
+    alpha: number,
+    isPriority: boolean,
+    now: number,
+    avoid: Rect[],
+  ): Rect | null {
+    if (bonus <= 0) return null;
+    const color = '#35d6b4';
+    const text = `📜 依頼 +${Math.round(bonus)}億`;
+    const fs = Math.max(13, (isPriority ? 15 : 13) * ratio);
+    ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.font = `800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
+    const tw = ctx.measureText(text).width;
+    const padX = fs * 0.55;
+    const h = fs + 10;
+    const w = tw + padX * 2;
+    const candidates: Array<{ x: number; y: number }> = [
+      { x: labelRect.x + labelRect.w / 2 - w / 2, y: labelRect.y - h - 12 },
+      { x: labelRect.x + labelRect.w / 2 - w / 2, y: labelRect.y + labelRect.h + 12 },
+      { x: labelRect.x + labelRect.w + 8, y: labelRect.y + labelRect.h / 2 - h / 2 },
+      { x: labelRect.x - w - 8, y: labelRect.y + labelRect.h / 2 - h / 2 },
+    ];
+    const board = this.freeBoardBox();
+    let pick: Rect | null = null;
+    for (const cand of candidates) {
+      const rect = { x: cand.x, y: cand.y, w, h };
+      if (rect.x < board.x + 2 || rect.y < board.y + 2) continue;
+      if (rect.x + rect.w > board.x + board.w - 2 || rect.y + rect.h > board.y + board.h - 2) continue;
+      if (avoid.some((r) => rectsOverlap(rect, r, 2))) continue;
+      pick = rect;
+      break;
+    }
+    if (!pick) {
+      pick = {
+        x: Math.max(board.x + 2, Math.min(board.x + board.w - w - 2, candidates[1].x)),
+        y: Math.max(board.y + 2, labelRect.y + labelRect.h + 6),
+        w,
+        h,
+      };
+    }
+    // 影 + 本体
+    ctx.fillStyle = 'rgba(6, 14, 28, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(pick.x + 1, pick.y + 3, pick.w, pick.h, h / 2);
+    ctx.fill();
+    ctx.fillStyle = '#fffdf2';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.roundRect(pick.x, pick.y, pick.w, pick.h, h / 2);
+    ctx.fill();
+    ctx.stroke();
+    if (!this.reducedMotion) {
+      ctx.globalAlpha = alpha * (0.3 + 0.3 * Math.sin(now / 380));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4.5;
+      ctx.beginPath();
+      ctx.roundRect(pick.x - 2, pick.y - 2, pick.w + 4, pick.h + 4, (h + 4) / 2);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    }
+    ctx.fillStyle = '#0b4a40';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pick.x + pick.w / 2, pick.y + pick.h / 2 + 0.5);
+    ctx.restore();
+    return pick;
   }
 
   /**
@@ -4280,6 +4661,7 @@ export class MapView {
     now: number,
     avoid: Rect[],
   ): Rect | null {
+    if (this.hiddenLayers.cityMods) return null;
     const state = this.state;
     const mods = state ? activeCityMods(state, cityId) : [];
     if (!state || mods.length === 0) return null;
@@ -6112,20 +6494,22 @@ export class MapView {
     // Marker dots must stay visible: name plates may not sit on any of them.
     const dots: Rect[] = [];
     const dotRect = (x: number, y: number, r: number): Rect => ({ x: x - r, y: y - r - 16, w: r * 2, h: r * 2 + 20 });
-    for (const token of this.tokens) {
-      if (this.tokenRealm(token.playerId) !== 'world') continue;
-      const node = this.nodeById.get(token.nodeId);
-      if (!node) continue;
-      dots.push(dotRect(cam.screenX(node.x), cam.screenY(node.y), 10));
+    if (!this.hiddenLayers.players) {
+      for (const token of this.tokens) {
+        if (this.tokenRealm(token.playerId) !== 'world') continue;
+        const node = this.nodeById.get(token.nodeId);
+        if (!node) continue;
+        dots.push(dotRect(cam.screenX(node.x), cam.screenY(node.y), 10));
+      }
     }
-    const destEntry = this.cityEntries.find((e) => e.city.id === state.destination);
+    const destEntry = this.hiddenLayers.destination ? undefined : this.cityEntries.find((e) => e.city.id === state.destination);
     if (destEntry) dots.push(dotRect(cam.screenX(destEntry.node.x), cam.screenY(destEntry.node.y), 12));
     const markerName = (
       x: number,
       y: number,
       text: string,
       color: string,
-      shape: 'current' | 'destination',
+      shape: 'current' | 'destination' | 'errand',
     ): void => {
       ctx.save();
       ctx.translate(x, y);
@@ -6142,6 +6526,18 @@ export class MapView {
           ctx.fillRect(1.5 + c * 7.5, -15 + r * 7.5, 7.5, 7.5);
         }
         ctx.strokeStyle = '#23385c'; ctx.lineWidth = 1.2; ctx.strokeRect(1.5, -15, 15, 15);
+      } else if (shape === 'errand') {
+        // 広域でも依頼だと分かる、青緑の巻物バッジ。
+        ctx.beginPath(); ctx.arc(0, 0, 10, 0, TAU);
+        ctx.fillStyle = '#35d6b4'; ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.4; ctx.stroke();
+        ctx.strokeStyle = '#0f3b34'; ctx.lineWidth = 1.4; ctx.stroke();
+        ctx.fillStyle = '#fff6dc';
+        ctx.beginPath(); ctx.roundRect(-4.5, -6, 9, 12, 1.6); ctx.fill();
+        ctx.strokeStyle = '#0f3b34'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = 'rgba(15, 59, 52, 0.6)';
+        ctx.beginPath(); ctx.moveTo(-2.5, -2); ctx.lineTo(2.5, -2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-2.5, 1); ctx.lineTo(2.5, 1); ctx.stroke();
       } else {
         ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU);
         ctx.fillStyle = color; ctx.fill();
@@ -6190,45 +6586,57 @@ export class MapView {
       };
       used.push(labelRect);
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = shape === 'destination' ? '#c98a00' : color;
+      ctx.strokeStyle = shape === 'destination' ? '#c98a00' : shape === 'errand' ? '#0f8f78' : color;
       ctx.lineWidth = 2.2;
       ctx.beginPath(); ctx.roundRect(labelRect.x, labelRect.y, tw, th, 10); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = '#23385c';
       ctx.lineWidth = 0.9;
       ctx.stroke();
-      ctx.fillStyle = shape === 'destination' ? '#8a5c00' : '#1a2b4c';
+      ctx.fillStyle = shape === 'destination' ? '#8a5c00' : shape === 'errand' ? '#0f5f52' : '#1a2b4c';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(text, labelRect.x + tw / 2, labelRect.y + th / 2 + 0.5);
       ctx.restore();
     };
-    for (const token of this.tokens) {
-      if (this.tokenRealm(token.playerId) !== 'world') continue;
-      const node = this.nodeById.get(token.nodeId);
-      if (!node) continue;
-      const x = cam.screenX(node.x);
-      const y = cam.screenY(node.y);
-      if (x < -50 || x > cam.vw + 50 || y < -50 || y > cam.vh + 50) continue;
-      const isCurrent = token.playerId === state.current;
-      if (!isCurrent) {
-        ctx.fillStyle = this.playerColor(token.playerId);
-        ctx.beginPath(); ctx.arc(x, y, 4, 0, TAU); ctx.fill();
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke();
+    if (!this.hiddenLayers.players) {
+      for (const token of this.tokens) {
+        if (this.tokenRealm(token.playerId) !== 'world') continue;
+        const node = this.nodeById.get(token.nodeId);
+        if (!node) continue;
+        const x = cam.screenX(node.x);
+        const y = cam.screenY(node.y);
+        if (x < -50 || x > cam.vw + 50 || y < -50 || y > cam.vh + 50) continue;
+        const isCurrent = token.playerId === state.current;
+        if (!isCurrent) {
+          ctx.fillStyle = this.playerColor(token.playerId);
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, TAU); ctx.fill();
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke();
+        }
+      }
+      const current = state.players[state.current];
+      if (current) {
+        const node = this.nodeById.get(current.nodeId);
+        if (node && (node.realm ?? 'world') === 'world') {
+          const player = state.players[state.current];
+          const name = this.characterById.get(player.characterId)?.nameJa ?? player.name;
+          markerName(cam.screenX(node.x), cam.screenY(node.y), name, this.playerColor(state.current), 'current');
+        }
       }
     }
-    const current = state.players[state.current];
-    if (current) {
-      const node = this.nodeById.get(current.nodeId);
-      if (node && (node.realm ?? 'world') === 'world') {
-        const player = state.players[state.current];
-        const name = this.characterById.get(player.characterId)?.nameJa ?? player.name;
-        markerName(cam.screenX(node.x), cam.screenY(node.y), name, this.playerColor(state.current), 'current');
-      }
-    }
-    const destCity = this.cityEntries.find((e) => e.city.id === state.destination);
+    const destCity = this.hiddenLayers.destination ? undefined : this.cityEntries.find((e) => e.city.id === state.destination);
     if (destCity) {
       markerName(cam.screenX(destCity.node.x), cam.screenY(destCity.node.y), destCity.city.nameJa, '#ffd23f', 'destination');
     }
+    const errandCity = this.hiddenLayers.errand || !this.errandNodeId
+      ? null
+      : this.cityEntries.find((e) => e.node.id === this.errandNodeId) ?? null;
+    if (errandCity) {
+      const ex = cam.screenX(errandCity.node.x);
+      const ey = cam.screenY(errandCity.node.y);
+      dots.push(dotRect(ex, ey, 12));
+      markerName(ex, ey, `📜 ${errandCity.city.nameJa}`, '#35d6b4', 'errand');
+    }
     // 広域表示でも都市効果を見失わないよう、効果中の都市にリングと短い札を出す。
+    if (this.hiddenLayers.cityMods) return;
     for (const entry of this.cityEntries) {
       const mods = activeCityMods(state, entry.city.id);
       if (mods.length === 0) continue;

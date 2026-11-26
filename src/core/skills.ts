@@ -108,8 +108,9 @@ function wantsSkill(
   player: PlayerState,
   skill: CharacterSkill,
 ): boolean {
-  // 年度最後の月。まだ手番が残っているので、ここで必ず使わせる。
-  if (state.month === 3) return true;
+  // 年度の終盤（2〜3月）。まだ手番が残っているので、ここで必ず使わせる。
+  // 3月だけにすると、2月の取り立て休みや skipTurns で手番が飛んだときに未使用のまま年を越す。
+  if (state.month === 2 || state.month === 3) return true;
 
   const worth = netWorth(data, state, player.id);
   const others = state.players.filter((p) => p.id !== player.id).map((p) => netWorth(data, state, p.id));

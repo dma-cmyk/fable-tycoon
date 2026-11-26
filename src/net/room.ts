@@ -131,6 +131,9 @@ export function fxDuration(fx: Fx): number {
     case 'skill':
     case 'final_year':
       return FX_MS[fx.t];
+    case 'errand':
+    case 'errand_done':
+      return FX_MS[fx.t];
     default: {
       const never: never = fx;
       void never;

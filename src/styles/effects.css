@@ -481,35 +481,6 @@ body.reduced-motion *::after {
 
 .rank-row { transition: transform 420ms cubic-bezier(.2,.8,.2,1), border-color 150ms ease; will-change: transform; }
 
-/* ---------------------------------------------------------------- map view dialog */
-
-.map-view-dialog { display: flex; flex-direction: column; gap: 12px; }
-.map-view-copy { margin: 0; color: #5d6780; font-size: 12px; }
-.map-view-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.map-view-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 62px;
-  padding: 8px 12px;
-  border-radius: 13px;
-  border: 2px solid #ded3b8;
-  background: #fffdf5;
-  color: #26324b;
-  text-align: left;
-  font-weight: 800;
-}
-.map-view-tab.is-selected { border-color: #d99a00; box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.28); }
-.map-view-tab.realm-heaven { background: linear-gradient(180deg, #fffdf2, #ffefbd); }
-.map-view-tab.realm-hell { background: linear-gradient(180deg, #fff2ef, #ffd3c9); }
-.map-view-tab.realm-space { background: linear-gradient(180deg, #f1edff, #d9d0ff); }
-.map-view-icon { font-size: 26px; }
-.map-view-name { flex: 1; font-size: 14px; }
-.map-view-count { font-size: 10px; padding: 1px 7px; border-radius: 99px; background: #efe6d0; }
-.map-view-return { width: 100%; min-height: 50px; }
-.map-view-legend { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; color: #6b6350; }
-.map-view-legend-item { display: inline-flex; gap: 3px; align-items: center; padding: 2px 7px; border-radius: 99px; background: #f3ecda; }
-
 /* ---------------------------------------------------------------- station enhancements */
 
 .city-modal .modal-panel { width: min(820px, 100%); height: min(90dvh, 860px); }
@@ -764,7 +735,6 @@ body.reduced-motion *::after {
   .shop-stock { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shop-head { flex-wrap: wrap; }
   .cards-list .card-item { width: 100%; }
-  .map-view-grid { grid-template-columns: 1fr; }
   .city-modal .modal-panel { height: 100%; }
   .property-industry-chip { width: 42px; }
   .shop-modal .modal-panel { height: 100%; }

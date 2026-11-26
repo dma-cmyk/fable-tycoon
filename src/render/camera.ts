@@ -5,6 +5,11 @@ import { MAP_H, MAP_W, wrapDx, wrapX } from '../core/geo';
 
 const FIT_MARGIN = 0.97;
 
+/** 全体地図とみなすズーム（最小ズーム比）。 */
+export const OVERVIEW_ZOOM_RATIO = 1.18;
+/** プレイ画面のズーム下限。全体地図のしきい値より必ず上に置き、通常プレイで全体表示に落ちない。 */
+export const PLAY_MIN_ZOOM_FACTOR = 1.24;
+
 export function minZoomFor(vw: number, vh: number, worldW: number, worldH: number): number {
   const fit = Math.min(vw / worldW, vh / worldH);
   return Math.max(0.02, fit * FIT_MARGIN);
@@ -26,6 +31,26 @@ export interface CameraTween {
   resolve: () => void;
 }
 
+export interface CameraSnapshot {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** Freeze the camera (cancelling any tween) and record its exact centre and zoom. */
+export function captureCamera(cam: Camera): CameraSnapshot {
+  cam.stopTween();
+  return { x: cam.x, y: cam.y, zoom: cam.zoom };
+}
+
+/** Restore a captured centre/zoom exactly, clamped only by the camera's own limits. */
+export function restoreCamera(cam: Camera, snapshot: CameraSnapshot): void {
+  cam.stopTween();
+  cam.zoom = cam.clampZoom(snapshot.zoom);
+  cam.x = cam.clampCenterX(snapshot.x, cam.zoom);
+  cam.y = cam.clampCenterY(snapshot.y, cam.zoom);
+}
+
 export class Camera {
   x: number;
   y: number;
@@ -33,6 +58,8 @@ export class Camera {
   vw = 1;
   vh = 1;
   tween: CameraTween | null = null;
+  /** 最小ズームに掛ける係数。プレイ画面は 1 より大きくして全体表示へ落ちないようにする。 */
+  minZoomFactor = 1;
 
   constructor(
     readonly worldW: number = MAP_W,
@@ -52,7 +79,7 @@ export class Camera {
   }
 
   minZoom(): number {
-    return minZoomFor(this.vw, this.vh, this.worldW, this.worldH);
+    return minZoomFor(this.vw, this.vh, this.worldW, this.worldH) * this.minZoomFactor;
   }
 
   maxZoom(): number {

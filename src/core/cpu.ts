@@ -23,6 +23,7 @@ import { peekCityTarget } from './cityMods';
 import { cpuSkillAction } from './skills';
 import { PIPER_DEAL_EVENT_ID } from './piperLines';
 import { piperDealCpuChoice, piperMoveBias } from './piperCpu';
+import { errandMoveBias } from './errand';
 import {
   chooseBuyoutAction,
   chooseShowdownCardAction,
@@ -193,6 +194,8 @@ function chooseMove(
     if (!Number.isFinite(score)) score = 9999;
     // Lv1 は取り立て屋を気にしない（DESIGN §2.8）。Lv2/Lv3 だけ押し付け・回避を狙う。
     if (player.cpuLevel >= 2) score += piperMoveBias(data, state, player, option);
+    // 寄り道依頼は目的地までの距離と報酬を天秤にかける（Lv2/Lv3 のみ）。
+    if (player.cpuLevel >= 2) score += errandMoveBias(data, state, player, option);
     return { option, score };
   });
   scored.sort((a, b) => {

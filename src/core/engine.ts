@@ -79,6 +79,7 @@ import {
   grantUnderdogCard,
   playUnderdogCard,
 } from './showdown';
+import { claimErrand, drawErrand, maybeRedrawErrand } from './errand';
 import {
   REALMS,
   effectiveDistance,
@@ -199,7 +200,11 @@ export function createGame(data: GameData, config: GameConfig): StepResult {
   const fx: Fx[] = [];
   fx.push({ t: 'month', year: 1, month: 4 });
   chooseDestination(data, state, fx, startNode, { kind: 'range' });
-  if (!maybeStartMonthlyEvent(data, state, fx)) beginTurn(data, state, fx);
+  // 最初の依頼は目的地の直後に引く。ただし月替わりイベントの抽選より後で、
+  // 既存の乱数列（イベントの発生・内容）を動かさない。
+  const eventStarted = maybeStartMonthlyEvent(data, state, fx);
+  drawErrand(data, state, fx);
+  if (!eventStarted) beginTurn(data, state, fx);
   return { state, fx };
 }
 
@@ -271,22 +276,26 @@ function chooseDestination(
 
   if (candidates.length === 0) throw new EngineError('illegal', 'no reachable destination city');
 
+  // 寄り道依頼の駅を目的地にしない（同じ駅で 2 つの報酬が重なるのを避ける）。
+  const withoutErrand = candidates.filter((c) => c.cityId !== state.errand?.cityId);
+  const destinationPool = withoutErrand.length > 0 ? withoutErrand : candidates;
+
   let pool: Candidate[];
   let chosen: Candidate;
   if (mode.kind === 'nearest') {
-    const eligible = candidates.filter((c) => c.dist >= mode.minDistance);
-    pool = eligible.length > 0 ? eligible : farthest(candidates);
+    const eligible = destinationPool.filter((c) => c.dist >= mode.minDistance);
+    pool = eligible.length > 0 ? eligible : farthest(destinationPool);
     chosen = pool.slice().sort((a, b) => (a.dist !== b.dist ? a.dist - b.dist : a.cityId.localeCompare(b.cityId)))[0];
   } else {
     let lo = DESTINATION_RANGE_MIN;
     let hi = DESTINATION_RANGE_MAX;
     pool = [];
     for (let widen = 0; widen < 24 && pool.length === 0; widen += 1) {
-      pool = candidates.filter((c) => c.dist >= lo && c.dist <= hi);
+      pool = destinationPool.filter((c) => c.dist >= lo && c.dist <= hi);
       lo = Math.max(DESTINATION_FLOOR, lo - 10);
       hi += 10;
     }
-    if (pool.length === 0) pool = farthest(candidates);
+    if (pool.length === 0) pool = farthest(destinationPool);
     chosen =
       weightedPick(
         state,
@@ -710,6 +719,8 @@ function processLanding(data: GameData, state: GameState, fx: Fx[]): void {
         endTurn(data, state, fx);
         return;
       }
+      // 寄り道依頼の駅なら、買い物の前に報酬を払って次の依頼を出す。
+      claimErrand(data, state, fx, player);
       state.phase = { t: 'buy', cityId };
       const city = data.cities.find((c) => c.id === cityId);
       fx.push({ t: 'toast', text: `${city?.nameJa ?? cityId} に到着。物件を購入できる。` });
@@ -1282,6 +1293,7 @@ function advanceTurn(data: GameData, state: GameState, fx: Fx[]): void {
       state.assetHistory.push(state.players.map((p) => netWorth(data, state, p.id)));
       fx.push({ t: 'month', year: state.year, month: state.month });
       fx.push(...finalYearFx(state));
+      maybeRedrawErrand(data, state, fx);
       runPiperMonthStart(state, fx);
       if (maybeStartMonthlyEvent(data, state, fx)) return;
     }

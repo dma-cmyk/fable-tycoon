@@ -580,6 +580,13 @@
     "intonation": 1,
     "rev": 2
   },
+  "82950306": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
   "83471524": {
     "speaker": 24,
     "speed": 1,
@@ -28357,6 +28364,349 @@
     "rev": 2
   },
   "d6e8b37f": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "73a790ff": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "4a9252e6": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "746cc0b2": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "2d450fba": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "e34f63ab": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "fe26f548": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "24c09a41": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "2a0b2deb": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "0014b3c3": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "8597619c": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "b0d0d158": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "52b72941": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "afe33d88": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "83dfe6cd": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "123f4396": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "e349d84f": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "82e6d2b6": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "6575eba5": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "9d86b1c5": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "bdc54109": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "b5285629": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "d8ee5829": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "7fd06fc6": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "611eaa80": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "aeae1c5f": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "db4c01d2": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "340326b1": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "f643fd24": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "1f04230b": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "93762da9": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "307ed74d": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "28607a72": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "7092e1ba": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "22630bb2": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "72feed91": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "ac68f236": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "f3191e2f": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "c36b3ab2": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "094945cb": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "4fb8b418": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "dfb83897": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "517018b2": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "cee426fe": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "9742db1b": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "58d406cd": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "373ddfe8": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "6fff594d": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "a5b6b549": {
+    "speaker": 46,
+    "speed": 1,
+    "pitch": 0,
+    "intonation": 1,
+    "rev": 2
+  },
+  "a9f075f4": {
     "speaker": 46,
     "speed": 1,
     "pitch": 0,

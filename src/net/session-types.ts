@@ -64,4 +64,6 @@ export const FX_MS = {
   city_mod: 1500,
   skill: 2200,
   final_year: 3000,
+  errand: 2100,
+  errand_done: 1500,
 } as const;
