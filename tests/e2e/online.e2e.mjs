@@ -551,6 +551,43 @@ async function press(client, locator) {
   const target = locator.first();
   await target.waitFor({ state: 'attached', timeout: 12_000 });
   await target.scrollIntoViewIfNeeded().catch(() => undefined);
+  // Forced clicks dispatch a real pointer event at the element's center. If a
+  // floating layer (recenter dock, edge hint, toast, overlay) is on top, that
+  // layer receives the tap and the intended action silently does nothing.
+  // Record the interception and fall back to a DOM click so the run can proceed.
+  let interception = null;
+  try {
+    interception = await target.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) return null;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit) return null;
+      if (hit === element || element.contains(hit) || hit.contains(element)) return null;
+      return {
+        blocker: String(hit.className || hit.tagName).slice(0, 100),
+        target: String(element.className || element.tagName).slice(0, 100),
+      };
+    });
+  } catch {
+    interception = null;
+  }
+  if (interception?.blocker) {
+    client.pressInterceptions = client.pressInterceptions || [];
+    if (client.pressInterceptions.length < 80) {
+      client.pressInterceptions.push({ atMs: nowMs(), ...interception });
+    }
+    const clicked = await target
+      .evaluate((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        element.click();
+        return true;
+      })
+      .catch(() => false);
+    if (clicked) return;
+  }
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -675,6 +712,8 @@ async function installFxObserver(client) {
         skill: 0,
         buyout: 0,
         final_year: 0,
+        errand: 0,
+        errand_done: 0,
       };
       const prev = {};
       const selectors = {
@@ -683,6 +722,20 @@ async function installFxObserver(client) {
         skill: '.skill-cutin',
         buyout: '.buyout-panel',
         final_year: '.final-year-overlay',
+      };
+      const seenToasts = new WeakSet();
+      const scanToasts = () => {
+        for (const el of document.querySelectorAll('.toast')) {
+          if (seenToasts.has(el)) continue;
+          const text = el.textContent || '';
+          if (!text) continue;
+          // `errand_done` only surfaces as a toast + narrator line; the toast is
+          // the stable DOM marker. Count each node once.
+          if (text.includes('依頼を達成')) {
+            counts.errand_done += 1;
+            seenToasts.add(el);
+          }
+        }
       };
       const shown = (selector) => {
         const el = document.querySelector(selector);
@@ -694,9 +747,22 @@ async function installFxObserver(client) {
           if (visible && !prev[kind]) counts[kind] += 1;
           prev[kind] = visible;
         }
+        scanToasts();
       };
       win.__e2eFx = { counts, check };
-      new MutationObserver(check).observe(document.body, {
+      new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type !== 'childList') continue;
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            // The errand cutin is appended once per fx and removed shortly after;
+            // count the insertion rather than a visibility rising edge so two
+            // adjacent errands cannot collapse into one.
+            if (node.matches?.('.errand-cutin')) counts.errand += 1;
+          }
+        }
+        check();
+      }).observe(document.body, {
         subtree: true,
         childList: true,
         attributes: true,
@@ -743,6 +809,7 @@ async function sampleModalDepth(client) {
           skill: visible('.skill-cutin'),
           buyout: visible('.buyout-panel'),
           final_year: visible('.final-year-overlay'),
+          errand: visible('.errand-cutin'),
         },
       };
     })
@@ -819,6 +886,32 @@ async function sampleNetDebug(client) {
           return (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
         };
         const primary = document.querySelector('.dice-primary');
+        const visibleEl = (selector) => {
+          const el = document.querySelector(selector);
+          if (!el || el.hidden) return null;
+          const style = getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return null;
+          return el;
+        };
+        const rectOf = (el) => (el ? el.getBoundingClientRect() : null);
+        const overlaps = (a, b) =>
+          !!a && !!b && a.width > 0 && b.width > 0 && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        const primaryRect = rectOf(primary);
+        let primaryTop = null;
+        if (primaryRect && primaryRect.width > 0 && primaryRect.height > 0) {
+          const x = primaryRect.left + primaryRect.width / 2;
+          const y = primaryRect.top + primaryRect.height / 2;
+          if (x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight) {
+            const hit = document.elementFromPoint(x, y);
+            primaryTop = hit
+              ? hit === primary || primary.contains(hit)
+                ? 'self'
+                : String(hit.className || hit.tagName).slice(0, 90)
+              : null;
+          }
+        }
+        const home = visibleEl('.map-home-button') ?? visibleEl('.map-home-actor');
+        const edge = visibleEl('.map-edge-hint');
         return {
           net,
           ui: {
@@ -826,8 +919,16 @@ async function sampleNetDebug(client) {
             status: text('.status-chip'),
             primary: text('.dice-primary'),
             primaryEnabled: primary ? !primary.disabled : null,
+            primaryTop,
             skippable: !!document.querySelector('.skip-hint:not([hidden])'),
             result: !!document.querySelector('.result-screen'),
+            mapScreen: !!visibleEl('.map-screen'),
+            modalOpen: !!document.querySelector('.modal-backdrop'),
+            mapHome: !!home,
+            edgeHint: !!edge,
+            errandChip: !!visibleEl('.errand-chip'),
+            homeOverlapsPrimary: overlaps(rectOf(home), primaryRect),
+            edgeOverlapsPrimary: overlaps(rectOf(edge), primaryRect),
           },
         };
       })
@@ -1419,6 +1520,23 @@ async function actOnce(client) {
   if (!page || page.isClosed()) return false;
 
   if (await isVisible(page.locator('.result-screen'))) return 'result';
+
+  // The world map is a full-screen read-only overlay. The bot never opens it,
+  // but if a stray tap/overlap did, every action behind it would be inert.
+  // Close it immediately and keep the evidence.
+  if (await isVisible(page.locator('.map-screen:not([hidden])'))) {
+    const status = ((await page.locator('.status-chip').textContent().catch(() => '')) || '').trim();
+    const primary = ((await page.locator('.dice-primary').textContent().catch(() => '')) || '').trim();
+    client.mapScreenOpens = (client.mapScreenOpens || 0) + 1;
+    client.mapScreenLog = client.mapScreenLog || [];
+    if (client.mapScreenLog.length < 40) {
+      client.mapScreenLog.push({ atMs: nowMs(), status, primary });
+    }
+    const close = page.locator('.map-screen-close').first();
+    if (await isVisible(close)) await domClick(close);
+    else await page.keyboard.press('Escape').catch(() => undefined);
+    return 'map_close';
+  }
 
   // Track how long each cutscene (演出中) actually lasts. Tap-to-skip is the
   // same affordance a human has, but it is only used after a real stall, and
@@ -2161,6 +2279,51 @@ async function main() {
     }
   }
 
+  // ---- New play-view UI sanity: open/close the world-map overlay and use the
+  // own-piece recenter dock. Runs on one client with its bot loop paused so the
+  // bot cannot close the overlay first.
+  phase('play_view_ui_check');
+  {
+    const probeClient = webkitClient ?? activeGuests[0] ?? host;
+    const result = { client: probeClient.id, ok: false, steps: [] };
+    probeClient.paused = true;
+    await sleep(600); // let an in-flight actOnce finish before touching the UI
+    try {
+      const mapScreen = probeClient.page.locator('.map-screen:not([hidden])');
+      if (await isVisible(mapScreen)) {
+        await domClick(probeClient.page.locator('.map-screen-close').first());
+      }
+      await press(probeClient, probeClient.page.locator('.hud-cmd-map').first());
+      await waitFor(() => isVisible(probeClient.page.locator('.map-screen:not([hidden])')), {
+        timeout: 10_000,
+        interval: 200,
+        label: `${probeClient.id} world map opens`,
+      });
+      result.steps.push('opened');
+      result.tabs = await probeClient.page.locator('.map-screen-tab').count();
+      result.layers = await probeClient.page.locator('.map-screen-layer').count();
+      await screenshot(probeClient, `map-screen-${probeClient.id}`, { optional: true });
+      await domClick(probeClient.page.locator('.map-screen-close').first());
+      await waitFor(
+        async () => !(await isVisible(probeClient.page.locator('.map-screen:not([hidden])'))),
+        { timeout: 10_000, interval: 200, label: `${probeClient.id} world map closes` },
+      );
+      result.steps.push('closed');
+      const home = probeClient.page.locator('.map-home-button:not([hidden])').first();
+      if (await isVisible(home)) {
+        await press(probeClient, home);
+        result.steps.push('recenter');
+      }
+      result.ok = true;
+    } catch (error) {
+      result.error = error.message;
+      log(`play-view UI check failed: ${error.message}`);
+    } finally {
+      probeClient.paused = false;
+    }
+    report.playViewCheck = result;
+  }
+
   // ---- Firefox tab close/reopen: same browser context, same localStorage identity.
   phase('firefox_rejoin_start');
   const firefoxSeatBefore = firefoxClient?.seat ?? null;
@@ -2452,7 +2615,7 @@ try {
     report.events = { byClient, unique: [...all].sort() };
   }
   {
-    const kinds = ['piper_roulette', 'piper_disaster', 'skill', 'buyout', 'final_year'];
+    const kinds = ['piper_roulette', 'piper_disaster', 'skill', 'buyout', 'final_year', 'errand', 'errand_done'];
     const totals = Object.fromEntries(kinds.map((kind) => [kind, 0]));
     const perClient = {};
     for (const client of clients) {
@@ -2467,6 +2630,45 @@ try {
       }
     }
     report.fxObserved = { totals, perClient, buyoutsConfirmed: Object.fromEntries(clients.map((c) => [c.id, c.buyoutDone || 0])) };
+  }
+  {
+    // Interference evidence for the new play-view UI: the world-map overlay,
+    // the "📍 自分のコマへ" dock and the edge indicator.
+    const summarize = (client) => {
+      const samples = (client.netTimeline || []).filter((entry) => entry && !entry.blocked);
+      const count = (predicate) => samples.filter(predicate).length;
+      const blockers = {};
+      for (const entry of samples) {
+        if (entry.modalOpen) continue;
+        if (entry.primaryTop && entry.primaryTop !== 'self') {
+          blockers[entry.primaryTop] = (blockers[entry.primaryTop] || 0) + 1;
+        }
+      }
+      return {
+        samples: samples.length,
+        mapScreen: count((entry) => entry.mapScreen === true),
+        mapHome: count((entry) => entry.mapHome === true),
+        edgeHint: count((entry) => entry.edgeHint === true),
+        errandChip: count((entry) => entry.errandChip === true),
+        homeOverlapsPrimary: count((entry) => entry.homeOverlapsPrimary === true),
+        edgeOverlapsPrimary: count((entry) => entry.edgeOverlapsPrimary === true),
+        primaryCovered: count(
+          (entry) => !entry.modalOpen && !!entry.primaryTop && entry.primaryTop !== 'self',
+        ),
+        primaryCoveredWhileModal: count(
+          (entry) => entry.modalOpen && !!entry.primaryTop && entry.primaryTop !== 'self',
+        ),
+        primaryBlockers: blockers,
+      };
+    };
+    report.playViewUi = {
+      perClient: Object.fromEntries(clients.map((client) => [client.id, summarize(client)])),
+      mapScreenOpens: Object.fromEntries(clients.map((client) => [client.id, client.mapScreenOpens || 0])),
+      mapScreenLog: Object.fromEntries(clients.map((client) => [client.id, client.mapScreenLog || []])),
+      pressInterceptions: Object.fromEntries(
+        clients.map((client) => [client.id, client.pressInterceptions || []]),
+      ),
+    };
   }
   {
     report.netTimelines = Object.fromEntries(

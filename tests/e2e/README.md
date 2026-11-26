@@ -47,7 +47,13 @@ Everything is written under `.tmp/e2e/`:
   during play), `canvasLimitWarnings` (browser `Canvas area exceeds` messages),
   `mobileDpr`, `events.byClient`/`events.unique` (event ids seen), and
   `fxObserved` (counts of `piper_roulette` / `piper_disaster` / `skill` /
-  `buyout` / `final_year`). With `E2E_DEBUG_NET=1` it also records
+  `buyout` / `final_year` / `errand` / `errand_done`; `errand_done` is counted
+  from its “依頼を達成” toast). Since the play-view UI round it also records
+  `playViewCheck` (world-map open/close + own-piece recenter exercise),
+  `playViewUi` (per-client samples of `.map-screen` / `.map-home-*` /
+  `.map-edge-hint` visibility and primary-button overlap/blocker classes; its
+  `pressInterceptions` lists forced clicks that a floating layer received
+  instead of the intended element). With `E2E_DEBUG_NET=1` it also records
   `netTimelines` (per-client `__fableNetDebug` samples: role/generation/
   applied seq/frozen/tasks/deadline plus the HUD primary label),
   `authorityLogs` (quorum/promotion/authority warnings) and `stallEvidence`
