@@ -10,6 +10,7 @@ import type { ChatLine, ClientMsg, LobbyView, ServerMsg } from './protocol';
 import { ALLOWED_YEARS, PROTOCOL_VERSION } from './protocol';
 import { BOARD_VERSION } from './board-version';
 import type { ConnectionState, Session } from './session-types';
+import type { FxTempoLevel } from '../core/fxPacing';
 import type { NetDebugSnapshot } from './debug';
 import { CPU_MOVE_DELAY_MS, RoomController } from './room';
 import type { RoomDeps, TimerHandle } from './room';
@@ -25,6 +26,8 @@ export interface LocalSetup {
   speed?: number;
   /** Live pacing getter (e.g. effectiveFxSpeed) so Settings changes apply to subsequent CPU actions. */
   getSpeed?: () => number;
+  /** Live 「演出の長さ」 getter so CPU-only compact beats are budgeted exactly as they play here. */
+  getTempoLevel?: () => FxTempoLevel;
 }
 
 function clampSpeed(value: number | undefined): number {
@@ -206,6 +209,8 @@ export class LocalSession implements Session {
       now: () => Date.now(),
       fxScale: () => 1 / readSpeed(),
       cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
+      // A local room has one viewer: budget CPU-only drama exactly as this client plays it.
+      tempoLevel: () => setup.getTempoLevel?.() ?? 'standard',
       // Local matches wait for human confirmation on year-end settlement even at 4x/8x fast-forward.
       yearEndAckMs: 0,
       ...localTimers(),
@@ -271,7 +276,11 @@ export class LocalSession implements Session {
     return session;
   }
 
-  static resume(raw: string, getSpeed?: () => number): LocalSession | null {
+  static resume(
+    raw: string,
+    getSpeed?: () => number,
+    getTempoLevel?: () => FxTempoLevel,
+  ): LocalSession | null {
     const parsed = parseSave(raw);
     if (!parsed) return null;
 
@@ -286,6 +295,7 @@ export class LocalSession implements Session {
           now: () => Date.now(),
           fxScale: () => 1 / readSpeed(),
           cpuDelayMs: () => Math.round(CPU_MOVE_DELAY_MS / readSpeed()),
+          tempoLevel: () => getTempoLevel?.() ?? 'standard',
           yearEndAckMs: 0,
           ...localTimers(),
           randomInt: randomIntFromCrypto,
@@ -512,11 +522,14 @@ export function localSaveIssue(): string | null {
   return saveIssue;
 }
 
-export function resumeLocal(getSpeed?: () => number): LocalSession | null {
+export function resumeLocal(
+  getSpeed?: () => number,
+  getTempoLevel?: () => FxTempoLevel,
+): LocalSession | null {
   const raw = readLocal(LOCAL_SAVE_KEY);
   if (!raw) return null;
   const room = decodeSave(raw);
-  return room ? LocalSession.resume(room, getSpeed) : null;
+  return room ? LocalSession.resume(room, getSpeed, getTempoLevel) : null;
 }
 
 export function clearLocalSave(): void {

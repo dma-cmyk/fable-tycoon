@@ -18,7 +18,7 @@ import {
 import type { Session } from '../net/session-types';
 import { h, ModalHost, ToastHost } from './dom';
 import { resetHorizontalScroll, watchHorizontalScroll } from './scrollGuard';
-import { effectiveFxSpeed } from './settings';
+import { effectiveFxSpeed, uiSettings } from './settings';
 import { applyMotionPreference } from './motion';
 import { TitleScreen } from './screens/title';
 import { SetupScreen } from './screens/setup';
@@ -28,6 +28,7 @@ import { GameScreen } from './screens/game';
 import { openSettingsDialog } from './components/settingsDialog';
 import { openHelpDialog } from './components/helpDialog';
 import { openCreditsDialog } from './components/creditsDialog';
+import { setServiceWorkerNotice } from './serviceWorker';
 import type { ScreenHandle, SetupMode } from './screens/types';
 import type { TransportInfo } from './screens/lobby';
 
@@ -162,7 +163,11 @@ export class App {
     try {
       this.closeSession();
       clearLocalSave();
-      const session = createLocal({ ...setup, getSpeed: () => effectiveFxSpeed() });
+      const session = createLocal({
+        ...setup,
+        getSpeed: () => effectiveFxSpeed(),
+        getTempoLevel: () => uiSettings().pacing ?? 'standard',
+      });
       this.lastLocalSetup = setup;
       this.session = session;
       this.showGame(session);
@@ -173,7 +178,10 @@ export class App {
 
   resumeLocalGame(): void {
     try {
-      const session = resumeLocal(() => effectiveFxSpeed());
+      const session = resumeLocal(
+        () => effectiveFxSpeed(),
+        () => uiSettings().pacing ?? 'standard',
+      );
       if (!session) {
         this.toasts.show(localSaveIssue() ?? '保存されたゲームが見つかりませんでした', 'bad', 6000);
         return;
@@ -270,6 +278,8 @@ export class App {
   }
 
   private installGlobalHandlers(): void {
+    // A service-worker update is announced once, without reloading under a live game.
+    setServiceWorkerNotice((text) => this.toasts.show(text, 'info', 6000));
     const unlock = (): void => {
       Audio.unlock();
       document.dispatchEvent(new CustomEvent('fable:audio-unlocked'));

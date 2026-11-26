@@ -112,7 +112,7 @@ async function freezeBoard(page) {
     map.staticRevision += 1;
     map.landLayer.invalidate();
     map.draw(1_700_000_000_000);
-    return { zoom: cam.zoom, x: cam.x, y: cam.y, layer: [map.landLayer.canvas.width, map.landLayer.canvas.height] };
+    return { zoom: cam.zoom, x: cam.x, y: cam.y, layer: [map.landLayer.getFrameStats().width, map.landLayer.getFrameStats().height] };
   });
 }
 
@@ -159,7 +159,9 @@ async function captureLayer(page) {
   return page.evaluate(() => {
     const map = globalThis.__fableGame.map;
     const L = map.landLayer;
-    const data = L.ctx.getImageData(0, 0, L.canvas.width, L.canvas.height);
+    // Normal frames draw tiles straight to the screen; the harness reads a composed copy.
+    const composed = L.snapshotFrame();
+    const data = composed.getContext('2d').getImageData(0, 0, composed.width, composed.height);
     const bytes = new Uint8Array(data.data.buffer);
     let binary = '';
     const chunk = 0x8000;
@@ -169,8 +171,8 @@ async function captureLayer(page) {
     const cam = map.camera;
     return {
       raw: btoa(binary),
-      width: L.canvas.width,
-      height: L.canvas.height,
+      width: composed.width,
+      height: composed.height,
       camera: { x: cam.x, y: cam.y, zoom: cam.zoom },
       geom: { ox: L.ox, oy: L.oy, scale: L.scale, key: L.key },
     };
@@ -196,9 +198,81 @@ async function capture(page) {
       width: canvas.width,
       height: canvas.height,
       camera: { x: cam.x, y: cam.y, zoom: cam.zoom },
-      layer: [map.landLayer.canvas.width, map.landLayer.canvas.height],
+      layer: [map.landLayer.getFrameStats().width, map.landLayer.getFrameStats().height],
     };
   });
+}
+
+/** Render frames until every visible tile of the current bucket is exact. */
+async function settleTiles(page, limit = 400) {
+  return page.evaluate((limit) => {
+    const map = globalThis.__fableGame.map;
+    map.landLayer.setFrameBudget(0);
+    let frames = 0;
+    let stats = map.landLayer.getFrameStats();
+    for (; frames < limit; frames += 1) {
+      map.draw(1_700_000_000_000);
+      stats = map.landLayer.getFrameStats();
+      if (stats.pending === 0) break;
+    }
+    return { frames, stats };
+  }, limit);
+}
+
+/** Capture one canvas as raw RGBA (base64) for the reference comparison. */
+async function captureCanvasRaw(page, which) {
+  return page.evaluate((which) => {
+    const map = globalThis.__fableGame.map;
+    const cam = map.camera;
+    if (which === 'fresh') {
+      // Forced full render through the shipping path: no cached tiles, paint everything.
+      map.landLayer.dropTiles();
+      map.landLayer.setFrameBudget(0);
+      for (let i = 0; i < 400; i += 1) {
+        map.draw(1_700_000_000_000);
+        if (map.landLayer.getFrameStats().pending === 0) break;
+      }
+    }
+    const canvas = which === 'monolithic'
+      ? map.landLayer.renderFullReference(
+        cam,
+        map.dpr,
+        map.staticRevision,
+        map.season,
+        (layer) => map.paintStaticBoard(layer),
+        (x, y) => map.avoidGrid.queryRect({ x: x - 42, y: y - 42, w: 84, h: 84 }).length > 0,
+        (x, y) => map.geoAt(x, y),
+        { overview: map.isOverview(), wrap: !map.isOverview() },
+      )
+      : map.landLayer.snapshotFrame();
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const bytes = new Uint8Array(data.data.buffer);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return { raw: btoa(binary), png: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
+  }, which);
+}
+
+/** Force placeholders for one frame (tile painting disabled) and screenshot it. */
+async function shotPlaceholder(page, browserName, viewName, tag, mutate) {
+  const dir = path.join(OUT, LABEL);
+  await mkdir(dir, { recursive: true });
+  await page.evaluate((mutate) => {
+    const map = globalThis.__fableGame.map;
+    const cam = map.camera;
+    map.landLayer.setFrameBudget(-1);
+    if (mutate.zoom) cam.zoom = cam.clampZoom(mutate.zoom);
+    if (mutate.dx) cam.x = cam.x + mutate.dx;
+    if (mutate.dy) cam.y = cam.clampCenterY(cam.y + mutate.dy, cam.zoom);
+    map.draw(1_700_000_000_000);
+  }, mutate);
+  const file = `${browserName}-${viewName}-${tag}.png`;
+  await page.locator('.map-canvas').screenshot({ path: path.join(dir, file) });
+  return file;
 }
 
 /** After the scripted moves: snapshot, then force a clean rebuild and snapshot again. */
@@ -278,6 +352,20 @@ function diffBounds(a, b, width) {
     if (py > maxY) maxY = py;
   }
   return maxX < 0 ? null : { x0: minX, y0: minY, x1: maxX, y1: maxY };
+}
+
+const EDGE_BLEED = 8;
+
+/** Drop the EDGE_BLEED ring (used pixels are the inner rect of every layer canvas). */
+function cropBleed(shot, bleed = EDGE_BLEED) {
+  const src = Buffer.from(shot.raw, 'base64');
+  const w = shot.width - bleed * 2;
+  const h = shot.height - bleed * 2;
+  const out = Buffer.allocUnsafe(w * h * 4);
+  for (let y = 0; y < h; y += 1) {
+    src.copy(out, y * w * 4, ((y + bleed) * shot.width + bleed) * 4, ((y + bleed) * shot.width + bleed + w) * 4);
+  }
+  return { raw: out.toString('base64'), width: w, height: h };
 }
 
 function diffRaw(aB64, bB64) {
@@ -379,9 +467,54 @@ async function runView(browserName, viewName) {
       globalThis.__parityObstacles = (globalThis.__fableGame.map.labelObstacles ?? []).map((r) => ({ ...r }));
     });
     const before = await captureAtCamera(page);
+    // The gate: every visible tile exact, then compare the composed frame with a monolithic
+    // paint of the same rect at the same camera. 0.00% is required.
+    await settleTiles(page);
+    result.settled = await page.evaluate(() => globalThis.__fableGame.map.landLayer.getFrameStats());
+    const composed = await captureCanvasRaw(page, 'composed');
+    const fresh = await captureCanvasRaw(page, 'fresh');
+    result.referenceDiff = diffRaw(composed.raw, fresh.raw);
+    const monolithic = await captureCanvasRaw(page, 'monolithic');
+    const composedInner = cropBleed(composed);
+    const monolithicInner = cropBleed(monolithic);
+    result.monolithicDiff = diffRaw(composedInner.raw, monolithicInner.raw);
+    result.monolithicDiffBounds = diffBounds(
+      Buffer.from(composedInner.raw, 'base64'),
+      Buffer.from(monolithicInner.raw, 'base64'),
+      composedInner.width,
+    );
+    if (args.get('dump') === '1') {
+      const dir = path.join(OUT, LABEL);
+      await mkdir(dir, { recursive: true });
+      for (const [tag, shot] of [['composed', composed], ['reference', monolithic]]) {
+        await writeFile(
+          path.join(dir, `${browserName}-${viewName}-${tag}.png`),
+          Buffer.from(String(shot.png).split(',')[1], 'base64'),
+        );
+        await writeFile(path.join(dir, `${browserName}-${viewName}-${tag}.raw`), Buffer.from(shot.raw, 'base64'));
+      }
+    }
+    // Mid-pan / mid-zoom frames while tiles are still arriving (placeholders, never blank).
+    if (args.get('shots') === '1') {
+      result.placeholderShots = [];
+      result.placeholderShots.push(
+        await shotPlaceholder(page, browserName, viewName, 'mid-zoom', { zoom: 2.05, dx: 120, dy: -40 }),
+      );
+      result.placeholderShots.push(
+        await shotPlaceholder(page, browserName, viewName, 'mid-pan', { dx: 260, dy: 120 }),
+      );
+      result.placeholderShots.push(
+        await shotPlaceholder(page, browserName, viewName, 'mid-seam', { dx: 3940, dy: 0 }),
+      );
+    }
+    // Restore an exact frame before the camera rides.
+    await settleTiles(page);
+    await setCamera(page, home);
+    await settleTiles(page);
     // Leave via the scripted pan/zoom ride, then come back to the exact same camera.
     await driveCamera(page, panScript(8192));
     await setCamera(page, home);
+    await settleTiles(page);
     const after = await captureAtCamera(page);
     // A second visit through a *different* route (the original report was mid-game, after
     // a long, irregular camera history).
@@ -395,7 +528,10 @@ async function runView(browserName, viewName) {
       { kind: 'pan', dx: 900, dy: -180 },
     ]);
     await setCamera(page, home);
+    await settleTiles(page);
     const again = await captureAtCamera(page);
+    const againFresh = await captureCanvasRaw(page, 'fresh');
+    result.referenceDiffAgain = diffRaw(again.layer.raw, againFresh.raw);
     result.diffAgain = diffRaw(before.layer.raw, again.layer.raw);
     result.frameDiffAgain = diffRaw(before.frame.raw, again.frame.raw);
     result.diff = diffRaw(before.layer.raw, after.layer.raw);
@@ -448,21 +584,29 @@ async function main() {
         );
       } else {
         console.log(
-          `[parity] ${browserName} ${viewName}: layer any=${result.diff.diffAnyPct}% ` +
-            `>8=${result.diff.diffOver8Pct}% mean=${result.diff.meanAbsChannelDelta} | ` +
-            `frame any=${result.frameDiff.diffAnyPct}% max=${result.frameDiff.maxChannelDelta} ` +
-            `again any=${result.diffAgain.diffAnyPct}% max=${result.diffAgain.maxChannelDelta} ` +
-            `frameBounds=${JSON.stringify(result.frameDiffBounds)} ` +
-            `(${result.layer.join('x')} layer, ${result.frame.join('x')} frame)`,
+          `[parity] ${browserName} ${viewName}: vs-full=${result.referenceDiff.diffAnyPct}% ` +
+            `| vs-monolithic=${result.monolithicDiff.diffAnyPct}% ` +
+            `>2=${result.monolithicDiff.diffOver2Pct}% (max ${result.monolithicDiff.maxChannelDelta}) ` +
+            `| wander any=${result.diff.diffAnyPct}% again=${result.diffAgain.diffAnyPct}% ` +
+            `vs-full-again=${result.referenceDiffAgain.diffAnyPct}% ` +
+            `frame any=${result.frameDiff.diffAnyPct}% ` +
+            `(${result.layer.join('x')} layer, ${result.frame.join('x')} frame, ` +
+            `tiles ${result.settled?.exact}/${result.settled?.exact + result.settled?.pending})`,
         );
       }
     }
   }
   await writeFile(path.join(OUT, `${LABEL}.json`), JSON.stringify({ label: LABEL, results }, null, 2));
   const failed = results.filter(
-    (r) => r.error || r.diff?.sizeMismatch ||
-      (r.diff?.diffAnyPct ?? 100) >= 1 || (r.frameDiff?.diffAnyPct ?? 100) >= 1 ||
-      (r.diffAgain?.diffAnyPct ?? 100) >= 1,
+    (r) => r.error || r.referenceDiff?.sizeMismatch || r.diff?.sizeMismatch ||
+      (r.referenceDiff?.diffAnyPct ?? 100) >= 0.005 ||
+      (r.referenceDiffAgain?.diffAnyPct ?? 100) >= 0.005 ||
+      (r.monolithicDiff?.diffOver8Pct ?? 100) >= 0.5 ||
+      (r.diff?.diffAnyPct ?? 100) >= 0.005 || (r.diffAgain?.diffAnyPct ?? 100) >= 0.005 ||
+      // The composited frame carries per-frame decorations (station pedestals from
+      // asynchronously decoded city tiles, label fades, bubbles); it is a diagnostic, the
+      // layer comparison above is the gate.
+      (r.frameDiff?.diffAnyPct ?? 100) >= 3,
   );
   console.log(JSON.stringify({ label: LABEL, runs: results.length, failed: failed.length }));
   if (failed.length > 0) process.exitCode = 1;

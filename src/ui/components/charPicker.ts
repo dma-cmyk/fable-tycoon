@@ -15,6 +15,7 @@ import {
   type CharacterFilterState,
 } from '../charFilter';
 import { pickRandom, randomIndex } from '../randomPick';
+import { ensureTier, preloadedImage, tierProgress } from '../assetPreload';
 
 export interface CharacterPickerOptions {
   modal: ModalHost;
@@ -40,6 +41,12 @@ const SHUFFLE_STEP_MS = 62;
 
 let rememberedFilters: CharacterFilterState = { ...DEFAULT_FILTERS };
 
+/** Every picker portrait is decoded and ready to paint. */
+function gridReady(): boolean {
+  const { loaded, total } = tierProgress('picker');
+  return total > 0 && loaded >= total;
+}
+
 /** 48-character picker with filters, preview-only cards and an explicit confirm. */
 export function openCharacterPicker(options: CharacterPickerOptions): void {
   const exclude = options.exclude ?? new Set<string>();
@@ -52,6 +59,10 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
   let shuffleTimer = 0;
 
   const grid = h('div', { class: 'char-grid' });
+  // The portraits are preloaded right after the title. When the player beats that warmup the
+  // grid stays down until the batch lands, with its own progress line: the picker never shows
+  // a wall of empty faces and never opens half-painted.
+  const artPending = h('div', { class: 'char-art-pending', text: '顔写真を並べています…' });
   const empty = h('div', { class: 'char-empty', attrs: { hidden: 'hidden' } });
   const count = h('span', { class: 'char-count', attrs: { 'aria-live': 'polite' } });
   const filterHost = h('div', { class: 'char-filters' });
@@ -291,7 +302,14 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
         { class: 'char-detail-art-wrap' },
         h('img', {
           class: 'char-detail-art',
-          attrs: { src: characterSprite(character), alt: character.nameJa, draggable: 'false' },
+          attrs: {
+            src: characterSprite(character),
+            alt: character.nameJa,
+            width: '160',
+            height: '120',
+            decoding: 'async',
+            draggable: 'false',
+          },
         }),
         h('span', { class: 'char-card-role char-detail-role', text: ROLE_JA[character.role] }),
       ),
@@ -331,7 +349,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
       },
       h('img', {
         class: 'char-detail-compact-art',
-        attrs: { src: characterSprite(character), alt: '', draggable: 'false' },
+        attrs: { src: characterSprite(character), alt: '', width: '44', height: '44', decoding: 'async', draggable: 'false' },
       }),
       h(
         'span',
@@ -464,12 +482,37 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
     'div',
     { class: 'char-picker-content' },
     filterHost,
-    h('div', { class: 'char-picker-main' }, h('div', { class: 'char-results' }, grid, empty), detail),
+    h('div', { class: 'char-picker-main' }, h('div', { class: 'char-results' }, artPending, grid, empty), detail),
   );
 
   const footer = h('div', { class: 'char-picker-footer' }, randomButton, confirmButton);
 
   const body = h('div', { class: 'char-picker' }, toolbar, content, footer);
+
+  /**
+   * Build the card list only once every portrait is decoded. The grid is rebuilt from scratch
+   * when a filter changes anyway, so deferring the first build costs nothing and removes the
+   * old "grid opens on nine blank faces" failure entirely.
+   */
+  const revealWhenPortraitsReady = (): void => {
+    const show = (): void => {
+      if (!grid.isConnected) return;
+      artPending.remove();
+      render();
+    };
+    if (gridReady()) {
+      show();
+      return;
+    }
+    const timer = window.setInterval(() => {
+      const { loaded, total } = tierProgress('picker');
+      artPending.textContent = `顔写真を並べています… ${total > 0 ? Math.round((loaded / total) * 100) : 0}%`;
+    }, 140);
+    void ensureTier('picker').then(() => {
+      window.clearInterval(timer);
+      show();
+    });
+  };
 
   handle = options.modal.open(body, {
     title: options.title ?? 'キャラクターを選ぶ',
@@ -477,7 +520,7 @@ export function openCharacterPicker(options: CharacterPickerOptions): void {
     className: 'modal-wide char-picker-modal',
     onClose: () => window.clearTimeout(shuffleTimer),
   });
-  render();
+  revealWhenPortraitsReady();
 }
 
 function filterRow(label: string, chips: HTMLElement[]): HTMLElement {
@@ -497,6 +540,10 @@ function characterCard(
   onClick: () => void,
 ): HTMLButtonElement {
   const perk = perkInfo(character.perk);
+  const spriteUrl = characterSprite(character);
+  // Only request a portrait we already hold. Otherwise the card shows the silhouette slot
+  // until the preload tier lands and re-renders, so the picker never opens on blank faces.
+  const ready = !!preloadedImage(spriteUrl);
   return h(
     'button',
     {
@@ -512,15 +559,20 @@ function characterCard(
     },
     h(
       'span',
-      { class: 'char-card-art', attrs: { style: `--char-color:${character.color}` } },
-      h('img', {
-        attrs: {
-          src: characterSprite(character),
-          alt: character.nameJa,
-          loading: 'lazy',
-          draggable: 'false',
-        },
-      }),
+      { class: `char-card-art ${ready ? '' : 'is-loading'}`.trim(), attrs: { style: `--char-color:${character.color}` } },
+      ready
+        ? h('img', {
+            attrs: {
+              src: spriteUrl,
+              alt: character.nameJa,
+              // Fixed box so the card never reflows when the portrait lands (CSS sets 78px).
+              width: '78',
+              height: '78',
+              decoding: 'async',
+              draggable: 'false',
+            },
+          })
+        : null,
       h('span', { class: 'char-card-role', text: ROLE_JA[character.role] }),
       taken ? h('span', { class: 'char-card-taken', text: '選択中' }) : null,
       current ? h('span', { class: 'char-card-current', text: '✓' }) : null,

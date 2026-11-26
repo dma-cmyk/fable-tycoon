@@ -141,6 +141,8 @@ let activeBgm: ActiveBgm | null = null;
 let bgmToken = 0;
 const bgmCache = new Map<BgmName, AudioBuffer>();
 const bgmFailed = new Set<BgmName>();
+/** In-flight decodes, so the title screen's repeated `bgm('title')` calls share one fetch. */
+const bgmLoading = new Map<BgmName, Promise<AudioBuffer | null>>();
 let bgmManifestPromise: Promise<Record<string, BgmEntry>> | null = null;
 
 // --- sfx ------------------------------------------------------------------
@@ -364,13 +366,22 @@ function bgm(name: BgmName | null): void {
       const file = entry && typeof entry.file === 'string' && entry.file.length > 0
         ? entry.file
         : `bgm/${name}.mp3`;
-      try {
-        buffer = await loadBuffer(`${ASSET_BASE}${file}`);
-      } catch {
-        bgmFailed.add(name);
-        return;
+      let pending = bgmLoading.get(name);
+      if (!pending) {
+        pending = loadBuffer(`${ASSET_BASE}${file}`)
+          .then((loaded) => {
+            bgmCache.set(name, loaded);
+            return loaded;
+          })
+          .catch(() => {
+            bgmFailed.add(name);
+            return null;
+          })
+          .finally(() => bgmLoading.delete(name));
+        bgmLoading.set(name, pending);
       }
-      bgmCache.set(name, buffer);
+      buffer = (await pending) ?? undefined;
+      if (!buffer) return;
     }
     if (token !== bgmToken || !ready || !ctx || !bgmBus) return;
 

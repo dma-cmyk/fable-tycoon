@@ -1,0 +1,30 @@
+/* 関連動画ブロック（eventPanel の「元ネタ」内）。クリックで初めて iframe を作る。 */
+.event-video-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event-video-btn {
+  align-self: flex-start;
+}
+
+.event-video-title {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-soft, #6b7785);
+}
+
+.event-video-host:empty {
+  display: none;
+}
+
+.event-video-frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+  background: #000;
+}

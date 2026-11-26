@@ -453,3 +453,144 @@
 @media (max-width: 899px) and (max-height: 520px) {
   .hud-comm-chooser { bottom: calc(86px + var(--safe-bottom)); }
 }
+
+/* ---------------------------------------------------------------- compact cut-in
+   CPU だけの小さい固有技（人間の金・物件・取り立て・休みに触れない技）は、画面を斜めに
+   切らず、上端に細い帯を 1 本だけ流す。予算は fxPacing の 0.8 秒（標準）で、
+   --skill-in / --skill-hold もその予算から JS が渡す。 */
+
+.skill-cutin.is-compact {
+  /* 上端の帯と文字だけ。全面フラッシュ・大きな立ち絵は使わない。
+     0.8 秒だけ HUD の上に重ねる（下に隠れると読めないため）。 */
+  display: block;
+  z-index: 120;
+  /* PC のヘッダー帯（約 40px）の下に置く。スマホは上端のままで読める。 */
+  --compact-top: 44px;
+}
+
+.skill-cutin.is-compact .skill-cutin-flash { display: none; }
+
+.skill-cutin.is-compact .skill-cutin-band {
+  left: 0;
+  right: 0;
+  top: var(--compact-top);
+  height: 68px;
+  transform: scaleY(0);
+  transform-origin: top center;
+  border-top: 0;
+  border-bottom: 3px solid #fff;
+  background: linear-gradient(100deg, var(--skill-color) 0%, var(--skill-color) 58%, rgba(0, 0, 0, 0.6) 100%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.skill-cutin.is-compact.is-in .skill-cutin-band {
+  animation: skill-compact-band-in var(--skill-in) cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+
+.skill-cutin.is-compact.is-out .skill-cutin-band {
+  animation: skill-compact-band-out 130ms ease-in both;
+}
+
+.skill-cutin.is-compact .skill-cutin-art-wrap {
+  left: max(10px, calc(50% - 300px));
+  top: calc(var(--compact-top) + 6px);
+  bottom: auto;
+  height: 56px;
+  width: 56px;
+  transform: none;
+  filter: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.skill-cutin.is-compact .skill-cutin-art {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  max-width: none;
+  object-fit: cover;
+  object-position: 50% 18%;
+  transform: scale(0.6);
+  transform-origin: center;
+}
+
+.skill-cutin.is-compact.is-in .skill-cutin-art {
+  animation: skill-compact-art-in var(--skill-in) ease-out both;
+}
+
+.skill-cutin.is-compact.is-out .skill-cutin-art { animation: none; }
+
+.skill-cutin.is-compact .skill-cutin-text {
+  right: max(14px, calc(50% - 540px));
+  left: max(76px, calc(50% - 236px));
+  top: calc(var(--compact-top) + 9px);
+  bottom: auto;
+  max-width: none;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+  clip-path: none;
+}
+
+.skill-cutin.is-compact .skill-cutin-kicker {
+  font-size: 11px;
+  padding: 1px 8px;
+  letter-spacing: 0.12em;
+}
+
+.skill-cutin.is-compact .skill-cutin-owner {
+  font-size: 11px;
+  color: var(--skill-ink);
+  opacity: 0.95;
+}
+
+.skill-cutin.is-compact .skill-cutin-name {
+  font-size: clamp(16px, 2vw, 22px);
+  clip-path: none;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.skill-cutin.is-compact.is-in .skill-cutin-name { animation: none; }
+
+.skill-cutin.is-compact .skill-cutin-target {
+  display: none;
+}
+
+@keyframes skill-compact-band-in {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes skill-compact-band-out {
+  from { transform: scaleY(1); opacity: 1; }
+  to { transform: scaleY(1) translateY(-40%); opacity: 0; }
+}
+
+@keyframes skill-compact-art-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 820px) {
+  .skill-cutin.is-compact { --compact-top: 0px; }
+  .skill-cutin.is-compact .skill-cutin-band { height: 58px; }
+  .skill-cutin.is-compact .skill-cutin-art-wrap { top: calc(var(--compact-top) + 5px); height: 48px; width: 48px; left: 10px; }
+  .skill-cutin.is-compact .skill-cutin-text {
+    left: 66px;
+    right: 10px;
+    top: calc(var(--compact-top) + 8px);
+    gap: 6px;
+  }
+  .skill-cutin.is-compact .skill-cutin-name { font-size: 17px; }
+  .skill-cutin.is-compact .skill-cutin-owner { display: none; }
+}
+
+.reduced-motion .skill-cutin.is-compact .skill-cutin-band { transform: none; animation: none; }

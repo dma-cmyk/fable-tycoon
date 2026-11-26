@@ -345,6 +345,72 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 `state.recentEvents` に抽選履歴（古い順）を残し、**直近12件に出たイベントは抽選から外す**
 （候補が尽きたら全候補に戻す）。乱数を引く回数は変えないので、シード固定の再現性は保たれる。
 
+### イベント画像の追加手順
+
+一枚絵は `public/assets/events/<eventId>.webp`（800×450、16:9、webp quality 82）に置き、
+`events.json` の `image` に `assets/events/<eventId>.webp` を書く。画像はパネル上部に帯状に出るので、
+**重要な人物と物は画面の上 2/3** に置く（下 1/3 は選択肢に隠れることがある）。
+
+1. **マニフェスト** `tools/art/event_art.json` に 1 行足す。
+
+   ```json
+   { "eventId": "my-event", "priority": 4, "style": "chibi",
+     "prompt": "何がどうなっている絵か。日本語で具体的に。",
+     "refs": ["public/assets/chars/alice.webp"],
+     "sheet": null, "slot": 0, "status": "pending",
+     "output": "public/assets/events/my-event.webp" }
+   ```
+
+   - `priority`: 1=最終年、2=`city_mod`、3=月替わり・季節、4=その他の news/history、5=異世界、6=寓話。
+   - `style`: `chibi`（ゲームの絵柄）または `photoreal`（突然の実写風パロディ。全体の 10〜15%）。
+   - `prompt`: 文字・ロゴ・実在の人物を描かせない。風刺の対象は制度・権力。
+   - `refs`: 絵柄とキャラクターの参照画像（`public/assets/chars/*.webp` など）。
+   - `sheet` は自動採番。手で書かない。
+
+2. **シート計画**: `python3 tools/art/event_art.py sheets`
+   同じ style の 4 行を 1 枚の 2×2 シート（`art/event_jobs.json`）にまとめる。
+   既存の割り当ては崩さないので、失敗したシートは同じ 4 枚で再試行できる。
+
+3. **生成**: `python3 tools/art/run_events.py`（Codex → agy の順に自動で切り替える）。
+   - Codex: `python3 tools/art/gen_codex.py --jobs art/event_jobs.json [sheet_id ...]`
+     4 枚まとめて 1 リクエスト。`usage limit` を検出したら即座に止まる。
+   - agy: `python3 tools/art/gen_agy.py [priority ...]` 1 枚ずつ。
+   - どちらも出力済みの行はスキップする。`art/log.jsonl` に記録が残る。
+   - クォータ切れは正常終了。残りはマニフェストの `status: "pending"` に残るので、
+     回復後に同じコマンドを流せば続きから再開する。
+
+4. **切り出し**: `python3 tools/art/event_art.py cut`
+   2×2 シートはガター（白い帯）を検出して 4 分割し、16:9 にセンタークロップ（上寄せ）して
+   800×450 webp で保存する。ガターが読めないときは等分四分割にフォールバックする。
+   agy の 1 枚絵も同じ経路でリサイズする。
+
+5. **反映**: `python3 tools/art/event_art.py apply`
+   `events.json` の `image` を書き、`src/ui/assetManifest.ts` の `EVENT_IMAGE_IDS` を更新する。
+
+6. **検証**: `npm run validate`
+   - `image` のパスが実在すること（エラー）
+   - 画像が 16:9 であること（±3.5%、エラー）／800×450 でない場合は warning
+
+7. **目視**: `python3 tools/art/event_art.py contact` で
+   `.tmp/fun/eventart/contact.jpg`（1000px 幅以下）にコンタクトシートを出す。
+   文字が写った・キャラクターが違う・グロい・実在ロゴがある、は失敗。
+   直すときは `eventId` を `<id>_v2`、`target` を元の `<id>` にした行を足す（`sheet` は自動採番）。
+   生成物は元イベントの画像パスへ切り出され、`events.json` の `image` は変わらない。
+   元の `_v2` でない行はそのまま残るので、気に入らなければ `_v2` 行を消して切り直せばよい。
+
+### 関連動画（`video`）
+
+`events.json` のイベントに任意で付ける。**今はデータに使っていないが、仕組みは動く**。
+
+```json
+"video": { "youtubeId": "dQw4w9WgXcQ", "start": 42, "title": "関連動画の説明" }
+```
+
+- `youtubeId` は 11 文字、`start` は非負の秒（省略可）、`title` は必須。
+- ゲーム内では「元ネタ」を開くと「▶ 関連動画」が出る。**クリックするまで iframe は作らない**
+  （`youtube-nocookie.com` を使い、自動再生もしない）。
+- 検証は `tools/validate-data.mjs` の events 節（id の形式・start・title）。
+
 ---
 
 ## 6. カード

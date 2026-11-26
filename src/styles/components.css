@@ -3919,3 +3919,30 @@
     max-height: none;
   }
 }
+/* Placeholder slot while a portrait is still in the preload queue: a soft silhouette on the
+   same gradient so the grid reads as "being drawn", never as a missing image. */
+.char-card-art.is-loading {
+  background-image:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.9) 0 6px, transparent 7px),
+    radial-gradient(ellipse 46% 24% at 50% 96%, rgba(125, 157, 192, 0.55) 0 98%, transparent 100%),
+    linear-gradient(180deg, #d8ecff, #a9cdf3);
+}
+.char-card-art.is-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: img-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Shown in the picker's result pane while the 48 portraits are still decoding. */
+.char-art-pending {
+  display: grid;
+  place-content: center;
+  min-height: 220px;
+  color: #4a6285;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

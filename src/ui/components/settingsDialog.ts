@@ -73,6 +73,36 @@ export function openSettingsDialog(modal: ModalHost, session?: Session | null): 
     applyMotionPreference();
   });
 
+  // 「演出の長さ」: only CPU-only beats are condensed, and only on this device. じっくり keeps
+  // every cut-in at its old length, 標準 shortens CPU-only ones, さくさく shortens them further.
+  const PACING_CHOICES = [
+    { value: 'calm', label: 'じっくり', note: '今までどおり' },
+    { value: 'standard', label: '標準', note: 'CPU だけの演出を短く' },
+    { value: 'brisk', label: 'さくさく', note: 'もっと短く' },
+  ] as const;
+  const pacingSeg = h('div', { class: 'seg', attrs: { role: 'group', 'aria-label': '演出の長さ' } });
+  for (const choice of PACING_CHOICES) {
+    pacingSeg.append(
+      h('button', {
+        class: 'seg-btn',
+        text: choice.label,
+        attrs: {
+          type: 'button',
+          'aria-pressed': String(uiSettings().pacing === choice.value),
+          title: choice.note,
+        },
+        on: {
+          click: () => {
+            saveUiSettings({ pacing: choice.value });
+            pacingSeg.querySelectorAll('button').forEach((btn) => {
+              btn.setAttribute('aria-pressed', String(btn.textContent === choice.label));
+            });
+          },
+        },
+      }),
+    );
+  }
+
   let reportsSection: HTMLElement | null = null;
   if (session && session.mode === 'online') {
     const mySeat = session.mySeats()[0];
@@ -136,6 +166,20 @@ export function openSettingsDialog(modal: ModalHost, session?: Session | null): 
         h('span', { class: 'settings-row-desc', text: 'サイコロ・移動・台詞のテンポ。待ちがたまったら自動で 2 倍速。' }),
       ),
       speedSeg,
+    ),
+    h(
+      'div',
+      { class: 'settings-row' },
+      h(
+        'div',
+        { class: 'settings-row-text' },
+        h('span', { class: 'settings-row-title', text: '演出の長さ' }),
+        h('span', {
+          class: 'settings-row-desc',
+          text: 'CPU だけの固有技・買収の見せ方。あなたが関わる演出の長さは変わりません。',
+        }),
+      ),
+      pacingSeg,
     ),
     h(
       'div',

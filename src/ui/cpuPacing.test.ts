@@ -6,6 +6,7 @@ import {
   CpuTurnPacer,
   isRoutineCpuFx,
   isRoutineCpuSay,
+  ROUTINE_BOOST,
 } from './cpuPacing';
 
 /** Minimal public state: seat 0 is the human, 1..3 are CPUs. */
@@ -71,7 +72,7 @@ describe('CPU pacing classification', () => {
     expect(routine({ t: 'cash', playerId: 0, delta: 12, reason: '青マス' }, 0)).toBe(false);
     expect(routine({ t: 'cash', playerId: 0, delta: 156, reason: '目的地ボーナス' }, 1)).toBe(false);
     expect(routine({ t: 'cash', playerId: 1, delta: 156, reason: '目的地ボーナス' }, 1)).toBe(false);
-    for (const reason of ['決算', 'スリ', '肩代わり', '敵対的買収', '物件売却']) {
+    for (const reason of ['スリ', '肩代わり', '敵対的買収', '物件売却']) {
       expect(routine({ t: 'cash', playerId: 1, delta: 10, reason }, 1), reason).toBe(false);
     }
   });
@@ -93,12 +94,15 @@ describe('CPU pacing classification', () => {
 describe('CpuTurnPacer', () => {
   it('tracks the turn actor and returns the boost', () => {
     const pacer = new CpuTurnPacer();
-    expect(pacer.speedFor({ t: 'turn', playerId: 1 }, state)).toBe(CPU_ROUTINE_BOOST);
+    // 標準 (default) is one notch above the old ×3 baseline.
+    expect(pacer.speedFor({ t: 'turn', playerId: 1 }, state)).toBe(ROUTINE_BOOST.standard);
     expect(pacer.actorSeat).toBe(1);
-    expect(pacer.speedFor({ t: 'dice', values: [2] }, state)).toBe(CPU_ROUTINE_BOOST);
+    expect(pacer.speedFor({ t: 'dice', values: [2] }, state)).toBe(ROUTINE_BOOST.standard);
     expect(pacer.speedFor({ t: 'goal', playerId: 1, cityId: 'x', bonus: 1 }, state)).toBe(1);
     // The next update may start without a fresh `turn` fx: the actor persists.
-    expect(pacer.speedFor({ t: 'move', playerId: 1, path: ['a'] }, state)).toBe(CPU_ROUTINE_BOOST);
+    expect(pacer.speedFor({ t: 'move', playerId: 1, path: ['a'] }, state)).toBe(ROUTINE_BOOST.standard);
+    // じっくり = 今までどおり.
+    expect(pacer.speedFor({ t: 'dice', values: [2] }, state, { level: 'calm' })).toBe(CPU_ROUTINE_BOOST);
     expect(pacer.speedFor({ t: 'turn', playerId: 0 }, state)).toBe(1);
     expect(pacer.actorSeat).toBe(0);
     pacer.reset();

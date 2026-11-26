@@ -16,6 +16,7 @@ import {
   type CityRouteConnections,
 } from '../ui/squareInfo';
 import { formatOkuShort } from '../ui/format';
+import { loadImageShared } from '../ui/assetPreload';
 import type {
   BoardNode,
   Character,
@@ -781,14 +782,24 @@ export class MapView {
         const pts = r.pts;
         if (pts.length < 4) continue;
         const shift = shiftNear(pts[0]);
-        const [sx, sy] = toCanvas(pts[0] + shift, pts[1]);
-        if (!visible(sx, sy, 120)) continue;
+        // Cull on the whole polyline: a tile only sees a river's middle, so testing the
+        // first point alone would drop every long river that crosses the tile.
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let i = 0; i < pts.length; i += 2) {
+          minX = Math.min(minX, pts[i]);
+          maxX = Math.max(maxX, pts[i]);
+          minY = Math.min(minY, pts[i + 1]);
+          maxY = Math.max(maxY, pts[i + 1]);
+        }
+        const [bx, by] = toCanvas(minX + shift, minY);
+        const reach = Math.max(maxX - minX, maxY - minY) * scale + 120;
+        if (!visible(bx, by, reach)) continue;
         const path = new Path2D();
         for (let i = 0; i < pts.length; i += 2) {
-          const [px, py] = toCanvas(pts[i] + shift, pts[i+1]);
+          const [px, py] = toCanvas(pts[i] + shift, pts[i + 1]);
           if (i === 0) path.moveTo(px, py); else path.lineTo(px, py);
         }
-        const width = Math.max(1 * dpr, (r.w ?? 2.2) * this.camera.zoom * dpr);
+        const width = Math.max(1 * dpr, (r.w ?? 2.2) * layer.zoom * dpr);
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -806,12 +817,22 @@ export class MapView {
         const ring = lake.rings[0];
         if (!ring || ring.length < 6) continue;
         const shift = shiftNear(ring[0]);
-        const [sx, sy] = toCanvas(ring[0] + shift, ring[1]);
-        if (!visible(sx, sy, 120)) continue;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const rr of lake.rings) {
+          for (let i = 0; i < rr.length; i += 2) {
+            minX = Math.min(minX, rr[i]);
+            maxX = Math.max(maxX, rr[i]);
+            minY = Math.min(minY, rr[i + 1]);
+            maxY = Math.max(maxY, rr[i + 1]);
+          }
+        }
+        const [bx, by] = toCanvas(minX + shift, minY);
+        const reach = Math.max(maxX - minX, maxY - minY) * scale + 120;
+        if (!visible(bx, by, reach)) continue;
         const path = new Path2D();
         for (const r of lake.rings) {
           for (let i = 0; i < r.length; i += 2) {
-            const [px, py] = toCanvas(r[i] + shift, r[i+1]);
+            const [px, py] = toCanvas(r[i] + shift, r[i + 1]);
             if (i === 0) path.moveTo(px, py); else path.lineTo(px, py);
           }
           path.closePath();
@@ -859,7 +880,7 @@ export class MapView {
     const centerX = layer.ox + layer.wWorld / 2;
     const wPx = layer.wWorld * scale;
     const hPx = layer.hWorld * scale;
-    const radiusPx = this.cityRadius() * layer.dpr;
+    const radiusPx = this.cityRadius(layer.zoom) * layer.dpr;
     const placed: Array<{ x: number; y: number }> = [];
     const sorted = [...this.cityEntries]
       .filter((entry) => !!entry.city.landmark)
@@ -873,7 +894,9 @@ export class MapView {
       const sz = worldSize * scale;
       const wx = centerX + wrapDx(centerX, entry.node.x);
       const [px, py] = toCanvas(wx, entry.node.y);
-      if (px < -sz || px > wPx + sz || py < -sz || py > hPx + sz) continue;
+      // The block is drawn one pedestal-radius sideways and slightly below the station.
+      const pad = sz + radiusPx + 24 * layer.dpr;
+      if (px < -pad || px > wPx + pad || py < -pad || py > hPx + pad) continue;
       // One compact block below the station, leaving the plate, label and all
       // route edges clear. Landmarks remain drawn above this cluster.
       const dir = hashString(entry.city.id) % 2 === 0 ? 1 : -1;
@@ -1435,12 +1458,17 @@ export class MapView {
     if (this.cityTileLoading.has(key)) return;
     this.cityTileLoading.add(key);
     const rel = small ? `assets/tiles/cities/small/${cityId}.webp` : `assets/tiles/cities/${cityId}.webp`;
-    const url = new URL(rel, document.baseURI).href;
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => {
+    // Shared loader: the boot warmup already decodes the start-city tiles, and a transient
+    // failure gets two backoff retries instead of permanently falling back to the generic
+    // station plate. A real 404 still fails once and is remembered in `cityTileFailed`.
+    void loadImageShared(new URL(rel, document.baseURI).href).then((img) => {
       this.cityTileLoading.delete(key);
       if (this.destroyed) return;
+      if (!img) {
+        this.cityTileFailed.add(cityId);
+        this.requestRender();
+        return;
+      }
       const cache = small ? this.cityTileSmallCache : this.cityTileFullCache;
       // A layer can hold more stations than the old limits, which made the LRU evict
       // the tile it had just decoded and re-request it on the next rebuild.
@@ -1448,12 +1476,7 @@ export class MapView {
       this.putLru(cache, cityId, img, limit);
       // New art only affects that city's pedestal, which is a per-frame pass now.
       this.requestRender();
-    };
-    img.onerror = () => {
-      this.cityTileLoading.delete(key);
-      this.cityTileFailed.add(cityId);
-    };
-    img.src = url;
+    });
   }
 
   private getCityTileImage(city: City | undefined, drawSizePx: number): HTMLImageElement | null {
@@ -1648,6 +1671,15 @@ export class MapView {
       this.landLayer.invalidate();
     }
     this.month = m;
+    this.requestRender();
+  }
+
+  /**
+   * A deferred image (emotion variant, landmark, stamp, realm backdrop) finished decoding.
+   * Repaint so it appears without waiting for the next state change.
+   */
+  refreshAssets(): void {
+    this.landLayer.invalidate();
     this.requestRender();
   }
 
@@ -2666,6 +2698,7 @@ export class MapView {
     ctx.translate(shake.x, shake.y);
     if (this.view === 'world') {
       this.ensureBakedLayer();
+      const overview = this.isOverview();
       this.landLayer.draw(
         ctx,
         cam,
@@ -2675,13 +2708,15 @@ export class MapView {
         (layer) => this.paintStaticBoard(layer),
         (x, y) => this.avoidGrid.queryRect({ x: x - 42, y: y - 42, w: 84, h: 84 }).length > 0,
         (x, y) => this.geoAt(x, y),
-        !this.isOverview(),
+        { overview, wrap: !overview },
       );
+      // Tiles arrive a few per frame; keep rendering until the viewport is exact.
+      if (this.landLayer.getFrameStats().pending > 0) this.requestRender();
       this.landLayer.drawSeasonFade(ctx, cam, now);
       // Station pedestals are NOT baked into the terrain raster: their pixels depend on
       // ownership and on tile art that decodes asynchronously, and either used to force a
       // full-board repaint (300 ms) on every change. Painting them per frame costs ~1.5 ms.
-      if (!this.isOverview()) this.drawCityPedestals(ctx);
+      if (!overview) this.drawCityPedestals(ctx);
       this.ambient.draw(ctx, cam, now, this.detailLevel(), (x, y) => this.landLayer.isLand(x, y));
       this.drawWorldWarpTiles(ctx, now);
       this.drawSeasonParticles(ctx, now);
@@ -3543,15 +3578,19 @@ export class MapView {
     ctx.restore();
   }
 
-  /** Land + trees are already painted; this callback adds the static board geometry. */
+  /**
+   * Land + trees are already painted; this callback adds the static board geometry.
+   * Every zoom-derived size and the overview flag come from `layer`, never from the live
+   * camera: a painted tile is shared between frames whose zoom differs by a few percent.
+   */
   private paintStaticBoard(layer: LayerTransform): void {
     const { ctx, toCanvas, scale, dpr, ox, wWorld, hWorld } = layer;
     const centerX = ox + wWorld / 2;
     const wPx = wWorld * scale;
     const hPx = hWorld * scale;
     const margin = 80 * dpr;
-    const detail0 = this.detailLevel();
-    const overview = this.isOverview();
+    const detail0 = this.detailLevel(layer.zoom);
+    const overview = layer.overview;
     this.drawMapArt(ctx, layer, detail0);
     this.drawTerrain(ctx, layer, detail0);
     this.drawCityClusters(ctx, layer, detail0);
@@ -3563,8 +3602,8 @@ export class MapView {
     const chevronPath = new Path2D();
     const airPath = new Path2D();
     const airGlyphPath = new Path2D();
-    const zoomForTrack = this.camera.zoom;
-    const detailForTrack = this.detailLevel();
+    const zoomForTrack = layer.zoom;
+    const detailForTrack = this.detailLevel(layer.zoom);
     for (const e of this.edges) {
       const ax = centerX + wrapDx(centerX, e.ax);
       const bx = ax + e.dx;
@@ -3643,7 +3682,7 @@ export class MapView {
         }
       }
     }
-    const zoom = this.camera.zoom;
+    const zoom = layer.zoom;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -3709,8 +3748,8 @@ export class MapView {
     }
     ctx.restore();
 
-    const detail = this.detailLevel();
-    const tileR = this.tileRadius() * dpr;
+    const detail = this.detailLevel(layer.zoom);
+    const tileR = this.tileRadius(layer.zoom) * dpr;
     const cityPad = 90 * dpr;
 
     // --- gems ----------------------------------------------------------------
@@ -3719,8 +3758,10 @@ export class MapView {
         if (node.kind === 'city' || node.kind === 'warp') continue;
         const wx = centerX + wrapDx(centerX, node.x);
         const [px, py] = toCanvas(wx, node.y);
-        if (px < -tileR - 10 * dpr || px > wPx + tileR + 10 * dpr) continue;
-        if (py < -tileR - 10 * dpr || py > hPx + tileR + 10 * dpr) continue;
+        // The sprite spans ~1.5×tileR around the anchor, so the tile cull needs that reach.
+        const reach = tileR * 1.6 + 10 * dpr;
+        if (px < -reach || px > wPx + reach) continue;
+        if (py < -reach || py > hPx + reach) continue;
         this.drawGem(ctx, node, px, py, tileR, detail);
       }
     }

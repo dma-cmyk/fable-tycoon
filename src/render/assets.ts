@@ -1,11 +1,22 @@
 // Asset loading for the map renderer. Character sprite paths in characters.json still
 // point at .png files while the shipped cut sprites are .webp, so ids drive the URLs.
+//
+// Two phases:
+//   critical  - land data, terrain, tiles, sprites the board needs on its very first frame;
+//               this is what the loading bar waits for.
+//   deferred  - emotion variants, landmarks, stamps, realms, npcs; loaded in the background
+//               after the board is playable. `MapAssets` is a live object, so a late image
+//               simply appears on the next repaint instead of blocking the screen.
+//
+// Both phases reuse `loadImageShared`, so anything the boot preloader already fetched (the
+// map tier, the picker portraits) is served from memory instead of the network.
 
 import type { GameData } from '../core/types';
 import type { LandJson, MapAssets, MapArtData } from './map';
 import { VEHICLE_FILES, VEHICLE_KINDS } from './vehicles';
 import { REALMS } from '../core/realm';
 import type { RealmId } from '../core/types';
+import { fetchJsonShared, loadImageShared, preloadedImage } from '../ui/assetPreload';
 import {
   COMMON_CITY_TILE_KINDS,
   SQUARE_TILE_KINDS,
@@ -20,7 +31,6 @@ export interface AssetProgress {
   label: string;
 }
 
-const IMAGE_TIMEOUT_MS = 15000;
 // Flip once public/assets/map/{terrain,terrain_lo,rivers,lakes,borders,labels} exist.
 // Keeping this false avoids noisy 404s for the optional MapArt bundle.
 const MAP_ART_READY = true; // terrain/borders/labels bundle
@@ -30,54 +40,39 @@ function assetUrl(path: string): string {
   return new URL(`assets/${path}`, document.baseURI).href;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.decoding = 'async';
-    let settled = false;
-    const done = (value: HTMLImageElement | null): void => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-    const timer = setTimeout(() => done(null), IMAGE_TIMEOUT_MS);
-    img.onload = () => {
-      clearTimeout(timer);
-      done(img);
-    };
-    img.onerror = () => {
-      clearTimeout(timer);
-      done(null);
-    };
-    img.src = url;
+/** Runs `jobs` with a small concurrency window; resolves once all have settled. */
+async function runLimited(limit: number, jobs: Array<() => Promise<void>>): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, jobs.length) }, async () => {
+    while (cursor < jobs.length) {
+      const job = jobs[cursor];
+      cursor += 1;
+      await job();
+    }
   });
+  await Promise.all(workers);
+}
+
+export interface LoadMapAssetsOptions {
+  /** Called after the board is playable and each deferred image arrives (for a repaint). */
+  onLateAsset?: () => void;
 }
 
 /** Load every map asset: land polygons, character sprites, landmarks and NPC sprites. */
 export async function loadMapAssets(
   data: GameData,
   onProgress?: (p: AssetProgress) => void,
+  options: LoadMapAssetsOptions = {},
 ): Promise<MapAssets> {
   const landUrl = assetUrl('map/land.json');
-  const res = await fetch(landUrl);
-  if (!res.ok) throw new Error(`land.json を読み込めません (${res.status})`);
-  const land = (await res.json()) as LandJson;
+  const land = await fetchJsonShared<LandJson>(landUrl);
   let mapArt: MapArtData = {};
   if (MAP_ART_READY || MAP_ART_VECTORS_READY) {
-    const fetchJson = async <T>(path: string): Promise<T | null> => {
-      try {
-        const r = await fetch(assetUrl(path));
-        if (!r.ok) return null;
-        return (await r.json()) as T;
-      } catch {
-        return null;
-      }
-    };
     const [rivers, lakes, borders, labels] = await Promise.all([
-      fetchJson<NonNullable<MapArtData['rivers']>>('map/rivers.json'),
-      fetchJson<NonNullable<MapArtData['lakes']>>('map/lakes.json'),
-      MAP_ART_READY ? fetchJson<NonNullable<MapArtData['borders']>>('map/borders.json') : Promise.resolve(null),
-      MAP_ART_READY ? fetchJson<NonNullable<MapArtData['labels']>>('map/labels.json') : Promise.resolve(null),
+      fetchJsonShared<NonNullable<MapArtData['rivers']>>(assetUrl('map/rivers.json')).catch(() => null),
+      fetchJsonShared<NonNullable<MapArtData['lakes']>>(assetUrl('map/lakes.json')).catch(() => null),
+      MAP_ART_READY ? fetchJsonShared<NonNullable<MapArtData['borders']>>(assetUrl('map/borders.json')).catch(() => null) : Promise.resolve(null),
+      MAP_ART_READY ? fetchJsonShared<NonNullable<MapArtData['labels']>>(assetUrl('map/labels.json')).catch(() => null) : Promise.resolve(null),
     ]);
     mapArt = { rivers: rivers ?? undefined, lakes: lakes ?? undefined, borders: borders ?? undefined, labels: labels ?? undefined };
   }
@@ -101,20 +96,24 @@ export async function loadMapAssets(
     label: string;
     url: string;
     put: (img: HTMLImageElement) => void;
+    deferred?: boolean;
   }
-  const jobs: Job[] = [];
+  const critical: Job[] = [];
+  const late: Job[] = [];
+
+  const add = (job: Job): void => {
+    (job.deferred ? late : critical).push(job);
+  };
+
   for (const c of data.characters) {
-    jobs.push({
-      label: `chars/${c.id}`,
-      url: assetUrl(`chars/${c.id}.webp`),
-      put: (img) => chars.set(c.id, img),
-    });
+    add({ label: `chars/${c.id}`, url: assetUrl(`chars/${c.id}.webp`), put: (img) => chars.set(c.id, img) });
   }
   for (const id of Object.keys(REALMS) as RealmId[]) {
-    jobs.push({
+    add({
       label: `realms/${id}`,
       url: assetUrl(REALMS[id].background.replace(/^assets\//, '')),
       put: (img) => realms.set(id, img),
+      deferred: true,
     });
   }
   const stampNames = [
@@ -122,65 +121,61 @@ export async function loadMapAssets(
     'fields', 'town', 'metropolis', 'port_town', 'station', 'iceberg', 'ranch', 'oil_rig', 'factory',
   ];
   if (MAP_ART_READY) {
-    jobs.push({
-      label: 'map/terrain',
-      url: assetUrl('map/terrain.webp'),
-      put: (img) => { terrain = img; },
-    });
-    jobs.push({
-      label: 'map/terrain_lo',
-      url: assetUrl('map/terrain_lo.webp'),
-      put: (img) => { terrainLo = img; },
-    });
+    add({ label: 'map/terrain', url: assetUrl('map/terrain.webp'), put: (img) => { terrain = img; } });
+    add({ label: 'map/terrain_lo', url: assetUrl('map/terrain_lo.webp'), put: (img) => { terrainLo = img; } });
   }
   for (const name of stampNames) {
-    jobs.push({
+    add({
       label: `stamps/${name}`,
       url: assetUrl(`stamps/${name}.webp`),
       put: (img) => stamps.set(name, img),
+      deferred: true,
     });
   }
   for (const kind of SQUARE_TILE_KINDS) {
-    jobs.push({
+    add({
       label: `tiles/${kind}`,
       url: assetUrl(squareTileAssetPath(kind, false)),
       put: (img) => squareTiles.set(kind, img),
     });
-    jobs.push({
+    add({
       label: `tiles/small/${kind}`,
       url: assetUrl(squareTileAssetPath(kind, true)),
       put: (img) => squareTilesSmall.set(kind, img),
     });
   }
   for (const kind of COMMON_CITY_TILE_KINDS) {
-    jobs.push({
+    add({
       label: `tiles/city/${kind}`,
       url: assetUrl(`tiles/city/${kind}.webp`),
       put: (img) => cityTiles.set(kind, img),
     });
-    jobs.push({
+    add({
       label: `tiles/city/small/${kind}`,
       url: assetUrl(`tiles/city/small/${kind}.webp`),
       put: (img) => cityTilesSmall.set(kind, img),
     });
   }
   for (const kind of VEHICLE_KINDS) {
-    jobs.push({
+    add({
       label: `vehicles/${kind}`,
       url: assetUrl(`vehicles/${VEHICLE_FILES[kind]}`),
       put: (img) => vehicles.set(kind, img),
+      deferred: true,
     });
   }
   for (const c of data.characters) {
-    jobs.push({
+    add({
       label: `chars/${c.id}_joy`,
       url: assetUrl(`chars/${c.id}_joy.webp`),
       put: (img) => joy.set(c.id, img),
+      deferred: true,
     });
-    jobs.push({
+    add({
       label: `chars/${c.id}_sad`,
       url: assetUrl(`chars/${c.id}_sad.webp`),
       put: (img) => sad.set(c.id, img),
+      deferred: true,
     });
   }
   const landmarkIds = new Set<string>();
@@ -188,52 +183,67 @@ export async function loadMapAssets(
     if (c.landmark) landmarkIds.add(c.landmark);
   }
   for (const id of landmarkIds) {
-    jobs.push({
+    add({
       label: `landmarks/${id}`,
       url: assetUrl(`landmarks/${id}.webp`),
       put: (img) => landmarks.set(id, img),
+      deferred: true,
     });
   }
   // The piper is the only NPC drawn on the board, but loading the whole set is cheap
   // and keeps room for future board-side cameos.
   for (const n of data.npcs) {
     if (!n.sprite) continue;
-    jobs.push({
+    add({
       label: `npcs/${n.id}`,
       url: assetUrl(`npcs/${n.id}.webp`),
       put: (img) => npcs.set(n.id, img),
+      deferred: true,
     });
   }
 
+  const putIfLoaded = (job: Job): boolean => {
+    const img = preloadedImage(job.url);
+    if (!img) return false;
+    job.put(img);
+    return true;
+  };
+
   let loaded = 0;
-  const total = jobs.length + 1;
+  const total = critical.length;
   onProgress?.({ loaded, total, label: 'map/land.json' });
-  await Promise.all(
-    jobs.map(async (job) => {
-      const img = await loadImage(job.url);
+  // Several files are already decoded by the boot preloader; count those instantly so the
+  // bar reflects the real remaining work instead of stalling on cached images.
+  const pendingJobs: Array<() => Promise<void>> = [];
+  for (const job of critical) {
+    if (putIfLoaded(job)) {
+      loaded += 1;
+      onProgress?.({ loaded, total, label: job.label });
+      continue;
+    }
+    pendingJobs.push(async () => {
+      const img = await loadImageShared(job.url);
       if (img) job.put(img);
       loaded += 1;
       onProgress?.({ loaded, total, label: job.label });
-    }),
-  );
+    });
+  }
+  await runLimited(6, pendingJobs);
   // Let decode finish so the first frame never flashes empty sprites.
   await Promise.all(
     [
       ...chars.values(),
-      ...landmarks.values(),
-      ...npcs.values(),
       ...vehicles.values(),
-      ...joy.values(),
-      ...sad.values(),
-      ...realms.values(),
       ...stamps.values(),
       ...squareTiles.values(),
       ...squareTilesSmall.values(),
       ...cityTiles.values(),
       ...cityTilesSmall.values(),
+      ...[terrain, terrainLo].filter((img): img is HTMLImageElement => !!img),
     ].map((img) => img.decode().catch(() => undefined)),
   );
-  return {
+
+  const assets: MapAssets = {
     land,
     chars,
     landmarks,
@@ -251,4 +261,20 @@ export async function loadMapAssets(
     terrainLo,
     mapArt,
   };
+
+  // Deferred art: drain it in the background so the board is playable immediately.
+  void (async () => {
+    const jobs = late.map((job) => async () => {
+      if (putIfLoaded(job)) return;
+      const img = await loadImageShared(job.url);
+      if (img) {
+        job.put(img);
+        options.onLateAsset?.();
+      }
+    });
+    await runLimited(4, jobs);
+    options.onLateAsset?.();
+  })();
+
+  return assets;
 }

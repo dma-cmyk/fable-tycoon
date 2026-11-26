@@ -5,17 +5,31 @@
 // change: this module only decides how fast the CLIENT paints an fx. The classification itself
 // lives in `src/core/fxPacing.ts` and is shared with the host's CPU turn budget, so the client
 // can never play slower than the time the host already allotted for the turn.
+//
+// 2026-11-27 tempo slice: a CPU's 固有技 / CPU-to-CPU 買収 that touches no human now plays a
+// compact beat. `CpuTurnPacer` classifies the whole update at once (a skill's consequences are
+// fx of the same update), so `control.compact` and the playback speed always agree.
 
 import type { PublicState } from '../core/engine';
 import type { Fx } from '../core/types';
 import {
+  compactDramaKind,
   isRoutineCpuFx as coreRoutineCpuFx,
   isRoutineCpuSay as coreRoutineCpuSay,
   routineFxScale,
   type FxPacingContext,
+  type FxTempoLevel,
 } from '../core/fxPacing';
+import { effectiveTempoLevel } from './settings';
 
-export { CPU_ROUTINE_BOOST } from '../core/fxPacing';
+export {
+  BIG_SWING_RATIO,
+  compactDramaMs,
+  CPU_ROUTINE_BOOST,
+  ROUTINE_BOOST,
+  DEFAULT_TEMPO_LEVEL,
+  type FxTempoLevel,
+} from '../core/fxPacing';
 
 /** Hard ceiling after multiplying, so ?speed=8 does not turn into a single frame. */
 export const MAX_PACED_SPEED = 12;
@@ -30,6 +44,20 @@ function contextOf(state: PublicState, actor: number | null): FxPacingContext {
   return { actor, isCpu: (playerId) => isCpuSeat(state, playerId) };
 }
 
+/**
+ * Only the drama classifiers need net worth; routine bookkeeping must not walk every property.
+ * The value itself comes from the host (which owns GAME_DATA and `netWorth`), so this module
+ * stays free of the data bundle.
+ */
+function needsLeaderWorth(fx: Fx, update: readonly Fx[] | undefined): boolean {
+  return (
+    fx.t === 'skill' ||
+    fx.t === 'buyout' ||
+    (fx.t === 'say' && (fx.lineKey === 'skill' || fx.lineKey === undefined)) ||
+    (update?.some((item) => item.t === 'skill' || item.t === 'buyout') ?? false)
+  );
+}
+
 /** A `say` fx that can play without the voice wait (see `fxPacing.isRoutineCpuSay`). */
 export function isRoutineCpuSay(fx: Extract<Fx, { t: 'say' }>, state: PublicState): boolean {
   return coreRoutineCpuSay(fx, contextOf(state, null));
@@ -40,30 +68,90 @@ export interface RoutineFxInput {
   state: PublicState;
   /** Seat whose turn is currently being presented (latest `turn` fx), if known. */
   actor: number | null;
+  /** Every fx of the update being played; the 固有技 / 買収 rules read it. */
+  update?: readonly Fx[];
+  /** 「演出の長さ」. Omitted = the player's saved setting. */
+  level?: FxTempoLevel;
+  /** Net worth (億) of the current leader, when the caller can compute it. */
+  leaderWorth?: number;
 }
 
-export function isRoutineCpuFx({ fx, state, actor }: RoutineFxInput): boolean {
-  return coreRoutineCpuFx(fx, contextOf(state, actor));
+export function isRoutineCpuFx({ fx, state, actor, update, level, leaderWorth }: RoutineFxInput): boolean {
+  return coreRoutineCpuFx(fx, {
+    ...contextOf(state, actor),
+    ...(update ? { update } : {}),
+    level: level ?? effectiveTempoLevel(),
+    ...(leaderWorth === undefined ? {} : { leaderWorth }),
+  });
 }
 
 /**
- * Tracks whose turn is on screen and answers the per-fx speed multiplier.
- * Fed by FxPlayer once per fx; `reset()` on snapshot adoption.
+ * Tracks whose turn is on screen and answers the per-fx speed multiplier plus the compact
+ * presentation tier. Fed by FxPlayer once per fx; `reset()` on snapshot adoption.
  */
 export class CpuTurnPacer {
   private actor: number | null = null;
+  private compact: 'skill' | 'buyout' | null = null;
+  /** Leader net worth, recomputed once per update (netWorth walks every property). */
+  private worthCache: { state: PublicState; worth: number } | null = null;
 
   reset(): void {
     this.actor = null;
+    this.compact = null;
+    this.worthCache = null;
   }
 
   get actorSeat(): number | null {
     return this.actor;
   }
 
-  /** Feeds `turn` fx, then returns the extra playback multiplier (1 = unchanged). */
-  speedFor(fx: Fx, state: PublicState): number {
+  /** Compact tier of the fx that `speedFor` was last called for. */
+  get compactBeat(): 'skill' | 'buyout' | null {
+    return this.compact;
+  }
+
+  /**
+   * Feeds one fx, then returns its playback multiplier (1 = unchanged).
+   * `update` is the whole update so a skill beat can weigh its consequences; `leaderWorth`
+   * is only requested from the host for the drama classifiers (see {@link needsLeaderWorth}).
+   */
+  speedFor(
+    fx: Fx,
+    state: PublicState,
+    options: {
+      update?: readonly Fx[];
+      level?: FxTempoLevel;
+      leaderWorth?: (state: PublicState) => number;
+    } = {},
+  ): number {
     if (fx.t === 'turn') this.actor = fx.playerId;
-    return routineFxScale(fx, contextOf(state, this.actor));
+    const { update, level } = options;
+    let leaderWorth: number | undefined;
+    if (options.leaderWorth && needsLeaderWorth(fx, update)) {
+      if (!this.worthCache || this.worthCache.state !== state) {
+        this.worthCache = { state, worth: options.leaderWorth(state) };
+      }
+      leaderWorth = this.worthCache.worth;
+    }
+    const ctx: FxPacingContext = {
+      actor: this.actor,
+      isCpu: (playerId) => isCpuSeat(state, playerId),
+      ...(update && update.length > 0 ? { update } : {}),
+      level: level ?? effectiveTempoLevel(),
+      ...(leaderWorth === undefined ? {} : { leaderWorth }),
+    };
+    this.compact = compactDramaKind(fx, ctx);
+    if (this.compact === null && fx.t === 'say' && fx.playerId !== undefined && update) {
+      // A line that belongs to a compact CPU-only beat is colour: its 掛け合い does not wait.
+      const compactSkill = update.some(
+        (item) => item.t === 'skill' && item.playerId === fx.playerId && compactDramaKind(item, ctx) === 'skill',
+      );
+      const compactBuyout = update.some(
+        (item) => item.t === 'buyout' && compactDramaKind(item, ctx) === 'buyout',
+      );
+      if (compactSkill) this.compact = 'skill';
+      else if (compactBuyout) this.compact = 'buyout';
+    }
+    return routineFxScale(fx, ctx);
   }
 }

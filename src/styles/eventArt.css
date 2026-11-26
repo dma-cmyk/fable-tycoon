@@ -1,0 +1,36 @@
+/* イベント一枚絵の見せ方（16:9）。
+   画像は「上 2/3 に主役」で描いてあるので、cover で切り抜くときも上寄せにする。
+   PC は縦に余裕があるので帯を高くし、スマホは選択肢を押し出さない高さに抑える。 */
+
+.event-panel .event-hero:not(.no-image) {
+  height: clamp(150px, 24vh, 250px);
+  min-height: 132px;
+}
+
+.event-panel .event-image {
+  object-position: 50% 26%;
+}
+
+@media (max-width: 860px) {
+  /* スマホ: 16:9 を幅いっぱいに出しつつ、選択肢が画面外へ出ない高さ。 */
+  .event-panel .event-hero:not(.no-image) {
+    height: clamp(116px, 18vh, 146px);
+    min-height: 116px;
+  }
+}
+
+@media (max-width: 860px) and (max-height: 700px) {
+  .event-panel .event-hero:not(.no-image) {
+    height: 104px;
+    min-height: 104px;
+  }
+}
+
+/* 極端に低い横長画面では従来どおりの帯に戻す。 */
+@media (max-height: 520px) {
+  .event-panel .event-hero:not(.no-image),
+  .event-panel .event-hero.no-image {
+    height: 64px;
+    min-height: 64px;
+  }
+}

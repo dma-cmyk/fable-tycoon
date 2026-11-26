@@ -9,6 +9,7 @@ import type { EmoteEvent, LobbyView, ServerMsg } from '../../net/protocol';
 import { FX_MS, type ConnectionState, type Session } from '../../net/session-types';
 import { MapView, moveKindChip, type MapAssets, type MapCameraState, type SquareInspectEvent } from '../../render/map';
 import { loadMapAssets, type AssetProgress } from '../../render/assets';
+import { loadingLine } from '../assetPreload';
 import {
   assetUrl,
   characterSprite,
@@ -40,7 +41,14 @@ import { avatar, h, iconButton, uiIcon, type ModalHandle } from '../dom';
 import { rubyName } from '../ruby';
 import { fitTextOneLine } from '../fitText';
 import { placeDestinationArrow } from '../destArrow';
-import { effectiveUiSettings, uiSettings, readMute, writeMute, type MuteFlags } from '../settings';
+import {
+  effectiveTempoLevel,
+  effectiveUiSettings,
+  uiSettings,
+  readMute,
+  writeMute,
+  type MuteFlags,
+} from '../settings';
 import { isIdenticalResync, type ResyncWatermark } from '../resync';
 import { raceWithTimeout, voiceBudgetMs, voicePlaybackRate } from '../../audio/voiceBudget';
 import { ChatPanel } from '../components/chatPanel';
@@ -80,7 +88,7 @@ import { openPlayerMenu, openPlayerRoster, type PlayerView } from '../components
 import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { ResultScreen } from './result';
 import { FxPlayer, type PlaybackControl } from '../fxPlayer';
-import { isRoutineCpuSay } from '../cpuPacing';
+import { compactDramaMs, isRoutineCpuSay } from '../cpuPacing';
 import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, shopCardPriceLabel, shopCardPriceInfo, type CityMoveInfo } from '../moveChipInfo';
 import {
   countMoveFilters,
@@ -205,6 +213,11 @@ export class GameScreen implements ScreenHandle {
   private emotePlaying = false;
   private endedVoicePlayed = false;
   private transientMsgPending = false;
+  /**
+   * 月替わりなど全員に等しく降りるイベント（と、CPU が引いたイベント）の導入台詞は、
+   * ひとりで/みんなで遊ぶときだけ 1.5 倍で送る。オンラインは他所のペースを乱さないよう据え置き。
+   */
+  private eventIntroBoost = 1;
   private suppressMapTapUntil = 0;
   private pendingPhaseEnd: 'end_buy' | 'end_shop' | null = null;
   /** Local/solo: a choice clicked while the intro lines played, sent once the fx queue drains. */
@@ -921,6 +934,12 @@ export class GameScreen implements ScreenHandle {
         this.skipHint.hidden = !skippable || !!this.resultScreen;
       },
       onQueueChange: () => undefined,
+      // 「大きすぎる固有技はフルで見せる」の物差し。ホストと同じ netWorth を共有する。
+      leaderWorth: (state) => {
+        let best = 0;
+        for (const player of state.players) best = Math.max(best, netWorth(GAME_DATA, state, player.id));
+        return best;
+      },
       onWatchdog: () => {
         Audio.stopVoice();
         this.dice.cancel();
@@ -1017,11 +1036,20 @@ export class GameScreen implements ScreenHandle {
     this.retryButton.hidden = true;
     this.loadingFill.style.width = '0%';
     try {
-      const assets = await loadMapAssets(GAME_DATA, (progress: AssetProgress) => {
-        const ratio = progress.total > 0 ? progress.loaded / progress.total : 0;
-        this.loadingFill.style.width = `${Math.round(ratio * 100)}%`;
-        this.loadingText.textContent = `世界地図をひらいています… ${progress.label}`;
-      });
+      const assets = await loadMapAssets(
+        GAME_DATA,
+        (progress: AssetProgress) => {
+          const ratio = progress.total > 0 ? progress.loaded / progress.total : 0;
+          this.loadingFill.style.width = `${Math.round(ratio * 100)}%`;
+          this.loadingText.textContent = loadingLine(ratio, 'map');
+        },
+        {
+          // Emotion variants, landmarks and stamps stream in behind the first frame.
+          onLateAsset: () => {
+            if (!this.destroyed) this.map?.refreshAssets();
+          },
+        },
+      );
       if (this.destroyed) return;
       this.mapAssets = assets;
       this.map?.setMiniMap(null);
@@ -4378,6 +4406,27 @@ export class GameScreen implements ScreenHandle {
         const character = charsById.get(fx.characterId);
         const target = fx.targetId !== undefined ? pending.players[fx.targetId] : undefined;
         const targetCharacter = target ? charsById.get(target.characterId) : undefined;
+        const compact = control.compact === 'skill';
+        // CPU だけの技（人間の金・物件・取り立て・休みに触れない小さい技）は短い帯だけ。
+        // 予算は fxPacing が決めたもの（ホストの予算と同じ）を使い、声は待たない。
+        if (compact) {
+          Audio.sfx('stamp');
+          this.portraitMood('joy', fx.playerId);
+          this.portraitMotion('jump');
+          this.addLog(`✨ ${this.playerName(fx.playerId)} が固有技「${fx.name}」を発動！`);
+          const budgetMs = compactDramaMs('skill', effectiveTempoLevel());
+          if (character) {
+            await this.skillCutin.play(
+              fx,
+              { character, compact: true, budgetMs },
+              control,
+            );
+          } else {
+            this.app.toasts.show(`✨ ${fx.name}`, 'info', 1600);
+            await control.wait(budgetMs);
+          }
+          return;
+        }
         Audio.sfx('goal_fanfare');
         this.portraitMood('joy', fx.playerId);
         this.portraitMotion('jump');
@@ -4408,10 +4457,23 @@ export class GameScreen implements ScreenHandle {
       case 'event_open': {
         this.updateStatusChip(pending, actorOf(pending));
         this.openEventPanel(fx.eventId, pending);
+        const event = eventsById.get(fx.eventId);
+        // 全員に等しく降りる月替わりイベント、または CPU が引いたイベントは、この端末の
+        // 鑑賞者は 1 人だけ（ローカル/ソロ）。導入の台詞を 1.5 倍で流し、声は待たない。
+        // Use the drawer's seat: an auto-applied event has already advanced `current`.
+        const cpuActor = pending.players[fx.playerId]?.isCpu === true;
+        // 「じっくり」は今までどおり = 等速・声待ちあり。
+        this.eventIntroBoost =
+          this.session.mode !== 'online' &&
+          effectiveTempoLevel() !== 'calm' &&
+          (event?.monthly === true || cpuActor)
+            ? 1.5
+            : 1;
         await control.wait(FX_MS.event_open);
         return;
       }
       case 'event_close': {
+        this.eventIntroBoost = 1;
         this.eventPanel.hide();
         this.syncEventComm();
         this.activeEventBgm = null;
@@ -4648,6 +4710,21 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'buyout': {
+        if (control.compact === 'buyout') {
+          // CPU 同士の買収: 人間の街シート・カメラ・紙吹雪は動かさず、トースト 1 枚で済ませる。
+          const ref = propertiesById.get(fx.propertyId);
+          Audio.sfx('buy');
+          this.app.toasts.show(
+            `🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} から ${ref?.property.name ?? fx.propertyId} を ${formatOku(fx.amount)} で買収`,
+            'info',
+            2800,
+          );
+          this.addLog(
+            `🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の ${ref?.property.name ?? fx.propertyId} を ${formatOku(fx.amount)} で買収`,
+          );
+          await control.wait(compactDramaMs('buyout', effectiveTempoLevel()));
+          return;
+        }
         // 買収の掛け合いを見せるため、いったん街のシートを閉じる（演出後に最新状態で開き直る）。
         this.closeCitySheet();
         const ref = propertiesById.get(fx.propertyId);
@@ -4738,14 +4815,17 @@ export class GameScreen implements ScreenHandle {
         : voiceKeyOf(speaker);
     const speakerLobbySeat = speakerSeat !== null ? this.seatOfPlayer(speakerSeat) : null;
     const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
-    const speed = control.speed;
+    // イベント導入の掛け合いだけ 1.5 倍（ローカル/ソロ）。声は色として流し、待たない。
+    const introBoost = this.eventIntroBoost > 1 && fx.lineKey === undefined ? this.eventIntroBoost : 1;
+    const speed = control.speed * introBoost;
     const autoAdvance = uiSettings().autoAdvance;
     // A CPU's routine quips are scenery. Play their clip only as colour; never block the turn
     // on it, otherwise the ×3 CPU pacing waits on 1.2x voice for every line.
-    const routineCpu = isRoutineCpuSay(fx, state);
+    // A compact CPU-only 固有技 drops its voice wait the same way (`control.compact`).
+    const routineCpu = isRoutineCpuSay(fx, state) || control.compact !== null;
     // Voice playback rate is intentionally capped at 1.2x for intelligibility; at 4x/8x or while
     // catching up on queued updates, do not block message advancement on 1.2x audio playback.
-    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routineCpu;
+    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routineCpu && introBoost === 1;
     let voiceStarted = false;
     const voicePromise =
       muted || routineCpu || control.backlog > 0
@@ -4781,7 +4861,8 @@ export class GameScreen implements ScreenHandle {
       // Auto-advance is timer-driven and speed-scaled, so a bound is safe; manual advance
       // intentionally waits for the reader and pauses the watchdog instead.
       if (autoAdvance) {
-        await control.bound(shown, voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500);
+        const budget = voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500;
+        await control.bound(shown, introBoost > 1 ? budget / introBoost : budget);
       } else {
         await shown;
       }

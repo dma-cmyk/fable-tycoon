@@ -7,6 +7,7 @@ import { describeEffect } from '../eventEffects';
 import { eventFootnoteText, splitChoiceDetail } from '../eventPanelNote';
 import { EVENT_IMAGE_IDS } from '../assetManifest';
 import { assetUrl, citiesById, KIND_ICON, KIND_JA } from '../format';
+import { eventVideoBlock } from './eventVideo';
 import { rubyName } from '../ruby';
 
 export interface EventPanelOptions {
@@ -231,12 +232,15 @@ export class EventPanel {
       this.choicesBanner.hidden = false;
       this.choicesNote.hidden = false;
       this.choicesNote.textContent = '台詞の途中でも選べます（選ぶと残りを飛ばす）';
-      this.choicesSkipBtn.hidden = true;
+      // ローカル/ソロの「台詞を早送り」: 残りの導入を読み飛ばして選択肢の前へ。
+      this.choicesSkipBtn.hidden = !this.options.onSkipFx;
+      this.choicesSkipBtn.textContent = '⏩ 台詞を早送り';
     } else if (waitingFx && (this.isMine || !phaseActive)) {
       this.choicesBanner.hidden = false;
       this.choicesNote.hidden = false;
       this.choicesNote.textContent = '演出のあとで選べます';
       this.choicesSkipBtn.hidden = !this.options.onSkipFx;
+      this.choicesSkipBtn.textContent = '演出をスキップして選ぶ ▶▶';
     } else if (!phaseActive) {
       this.choicesBanner.hidden = false;
       this.choicesNote.hidden = false;
@@ -413,6 +417,7 @@ export class EventPanel {
         text: '実在の存命人物を名指しする意図はありません。風刺の対象は制度・政策・金銭欲です。',
       }),
     );
+    if (event.video) parts.push(eventVideoBlock(event.video));
     this.metaBody.replaceChildren(...parts);
   }
 }

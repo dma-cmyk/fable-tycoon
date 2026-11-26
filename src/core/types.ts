@@ -216,11 +216,20 @@ export interface Source {
   date?: string; // YYYY or YYYY-MM-DD
 }
 
+/** イベントの「元ネタ」に出す関連動画。埋め込みはクリック時のみ。 */
+export interface EventVideo {
+  youtubeId: string; // 11文字の YouTube 動画ID
+  start?: number; // 再生開始秒
+  title: string; // ボタンに出す説明
+}
+
 export interface GameEventDef {
   id: string;
   title: string; // 例: "AIバブル再来!?"
   kind: 'news' | 'history' | 'fable'; // fable = 完全創作
   image?: string; // public-relative illustration path
+  /** 関連動画（任意）。クリックするまで iframe を作らない（プライバシーと速度のため）。 */
+  video?: EventVideo;
   /** BGM id while this event is shown (src/audio/audio.ts BgmName). Omitted = default by kind. */
   bgm?: string;
   /** 事実の要約（風刺を含めない）。kind が news/history のとき必須。 */

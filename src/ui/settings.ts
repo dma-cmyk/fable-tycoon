@@ -1,5 +1,7 @@
 /** Client-only preferences: presentation speed, chat visibility, per-seat mute. */
 
+import { DEFAULT_TEMPO_LEVEL, type FxTempoLevel } from '../core/fxPacing';
+
 export type FxSpeed = 1 | 2 | 4 | 8;
 
 export interface UiSettings {
@@ -8,6 +10,12 @@ export interface UiSettings {
   showChat: boolean;
   /** Prefer calmer UI motion. OS prefers-reduced-motion is honored on top of this. */
   reducedMotion: boolean;
+  /**
+   * 「演出の長さ」: how much CPU-only drama is condensed. Client presentation only — the host's
+   * budget stays the upper bound (see `src/core/fxPacing.ts`), so changing it never desyncs a room.
+   * Absent = 標準.
+   */
+  pacing?: FxTempoLevel;
 }
 
 export interface MuteFlags {
@@ -25,6 +33,7 @@ const DEFAULT_SETTINGS: UiSettings = {
   autoAdvance: true,
   showChat: true,
   reducedMotion: false,
+  pacing: DEFAULT_TEMPO_LEVEL,
 };
 
 function readJson(key: string): unknown {
@@ -47,6 +56,9 @@ export function readUiSettings(): UiSettings {
     if (typeof record.autoAdvance === 'boolean') out.autoAdvance = record.autoAdvance;
     if (typeof record.showChat === 'boolean') out.showChat = record.showChat;
     if (typeof record.reducedMotion === 'boolean') out.reducedMotion = record.reducedMotion;
+    if (record.pacing === 'calm' || record.pacing === 'standard' || record.pacing === 'brisk') {
+      out.pacing = record.pacing;
+    }
   }
   return out;
 }
@@ -116,6 +128,11 @@ export function urlFxSpeed(): FxSpeed | null {
 
 export function effectiveFxSpeed(): FxSpeed {
   return urlFxSpeed() ?? uiSettings().fxSpeed;
+}
+
+/** 「演出の長さ」 with the default filled in. */
+export function effectiveTempoLevel(): FxTempoLevel {
+  return uiSettings().pacing ?? DEFAULT_TEMPO_LEVEL;
 }
 
 export function effectiveUiSettings(): UiSettings {

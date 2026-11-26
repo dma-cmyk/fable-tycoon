@@ -69,6 +69,51 @@ Everything is written under `.tmp/e2e/`:
   `maxHighFraction` and the top-5 columns) to catch a shifted/patched terrain
   raster: a stale band raises the jump across most rows at one x.
 
+## Feature coverage (pegasus / rocket / piper confiscation)
+
+`feature-coverage.mjs` is a staged single-client UI test for the ticket features
+that are hard to reach by playing:
+
+```bash
+PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 \
+  node tests/e2e/feature-coverage.mjs --viewport=both   # or pc / phone
+```
+
+`--phone-dpr=N` selects the phone emulation DPR (default `1`; pass `3` for a
+native iPhone 13 raster). DPR 1 is the workaround for the renderer's known
+map-canvas over-allocation crash (`Canvas area exceeds the maximum limit`,
+tracked for the renderer owner); the CSS viewport stays 390×844 and the touch
+UI is unchanged.
+
+It starts its own `vite dev` server on `127.0.0.1:5281`, starts a real local
+game through the UI, then for each scenario writes a **real save** into
+`localStorage['fable.local']` (same envelope/`room` format as the game), reloads,
+and drives the visible picker/event/shop UI with clicks. It never calls core
+functions to change the game; all assertions read the engine state exposed to
+development builds as `window.__fableGame` (see `src/ui/app.ts`) plus the DOM.
+
+Covered checks:
+
+| Area | What is asserted |
+|---|---|
+| 飛行機 (pegasus) | picker lists airports, every offered row is ≥4 steps from the destination, the destination and near cities are absent, landing actually moves the player; destination is 東京 |
+| ロケット | same for 356 cities + 宇宙へ; forced destination via `state.players[0].pendingDestination` |
+| 取り立て屋 Lv1 | offer shows 2 choices, plan excludes a 3,000億 property above the 5% cap, 差し出す loses one property and refunds 20% of its price |
+| 取り立て屋 Lv2 | plan picks the two cheap properties, 示談 costs 60% of price, both properties stay owned and cash drops |
+| 略奪 Lv1/Lv2 | when no property fits the cap, the event never opens, cash is taken instead, the over-cap property stays owned |
+
+Outputs live in `.tmp/e2e/feature-coverage/`: `pc-*.png` / `phone-*.png`
+(picker, landing, offer, result), `sheet-*.png` pairs and `report.json`.
+A viewport attempt is retried once automatically because the shared worktree
+may reload the app mid-run (`attempt N failed` in the log); partial checks from
+a failed attempt are discarded.
+
+Known finding (2026-11-27): `src/core/engine.ts` `cardTargetOptions()` filters
+out destinations <4 steps away (`filterWarpTargets`), so the
+`disabled + 目的地に近すぎる` row branch in `src/ui/components/phaseDialogs.ts`
+is not reachable in real play; the picker instead explains the rule in its
+header and simply omits those cities.
+
 ## Environment
 
 - Browsers run **headless and muted** by default: Chromium gets

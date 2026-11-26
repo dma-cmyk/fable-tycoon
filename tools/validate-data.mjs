@@ -30,6 +30,36 @@ const isInt = (v) => Number.isInteger(v);
 const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
 const oneOf = (v, values) => values.includes(v);
 
+// イベント画像は 16:9。許容は ±3.5%（800x450 = 1.778 を基準に、切り出し誤差を吸収する）。
+const IMAGE_ASPECT_TOL = 0.035;
+
+/** Read width/height from a PNG or WebP header without dependencies. */
+function imageSize(path) {
+  try {
+    const buf = readFileSync(path);
+    if (buf.length < 30) return null;
+    if (buf.toString('ascii', 1, 4) === 'PNG') {
+      return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+    if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+      const chunk = buf.toString('ascii', 12, 16);
+      if (chunk === 'VP8X') {
+        return { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) };
+      }
+      if (chunk === 'VP8 ') {
+        return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+      }
+      if (chunk === 'VP8L') {
+        const bits = buf.readUInt32LE(21);
+        return { width: 1 + (bits & 0x3fff), height: 1 + ((bits >> 14) & 0x3fff) };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // nameKana: nameJa のふりがな。漢字（CJK統合漢字と々）を含む名前だけが持つ。
 const KANJI = /[\u4e00-\u9fff\u3005]/;
 const NAME_KANA = /^[\u3041-\u3096\u30fc\u30fb ]+$/; // ひらがな + 長音ー + 中点・ + 半角空白
@@ -875,6 +905,36 @@ if (data['events.json'] !== undefined) {
         }
       }
       if (ev.image !== undefined && !isStr(ev.image)) err(`${p}.image`, 'must be a public-relative path');
+      else if (isStr(ev.image)) {
+        const file = join(ROOT, 'public', ev.image);
+        if (!existsSync(file)) err(`${p}.image`, `file not found: public/${ev.image}`);
+        else {
+          const size = imageSize(file);
+          if (!size) warn(`${p}.image`, `cannot read image size: ${ev.image}`);
+          else {
+            const ratio = size.width / size.height;
+            if (Math.abs(ratio - 16 / 9) > IMAGE_ASPECT_TOL) {
+              err(`${p}.image`, `must be 16:9 (${size.width}x${size.height} = ${ratio.toFixed(3)})`);
+            }
+            if (size.width !== 800 || size.height !== 450) {
+              warn(`${p}.image`, `expected 800x450, got ${size.width}x${size.height}`);
+            }
+          }
+        }
+      }
+      if (ev.video !== undefined) {
+        const vp = `${p}.video`;
+        if (!isObj(ev.video)) err(vp, 'must be an object');
+        else {
+          if (!isStr(ev.video.youtubeId) || !/^[A-Za-z0-9_-]{11}$/.test(ev.video.youtubeId)) {
+            err(`${vp}.youtubeId`, 'must be an 11-character YouTube id');
+          }
+          if (!isStr(ev.video.title)) err(`${vp}.title`, 'must be a non-empty string');
+          if (ev.video.start !== undefined && (!isInt(ev.video.start) || ev.video.start < 0)) {
+            err(`${vp}.start`, 'must be a non-negative integer (seconds)');
+          }
+        }
+      }
 
       if (ev.kind === 'news' || ev.kind === 'history') {
         if (!isStr(ev.fact)) err(`${p}.fact`, 'required for news/history');

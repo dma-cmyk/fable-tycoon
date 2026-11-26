@@ -358,6 +358,10 @@ export class SetupScreen implements ScreenHandle {
                   attrs: {
                     src: characterSprite(character),
                     alt: character?.nameJa ?? '',
+                    // Matches .seat-char-art so a slow portrait cannot resize the seat row.
+                    width: '58',
+                    height: '62',
+                    decoding: 'async',
                     draggable: 'false',
                     loading: 'lazy',
                   },

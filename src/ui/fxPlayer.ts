@@ -75,6 +75,8 @@ export interface PlaybackControl {
   readonly speed: number;
   /** Extra multiplier applied to `speed` because the current fx is routine CPU bookkeeping. */
   readonly accel: number;
+  /** Compact presentation tier of the current fx (`null` = the full beat). */
+  readonly compact: 'skill' | 'buyout' | null;
   /** Number of newer updates waiting behind the currently playing head. */
   readonly backlog: number;
 }
@@ -88,6 +90,11 @@ export interface FxPlayerHost {
   onQueueChange(pending: number): void;
   /** Optional cleanup hook run when the watchdog force-terminates a stalled update. */
   onWatchdog?(update: FxUpdate): void;
+  /**
+   * Net worth (億) of the current leader, used by the 「大きすぎる固有技はフルで見せる」 rule.
+   * Optional so tests can omit it (the rule then falls back to a fixed 40億 threshold).
+   */
+  leaderWorth?(state: PublicState): number;
 }
 
 interface ActiveWait {
@@ -190,6 +197,8 @@ export class FxPlayer {
   /** CPU routine fx are painted at `fxSpeed × CPU_ROUTINE_BOOST`. */
   private readonly pacer = new CpuTurnPacer();
   private activeBoost = 1;
+  /** Compact tier of the fx being played (skills / CPU-to-CPU buyouts). */
+  private activeCompact: 'skill' | 'buyout' | null = null;
   private stats: FxPlaybackStat[] = [];
   private slowCount = 0;
   private updateStartedAt = 0;
@@ -269,6 +278,7 @@ export class FxPlayer {
     this.finishActive();
     this.pacer.reset();
     this.activeBoost = 1;
+    this.activeCompact = null;
     this.activeCutin = null;
     this.updateDeadlineAt = 0;
     this.updateStartedAt = 0;
@@ -480,6 +490,9 @@ export class FxPlayer {
       get accel() {
         return player.activeBoost;
       },
+      get compact() {
+        return player.activeCompact;
+      },
       get backlog() {
         return Math.max(0, player.queue.length - 1);
       },
@@ -542,7 +555,14 @@ export class FxPlayer {
           this.skipCallbacks.clear();
           this.skipRequested = false;
           // CPU routine bookkeeping plays faster; `turn` fx also update the paced actor.
-          this.activeBoost = this.pacer.speedFor(fx, update.state);
+          this.activeBoost = this.pacer.speedFor(fx, update.state, {
+            update: update.fx,
+            level: this.host.settings().pacing,
+            ...(this.host.leaderWorth
+              ? { leaderWorth: (state: PublicState) => this.host.leaderWorth!(state) }
+              : {}),
+          });
+          this.activeCompact = this.pacer.compactBeat;
           this.activeCutin = isCutinFx(fx) ? fx : null;
           this.host.setSkippable(true);
           const stepStart = performance.now();
@@ -558,6 +578,7 @@ export class FxPlayer {
         }
         this.activeCutin = null;
         this.activeBoost = 1;
+        this.activeCompact = null;
         if (this.epoch !== epoch) return;
         this.skipUpdateRequested = false;
         this.clearWatchdog();

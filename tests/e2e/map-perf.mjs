@@ -719,17 +719,19 @@ async function updatesView(browser, view, policy) {
       return refresh();
     };
     globalThis.__rebuildLog = [];
-    const rebuild = map.landLayer.rebuild.bind(map.landLayer);
-    map.landLayer.rebuild = (...a) => {
-      globalThis.__rebuilds += 1;
+    globalThis.__tilesPainted = 0;
+    const paintTile = map.landLayer.paintTile.bind(map.landLayer);
+    map.landLayer.paintTile = (...a) => {
+      globalThis.__tilesPainted += 1;
       globalThis.__rebuildLog.push({
         t: Math.round(performance.now()),
         rev: map.staticRevision,
         cam: [Math.round(map.camera.x), Math.round(map.camera.y), Math.round(map.camera.zoom * 1000) / 1000],
         loading: map.cityTileLoading?.size ?? 0,
         sprites: map.cityPedestalSprites?.size ?? 0,
+        tile: [a[3]?.ix ?? -1, a[3]?.iy ?? -1],
       });
-      return rebuild(...a);
+      return paintTile(...a);
     };
     globalThis.__ped = { ms: 0, calls: 0, paints: 0, paintMs: 0 };
     const pedAt = map.drawCityPedestalAt.bind(map);
@@ -816,6 +818,7 @@ async function updatesView(browser, view, policy) {
       draw: stat(globalThis.__drawTimes),
       raf: stat(map.frameTimes),
       rebuilds: globalThis.__rebuilds,
+      tilesPainted: globalThis.__tilesPainted ?? 0,
       invalidates: globalThis.__invalidates,
       rebuildLog: globalThis.__rebuildLog,
       patchLog: globalThis.__patchLog,
@@ -1099,21 +1102,38 @@ async function playView(browser, view, policy) {
       if (map.staticRevision !== before) globalThis.__causes.bake += 1;
     };
     let lastKey = '';
-    const rebuild = map.landLayer.rebuild.bind(map.landLayer);
-    map.landLayer.rebuild = (...a) => {
-      globalThis.__rebuilds += 1;
+    globalThis.__tilesPainted = 0;
+    globalThis.__paintTimes = [];
+    globalThis.__land = { ms: 0, calls: 0, max: 0, compose: 0 };
+    const landDraw = map.landLayer.draw.bind(map.landLayer);
+    map.landLayer.draw = (...a) => {
+      const t0 = performance.now();
+      try {
+        return landDraw(...a);
+      } finally {
+        const dt = performance.now() - t0;
+        const s = globalThis.__land;
+        s.ms += dt;
+        s.calls += 1;
+        if (dt > s.max) s.max = dt;
+        if (map.landLayer.getFrameStats().recomposed) s.compose += 1;
+      }
+    };
+    const paintTile = map.landLayer.paintTile.bind(map.landLayer);
+    map.landLayer.paintTile = (...a) => {
+      globalThis.__tilesPainted += 1;
       const before = map.landLayer.key;
-      const out = rebuild(...a);
-      // Classify AFTER the rebuild: a same-key rebuild is a pan/margin one, a changed
-      // key is a zoom bucket (or content) rebuild.
-      globalThis.__rebuildLog.push({
-        t: Math.round(performance.now()),
-        reason: before === map.landLayer.key ? 'margin' : 'key',
-        zoom: Math.round(map.camera.zoom * 1000) / 1000,
-        rev: map.staticRevision,
-      });
-      lastKey = map.landLayer.key;
-      return out;
+      const t0 = performance.now();
+      try {
+        return paintTile(...a);
+      } finally {
+        globalThis.__paintTimes.push(performance.now() - t0);
+        globalThis.__rebuildLog.push({
+          t: Math.round(performance.now()),
+          reason: before === map.landLayer.key ? 'tile' : 'bucket',
+          tile: [a[3]?.ix ?? -1, a[3]?.iy ?? -1],
+        });
+      }
     };
     globalThis.__drawTimes = [];
     const draw = map.draw.bind(map);
@@ -1181,8 +1201,16 @@ async function playView(browser, view, policy) {
       draw: stat(globalThis.__drawTimes),
       raf: stat(map.frameTimes),
       rebuilds: globalThis.__rebuilds,
+      tilesPainted: globalThis.__tilesPainted ?? 0,
       pedestalMs: Math.round(globalThis.__ped.ms * 10) / 10,
       pedestalCalls: globalThis.__ped.calls,
+      land: globalThis.__land,
+      paintTimes: (() => {
+        const list = [...(globalThis.__paintTimes ?? [])].sort((a, b) => a - b);
+        if (!list.length) return { n: 0 };
+        const pick = (q) => Math.round(list[Math.min(list.length - 1, Math.floor(list.length * q))] * 100) / 100;
+        return { n: list.length, p50: pick(0.5), p95: pick(0.95), max: Math.round(list[list.length - 1] * 100) / 100 };
+      })(),
       longTasks: globalThis.__longTasks,
       rebuildLog: globalThis.__rebuildLog,
       patchLog: globalThis.__patchLog,
@@ -1511,7 +1539,10 @@ async function main() {
           await writeFile(path.join(PERF_OUT, `${LABEL}-${policy}-play-${view}.json`), JSON.stringify(result, null, 2));
           console.log(
             `[play] ${LABEL} ${policy} ${view}: ${result.acted} actions | draw p50=${result.draw.p50} ` +
-              `p95=${result.draw.p95} max=${result.draw.max} | raf p95=${result.raf.p95} | rebuilds=${result.rebuilds} | ` +
+              `p95=${result.draw.p95} max=${result.draw.max} | raf p95=${result.raf.p95} | ` +
+              `rebuilds=${result.rebuilds} tiles=${result.tilesPainted ?? 0} ` +
+              `(p50=${result.paintTimes?.p50 ?? 0} p95=${result.paintTimes?.p95 ?? 0} max=${result.paintTimes?.max ?? 0}) | ` +
+              `land ${Math.round(result.land?.ms ?? 0)}ms/${result.land?.calls ?? 0} frames max=${Math.round(result.land?.max ?? 0)} compose=${result.land?.compose ?? 0} | ` +
               `pedestal ${result.pedestalMs}ms over ${result.pedestalCalls} calls | long tasks ` +
               `${result.longTaskSummary.count} (>100ms ${result.longTaskSummary.over100}, total ` +
               `${result.longTaskSummary.totalMs}ms, max ${result.longTaskSummary.maxMs}ms)`,

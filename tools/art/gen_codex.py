@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate art sheets with the Codex CLI image tool, sequentially and idempotently.
 
-Usage: python3 tools/art/gen_codex.py [job_id ...]
-Reads tools/art/jobs.json, writes art/raw/<job>.png and appends art/log.jsonl.
-Skips jobs whose PNG already exists.
+Usage: python3 tools/art/gen_codex.py [--jobs tools/art/event_jobs.json] [job_id ...]
+Reads tools/art/jobs.json by default, writes art/raw/<job>.png and appends art/log.jsonl.
+Skips jobs whose PNG already exists, and exits on a Codex usage limit so the caller can switch
+to the next generator.
 """
 import json
 import shutil
@@ -14,7 +15,14 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-JOBS = json.loads((ROOT / "tools/art/jobs.json").read_text())
+_argv = sys.argv[1:]
+_jobs_path = ROOT / "tools/art/jobs.json"
+if "--jobs" in _argv:
+    _i = _argv.index("--jobs")
+    _jobs_path = ROOT / _argv[_i + 1]
+    del _argv[_i:_i + 2]
+ARGS = _argv
+JOBS = json.loads(_jobs_path.read_text())
 RAW = ROOT / "art/raw"
 LOG = ROOT / "art/log.jsonl"
 GEN = Path.home() / ".codex/generated_images"
@@ -63,14 +71,16 @@ def run(job: dict) -> None:
                 print(f"ok {job['id']} {thread} {rec['secs']}s", flush=True)
                 return
             print(f"FAIL {job['id']} attempt {attempt}: {error} rc={proc.returncode}", flush=True)
-            if error and "usage limit" in error:
+            if error and any(k in error.lower() for k in ("usage limit", "rate limit", "quota", "too many requests")):
+                with LOG.open("a") as f:
+                    f.write(json.dumps({"job": job["id"], "quota": error}, ensure_ascii=False) + "\n")
                 sys.exit(f"usage limit: {error}")
     with LOG.open("a") as f:
         f.write(json.dumps({"job": job["id"], "failed": True}) + "\n")
 
 
 def main() -> None:
-    wanted = set(sys.argv[1:])
+    wanted = set(ARGS)
     for job in JOBS:
         if wanted and job["id"] not in wanted:
             continue

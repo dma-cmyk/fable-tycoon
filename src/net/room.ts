@@ -24,7 +24,7 @@ import {
   ALLOWED_YEARS,
 } from '../core/engine';
 import { COMM, MAX_SEATS, PROTOCOL_VERSION } from './protocol';
-import { routineFxDuration } from '../core/fxPacing';
+import { routineFxDuration, type FxTempoLevel } from '../core/fxPacing';
 import type {
   AllowedYears,
   ChatLine,
@@ -69,6 +69,13 @@ export interface RoomDeps {
   cpuDelayMs?: number | (() => number);
   /** Multiplies standard fx playback durations (tests set a small value; LocalSession binds live fxSpeed). */
   fxScale?: number | (() => number);
+  /**
+   * 「演出の長さ」 the room budgets CPU-only drama for. Online hosts keep `calm`: the nominal
+   * DESIGN length is the upper bound every client's setting can only shorten (see
+   * `src/core/fxPacing.ts`). A local room binds the local player's live setting so the solo
+   * game does not idle after a compact beat.
+   */
+  tempoLevel?: FxTempoLevel | (() => FxTempoLevel);
 }
 
 /** CPU / autoplay pacing (DESIGN §4). */
@@ -298,6 +305,11 @@ export class RoomController {
   private get fxScale(): number {
     const value = this.deps.fxScale;
     return typeof value === 'function' ? value() : (value ?? 1);
+  }
+
+  private get tempoLevel(): FxTempoLevel {
+    const value = this.deps.tempoLevel;
+    return typeof value === 'function' ? value() : (value ?? 'calm');
   }
 
   private status: RoomStatus = 'lobby';
@@ -1437,12 +1449,16 @@ export class RoomController {
     }
     this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
     // CPU routine fx are scheduled with the same shortened duration the client plays them at
-    // (`src/core/fxPacing.ts`); everything else — human fx, goals, piper, buyouts, events,
-    // monopolies — keeps the nominal budget. `lastBy` is the acting player of this update.
+    // (`src/core/fxPacing.ts`); everything else — human fx, goals, piper, events, monopolies —
+    // keeps the nominal budget. `lastBy` is the acting player of this update and `fx` is its
+    // whole list, so a compact skill beat can weigh the cash rows it produced.
     const pacing = {
       actor: this.lastBy,
       isCpu: (playerId: number | null | undefined) =>
         this.state?.players[playerId ?? -1]?.isCpu === true,
+      update: fx,
+      level: this.tempoLevel,
+      ...(this.state ? { leaderWorth: this.leaderWorth() } : {}),
     };
     this.turnFxMs =
       fx.reduce((sum, item) => sum + routineFxDuration(fxDuration(item), item, pacing), 0) *
@@ -1532,6 +1548,16 @@ export class RoomController {
       deadline: this.deadline,
       tasks: this.scheduledTasks(),
     });
+  }
+
+  /** Net worth (億) of the current leader — the yardstick for 「大きすぎる技はフルで見せる」. */
+  private leaderWorth(): number {
+    if (!this.state) return 0;
+    let best = 0;
+    for (const player of this.state.players) {
+      best = Math.max(best, netWorth(this.deps.data, this.state, player.id));
+    }
+    return best;
   }
 
   private tick(): void {

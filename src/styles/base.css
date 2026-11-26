@@ -98,6 +98,33 @@ img {
   -webkit-user-drag: none;
 }
 
+/*
+ * A guarded image whose bitmap is not ready yet. The box is already reserved by the
+ * component's CSS; this shimmer makes the wait legible instead of a blank hole.
+ * `imageFallback.ts` owns the attribute and removes it on load/error-settle.
+ */
+img[data-img-pending] {
+  background-color: rgba(126, 160, 200, 0.22);
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 22%,
+    rgba(255, 255, 255, 0.42) 48%,
+    rgba(255, 255, 255, 0) 74%
+  );
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  animation: img-shimmer 1.35s ease-in-out infinite;
+}
+
+@keyframes img-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  img[data-img-pending] { animation: none; background-image: none; }
+}
+
 input,
 textarea {
   user-select: text;

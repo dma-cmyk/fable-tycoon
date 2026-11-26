@@ -1,13 +1,24 @@
-// Ocean backdrop and a windowed, zoom-bucketed land raster cache.
+// Ocean backdrop and a tiled, world-anchored land raster cache.
 //
-// The land can be re-rasterised at exactly zoom*dpr device pixels because the cache only
-// covers the viewport plus a margin, never the whole world at high zoom. Panning inside
-// the margin reuses the layer; leaving it (or changing zoom bucket) rebuilds it.
+// The land and the static board used to live in one camera-sized raster that had to be
+// repainted whenever the viewport left its margin (~330 ms at 1920×1080, report 85). They
+// now live in 512-device-pixel tiles laid out on a lattice anchored at the world origin, so
+// a tile depends only on its world rect, its quantised scale, the dpr and the content. That
+// makes a pan (and the horizontal wrap) reuse tiles, and it makes a rendered frame a pure
+// function of camera + content — which is what tests/e2e/map-raster-parity.mjs compares
+// against a monolithic paint of the same rect.
+//
+// Geometry per zoom bucket:
+//   S  = device px per world unit, snapped so MAP_W / TILE_DEV * S is an integer (nx)
+//   nx = whole tiles around the world, so the MAP_W seam always falls on a tile edge
+//   ny = ceil(MAP_H * S / TILE_DEV)
+// Tile (i, j) covers device rect [i*TILE_DEV, (i+1)*TILE_DEV) × [j*TILE_DEV, ...) in the
+// world-anchored frame; column i is normalised modulo nx when the world wraps.
 
 import { MAP_H, MAP_W, project, wrapDx } from '../core/geo';
 import type { Camera } from './camera';
 import type { LandJson } from './map';
-import { detectCanvasBudget, fitCanvasSize, fitRaster, noteCanvasAllocation, releaseCanvas, type CanvasBudget } from './canvasBudget';
+import { detectCanvasBudget, fitCanvasSize, noteCanvasAllocation, releaseCanvas, type CanvasBudget } from './canvasBudget';
 
 interface PolyBox {
   minX: number;
@@ -15,6 +26,8 @@ interface PolyBox {
   maxX: number;
   maxY: number;
   rings: number[][];
+  /** World-unit path (all rings of this polygon), built once. */
+  path: Path2D;
 }
 
 interface TreeStamp {
@@ -27,10 +40,19 @@ interface TreeStamp {
   lon?: number;
 }
 
-// Extra world margin on each side of the viewport. Left as-is: changing it rescales the
-// raster, which shifts every coastline by a fraction of a pixel, and the rebuild it feeds
-// now only runs on a pan past the margin.
-const CACHE_PAD = 0.85;
+/** Tile edge in device pixels. */
+const TILE_DEV = 512;
+/** Tile cache size as a fraction of the canvas-area budget. */
+const TILE_AREA_RATIO = 0.5;
+/** Default incremental rasterisation budget per drawn frame. */
+const DEFAULT_FRAME_BUDGET_MS = 8;
+/**
+ * Device pixels painted beyond every tile / frame edge and then discarded. Chromium's clip
+ * at a canvas edge perturbs the outermost ~5 px of what is drawn into it, so a tile painted
+ * edge-to-edge is *not* byte-identical to the same rect of a larger paint. Keeping the used
+ * pixels this far from the canvas edge makes tiles exactly equal to a full paint.
+ */
+const EDGE_BLEED = 8;
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -61,18 +83,125 @@ const SEASON_TREES: Record<Season, [string, string, string]> = {
 
 export interface LayerTransform {
   ctx: CanvasRenderingContext2D;
+  /** World point → device pixel inside the painted region (fractional). */
   toCanvas: (x: number, y: number) => [number, number];
-  /** Device px per map unit. */
+  /** Device px per world unit of this region. */
   scale: number;
-  /** Device pixels per CSS pixel (visual sizes are authored in CSS px). */
+  /** Device px per CSS pixel (visual sizes are authored in CSS px). */
   dpr: number;
+  /** World origin of the painted region. */
   ox: number;
   oy: number;
   wWorld: number;
   hWorld: number;
+  /**
+   * Quantised zoom (scale / dpr) the content is painted for. Everything zoom-derived in a
+   * baked layer must use this instead of `camera.zoom`: a tile is shared between frames
+   * whose live zoom differs slightly, so a cached tile must not depend on the camera.
+   */
+  zoom: number;
+  /** Overview is part of the baked content (it switches the board dots on/off). */
+  overview: boolean;
 }
 
 export type LayerPainter = (layer: LayerTransform) => void;
+
+export interface LandFrameStats {
+  /** Visible tiles drawn from the exact bucket. */
+  exact: number;
+  /** Visible tiles drawn from another bucket (or the previous frame) while painting. */
+  placeholder: number;
+  /** Visible tiles still missing after this frame's paint pass. */
+  pending: number;
+  /** Tiles rasterised this frame. */
+  painted: number;
+  /** Milliseconds spent rasterising tiles this frame. */
+  paintMs: number;
+  /** False when the previous composition was reused untouched. */
+  recomposed: boolean;
+  /** Device px per world unit of the active bucket. */
+  scale: number;
+  width: number;
+  height: number;
+}
+
+export interface LandContentOptions {
+  /** Whole-world overview view (board dots, single circumference). */
+  overview?: boolean;
+  /** Repeat the world horizontally (true in play, false for the overview). */
+  wrap?: boolean;
+  /** Override the per-frame rasterisation budget in ms (tests). */
+  budgetMs?: number;
+}
+
+interface Tile {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  ix: number;
+  iy: number;
+  devW: number;
+  devH: number;
+  used: number;
+}
+
+interface TileGroup {
+  key: string;
+  bucket: number;
+  dpr: number;
+  scale: number;
+  /** Tile columns around the world. */
+  nx: number;
+  /** Tile rows from pole to pole. */
+  ny: number;
+  /** Everything that is baked into the pixels except the revision. */
+  family: string;
+  tiles: Map<string, Tile>;
+  used: number;
+}
+
+interface TileRect {
+  /** Column in the frame's (un-normalised) lattice. */
+  ux: number;
+  /** Column normalised modulo nx. */
+  ix: number;
+  iy: number;
+  /** Device offset inside the composed frame. */
+  devX: number;
+  devY: number;
+  devW: number;
+  devH: number;
+  dist: number;
+}
+
+interface PaintContent {
+  season: Season;
+  overview: boolean;
+  withTrees: boolean;
+  paintStatic?: LayerPainter;
+  treeAvoid?: (x: number, y: number) => boolean;
+  geoAt?: (x: number, y: number) => { lat: number; lon: number };
+}
+
+interface FrameGeometry {
+  bucket: number;
+  zoom: number;
+  scale: number;
+  nx: number;
+  ny: number;
+  family: string;
+  revision: number;
+  wrap: boolean;
+  withTrees: boolean;
+  /** Viewport top-left in the world-anchored device lattice. */
+  originX: number;
+  originY: number;
+  /** Composed frame size in device px. */
+  devW: number;
+  devH: number;
+  /** Integer device offset of the composed frame's pixel 0 inside the viewport. */
+  blitX: number;
+  blitY: number;
+}
 
 /** Small deterministic PRNG used only for decoration. */
 function hash01(n: number): number {
@@ -114,22 +243,7 @@ function isDesertBox(lat: number, lon: number): boolean {
 
 export class LandLayer {
   private readonly boxes: PolyBox[];
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  /** Coastline path in world units, built once and reused under a transform. */
-  private worldPath: Path2D | null = null;
-  private key = '';
-  private ox = 0;
-  private oy = 0;
-  private wWorld = 0;
-  private hWorld = 0;
-  private scale = 0;
-  private centerX = 0;
-  private centerY = 0;
   private trees: TreeStamp[] | null = null;
-  private fadeCanvas: HTMLCanvasElement | null = null;
-  private fadeStart = 0;
-  private fadeMeta: { ox: number; oy: number; wWorld: number; hWorld: number; scale: number } | null = null;
   private terrain: HTMLImageElement | undefined;
   private terrainLo: HTMLImageElement | undefined;
   private biomeMask: Uint8ClampedArray | null = null;
@@ -137,21 +251,69 @@ export class LandLayer {
   private biomeH = 238;
   private budget: CanvasBudget = detectCanvasBudget();
 
+  /** Composed frame for the last draw (viewport size in device px). */
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  /** Previous composed frame, kept only while tiles are missing (placeholder). */
+  private backCanvas: HTMLCanvasElement | null = null;
+  private backCtx: CanvasRenderingContext2D | null = null;
+  private backGeom: FrameGeometry | null = null;
+
+  private groups = new Map<string, TileGroup>();
+  private cachedArea = 0;
+  private seq = 0;
+  private frameBudgetMs = DEFAULT_FRAME_BUDGET_MS;
+  private composeKey = '';
+  private lastGroupKey = '';
+  private lastFrame: FrameGeometry | null = null;
+  private lastGroup: TileGroup | null = null;
+  private everComposed = false;
+  private lastStats: LandFrameStats = {
+    exact: 0,
+    placeholder: 0,
+    pending: 0,
+    painted: 0,
+    paintMs: 0,
+    recomposed: false,
+    scale: 0,
+    width: 0,
+    height: 0,
+  };
+  /** Scratch canvas for `renderFullReference` (parity harness). */
+  private referenceCanvas: HTMLCanvasElement | null = null;
+  private fadeCanvas: HTMLCanvasElement | null = null;
+  private fadeStart = 0;
+  private fadeMeta: { ox: number; oy: number; wWorld: number; hWorld: number; scale: number } | null = null;
+
+  /** Group key of the last composed frame; read by the dev harnesses for diagnostics. */
+  key = '';
+  private ox = 0;
+  private oy = 0;
+  private scale = 0;
+  private wWorld = 0;
+  private hWorld = 0;
+
   constructor(land: LandJson) {
     this.boxes = land.polygons.map((rings) => {
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
+      const path = new Path2D();
       for (const ring of rings) {
         for (let i = 0; i < ring.length; i += 2) {
-          minX = Math.min(minX, ring[i]);
-          maxX = Math.max(maxX, ring[i]);
-          minY = Math.min(minY, ring[i + 1]);
-          maxY = Math.max(maxY, ring[i + 1]);
+          const x = ring[i];
+          const y = ring[i + 1];
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          if (i === 0) path.moveTo(x, y);
+          else path.lineTo(x, y);
         }
+        path.closePath();
       }
-      return { minX, minY, maxX, maxY, rings };
+      return { minX, minY, maxX, maxY, rings, path };
     });
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d');
@@ -162,8 +324,24 @@ export class LandLayer {
     this.trees = this.buildTrees();
   }
 
+  /** Drop the composed frame; tiles stay cached (they are keyed by content). */
   invalidate(): void {
-    this.key = '';
+    this.composeKey = '';
+  }
+
+  /** Drop every cached tile; the next draw rebuilds the whole visible set. */
+  dropTiles(): void {
+    this.clearTiles();
+    this.composeKey = '';
+  }
+
+  /** Test hook: cap the per-frame rasterisation budget in ms (negative = paint nothing). */
+  setFrameBudget(ms: number): void {
+    this.frameBudgetMs = Math.max(-1, ms);
+  }
+
+  getFrameStats(): LandFrameStats {
+    return this.lastStats;
   }
 
   setBudget(budget: CanvasBudget): void {
@@ -174,30 +352,47 @@ export class LandLayer {
       && budget.webkit === this.budget.webkit;
     if (same) return;
     this.budget = budget;
-    this.key = '';
-    // A different device profile means the previous backing stores may be
-    // oversized. Drop them now; the next frame rebuilds within the new budget.
+    this.clearTiles();
     if (this.canvas.width || this.canvas.height) releaseCanvas(this.canvas);
+    if (this.backCanvas) {
+      releaseCanvas(this.backCanvas);
+      this.backCanvas = null;
+      this.backCtx = null;
+      this.backGeom = null;
+    }
+    if (this.referenceCanvas) {
+      releaseCanvas(this.referenceCanvas);
+      this.referenceCanvas = null;
+    }
     if (this.fadeCanvas) {
       releaseCanvas(this.fadeCanvas);
       this.fadeCanvas = null;
       this.fadeMeta = null;
     }
+    this.composeKey = '';
   }
 
   /** Release all offscreen canvases. */
   destroy(): void {
+    this.clearTiles();
     releaseCanvas(this.canvas);
+    if (this.backCanvas) releaseCanvas(this.backCanvas);
+    if (this.referenceCanvas) releaseCanvas(this.referenceCanvas);
     if (this.fadeCanvas) releaseCanvas(this.fadeCanvas);
+    this.backCanvas = null;
+    this.backCtx = null;
+    this.backGeom = null;
+    this.referenceCanvas = null;
     this.fadeCanvas = null;
     this.fadeMeta = null;
-    this.key = '';
+    this.composeKey = '';
   }
 
   setTerrain(full?: HTMLImageElement, lo?: HTMLImageElement): void {
     this.terrain = full;
     this.terrainLo = lo;
-    this.key = '';
+    this.clearTiles();
+    this.composeKey = '';
     const img = full ?? lo;
     if (img && img.naturalWidth > 0) {
       const c = document.createElement('canvas');
@@ -232,7 +427,13 @@ export class LandLayer {
     return pointInPolygons(this.boxes, x, y);
   }
 
-  /** Draw the cached land + static board into a DPR-transformed screen context. */
+  // ---------------------------------------------------------------- frame assembly
+
+  /**
+   * Compose the land layer for this frame and blit it onto `target`, a DPR-transformed
+   * screen context. Visible tiles are reused; the rest are rasterised within
+   * `frameBudgetMs` and shown from the nearest other bucket (scaled) until they arrive.
+   */
   draw(
     target: CanvasRenderingContext2D,
     cam: Camera,
@@ -242,392 +443,684 @@ export class LandLayer {
     paintStatic?: LayerPainter,
     treeAvoid?: (x: number, y: number) => boolean,
     geoAt?: (x: number, y: number) => { lat: number; lon: number },
-    tileWorld = true,
+    options: LandContentOptions = {},
   ): void {
-    // Quantise zoom on a log2 grid (~7% steps). The cached raster is reused and
-    // scaled a few percent while zooming, so wheel/pinch do not rebuild every frame.
-    const bucket = Math.round(Math.log2(cam.zoom) * 10) / 10;
-    const bucketZoom = Math.pow(2, bucket);
-    const withTrees = cam.zoom >= 0.62;
-    const visW = cam.vw / bucketZoom;
-    const visH = cam.vh / bucketZoom;
-    const wWorld = Math.min(MAP_W, visW * (1 + 2 * CACHE_PAD));
-    const hWorld = Math.min(MAP_H, visH * (1 + 2 * CACHE_PAD));
-    // Never allocate the full requested raster. On phones/WebKit a 3× DPR
-    // whole-view cache exceeds the backing-store limit; the same viewport
-    // area at a coarser raster scale is visually identical once drawn.
-    const requestedScale = bucketZoom * dpr;
-    const raster = fitRaster(wWorld, hWorld, requestedScale, this.budget);
-    const scale = raster.scale;
-    // Geometry-exact key. Rendering the raster at a different zoom bucket and rescaling it
-    // in the blit is visually a different picture from a rebuild at the current zoom, so
-    // (visual correctness first) any change of bucket, scale or raster extent rebuilds.
-    const key = `${bucket}:${dpr.toFixed(3)}:${scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
+    const overview = options.overview ?? false;
+    const wrap = options.wrap ?? !overview;
+    if (options.budgetMs !== undefined) this.frameBudgetMs = Math.max(0, options.budgetMs);
+    const frame = this.frameGeometry(cam, dpr, revision, season, overview, wrap);
+    const content: PaintContent = { season, overview, withTrees: frame.withTrees, paintStatic, treeAvoid, geoAt };
+    const groupKey = `${frame.bucket}:${dpr.toFixed(3)}:${frame.scale}:${frame.family}:${revision}`;
+    const group = this.ensureGroup(groupKey, frame, dpr);
+    const visible = this.listTiles(frame, 0);
+    const paintList = this.listTiles(frame, 1);
 
-    const marginX = wWorld >= MAP_W - 0.5 ? Infinity : (wWorld - visW) / 2;
-    const marginY = hWorld >= MAP_H - 0.5 ? Infinity : (hWorld - visH) / 2;
-    const dx = Math.abs(wrapDx(this.centerX, cam.x));
-    const dy = Math.abs(cam.y - this.centerY);
-    const needs =
-      key !== this.key ||
-      dx > marginX * 0.8 ||
-      dy > marginY * 0.8;
-
-    if (needs) {
-      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
+    // Rasterise missing tiles inside the per-frame budget. The first composition of a
+    // session paints synchronously: there is no earlier frame to fall back on.
+    const cold = !this.everComposed;
+    const started = performance.now();
+    let painted = 0;
+    const budget = this.frameBudgetMs;
+    for (const entry of paintList) {
+      if (this.tileFor(group, entry.ix, entry.iy) !== undefined) continue;
+      if (budget < 0) break;
+      if (!cold && painted > 0 && budget > 0 && performance.now() - started >= budget) break;
+      this.paintTile(group, frame, content, entry, dpr);
+      painted += 1;
     }
+    const paintMs = performance.now() - started;
+    if (painted > 0) this.evict();
 
-    const screenX = cam.vw / 2 + wrapDx(cam.x, this.ox + this.wWorld / 2) * cam.zoom - (this.wWorld * cam.zoom) / 2;
-    const screenY = cam.vh / 2 + (this.oy + this.hWorld / 2 - cam.y) * cam.zoom - (this.hWorld * cam.zoom) / 2;
-    const drawW = this.wWorld * cam.zoom;
-    const drawH = this.hWorld * cam.zoom;
+    let exact = 0;
+    for (const entry of visible) if (this.tileFor(group, entry.ix, entry.iy) !== undefined) exact += 1;
+    const pending = visible.length - exact;
 
-    if (this.wWorld >= MAP_W - 0.5) {
-      // Overview intentionally shows exactly one circumference: repeating it
-      // would make phone overviews look like the same continents twice.
-      if (!tileWorld) {
-        target.drawImage(this.canvas, screenX, screenY, drawW, drawH);
-        return;
-      }
-      // Whole-world cache: tile horizontally so views that straddle the seam
-      // always show the wrapped part of the world on both sides.
-      const first = Math.floor((0 - screenX) / drawW);
-      const last = Math.floor((cam.vw - screenX) / drawW);
-      for (let k = first; k <= last; k++) {
-        target.drawImage(this.canvas, screenX + k * drawW, screenY, drawW, drawH);
-      }
-      return;
-    }
-    // Clip instead of cropping the source rect: the sampling map stays identical to a
-    // whole-raster blit (so pixels are unchanged), while the rasteriser can skip the
-    // off-screen part of the cache instead of resampling ~7 viewports per frame.
+    // Tiles go straight to the screen at integer device positions: no intermediate
+    // full-viewport canvas is built or copied on a normal frame.
+    const key = `${groupKey}|${frame.originX}|${frame.originY}|${frame.devW}:${frame.devH}`;
+    const recomposed = painted > 0 || cold || key !== this.composeKey;
+    this.composeKey = key;
+    this.everComposed = true;
+    this.lastFrame = frame;
+    this.lastGroup = group;
+    this.lastGroupKey = groupKey;
+
+    const m = target.getTransform();
     target.save();
-    target.beginPath();
-    target.rect(0, 0, cam.vw, cam.vh);
-    target.clip();
-    target.drawImage(this.canvas, screenX, screenY, drawW, drawH);
+    target.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
+    this.drawTiles(target, frame, group, visible);
     target.restore();
+    // While tiles are missing, keep a snapshot for the next frame's placeholder.
+    if (pending > 0) this.keepBackFrame(frame, group, visible);
+
+    this.key = groupKey;
+    this.ox = frame.originX / frame.scale;
+    this.oy = frame.originY / frame.scale;
+    this.scale = frame.scale;
+    this.wWorld = frame.devW / frame.scale;
+    this.hWorld = frame.devH / frame.scale;
+    this.lastStats = {
+      exact,
+      placeholder: pending,
+      pending,
+      painted,
+      paintMs: Math.round(paintMs * 100) / 100,
+      recomposed,
+      scale: frame.scale,
+      width: frame.devW,
+      height: frame.devH,
+    };
   }
 
-  private rebuild(
+  /**
+   * Paint the same viewport in one pass, without the tile cache or the tile split.
+   *
+   * The parity harness uses this as the *seam* reference. It cannot be bit-identical to the
+   * tiled frame: Chromium evaluates device-space shaders (the terrain texture, the land
+   * gradient) in the canvas' own coordinate system, so the same world pixel samples a
+   * fraction of a texel differently in two differently-translated canvases. Measured with a
+   * tile-free probe: <= 2 of 255 levels on ~1% of pixels, no hard edges (a real seam would
+   * show as a one-pixel line with deltas of tens). The bit-exact gate is vs
+   * `dropTiles()` + a full re-render through the shipping path.
+   */
+  renderFullReference(
     cam: Camera,
-    scale: number,
-    wWorld: number,
-    hWorld: number,
-    withTrees: boolean,
-    bucket: number,
     dpr: number,
     revision: number,
     season: Season,
     paintStatic?: LayerPainter,
     treeAvoid?: (x: number, y: number) => boolean,
     geoAt?: (x: number, y: number) => { lat: number; lon: number },
-    key = '',
-    requestedScale = scale,
-  ): void {
-    const fit = fitRaster(wWorld, hWorld, requestedScale, this.budget);
-    this.scale = fit.scale;
-    this.prepareCanvas(fit.width, fit.height, Math.ceil(wWorld * requestedScale), Math.ceil(hWorld * requestedScale));
-    this.wWorld = wWorld;
-    this.hWorld = hWorld;
-    this.centerX = cam.x;
-    this.key = key || `${bucket}:${dpr.toFixed(3)}:${fit.scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
-
-    if (wWorld >= MAP_W - 0.5) {
-      this.ox = 0;
-    } else {
-      this.ox = cam.x - wWorld / 2;
+    options: LandContentOptions = {},
+  ): HTMLCanvasElement {
+    const overview = options.overview ?? false;
+    const wrap = options.wrap ?? !overview;
+    const frame = this.frameGeometry(cam, dpr, revision, season, overview, wrap);
+    const content: PaintContent = { season, overview, withTrees: frame.withTrees, paintStatic, treeAvoid, geoAt };
+    const canvas = this.referenceCanvas ?? document.createElement('canvas');
+    const frameW = frame.devW + EDGE_BLEED * 2;
+    const frameH = frame.devH + EDGE_BLEED * 2;
+    if (canvas.width !== frameW || canvas.height !== frameH) {
+      releaseCanvas(canvas);
+      canvas.width = frameW;
+      canvas.height = frameH;
     }
-    if (hWorld >= MAP_H - 0.5) {
-      this.oy = 0;
-      this.centerY = MAP_H / 2;
-    } else {
-      this.oy = Math.min(MAP_H - hWorld, Math.max(0, cam.y - hWorld / 2));
-      this.centerY = this.oy + hWorld / 2;
-    }
-
-    this.paintRaster(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt);
-  }
-
-  /** Allocate (or keep) the backing store for the current geometry and clear it. */
-  private prepareCanvas(wPx: number, hPx: number, requestedPxW: number, requestedPxH: number): void {
-    if (this.canvas.width !== wPx || this.canvas.height !== hPx) {
-      // Release the previous backing store first; switching zoom buckets must
-      // not keep two large layers resident on a phone.
-      releaseCanvas(this.canvas);
-      this.canvas.width = wPx;
-      this.canvas.height = hPx;
-    } else {
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.clearRect(0, 0, wPx, hPx);
-    }
-    noteCanvasAllocation('land', wPx, hPx, requestedPxW, requestedPxH, this.budget);
+    this.referenceCanvas = canvas;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.paintRegion(
+      ctx,
+      frame.originX - EDGE_BLEED,
+      frame.originY - EDGE_BLEED,
+      frameW,
+      frameH,
+      frame.scale,
+      frame.zoom,
+      dpr,
+      content,
+    );
+    return canvas;
   }
 
   /**
-   * Paint the cached board from the current `ox/oy/scale`. `clip` (device px) limits the
-   * work to one strip; the world→canvas mapping is unchanged either way, so a strip is
-   * pixel-identical to the same region of a full paint.
+   * Quantised geometry for a frame. `scale` is snapped so that the world circumference is a
+   * whole number of tiles (the MAP_W seam therefore falls on a tile edge), and so that the
+   * viewport origin lands on a whole device pixel (tiles blit without resampling).
    */
-  private paintRaster(
+  private frameGeometry(
     cam: Camera,
     dpr: number,
+    revision: number,
     season: Season,
-    withTrees: boolean,
-    paintStatic: LayerPainter | undefined,
-    treeAvoid: ((x: number, y: number) => boolean) | undefined,
-    geoAt: ((x: number, y: number) => { lat: number; lon: number }) | undefined,
-    clip?: [number, number, number, number],
-  ): void {
-    const ctx = this.ctx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.save();
-    if (clip) {
-      ctx.beginPath();
-      ctx.rect(clip[0], clip[1], clip[2], clip[3]);
-      ctx.clip();
-      ctx.clearRect(clip[0], clip[1], clip[2], clip[3]);
-    }
-    const toCanvas = (wx: number, wy: number): [number, number] => [
-      (wx - this.ox) * this.scale,
-      (wy - this.oy) * this.scale,
-    ];
-    const wWorld = this.wWorld;
-    const hWorld = this.hWorld;
+    overview: boolean,
+    wrap: boolean,
+  ): FrameGeometry {
+    const dprKey = Math.max(0.5, dpr);
+    const bucket = Math.round(Math.log2(Math.max(1e-4, cam.zoom)) * 10);
+    const desired = Math.pow(2, bucket / 10) * dprKey;
+    const nx = Math.max(1, Math.round((MAP_W * desired) / TILE_DEV));
+    const scale = (nx * TILE_DEV) / MAP_W;
+    const ny = Math.max(1, Math.ceil((MAP_H * scale) / TILE_DEV));
+    const zoom = scale / dprKey;
+    const withTrees = zoom >= 0.62;
+    const devW = Math.max(1, Math.round(cam.vw * dprKey));
+    const devH = Math.max(1, Math.round(cam.vh * dprKey));
+    const originX = Math.round((cam.x - devW / 2 / scale) * scale);
+    const originY = Math.round((cam.y - devH / 2 / scale) * scale);
+    const family = `${season}:${overview ? 1 : 0}:${withTrees ? 1 : 0}:${wrap ? 1 : 0}`;
+    return {
+      bucket,
+      zoom,
+      scale,
+      nx,
+      ny,
+      family,
+      revision,
+      wrap,
+      withTrees,
+      originX,
+      originY,
+      devW,
+      devH,
+      blitX: 0,
+      blitY: 0,
+    };
+  }
 
-    // Horizontal wrap copies needed to cover this layer's world x range.
-    const x0 = this.ox;
-    const x1 = this.ox + wWorld;
-    const kMin = Math.floor((x0 - MAP_W) / MAP_W);
-    const kMax = Math.ceil(x1 / MAP_W);
-
-    let visiblePolys = 0;
-    for (let k = kMin; k <= kMax; k++) {
-      const shift = k * MAP_W;
-      for (const box of this.boxes) {
-        if (box.maxX + shift < x0 || box.minX + shift > x1) continue;
-        if (box.maxY < this.oy || box.minY > this.oy + hWorld) continue;
-        visiblePolys += 1;
+  /** Tiles intersecting the viewport (margin 0) or its one-tile halo (margin 1). */
+  private listTiles(frame: FrameGeometry, margin: number): TileRect[] {
+    const { originX, originY, devW, devH, nx, ny, scale, wrap } = frame;
+    const out: TileRect[] = [];
+    const ix0 = Math.floor(originX / TILE_DEV) - margin;
+    const ix1 = Math.floor((originX + devW - 1) / TILE_DEV) + margin;
+    const iy0 = Math.max(0, Math.floor(originY / TILE_DEV) - margin);
+    const iy1 = Math.min(ny - 1, Math.floor((originY + devH - 1) / TILE_DEV) + margin);
+    const cx = originX + devW / 2;
+    const cy = originY + devH / 2;
+    for (let iy = iy0; iy <= iy1; iy += 1) {
+      const th = Math.max(1, Math.round(Math.min(TILE_DEV, MAP_H * scale - iy * TILE_DEV)));
+      const devY = iy * TILE_DEV - originY;
+      for (let ux = ix0; ux <= ix1; ux += 1) {
+        if (!wrap && (ux < 0 || ux >= nx)) continue;
+        const ix = ((ux % nx) + nx) % nx;
+        const devX = ux * TILE_DEV - originX;
+        out.push({
+          ux,
+          ix,
+          iy,
+          devX,
+          devY,
+          devW: TILE_DEV,
+          devH: th,
+          dist: Math.hypot(devX + TILE_DEV / 2 - cx, devY + th / 2 - cy),
+        });
       }
     }
-    // The coastline is static world geometry. Rebuilding this path costs ~20 ms and used
-    // to run for every raster; one world-space copy is drawn under the device transform.
-    const path = this.worldPath ?? (this.worldPath = this.buildWorldPath());
+    // Nearest-first: a cold bucket fills what the player is looking at before the halo.
+    out.sort((a, b) => a.dist - b.dist);
+    return out;
+  }
 
-    if (visiblePolys > 0) {
-      const palette = SEASON_LAND[season];
-      // Drawn in world units under this transform so one cached path serves every camera.
-      const haloW = (Math.max(4, Math.min(12, 4 * cam.zoom)) * dpr) / this.scale;
-      const outlineW = Math.max(2, Math.min(8, 2.1 * this.scale)) / this.scale;
-      const shadowDx = Math.max(1, 3.2 * this.scale) / this.scale;
-      const shadowDy = Math.max(1, 4.2 * this.scale) / this.scale;
-      const tex = cam.zoom <= 0.22 ? this.terrainLo ?? this.terrain : this.terrain ?? this.terrainLo;
-      for (let k = kMin; k <= kMax; k++) {
-        const shift = k * MAP_W;
-        ctx.save();
-        ctx.setTransform(this.scale, 0, 0, this.scale, -this.ox * this.scale, -this.oy * this.scale);
-        ctx.translate(shift, 0);
-        const grad = ctx.createLinearGradient(0, this.oy, 0, this.oy + hWorld);
-        grad.addColorStop(0, palette.top);
-        grad.addColorStop(0.45, palette.mid);
-        grad.addColorStop(1, palette.bottom);
-        // shallow-water halo just outside the coastline
-        ctx.save();
-        ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
-        ctx.lineWidth = haloW;
-        ctx.lineJoin = 'round';
-        ctx.stroke(path);
-        ctx.restore();
-
-        // A flat offset silhouette is much cheaper than a blurred canvas shadow
-        // and reads as a soft coastal drop shadow at every zoom.
-        ctx.save();
-        ctx.translate(shadowDx, shadowDy);
-        ctx.fillStyle = 'rgba(3, 48, 72, 0.28)';
-        ctx.fill(path, 'evenodd');
-        ctx.restore();
-
-        ctx.fillStyle = grad;
-        ctx.fill(path, 'evenodd');
-
-        if (tex && tex.naturalWidth > 0) {
-          ctx.save();
-          ctx.clip(path, 'evenodd');
-          ctx.drawImage(tex, 0, 0, MAP_W, MAP_H);
-          // Keep the concept-art saturation on top of the pale topographic texture.
-          ctx.globalCompositeOperation = 'soft-light';
-          ctx.globalAlpha = 0.5;
-          ctx.fillStyle = palette.mid;
-          ctx.fillRect(this.ox, this.oy, wWorld, hWorld);
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        ctx.save();
-        ctx.strokeStyle = palette.outline;
-        ctx.lineWidth = outlineW;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.stroke(path);
-        ctx.restore();
-        ctx.restore();
-      }
-    }
-
-    if (withTrees) {
-      if (!this.trees) this.trees = this.buildTrees();
-      this.drawTrees(ctx, toCanvas, cam.zoom >= 1.45 ? 0.25 : 0.6, season, treeAvoid, geoAt);
-    }
-    if (visiblePolys > 0 && (season === 'winter' || season === 'summer')) {
-      this.drawSnow(ctx, path, season);
-    }
-
-    if (paintStatic) {
-      paintStatic({
-        ctx,
-        toCanvas,
-        scale: this.scale,
+  private ensureGroup(key: string, frame: FrameGeometry, dpr: number): TileGroup {
+    let group = this.groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        bucket: frame.bucket,
         dpr,
-        ox: this.ox,
-        oy: this.oy,
-        wWorld: this.wWorld,
-        hWorld: this.hWorld,
-      });
+        scale: frame.scale,
+        nx: frame.nx,
+        ny: frame.ny,
+        family: frame.family,
+        tiles: new Map(),
+        used: ++this.seq,
+      };
+      this.groups.set(key, group);
     }
-    ctx.restore();
+    group.used = ++this.seq;
+    return group;
   }
 
-  /** One Path2D for the whole coastline, in world units. */
-  private buildWorldPath(): Path2D {
-    const path = new Path2D();
-    for (const box of this.boxes) {
-      for (const ring of box.rings) {
-        for (let i = 0; i < ring.length; i += 2) {
-          if (i === 0) path.moveTo(ring[i], ring[i + 1]);
-          else path.lineTo(ring[i], ring[i + 1]);
-        }
-        path.closePath();
+  private tileFor(group: TileGroup, ix: number, iy: number): Tile | undefined {
+    return group.tiles.get(`${ix}:${iy}`);
+  }
+
+  /** Rasterise one tile. Pixels are a pure function of the tile rect and the group. */
+  private paintTile(
+    group: TileGroup,
+    frame: FrameGeometry,
+    content: PaintContent,
+    entry: TileRect,
+    dpr: number,
+  ): void {
+    const id = `${entry.ix}:${entry.iy}`;
+    let tile = group.tiles.get(id);
+    const padW = entry.devW + EDGE_BLEED * 2;
+    const padH = entry.devH + EDGE_BLEED * 2;
+    if (!tile) {
+      const canvas = document.createElement('canvas');
+      canvas.width = padW;
+      canvas.height = padH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      tile = { canvas, ctx, ix: entry.ix, iy: entry.iy, devW: padW, devH: padH, used: 0 };
+      group.tiles.set(id, tile);
+      this.cachedArea += padW * padH;
+      noteCanvasAllocation('land-tile', padW, padH, padW, padH, this.budget);
+    }
+    tile.used = ++this.seq;
+    group.used = this.seq;
+    const ctx = tile.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, tile.devW, tile.devH);
+    this.paintRegion(
+      ctx,
+      entry.ux * TILE_DEV - EDGE_BLEED,
+      entry.iy * TILE_DEV - EDGE_BLEED,
+      tile.devW,
+      tile.devH,
+      frame.scale,
+      frame.zoom,
+      dpr,
+      content,
+    );
+  }
+
+  /** LRU trim down to the tile budget, then drop empty and long-unused groups. */
+  private evict(): void {
+    const cap = Math.max(TILE_DEV * TILE_DEV * 4, this.budget.maxArea * TILE_AREA_RATIO);
+    if (this.cachedArea > cap) {
+      const all: Array<{ group: TileGroup; id: string; tile: Tile }> = [];
+      for (const group of this.groups.values()) {
+        for (const [id, tile] of group.tiles) all.push({ group, id, tile });
+      }
+      all.sort((a, b) => a.tile.used - b.tile.used);
+      for (const entry of all) {
+        if (this.cachedArea <= cap) break;
+        if (entry.group.key === this.lastGroupKey && entry.tile.used > this.seq - 4) continue;
+        entry.group.tiles.delete(entry.id);
+        this.cachedArea -= entry.tile.devW * entry.tile.devH;
+        releaseCanvas(entry.tile.canvas);
       }
     }
-    return path;
+    if (this.groups.size > 8) {
+      const stale = [...this.groups.values()]
+        .filter((group) => group.key !== this.lastGroupKey)
+        .sort((a, b) => a.used - b.used);
+      for (const group of stale) {
+        if (this.groups.size <= 8) break;
+        this.dropGroup(group);
+      }
+    }
   }
 
-  private drawSnow(ctx: CanvasRenderingContext2D, path: Path2D, season: Season): void {
-    const north = season === 'winter';
-    const snowY = (project(0, north ? 35 : -35)[1] - this.oy) * this.scale;
-    const hPx = this.canvas.height;
-    ctx.save();
-    // Clip in world space, then paint the gradient back in device space.
-    ctx.setTransform(this.scale, 0, 0, this.scale, -this.ox * this.scale, -this.oy * this.scale);
-    ctx.clip(path, 'evenodd');
+  private dropGroup(group: TileGroup): void {
+    for (const tile of group.tiles.values()) {
+      this.cachedArea -= tile.devW * tile.devH;
+      releaseCanvas(tile.canvas);
+    }
+    group.tiles.clear();
+    this.groups.delete(group.key);
+  }
+
+  private clearTiles(): void {
+    for (const group of [...this.groups.values()]) this.dropGroup(group);
+    this.cachedArea = 0;
+  }
+
+  // ---------------------------------------------------------------- composition
+
+  /**
+   * Blit visible tiles into a device-space context. A tile that is missing is covered by the
+   * same world rect from the closest other bucket (scaled), or by the last snapshot, so a
+   * frame is never blank and never shows the wrong area. `off` is the context's device
+   * origin inside the lattice (EDGE_BLEED for a snapshot canvas, 0 for the screen).
+   */
+  private composeInto(
+    ctx: CanvasRenderingContext2D,
+    frame: FrameGeometry,
+    group: TileGroup,
+    visible: TileRect[],
+    off: number,
+  ): void {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (north) {
-      const g = ctx.createLinearGradient(0, 0, 0, Math.max(1, snowY));
-      g.addColorStop(0, 'rgba(255,255,255,0.72)');
-      g.addColorStop(0.7, 'rgba(255,255,255,0.5)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, this.canvas.width, Math.max(0, snowY));
-    } else {
-      const g = ctx.createLinearGradient(0, hPx, 0, Math.min(hPx, snowY));
-      g.addColorStop(0, 'rgba(255,255,255,0.72)');
-      g.addColorStop(0.7, 'rgba(255,255,255,0.5)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, Math.max(0, snowY), this.canvas.width, hPx - Math.max(0, snowY));
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    const missing: TileRect[] = [];
+    for (const entry of visible) {
+      const tile = this.tileFor(group, entry.ix, entry.iy);
+      if (tile) {
+        // Copy the tile's inner rect so the destination's own edge never affects it.
+        ctx.drawImage(
+          tile.canvas,
+          EDGE_BLEED,
+          EDGE_BLEED,
+          entry.devW,
+          entry.devH,
+          entry.devX + off,
+          entry.devY + off,
+          entry.devW,
+          entry.devH,
+        );
+      } else {
+        missing.push(entry);
+      }
     }
-    ctx.restore();
+    if (missing.length === 0) return;
+
+    // Placeholder sources, closest first: another bucket of the same content family, then
+    // any bucket, then the previous composed frame for anything still uncovered.
+    const sources = [...this.groups.values()]
+      .filter((g) => g.key !== group.key && g.tiles.size > 0)
+      .sort((a, b) => {
+        const fa = a.family === group.family ? 0 : 1;
+        const fb = b.family === group.family ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        return Math.abs(a.bucket - frame.bucket) - Math.abs(b.bucket - frame.bucket);
+      });
+    for (const entry of missing) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
+      ctx.clip();
+      const area = entry.devW * entry.devH;
+      let filled = 0;
+      for (const source of sources) {
+        filled += this.blitFromGroup(ctx, source, frame, entry, off);
+        if (filled >= area - 1) break;
+      }
+      if (filled < area - 1 && this.backCanvas && this.backGeom) {
+        ctx.clearRect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
+        this.blitFromFrame(ctx, this.backCanvas, this.backGeom, frame, entry, off);
+      }
+      ctx.restore();
+    }
   }
 
-  /** Snapshot the current season layer so MapView can crossfade it out. */
-  beginSeasonTransition(now: number): void {
-    if (this.canvas.width <= 1 || this.wWorld <= 0) return;
-    const c = this.fadeCanvas ?? document.createElement('canvas');
-    const fit = fitCanvasSize(this.canvas.width, this.canvas.height, this.budget);
-    if (c.width !== fit.width || c.height !== fit.height) {
-      releaseCanvas(c);
-      c.width = fit.width;
-      c.height = fit.height;
-    } else {
-      const old = c.getContext('2d');
-      if (!old) return;
-      old.setTransform(1, 0, 0, 1, 0, 0);
-      old.clearRect(0, 0, c.width, c.height);
+  /** Draw the visible tiles (and placeholders) straight onto the screen. */
+  private drawTiles(
+    target: CanvasRenderingContext2D,
+    frame: FrameGeometry,
+    group: TileGroup,
+    visible: TileRect[],
+  ): void {
+    this.composeInto(target, frame, group, visible, 0);
+  }
+
+  /**
+   * Compose the frame into `this.canvas` (device size + bleed ring) and return it. Used by
+   * the parity harness and the season crossfade; normal frames draw tiles directly.
+   */
+  snapshotFrame(): HTMLCanvasElement {
+    if (!this.lastFrame || !this.lastGroup) return this.canvas;
+    const frame = this.lastFrame;
+    const frameW = frame.devW + EDGE_BLEED * 2;
+    const frameH = frame.devH + EDGE_BLEED * 2;
+    if (this.canvas.width !== frameW || this.canvas.height !== frameH) {
+      releaseCanvas(this.canvas);
+      this.canvas.width = frameW;
+      this.canvas.height = frameH;
+      noteCanvasAllocation('land', frameW, frameH, frameW, frameH, this.budget);
     }
-    noteCanvasAllocation('land-fade', c.width, c.height, this.canvas.width, this.canvas.height, this.budget);
-    const g = c.getContext('2d');
+    this.ctx.clearRect(0, 0, frameW, frameH);
+    this.composeInto(this.ctx, frame, this.lastGroup, this.listTiles(frame, 0), EDGE_BLEED);
+    return this.canvas;
+  }
+
+  /**
+   * Blit the parts of one bucket's tiles that overlap a missing rect, clipped by the caller.
+   * Returns the covered device area so the composer can tell a full cover from a partial one.
+   */
+  private blitFromGroup(
+    ctx: CanvasRenderingContext2D,
+    source: TileGroup,
+    frame: FrameGeometry,
+    entry: TileRect,
+    off: number,
+  ): number {
+    const wx0 = (entry.ux * TILE_DEV) / frame.scale;
+    const wy0 = (entry.iy * TILE_DEV) / frame.scale;
+    const wx1 = wx0 + TILE_DEV / frame.scale;
+    const wy1 = wy0 + (entry.devH / frame.scale);
+    let area = 0;
+    for (const tile of source.tiles.values()) {
+      const sx0 = (tile.ix * TILE_DEV) / source.scale;
+      const sy0 = (tile.iy * TILE_DEV) / source.scale;
+      const sx1 = sx0 + (tile.devW / source.scale);
+      const sy1 = sy0 + (tile.devH / source.scale);
+      const shift = frame.wrap ? Math.round((wx0 - sx0) / MAP_W) * MAP_W : 0;
+      const ax0 = Math.max(wx0, sx0 + shift);
+      const ax1 = Math.min(wx1, sx1 + shift);
+      const ay0 = Math.max(wy0, sy0);
+      const ay1 = Math.min(wy1, sy1);
+      if (ax1 <= ax0 || ay1 <= ay0) continue;
+      ctx.drawImage(
+        tile.canvas,
+        (ax0 - sx0 - shift) * source.scale,
+        (ay0 - sy0) * source.scale,
+        (ax1 - ax0) * source.scale,
+        (ay1 - ay0) * source.scale,
+        ax0 * frame.scale - frame.originX + off,
+        ay0 * frame.scale - frame.originY + off,
+        (ax1 - ax0) * frame.scale,
+        (ay1 - ay0) * frame.scale,
+      );
+      area += (ax1 - ax0) * (ay1 - ay0) * frame.scale * frame.scale;
+    }
+    return Math.min(area, TILE_DEV * entry.devH);
+  }
+
+  /** Blit the previous composed frame over a missing rect. */
+  private blitFromFrame(
+    ctx: CanvasRenderingContext2D,
+    back: HTMLCanvasElement,
+    backGeom: FrameGeometry,
+    frame: FrameGeometry,
+    entry: TileRect,
+    off: number,
+  ): void {
+    const wx0 = (entry.ux * TILE_DEV) / frame.scale;
+    const wy0 = (entry.iy * TILE_DEV) / frame.scale;
+    const ww = TILE_DEV / frame.scale;
+    const wh = entry.devH / frame.scale;
+    const bx = backGeom.originX / backGeom.scale;
+    const by = backGeom.originY / backGeom.scale;
+    const bw = backGeom.devW / backGeom.scale;
+    const bh = backGeom.devH / backGeom.scale;
+    for (let k = -1; k <= 1; k += 1) {
+      const shift = frame.wrap ? k * MAP_W : 0;
+      const ax0 = Math.max(wx0, bx + shift);
+      const ax1 = Math.min(wx0 + ww, bx + bw + shift);
+      const ay0 = Math.max(wy0, by);
+      const ay1 = Math.min(wy0 + wh, by + bh);
+      if (ax1 <= ax0 || ay1 <= ay0) continue;
+      ctx.drawImage(
+        back,
+        (ax0 - shift - bx) * backGeom.scale,
+        (ay0 - by) * backGeom.scale,
+        (ax1 - ax0) * backGeom.scale,
+        (ay1 - ay0) * backGeom.scale,
+        ax0 * frame.scale - frame.originX + off,
+        ay0 * frame.scale - frame.originY + off,
+        (ax1 - ax0) * frame.scale,
+        (ay1 - ay0) * frame.scale,
+      );
+      if (!frame.wrap) break;
+    }
+  }
+
+  /** Keep a snapshot of the drawn frame for the next frame's placeholder. */
+  private keepBackFrame(frame: FrameGeometry, group: TileGroup, visible: TileRect[]): void {
+    const frameW = frame.devW + EDGE_BLEED * 2;
+    const frameH = frame.devH + EDGE_BLEED * 2;
+    if (!this.backCanvas || this.backCanvas.width !== frameW || this.backCanvas.height !== frameH) {
+      if (this.backCanvas) releaseCanvas(this.backCanvas);
+      this.backCanvas = document.createElement('canvas');
+      this.backCanvas.width = frameW;
+      this.backCanvas.height = frameH;
+      this.backCtx = this.backCanvas.getContext('2d');
+      noteCanvasAllocation('land-back', frameW, frameH, frameW, frameH, this.budget);
+    }
+    const g = this.backCtx;
     if (!g) return;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, c.width, c.height);
-    g.drawImage(this.canvas, 0, 0, c.width, c.height);
-    this.fadeCanvas = c;
-    this.fadeMeta = {
-      ox: this.ox,
-      oy: this.oy,
-      wWorld: this.wWorld,
-      hWorld: this.hWorld,
-      scale: this.scale,
-    };
-    this.fadeStart = now;
+    g.clearRect(0, 0, frameW, frameH);
+    this.composeInto(g, frame, group, visible, EDGE_BLEED);
+    this.backGeom = { ...frame };
   }
 
-  drawSeasonFade(target: CanvasRenderingContext2D, cam: Camera, now: number): void {
-    const meta = this.fadeMeta;
-    const canvas = this.fadeCanvas;
-    if (!meta || !canvas) return;
-    const p = (now - this.fadeStart) / 1000;
-    if (p >= 1) {
-      releaseCanvas(canvas);
-      this.fadeCanvas = null;
-      this.fadeMeta = null;
-      return;
-    }
-    const alpha = 1 - p;
-    const drawW = meta.wWorld * cam.zoom;
-    const drawH = meta.hWorld * cam.zoom;
-    const screenX =
-      cam.vw / 2 + wrapDx(cam.x, meta.ox + meta.wWorld / 2) * cam.zoom - drawW / 2;
-    const screenY =
-      cam.vh / 2 + (meta.oy + meta.hWorld / 2 - cam.y) * cam.zoom - drawH / 2;
-    target.save();
-    target.globalAlpha = Math.max(0, alpha);
-    if (meta.wWorld >= MAP_W - 0.5) {
-      const first = Math.floor((0 - screenX) / drawW);
-      const last = Math.floor((cam.vw - screenX) / drawW);
-      for (let k = first; k <= last; k++) {
-        target.drawImage(canvas, screenX + k * drawW, screenY, drawW, drawH);
+  // ---------------------------------------------------------------- painting
+
+  /**
+   * Paint one device rect of the world. `devX/devY` are its top-left in the world-anchored
+   * device lattice (integers), so a tile and a full-region paint of the same rect issue the
+   * same draw commands up to an integer translation and therefore land on the same pixels.
+   */
+  private paintRegion(
+    ctx: CanvasRenderingContext2D,
+    devX: number,
+    devY: number,
+    devW: number,
+    devH: number,
+    scale: number,
+    zoom: number,
+    dpr: number,
+    content: PaintContent,
+  ): void {
+    const wWorld = devW / scale;
+    const hWorld = devH / scale;
+    const ox = devX / scale;
+    const oy = devY / scale;
+    const x1 = ox + wWorld;
+    const y1 = oy + hWorld;
+    const palette = SEASON_LAND[content.season];
+    const haloDev = Math.max(4, Math.min(12, 4 * zoom)) * dpr;
+    const outlineDev = Math.max(2, Math.min(8, 2.1 * scale));
+    const shadowDev = Math.max(1, 3.2 * scale);
+    const pad = (haloDev + shadowDev + outlineDev + 6) / scale;
+    const kMin = Math.floor((ox - MAP_W) / MAP_W);
+    const kMax = Math.ceil(x1 / MAP_W);
+
+    // One even-odd path for every polygon (and wrapped copy) that can touch the region.
+    // A polygon that misses the region cannot change a pixel inside it, so this equals the
+    // old single whole-world path restricted to this rect.
+    let path: Path2D | null = null;
+    for (let k = kMin; k <= kMax; k += 1) {
+      const shift = k * MAP_W;
+      for (const box of this.boxes) {
+        if (box.maxX + shift < ox - pad || box.minX + shift > x1 + pad) continue;
+        if (box.maxY < oy - pad || box.minY > y1 + pad) continue;
+        if (!path) path = new Path2D();
+        path.addPath(box.path, { a: 1, b: 0, c: 0, d: 1, e: shift, f: 0 });
       }
-    } else {
-      target.drawImage(canvas, screenX, screenY, drawW, drawH);
     }
-    target.restore();
+
+    ctx.save();
+    ctx.setTransform(scale, 0, 0, scale, -devX, -devY);
+    if (path) {
+      const grad = ctx.createLinearGradient(0, 0, 0, MAP_H);
+      grad.addColorStop(0, palette.top);
+      grad.addColorStop(0.45, palette.mid);
+      grad.addColorStop(1, palette.bottom);
+      // shallow-water halo just outside the coastline
+      ctx.save();
+      ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
+      ctx.lineWidth = haloDev / scale;
+      ctx.lineJoin = 'round';
+      ctx.stroke(path);
+      ctx.restore();
+      // A flat offset silhouette is much cheaper than a blurred canvas shadow
+      // and reads as a soft coastal drop shadow at every zoom.
+      ctx.save();
+      ctx.translate(shadowDev / scale, shadowDev / scale);
+      ctx.fillStyle = 'rgba(3, 48, 72, 0.28)';
+      ctx.fill(path, 'evenodd');
+      ctx.restore();
+      ctx.fillStyle = grad;
+      ctx.fill(path, 'evenodd');
+      const tex = zoom <= 0.22 ? this.terrainLo ?? this.terrain : this.terrain ?? this.terrainLo;
+      if (tex && tex.naturalWidth > 0) {
+        ctx.save();
+        ctx.clip(path, 'evenodd');
+        ctx.drawImage(tex, 0, 0, MAP_W, MAP_H);
+        // Keep the concept-art saturation on top of the pale topographic texture.
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = palette.mid;
+        ctx.fillRect(-MAP_W, -MAP_H, MAP_W * 3, MAP_H * 3);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.strokeStyle = palette.outline;
+      ctx.lineWidth = outlineDev / scale;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke(path);
+      ctx.restore();
+    }
+    if (content.withTrees) {
+      if (!this.trees) this.trees = this.buildTrees();
+      this.drawTrees(ctx, devX, devY, devW, devH, scale, zoom >= 1.45 ? 0.25 : 0.6, content);
+    }
+    if (path && (content.season === 'winter' || content.season === 'summer')) {
+      this.drawSnow(ctx, path, content.season);
+    }
+    ctx.restore();
+
+    if (content.paintStatic) {
+      const toCanvas = (wx: number, wy: number): [number, number] => [wx * scale - devX, wy * scale - devY];
+      content.paintStatic({
+        ctx,
+        toCanvas,
+        scale,
+        dpr,
+        ox,
+        oy,
+        wWorld,
+        hWorld,
+        zoom,
+        overview: content.overview,
+      });
+    }
+  }
+  private drawSnow(ctx: CanvasRenderingContext2D, path: Path2D, season: Season): void {
+    const north = season === 'winter';
+    const snowY = project(0, north ? 35 : -35)[1];
+    const fade = 900;
+    ctx.save();
+    ctx.clip(path, 'evenodd');
+    if (north) {
+      const g = ctx.createLinearGradient(0, snowY - fade, 0, snowY);
+      g.addColorStop(0, 'rgba(255,255,255,0.72)');
+      g.addColorStop(0.7, 'rgba(255,255,255,0.5)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-MAP_W, -MAP_H, MAP_W * 3, snowY + MAP_H);
+    } else {
+      const g = ctx.createLinearGradient(0, MAP_H, 0, snowY);
+      g.addColorStop(0, 'rgba(255,255,255,0.72)');
+      g.addColorStop(0.7, 'rgba(255,255,255,0.5)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-MAP_W, snowY, MAP_W * 3, MAP_H * 2 - snowY);
+    }
+    ctx.restore();
   }
 
   private drawTrees(
     ctx: CanvasRenderingContext2D,
-    toCanvas: (x: number, y: number) => [number, number],
+    devX: number,
+    devY: number,
+    devW: number,
+    devH: number,
+    scale: number,
     minRank: number,
-    season: Season,
-    treeAvoid?: (x: number, y: number) => boolean,
-    geoAt?: (x: number, y: number) => { lat: number; lon: number },
+    content: PaintContent,
   ): void {
     const trees = this.trees;
     if (!trees) return;
-    const margin = 20 / Math.max(0.2, this.scale);
-    const x0 = this.ox - margin;
-    const x1 = this.ox + this.wWorld + margin;
-    const y0 = this.oy - margin;
-    const y1 = this.oy + this.hWorld + margin;
-    for (let k = -1; k <= 1; k++) {
+    const eq = project(0, 0)[1];
+    const margin = 56;
+    const x0 = (devX - margin) / scale;
+    const x1 = (devX + devW + margin) / scale;
+    const y0 = (devY - margin) / scale;
+    const y1 = (devY + devH + margin) / scale;
+    for (let k = -1; k <= 1; k += 1) {
       const shift = k * MAP_W;
       for (const t of trees) {
         if (t.rank < minRank) continue;
-        if (treeAvoid?.(t.x, t.y)) continue;
         const tx = t.x + shift;
         if (tx < x0 || tx > x1 || t.y < y0 || t.y > y1) continue;
+        if (content.treeAvoid && content.treeAvoid(t.x, t.y)) continue;
         if (t.lat === undefined) {
-          const geo = geoAt?.(t.x, t.y) ?? { lat: 0, lon: 0 };
+          const geo = (content.geoAt && content.geoAt(t.x, t.y)) || { lat: 0, lon: 0 };
           t.lat = geo.lat;
           t.lon = geo.lon;
         }
@@ -636,8 +1129,9 @@ export class LandLayer {
         // Barren ground (ice sheet, desert) must hide the whole tree, trunk
         // included: drawing the trunk first left brown sticks on Greenland.
         if (isDesertBox(lat, lon) || this.isBarrenAt(t.x, t.y)) continue;
-        const [cx, cy] = toCanvas(tx, t.y);
-        const s = t.size * this.scale;
+        const cx = tx * scale - devX;
+        const cy = t.y * scale - devY;
+        const s = t.size * scale;
         // trunk
         ctx.fillStyle = '#7a4c2b';
         ctx.beginPath();
@@ -645,18 +1139,17 @@ export class LandLayer {
         ctx.fill();
         // crown: two overlapping circles plus a highlight
         const crown = s * (0.72 + t.tint * 0.16);
-        const eq = project(0, 0)[1];
         const tropical = Math.abs(lat) < 23;
-        const hemi = tropical ? 'summer' : t.y < eq ? season : oppositeSeason(season);
+        const hemi = tropical ? 'summer' : t.y < eq ? content.season : oppositeSeason(content.season);
         const colors = SEASON_TREES[hemi];
         const base = t.tint > 0.66 ? colors[0] : t.tint > 0.33 ? colors[1] : colors[2];
-        ctx.fillStyle = !tropical && season === 'winter' && Math.abs(lat) > 35 ? '#eaf2e6' : base;
+        ctx.fillStyle = !tropical && content.season === 'winter' && Math.abs(lat) > 35 ? '#eaf2e6' : base;
         ctx.beginPath();
         ctx.arc(cx, cy - s * 0.75, crown, 0, Math.PI * 2);
         ctx.arc(cx - crown * 0.65, cy - s * 0.45, crown * 0.7, 0, Math.PI * 2);
         ctx.arc(cx + crown * 0.63, cy - s * 0.43, crown * 0.68, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = season === 'autumn' ? 'rgba(255, 230, 150, 0.6)' : 'rgba(235, 255, 210, 0.55)';
+        ctx.fillStyle = content.season === 'autumn' ? 'rgba(255, 230, 150, 0.6)' : 'rgba(235, 255, 210, 0.55)';
         ctx.beginPath();
         ctx.arc(cx - crown * 0.3, cy - s * 0.98, crown * 0.34, 0, Math.PI * 2);
         ctx.fill();
@@ -690,6 +1183,72 @@ export class LandLayer {
       }
     }
     return out;
+  }
+
+  // ---------------------------------------------------------------- season crossfade
+
+  /** Snapshot the current land look so MapView can crossfade it out. */
+  beginSeasonTransition(now: number): void {
+    if (this.scale <= 0 || !this.everComposed) return;
+    const snapshot = this.snapshotFrame();
+    if (snapshot.width <= 1) return;
+    const innerW = Math.max(1, snapshot.width - EDGE_BLEED * 2);
+    const innerH = Math.max(1, snapshot.height - EDGE_BLEED * 2);
+    const c = this.fadeCanvas ?? document.createElement('canvas');
+    if (c.width !== innerW || c.height !== innerH) {
+      releaseCanvas(c);
+      c.width = innerW;
+      c.height = innerH;
+    } else {
+      const old = c.getContext('2d');
+      if (!old) return;
+      old.setTransform(1, 0, 0, 1, 0, 0);
+      old.clearRect(0, 0, c.width, c.height);
+    }
+    noteCanvasAllocation('land-fade', c.width, c.height, innerW, innerH, this.budget);
+    const g = c.getContext('2d');
+    if (!g) return;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(snapshot, EDGE_BLEED, EDGE_BLEED, innerW, innerH, 0, 0, innerW, innerH);
+    this.fadeCanvas = c;
+    this.fadeMeta = {
+      ox: this.ox,
+      oy: this.oy,
+      wWorld: this.wWorld,
+      hWorld: this.hWorld,
+      scale: this.scale,
+    };
+    this.fadeStart = now;
+  }
+
+  drawSeasonFade(target: CanvasRenderingContext2D, cam: Camera, now: number): void {
+    const meta = this.fadeMeta;
+    const canvas = this.fadeCanvas;
+    if (!meta || !canvas) return;
+    const p = (now - this.fadeStart) / 1000;
+    if (p >= 1) {
+      releaseCanvas(canvas);
+      this.fadeCanvas = null;
+      this.fadeMeta = null;
+      return;
+    }
+    const alpha = 1 - p;
+    const drawW = meta.wWorld * cam.zoom;
+    const drawH = meta.hWorld * cam.zoom;
+    const screenX = cam.vw / 2 + wrapDx(cam.x, meta.ox + meta.wWorld / 2) * cam.zoom - drawW / 2;
+    const screenY = cam.vh / 2 + (meta.oy + meta.hWorld / 2 - cam.y) * cam.zoom - drawH / 2;
+    target.save();
+    target.globalAlpha = Math.max(0, alpha);
+    if (meta.wWorld >= MAP_W - 0.5) {
+      const first = Math.floor((0 - screenX) / drawW);
+      const last = Math.floor((cam.vw - screenX) / drawW);
+      for (let k = first; k <= last; k += 1) {
+        target.drawImage(canvas, screenX + k * drawW, screenY, drawW, drawH);
+      }
+    } else {
+      target.drawImage(canvas, screenX, screenY, drawW, drawH);
+    }
+    target.restore();
   }
 }
 

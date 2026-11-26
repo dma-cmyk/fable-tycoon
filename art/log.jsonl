@@ -57,3 +57,24 @@
 {"job": "city_icons_23", "thread": "01a20fdf-1e87-75f3-bb92-469b5c280b7a", "usage": {"input_tokens": 58311, "cached_input_tokens": 49408, "cache_write_input_tokens": 0, "output_tokens": 813, "reasoning_output_tokens": 0}, "secs": 77, "file": "art/raw/city_icons_23.png"}
 {"job": "city_icons_24", "thread": "01a20fe0-4b6c-7d93-a410-4253e23a3415", "usage": {"input_tokens": 58553, "cached_input_tokens": 27520, "cache_write_input_tokens": 0, "output_tokens": 1014, "reasoning_output_tokens": 0}, "secs": 79, "file": "art/raw/city_icons_24.png"}
 {"job": "city_icons_25", "thread": "01a20fe1-867b-7183-9d62-0c08724f875d", "usage": {"input_tokens": 58447, "cached_input_tokens": 49408, "cache_write_input_tokens": 0, "output_tokens": 1069, "reasoning_output_tokens": 32}, "secs": 86, "file": "art/raw/city_icons_25.png"}
+{"job": "ev_01", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "final-bubble-burst", "generator": "agy", "failed": true}
+{"job": "final-last-auction", "generator": "agy", "failed": true}
+{"job": "final-tax-audit-frontrunner", "generator": "agy", "failed": true}
+{"job": "final-underdog-loan", "generator": "agy", "failed": true}
+{"job": "final-frontrunner-curse", "generator": "agy", "failed": true}
+{"job": "final-last-place-rescue", "generator": "agy", "failed": true}
+{"job": "final-public-backlash", "generator": "agy", "failed": true}
+{"job": "final-shareholder-suit", "generator": "agy", "failed": true}
+{"job": "final-tax-haven-raid", "generator": "agy", "failed": true}
+{"job": "final-bubble-burst", "generator": "agy", "secs": 160, "file": "art/agy/final-bubble-burst.png"}
+{"job": "ev_02", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "final-last-auction", "generator": "agy", "secs": 122, "file": "art/agy/final-last-auction.png"}
+{"job": "final-tax-audit-frontrunner", "generator": "agy", "secs": 207, "file": "art/agy/final-tax-audit-frontrunner.png"}
+{"job": "final-underdog-loan", "generator": "agy", "secs": 424, "file": "art/agy/final-underdog-loan.png"}
+{"job": "ev_01", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "final-frontrunner-curse", "generator": "agy", "secs": 164, "file": "art/agy/final-frontrunner-curse.png"}
+{"job": "final-last-place-rescue", "generator": "agy", "secs": 158, "file": "art/agy/final-last-place-rescue.png"}
+{"job": "final-public-backlash", "generator": "agy", "secs": 198, "file": "art/agy/final-public-backlash.png"}
+{"job": "final-shareholder-suit", "generator": "agy", "quota": "画像生成ツールのクォータ上限（HTTP 429）に達しているため、画像を生成できませんでした。`/home/dma/プロジェクト/fable-tycoon/art/agy/final-shareholder-suit.png` は作成されていません。"}
+{"job": "bank-run-2023", "generator": "agy", "quota": "- **エラー**: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 3h42m59s.`"}

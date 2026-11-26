@@ -12778,6 +12778,7 @@
   },
   {
     "id": "final-tax-audit-frontrunner",
+    "image": "assets/events/final-tax-audit-frontrunner.webp",
     "title": "首位に税務調査が入る",
     "kind": "fable",
     "satireNote": "首位への税務調査と、節税スキームの危うさを誇張した創作。実在の人物・企業とは関係ない。",
@@ -12902,6 +12903,7 @@
   },
   {
     "id": "final-bubble-burst",
+    "image": "assets/events/final-bubble-burst.webp",
     "title": "最後のバブルが弾ける",
     "kind": "fable",
     "satireNote": "最終年にだけ弾ける都合のよいバブルという創作。実在の経済を予測するものではない。",
@@ -12951,6 +12953,7 @@
   },
   {
     "id": "final-public-backlash",
+    "image": "assets/events/final-public-backlash.webp",
     "title": "世論が首位を吊るす",
     "kind": "fable",
     "satireNote": "終盤の報道合戦と不買運動を誇張した創作。実在の人物・企業を貶める意図はない。",
@@ -12999,6 +13002,7 @@
   },
   {
     "id": "final-last-place-rescue",
+    "image": "assets/events/final-last-place-rescue.webp",
     "title": "最下位に救済基金が届く",
     "kind": "fable",
     "satireNote": "最終盤の救済策と、その財源が首位から出る構造を誇張した創作。",
@@ -13083,6 +13087,7 @@
   },
   {
     "id": "final-last-auction",
+    "image": "assets/events/final-last-auction.webp",
     "title": "最終競売、最後の値段",
     "kind": "fable",
     "satireNote": "最終盤の競売と、自分の街を自分で競り上げる自転車操業を誇張した創作。",
@@ -13182,6 +13187,7 @@
   },
   {
     "id": "final-frontrunner-curse",
+    "image": "assets/events/final-frontrunner-curse.webp",
     "title": "首位の呪い",
     "kind": "fable",
     "satireNote": "首位に取り立て屋が集まるという創作。実在の制度や人物とは関係ない。",
@@ -13219,6 +13225,7 @@
   },
   {
     "id": "final-underdog-loan",
+    "image": "assets/events/final-underdog-loan.webp",
     "title": "どん底への最後の融資",
     "kind": "fable",
     "satireNote": "最下位への怪しい融資と、首位叩きの世論を誇張した創作。",

@@ -25,6 +25,13 @@ export interface SkillCutinOptions {
   character: Character;
   targetName?: string;
   targetColor?: string;
+  /**
+   * 小さな帯で出す（CPU だけの技）。名前と持ち主だけを見せ、立ち絵の帯は画面の上端に縮む。
+   * `budgetMs` は呼び出し側が fxPacing から渡す（ホストの予算と同じ値）。
+   */
+  compact?: boolean;
+  /** 1x の再生予算。省略 = `FX_MS.skill`（フルのカットイン）。 */
+  budgetMs?: number;
 }
 
 /** 「かぐや姫 の 五つの難題」のような見出しを組み立てる（テスト用に export）。 */
@@ -68,8 +75,10 @@ export class SkillCutin {
   async play(fx: SkillFx, options: SkillCutinOptions, control: SkillCutinControl): Promise<void> {
     const { character } = options;
     const reduced = motionReduced();
+    const nominal = options.budgetMs ?? FX_MS.skill;
     this.el.hidden = false;
     this.el.classList.remove('is-in', 'is-out', 'is-targeted');
+    this.el.classList.toggle('is-compact', options.compact === true);
     this.el.style.setProperty('--skill-color', character.color);
     this.el.style.setProperty('--skill-ink', readableInk(character.color));
     this.art.src = characterSprite(character);
@@ -85,9 +94,9 @@ export class SkillCutin {
     } else {
       this.target.hidden = true;
     }
-    const budget = FX_MS.skill / Math.max(1, control.speed);
-    this.el.style.setProperty('--skill-in', `${reduced ? 1 : Math.max(90, Math.round(budget * 0.16))}ms`);
-    this.el.style.setProperty('--skill-hold', `${Math.max(120, Math.round(budget * 0.6))}ms`);
+    const budget = nominal / Math.max(1, control.speed);
+    this.el.style.setProperty('--skill-in', `${reduced ? 1 : Math.max(70, Math.round(budget * 0.16))}ms`);
+    this.el.style.setProperty('--skill-hold', `${Math.max(100, Math.round(budget * 0.6))}ms`);
 
     void this.el.offsetWidth;
     this.el.classList.add('is-in');
@@ -97,7 +106,7 @@ export class SkillCutin {
 
     control.onSkip(() => this.hide());
     try {
-      await control.wait(FX_MS.skill);
+      await control.wait(nominal);
     } finally {
       globalThis.clearTimeout(timer);
       this.hide();
@@ -106,7 +115,7 @@ export class SkillCutin {
 
   hide(): void {
     this.el.hidden = true;
-    this.el.classList.remove('is-in', 'is-out', 'is-targeted');
+    this.el.classList.remove('is-in', 'is-out', 'is-targeted', 'is-compact');
   }
 }
 
