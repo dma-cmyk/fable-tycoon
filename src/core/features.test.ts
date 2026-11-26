@@ -15,6 +15,7 @@ import { reachableInExactly, shortestDistance } from './graph';
 import { randInt } from './rng';
 import { isCardId } from './cards';
 import { runPiperTurnStart } from './piper';
+import { WARP_MIN_DEST_STEPS } from './warpRules';
 import { yearScale } from './economy';
 
 const data: GameData = fixtureData;
@@ -317,16 +318,21 @@ describe('tornado / portal / realm movement', () => {
 });
 
 describe('rocket card, dice and via fields', () => {
-  it('rocket offers every world city plus the space option', () => {
+  it('rocket offers world cities outside the destination ring plus the space option', () => {
     const state = cardState('rocket');
     state.destination = 'rio';
     const used = step(data, state, 0, { t: 'use_card', cardId: 'rocket' });
     expect(used.state.phase.t).toBe('card_target');
     if (used.state.phase.t === 'card_target') {
+      const options = used.state.phase.options;
       const world = data.cities.filter((c) => c.realm === undefined);
-      expect(used.state.phase.options).toContain('r:space');
-      for (const city of world) expect(used.state.phase.options).toContain(`c:${city.id}`);
-      expect(used.state.phase.options).toHaveLength(world.length + 1);
+      expect(options).toContain('r:space');
+      expect(options).not.toContain('c:rio');
+      for (const city of world) {
+        const node = `c:${city.id}`;
+        const allowed = distance(data, node, 'c:rio') >= WARP_MIN_DEST_STEPS;
+        expect(options.includes(node)).toBe(allowed);
+      }
     }
   });
 
@@ -334,8 +340,11 @@ describe('rocket card, dice and via fields', () => {
     const state = cardState('rocket');
     state.destination = 'rio';
     const used = step(data, state, 0, { t: 'use_card', cardId: 'rocket' });
-    const chosen = step(data, used.state, 0, { t: 'card_target', target: 'c:rio' });
-    expect(chosen.state.players[0].nodeId).toBe('c:rio');
+    if (used.state.phase.t !== 'card_target') throw new Error('expected card_target');
+    const target = used.state.phase.options.find((option) => option !== 'r:space');
+    expect(target).toBeDefined();
+    const chosen = step(data, used.state, 0, { t: 'card_target', target: target as string });
+    expect(chosen.state.players[0].nodeId).toBe(target);
     expect(chosen.fx.some((f) => f.t === 'warp' && f.via === 'rocket')).toBe(true);
 
     const space = cardState('rocket');
@@ -349,7 +358,7 @@ describe('rocket card, dice and via fields', () => {
   it('CPU rocket target minimizes distance to destination', () => {
     const state = fresh([1, 2, 1]);
     state.phase = { t: 'card_target', cardId: 'rocket', options: ['c:tokyo', 'c:osaka'] };
-    state.destination = 'osaka';
+    state.destination = 'singapore';
     expect(cpuDecide(data, state)).toEqual({ t: 'card_target', target: 'c:osaka' });
   });
 

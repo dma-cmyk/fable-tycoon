@@ -5328,3 +5328,51 @@
     white-space: nowrap;
   }
 }
+
+/* ============================================================================
+   行き先候補のクイック絞り込み（2026-11-26 Sol プレイテスト対応）
+   急行で 113〜233 候補になるため、「駅のみ」の隣に「買える駅 / 青・カード / 依頼」を置く。
+   幅が足りないときは横スクロールにせず 2 行目へ折り返す（スマホ 390px で確認）。
+   ========================================================================== */
+
+.move-quick-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.move-quick-filter[disabled] {
+  opacity: 0.45;
+}
+
+.move-quick-filter .move-filter-count {
+  margin-left: 3px;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+@media (max-width: 899px) {
+  .move-quick-filters {
+    order: 5;
+    flex: 1 1 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+
+  .move-quick-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .move-quick-filter {
+    flex: 0 0 auto;
+  }
+}
+
+/* カード売り場チップの「最安 17億 予算外」は物件価格と同じ帯に出す。 */
+.move-chip-price {
+  white-space: nowrap;
+}

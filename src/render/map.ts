@@ -15,6 +15,7 @@ import {
   squareInfoOf,
   type CityRouteConnections,
 } from '../ui/squareInfo';
+import { formatOkuShort } from '../ui/format';
 import type {
   BoardNode,
   Character,
@@ -388,6 +389,7 @@ const BADGE_PITCH = BADGE_R * 2 - 1;
 /** Half-width of the screen box a token plus its stacked chips occupies. */
 const TOKEN_BOX_HALF_W = 40;
 const TAU = Math.PI * 2;
+const SEASON_INDEX: Record<Season, number> = { spring: 1, summer: 2, autumn: 3, winter: 4 };
 const LABEL_FONT = '"M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif';
 
 function hashString(s: string): number {
@@ -479,6 +481,10 @@ export class MapView {
   /** 寄り道依頼の都市ノード（依頼なしは null）。 */
   private errandNodeId: string | null = null;
   private staticRevision = 0;
+  /** Hash of everything baked into the static land layer; rebuilds only when it moves. */
+  private staticBakedHash = 0;
+  /** Hash of the per-city ownership bars, recomputed with `ownership`. */
+  private ownershipHash = 0;
   private month = 4;
   private season: Season = seasonForMonth(4);
   private seasonTransitionStart = 0;
@@ -557,6 +563,8 @@ export class MapView {
   private readonly cityTileFullCache = new Map<string, HTMLImageElement>();
   private readonly cityTileSmallCache = new Map<string, HTMLImageElement>();
   private readonly cityTileLoading = new Set<string>();
+  /** City ids whose tile art failed to load; retrying every frame only keeps the queue hot. */
+  private readonly cityTileFailed = new Set<string>();
   private cityTileFlushTimer: number | null = null;
 
   private cityHits: Array<{ cityId: string; x: number; y: number; r: number }> = [];
@@ -1133,8 +1141,6 @@ export class MapView {
     );
     this.destinationNodeId = this.cityNodeId.get(state.destination) ?? null;
     this.errandNodeId = state.errand ? this.cityNodeId.get(state.errand.cityId) ?? null : null;
-    this.staticRevision += 1;
-    this.landLayer.invalidate();
     this.setMonth(state.month);
 
     if (!this.initialCameraDone && state.players.length > 0) {
@@ -1427,17 +1433,24 @@ export class MapView {
 
   private scheduleCityTileRefresh(): void {
     if (this.destroyed || this.cityTileFlushTimer !== null) return;
-    this.cityTileFlushTimer = window.setTimeout(() => {
+    const deadline = performance.now() + 1000;
+    const run = (): void => {
       this.cityTileFlushTimer = null;
       if (this.destroyed) return;
+      if (this.cityTileLoading.size > 0 && performance.now() < deadline) {
+        this.cityTileFlushTimer = window.setTimeout(run, 90);
+        return;
+      }
       this.staticRevision += 1;
       this.landLayer.invalidate();
       this.requestRender();
-    }, 45);
+    };
+    this.cityTileFlushTimer = window.setTimeout(run, 45);
   }
 
   private requestCityTile(cityId: string, small: boolean): void {
     if (this.destroyed || typeof Image === 'undefined') return;
+    if (this.cityTileFailed.has(cityId)) return;
     const key = small ? `s:${cityId}` : `f:${cityId}`;
     if (this.cityTileLoading.has(key)) return;
     this.cityTileLoading.add(key);
@@ -1449,12 +1462,18 @@ export class MapView {
       this.cityTileLoading.delete(key);
       if (this.destroyed) return;
       const cache = small ? this.cityTileSmallCache : this.cityTileFullCache;
-      const limit = small ? 160 : 48;
+      // A layer can hold more stations than the old limits, which made the LRU evict
+      // the tile it had just decoded and re-request it on the next rebuild.
+      const limit = small ? 256 : 96;
       this.putLru(cache, cityId, img, limit);
+      // Pedestal art is baked into the board raster, so the board must be repainted — but
+      // only once the batch has settled: repainting per arrival re-rasterises the board
+      // while the remaining images are still decoding, which starves the queue.
       this.scheduleCityTileRefresh();
     };
     img.onerror = () => {
       this.cityTileLoading.delete(key);
+      this.cityTileFailed.add(cityId);
     };
     img.src = url;
   }
@@ -2021,8 +2040,40 @@ export class MapView {
 
   // ---------------------------------------------------------------- setup helpers
 
+  /**
+   * Rebuild the static land layer only when its baked content actually changed.
+   *
+   * `paintStaticBoard` bakes the terrain, tracks and every square into one large raster.
+   * Forcing that on each `setState` (the old behaviour) made every fx update re-rasterise
+   * several viewports and produced the multi-hundred-ms long tasks that stalled timers.
+   * Token positions, cash and phase names are not baked, so a normal update only blits the
+   * existing raster; ownership, seat colours, season, view, overview and destination still
+   * invalidate it, as does newly decoded station art.
+   */
+  private ensureBakedLayer(): void {
+    let h = 2166136261;
+    const mix = (value: number): void => {
+      h = Math.imul(h ^ (value | 0), 16777619) >>> 0;
+    };
+    // Seat colours and ownership bars are painted into the board.
+    for (const color of this.playerColors) {
+      for (let i = 0; i < color.length; i += 1) mix(color.charCodeAt(i));
+    }
+    mix(this.ownershipHash);
+    mix(SEASON_INDEX[this.season]);
+    mix(this.view === 'world' ? 0 : this.view === 'heaven' ? 1 : this.view === 'hell' ? 2 : 3);
+    mix(this.isOverview() ? 1 : 0);
+    // Only overview bakes the destination marker into the layer.
+    mix(this.destinationNodeId ? hashString(this.destinationNodeId) : 0);
+    if (h === this.staticBakedHash) return;
+    this.staticBakedHash = h;
+    this.staticRevision += 1;
+    this.landLayer.invalidate();
+  }
+
   private rebuildOwnership(): void {
     this.ownership.clear();
+    this.ownershipHash = 0;
     if (!this.state) return;
     const playerCount = this.state.players.length;
     for (const { city } of this.cityEntries) {
@@ -2043,6 +2094,10 @@ export class MapView {
         }
       }
       this.ownership.set(city.id, { counts, total, monopoly });
+      let h = this.ownershipHash;
+      h = Math.imul(h ^ (city.id.length + total * 31 + monopoly + 7), 16777619) >>> 0;
+      for (const count of counts) h = Math.imul(h ^ (count + 1), 16777619) >>> 0;
+      this.ownershipHash = h;
     }
   }
 
@@ -2641,6 +2696,7 @@ export class MapView {
     ctx.save();
     ctx.translate(shake.x, shake.y);
     if (this.view === 'world') {
+      this.ensureBakedLayer();
       this.landLayer.draw(
         ctx,
         cam,
@@ -3682,7 +3738,6 @@ export class MapView {
 
     const detail = this.detailLevel();
     const tileR = this.tileRadius() * dpr;
-    const radius = this.cityRadius() * dpr;
     const cityPad = 90 * dpr;
 
     // --- gems ----------------------------------------------------------------
@@ -3696,6 +3751,8 @@ export class MapView {
         this.drawGem(ctx, node, px, py, tileR, detail);
       }
     }
+
+    const radius = this.cityRadius() * dpr;
 
     // --- city pedestals / overview dots ------------------------------------
     for (const entry of this.cityEntries) {
@@ -3820,7 +3877,24 @@ export class MapView {
     return { cx, cy, w, h };
   }
 
+  /**
+   * Station pedestal. Drawn per frame instead of baked into the land layer: its pixels
+   * depend on ownership and on tile art that decodes asynchronously, and forcing the whole
+   * board raster to rebuild for either was what produced the multi-hundred-ms long tasks.
+   */
   private drawCityPedestalAt(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radius: number,
+    owner: { counts: number[]; total: number; monopoly: number } | undefined,
+    city?: City,
+    pixelScale = 1,
+  ): void {
+    this.paintCityPedestal(ctx, x, y, radius, owner, city, pixelScale);
+  }
+
+  private paintCityPedestal(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
@@ -4584,7 +4658,7 @@ export class MapView {
   ): Rect | null {
     if (bonus <= 0) return null;
     const color = '#35d6b4';
-    const text = `📜 依頼 +${Math.round(bonus)}億`;
+    const text = `📜 依頼 +${formatOkuShort(bonus)}`;
     const fs = Math.max(13, (isPriority ? 15 : 13) * ratio);
     ctx.save();
     if (alpha < 1) ctx.globalAlpha = alpha;

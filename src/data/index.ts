@@ -9,15 +9,15 @@ import events from './events.json';
 import npcs from './npcs.json';
 import realms from './realms.json';
 import turnLines from './turnLines.json';
-import { PIPER_DEAL_EVENT } from '../core/piperLines';
+import { PIPER_CONFISCATE_EVENT, PIPER_DEAL_EVENT } from '../core/piperLines';
 
 export const GAME_DATA: GameData = {
   // 異世界の駅（realm 付き City）も物件・独占・収益の対象なので同じ配列に含める
   cities: [...(cities as City[]), ...(realms as City[])],
   board: board as Board,
   characters: characters as Character[],
-  // 取り立て屋の示談イベントはコード定義（抽選対象外）なので、抽選用の events.json には置かない。
-  events: [...(events as GameEventDef[]), PIPER_DEAL_EVENT],
+  // 取り立て屋の示談・没収イベントはコード定義（抽選対象外）なので、抽選用の events.json には置かない。
+  events: [...(events as GameEventDef[]), PIPER_DEAL_EVENT, PIPER_CONFISCATE_EVENT],
   cards: cards as CardDef[],
   npcs: npcs as NpcDef[],
   emotes: emotes as unknown as EmoteDef[],

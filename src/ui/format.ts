@@ -127,32 +127,7 @@ export function municipalityLabel(cityId: string): string {
 }
 
 /** Integer 億円 display. 12480 -> 1兆2,480億円; -30 -> ▲30億円. */
-export function formatOku(n: number): string {
-  const total = Math.round(n);
-  const abs = Math.abs(total);
-  const sign = total < 0 ? '▲' : '';
-  if (abs >= 10000) {
-    const cho = Math.floor(abs / 10000);
-    const rest = abs % 10000;
-    return rest > 0
-      ? `${sign}${cho.toLocaleString('ja-JP')}兆${rest.toLocaleString('ja-JP')}億円`
-      : `${sign}${cho.toLocaleString('ja-JP')}兆円`;
-  }
-  return `${sign}${abs.toLocaleString('ja-JP')}億円`;
-}
-
-/** Same as formatOku but without 円, for compact chips: 1兆2,480億. */
-export function formatOkuShort(n: number): string {
-  return formatOku(n).replace(/円$/, '');
-}
-
-/** '+12億' / '▲12億' for floating cash text. */
-export function formatDelta(n: number): string {
-  const total = Math.round(n);
-  if (total > 0) return `+${formatOkuShort(total)}`;
-  if (total < 0) return formatOkuShort(total);
-  return '±0億';
-}
+export { formatOku, formatOkuShort, formatDelta } from '../core/formatMoney';
 
 export function formatYears(years: number): string {
   return years === 1 ? '1年' : `${years}年`;

@@ -8,6 +8,7 @@
 // away from the DOM.
 
 import type { City } from '../core/types';
+import { WARP_MIN_DEST_STEPS, WARP_TOO_CLOSE_REASON } from '../core/warpRules';
 
 export type WarpSortMode = 'distance' | 'name';
 
@@ -29,8 +30,17 @@ export interface WarpCandidate {
   toErrand: number | null;
   /** Steps from the acting player's current node to this candidate. */
   fromHere: number | null;
-  /** `toDestination - fromHere`. Negative means the jump ends closer than standing still. */
+  /**
+   * `toDestination - (steps from here to the destination)`.
+   * Negative means the jump ends closer than standing still, i.e. the steps it saves.
+   * This is NOT `toDestination - fromHere`: board paths are not a straight line, so the
+   * walk to the candidate plus the candidate's distance is usually longer than standing still.
+   */
   gain: number | null;
+  /** True when the destination is too close to land here (warp ring rule). */
+  blocked: boolean;
+  /** Human-readable reason for a blocked row ("目的地に近すぎる"). */
+  blockedReason: string | null;
 }
 
 export interface BuildWarpCandidatesInput {
@@ -55,13 +65,20 @@ function stepsBetween(
 }
 
 export function buildWarpCandidates(input: BuildWarpCandidatesInput): WarpCandidate[] {
+  // The comparison baseline is where the player would end up by doing nothing, not where the
+  // candidate sits on the board. Measuring "here -> candidate" made Chicago advertise a 3-step
+  // gain while the destination actually went 13 -> 5 (an 8-step gain): paths curve, and a city
+  // on the way can be farther from the goal than the player already is.
+  const hereToDestination = stepsBetween(input.distance, input.hereNodeId, input.destinationNodeId);
   return input.sources.map((source) => {
     const toDestination = stepsBetween(input.distance, source.nodeId, input.destinationNodeId);
     const toErrand = input.errandNodeId
       ? stepsBetween(input.distance, source.nodeId, input.errandNodeId)
       : null;
     const fromHere = stepsBetween(input.distance, input.hereNodeId, source.nodeId);
-    const gain = toDestination !== null && fromHere !== null ? toDestination - fromHere : null;
+    const gain =
+      toDestination !== null && hereToDestination !== null ? toDestination - hereToDestination : null;
+    const blocked = toDestination !== null && toDestination < WARP_MIN_DEST_STEPS;
     return {
       nodeId: source.nodeId,
       cityId: source.city.id,
@@ -73,6 +90,8 @@ export function buildWarpCandidates(input: BuildWarpCandidatesInput): WarpCandid
       toErrand,
       fromHere,
       gain,
+      blocked,
+      blockedReason: blocked ? WARP_TOO_CLOSE_REASON : null,
     };
   });
 }
@@ -95,12 +114,15 @@ export function sortWarpCandidates(
   if (mode === 'name') {
     copy.sort(
       (a, b) =>
-        NAME_COLLATOR.compare(a.nameJa, b.nameJa) || a.cityId.localeCompare(b.cityId),
+        Number(a.blocked) - Number(b.blocked) ||
+        NAME_COLLATOR.compare(a.nameJa, b.nameJa) ||
+        a.cityId.localeCompare(b.cityId),
     );
     return copy;
   }
   copy.sort(
     (a, b) =>
+      Number(a.blocked) - Number(b.blocked) ||
       compareNullable(a.toDestination, b.toDestination) ||
       compareNullable(a.fromHere, b.fromHere) ||
       NAME_COLLATOR.compare(a.nameJa, b.nameJa) ||
@@ -116,6 +138,7 @@ export function warpDestinationRange(
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   for (const candidate of candidates) {
+    if (candidate.blocked) continue;
     if (candidate.toDestination === null) continue;
     min = Math.min(min, candidate.toDestination);
     max = Math.max(max, candidate.toDestination);

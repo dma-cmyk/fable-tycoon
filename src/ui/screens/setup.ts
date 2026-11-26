@@ -8,6 +8,8 @@ import { characterSprite, charsById } from '../format';
 import { perkInfo } from '../perks';
 import { readSavedName, saveName } from '../settings';
 import { openCharacterPicker } from '../components/charPicker';
+import { assignDistinctIds, pickRandom } from '../randomPick';
+import { readSetupPrefs, saveSetupPrefs } from '../setupPrefs';
 import type { ScreenHandle, SetupMode } from './types';
 
 type SeatKind = 'human' | 'cpu' | 'none';
@@ -36,6 +38,7 @@ export class SetupScreen implements ScreenHandle {
   private readonly mode: SetupMode;
   private readonly seats: SeatDraft[] = [];
   private years = 3;
+  private randomCpusOnStart = false;
   private readonly seatsHost: HTMLElement;
   private readonly footerHint: HTMLElement;
   private readonly startButton: HTMLButtonElement;
@@ -45,6 +48,7 @@ export class SetupScreen implements ScreenHandle {
     this.onStart = options.onStart;
     this.mode = options.mode;
     const savedName = readSavedName();
+    this.randomCpusOnStart = readSetupPrefs().randomCpusOnStart;
 
     const seatIndexes = [0, 1, 2, 3];
     for (const index of seatIndexes) {
@@ -105,6 +109,30 @@ export class SetupScreen implements ScreenHandle {
       yearsHost.append(btn);
     }
 
+    const randomCpuButton = h('button', {
+      class: 'btn btn-ghost btn-small setup-random-cpus',
+      text: '🎲 CPUをランダムにする',
+      attrs: { type: 'button' },
+      on: { click: () => this.randomizeCpus() },
+    });
+    const startRandomToggle = h('button', {
+      class: 'toggle',
+      attrs: {
+        type: 'button',
+        role: 'switch',
+        'aria-pressed': String(this.randomCpusOnStart),
+        'aria-label': 'ゲーム開始時にCPUを毎回ランダムにする',
+      },
+      on: {
+        click: () => {
+          this.randomCpusOnStart = !this.randomCpusOnStart;
+          startRandomToggle.setAttribute('aria-pressed', String(this.randomCpusOnStart));
+          saveSetupPrefs({ randomCpusOnStart: this.randomCpusOnStart });
+        },
+      },
+    });
+    this.randomCpuButton = randomCpuButton;
+
     const content = h(
       'div',
       { class: 'setup-body' },
@@ -121,6 +149,12 @@ export class SetupScreen implements ScreenHandle {
           }),
         ),
         this.seatsHost,
+        h(
+          'div',
+          { class: 'setup-seat-tools' },
+          randomCpuButton,
+          h('span', { class: 'muted setup-tools-note', text: '各席の 🎲 で 1 人ずつ引き直せます。' }),
+        ),
       ),
       h(
         'aside',
@@ -135,6 +169,13 @@ export class SetupScreen implements ScreenHandle {
             h('span', { class: 'setup-option-label', text: '年数' }),
             yearsHost,
             h('span', { class: 'muted setup-option-note', text: '4月開始・3月決算' }),
+          ),
+          h(
+            'div',
+            { class: 'setup-option-row' },
+            h('span', { class: 'setup-option-label', text: 'CPU' }),
+            startRandomToggle,
+            h('span', { class: 'muted setup-option-note', text: 'ゲーム開始時に毎回ランダム（CPU のキャラを引き直す）' }),
           ),
           h(
             'div',
@@ -191,6 +232,7 @@ export class SetupScreen implements ScreenHandle {
   }
 
   private readonly mobileStart: HTMLButtonElement;
+  private readonly randomCpuButton: HTMLButtonElement;
   private readonly cleanupFns: (() => void)[] = [];
 
   destroy(): void {
@@ -287,56 +329,70 @@ export class SetupScreen implements ScreenHandle {
     const characterButton =
       seat.kind !== 'none'
         ? h(
-            'button',
-            {
-              class: 'seat-char',
-              attrs: { type: 'button', 'aria-label': `${index + 1}席のキャラクターを選ぶ` },
-              on: {
-                click: () => {
-                  const exclude = new Set<string>();
-                  this.seats.forEach((other, otherIndex) => {
-                    if (otherIndex !== index && other.kind !== 'none') exclude.add(other.characterId);
-                  });
-                  openCharacterPicker({
-                    modal: this.modal,
-                    title: `${index + 1}席のキャラクター`,
-                    exclude,
-                    current: seat.characterId,
-                    onPick: (characterId) => {
-                      seat.characterId = characterId;
-                      this.renderSeats();
-                    },
-                  });
+            'div',
+            { class: 'seat-char-row' },
+            h(
+              'button',
+              {
+                class: 'seat-char',
+                attrs: { type: 'button', 'aria-label': `${index + 1}席のキャラクターを選ぶ` },
+                on: {
+                  click: () => {
+                    openCharacterPicker({
+                      modal: this.modal,
+                      title: `${index + 1}席のキャラクター`,
+                      exclude: this.takenByOthers(index),
+                      current: seat.characterId,
+                      onPick: (characterId) => {
+                        seat.characterId = characterId;
+                        this.renderSeats();
+                      },
+                    });
+                  },
                 },
               },
-            },
+              h(
+                'span',
+                { class: 'seat-char-art', attrs: { style: `--char-color:${character?.color ?? '#9fb3d9'}` } },
+                h('img', {
+                  attrs: {
+                    src: characterSprite(character),
+                    alt: character?.nameJa ?? '',
+                    draggable: 'false',
+                    loading: 'lazy',
+                  },
+                }),
+              ),
+              h(
+                'span',
+                { class: 'seat-char-info' },
+                h('span', { class: 'seat-char-name', text: character?.nameJa ?? '未選択' }),
+                h('span', { class: 'seat-char-origin', text: character ? `${character.origin} ・ ${character.originRegion}` : '' }),
+                character
+                  ? h(
+                      'span',
+                      { class: 'seat-char-perk' },
+                      h('span', { text: `${perkInfo(character.perk).icon} ${perkInfo(character.perk).label}` }),
+                      h('span', { class: 'seat-char-perk-desc', text: perkInfo(character.perk).desc }),
+                    )
+                  : null,
+              ),
+              h('span', { class: 'seat-char-edit', text: '変更', attrs: { 'aria-hidden': 'true' } }),
+            ),
             h(
-              'span',
-              { class: 'seat-char-art', attrs: { style: `--char-color:${character?.color ?? '#9fb3d9'}` } },
-              h('img', {
+              'button',
+              {
+                class: 'seat-char-random',
                 attrs: {
-                  src: characterSprite(character),
-                  alt: character?.nameJa ?? '',
-                  draggable: 'false',
-                  loading: 'lazy',
+                  type: 'button',
+                  'aria-label': `${index + 1}席のキャラクターをランダムに選ぶ`,
+                  title: 'ランダムに選ぶ',
                 },
-              }),
+                on: { click: () => this.rerollSeat(index) },
+              },
+              h('span', { class: 'seat-char-random-icon', text: '🎲', attrs: { 'aria-hidden': 'true' } }),
+              h('span', { class: 'seat-char-random-label', text: 'ランダム' }),
             ),
-            h(
-              'span',
-              { class: 'seat-char-info' },
-              h('span', { class: 'seat-char-name', text: character?.nameJa ?? '未選択' }),
-              h('span', { class: 'seat-char-origin', text: character ? `${character.origin} ・ ${character.originRegion}` : '' }),
-              character
-                ? h(
-                    'span',
-                    { class: 'seat-char-perk' },
-                    h('span', { text: `${perkInfo(character.perk).icon} ${perkInfo(character.perk).label}` }),
-                    h('span', { class: 'seat-char-perk-desc', text: perkInfo(character.perk).desc }),
-                  )
-                : null,
-            ),
-            h('span', { class: 'seat-char-edit', text: '変更', attrs: { 'aria-hidden': 'true' } }),
           )
         : h('div', { class: 'seat-empty' }, h('span', { text: 'この席はつかいません' }));
 
@@ -371,7 +427,48 @@ export class SetupScreen implements ScreenHandle {
     if (free) seat.characterId = free.id;
   }
 
+  /** Ids owned by every seat except `selfIndex`; used as picker exclusions. */
+  private takenByOthers(selfIndex: number): Set<string> {
+    const taken = new Set<string>();
+    this.seats.forEach((other, otherIndex) => {
+      if (otherIndex !== selfIndex && other.kind !== 'none') taken.add(other.characterId);
+    });
+    return taken;
+  }
+
+  /** Re-rolls one seat's character, avoiding every other occupied seat. */
+  private rerollSeat(index: number, announce = true): void {
+    const seat = this.seats[index];
+    if (!seat || seat.kind === 'none') return;
+    const taken = this.takenByOthers(index);
+    const pool = GAME_DATA.characters.filter((character) => !taken.has(character.id)).map((character) => character.id);
+    const picked = pickRandom(pool);
+    if (!picked) return;
+    seat.characterId = picked;
+    this.renderSeats();
+    if (announce) Audio.sfx('stamp');
+  }
+
+  /** Gives every CPU seat a distinct character, keeping the human picks untouched. */
+  private randomizeCpus(announce = true): void {
+    const humanIds = new Set(
+      this.seats.filter((seat) => seat.kind === 'human').map((seat) => seat.characterId),
+    );
+    const cpuIndexes = this.seats.map((seat, index) => ({ seat, index })).filter(({ seat }) => seat.kind === 'cpu');
+    if (cpuIndexes.length === 0) return;
+    const pool = GAME_DATA.characters.map((character) => character.id);
+    const picked = assignDistinctIds(pool, cpuIndexes.length, humanIds);
+    if (picked.length < cpuIndexes.length) return;
+    cpuIndexes.forEach(({ seat }, order) => {
+      seat.characterId = picked[order];
+    });
+    this.renderSeats();
+    this.refreshFooter();
+    if (announce) Audio.sfx('stamp');
+  }
+
   private startGame(): void {
+    if (this.randomCpusOnStart) this.randomizeCpus(false);
     const setup = this.buildSetup();
     if (!setup) return;
     saveName(this.seats.find((seat) => seat.kind === 'human')?.name.trim() ?? '');
@@ -429,5 +526,6 @@ export class SetupScreen implements ScreenHandle {
     this.footerHint.textContent = valid
       ? `人間 ${humans} 人 + CPU ${cpus} 人 ・ ${this.years} 年 ・ 全員 100 億円スタート`
       : '「なし」の席を減らすか、CPU を追加してください。';
+    this.randomCpuButton.disabled = cpus === 0;
   }
 }

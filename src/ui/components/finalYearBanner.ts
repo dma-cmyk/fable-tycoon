@@ -17,8 +17,10 @@ export interface FinalYearBannerOptions {
   rules: string[];
   /** 読み上げる固定ナレーション（字幕もバナー内に出す）。 */
   narration: string;
-  /** 自動で閉じるまでの ms。 */
+  /** 自動で閉じるまでの ms（`FX_MS.final_year / fxSpeed` を渡す）。 */
   durationMs?: number;
+  /** ナレーションの再生速度（1.2 倍で上限）。 */
+  rate?: number;
 }
 
 export interface FinalYearBannerHandle {
@@ -26,7 +28,8 @@ export interface FinalYearBannerHandle {
   close(): void;
 }
 
-const DEFAULT_DURATION_MS = 3200;
+/** 1x でのバナー表示時間（ms）。fx 側は speed で割った値を渡す。 */
+export const FINAL_YEAR_BANNER_MS = 3200;
 
 /** 最終年バナーを出す。タップで早送りでき、時間が来たら自動で閉じる。 */
 export function showFinalYearBanner(options: FinalYearBannerOptions): FinalYearBannerHandle {
@@ -78,7 +81,7 @@ export function showFinalYearBanner(options: FinalYearBannerOptions): FinalYearB
   root.addEventListener('click', close);
   options.host.append(root);
   // 字幕が出ている間に声を当てる（この行は事前生成済みのナレーター音声）。
-  void Audio.playVoice('narrator', options.narration);
-  timer = window.setTimeout(close, options.durationMs ?? DEFAULT_DURATION_MS);
+  void Audio.playVoice('narrator', options.narration, { rate: options.rate });
+  timer = window.setTimeout(close, options.durationMs ?? FINAL_YEAR_BANNER_MS);
   return { root, close };
 }

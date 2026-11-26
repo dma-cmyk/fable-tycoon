@@ -60,7 +60,7 @@ import { openInfoDialog, type NewsLogEntry } from '../components/infoDialog';
 import { openSquareLegendDialog } from '../components/squareLegend';
 import { openYearEndDialog, type YearEndHandle } from '../components/yearEndDialog';
 import { openShopDialog, type ShopHandle } from '../components/shopDialog';
-import { showFinalYearBanner, type FinalYearBannerHandle } from '../components/finalYearBanner';
+import { FINAL_YEAR_BANNER_MS, showFinalYearBanner, type FinalYearBannerHandle } from '../components/finalYearBanner';
 import { showErrandCutin, type ErrandCutinHandle } from '../components/errandCutin';
 import { MapScreen } from '../components/mapScreen';
 import { isPointOutsideBox, placeEdgeHint } from '../edgeHint';
@@ -81,9 +81,18 @@ import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { ResultScreen } from './result';
 import { FxPlayer, type PlaybackControl } from '../fxPlayer';
 import { isRoutineCpuSay } from '../cpuPacing';
-import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, type CityMoveInfo } from '../moveChipInfo';
+import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, shopCardPriceLabel, shopCardPriceInfo, type CityMoveInfo } from '../moveChipInfo';
+import {
+  countMoveFilters,
+  matchesMoveFilter,
+  MOVE_QUICK_FILTERS,
+  pinErrandFirst,
+  type MoveFilterEntry,
+  type MoveQuickFilter,
+} from '../moveFilters';
 import type { App } from '../app';
 import type { ScreenHandle } from './types';
+import { resetHorizontalScroll } from '../scrollGuard';
 
 export interface GameScreenOptions {
   app: App;
@@ -198,6 +207,8 @@ export class GameScreen implements ScreenHandle {
   private transientMsgPending = false;
   private suppressMapTapUntil = 0;
   private pendingPhaseEnd: 'end_buy' | 'end_shop' | null = null;
+  /** Local/solo: a choice clicked while the intro lines played, sent once the fx queue drains. */
+  private pendingEventChoice: number | null = null;
   private handoffResolve: (() => void) | null = null;
   private errandCutin: ErrandCutinHandle | null = null;
   private moveOnlyCities = false;
@@ -254,6 +265,10 @@ export class GameScreen implements ScreenHandle {
   private moveRemainTarget: 'destination' | 'exit' = 'destination';
   /** 駅チップの価格・所有者情報（候補ノードID → 情報）。候補か所持金が変わったときだけ作り直す。 */
   private moveChipInfoCache = new Map<string, CityMoveInfo>();
+  /** 100件超の候補を絞るクイックフィルタ（「買える駅」「青・カード」「依頼」）。 */
+  private moveQuickFilter: MoveQuickFilter = 'all';
+  /** 目的地までの近さ順位（ピン留めした依頼駅でも「近い #N」が正しく出るように）。 */
+  private moveNearRank = new Map<string, number>();
   private recommendedMoveNodeId: string | null = null;
   private readonly loading: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -743,9 +758,19 @@ export class GameScreen implements ScreenHandle {
 
     this.eventPanel = new EventPanel({
       onChoose: (index) => {
-        if (!this.state || this.state.phase.t !== 'event' || !this.interactiveNow()) return;
-        this.eventPanel.markChosen();
-        this.sendAction({ t: 'choose', index });
+        if (!this.state || this.state.phase.t !== 'event') return;
+        if (this.interactiveNow()) {
+          this.eventPanel.markChosen();
+          this.sendAction({ t: 'choose', index });
+          return;
+        }
+        // ソロ/ローカル: 台詞の途中で選べる。残りを飛ばし、演出が終わり次第 choice を送る。
+        // オンラインはホストの演出タイミングを崩さないよう従来どおり待たせる。
+        if (this.fxBusy && this.session.mode !== 'online') {
+          this.pendingEventChoice = index;
+          this.eventPanel.markChosen();
+          this.skipEventIntro();
+        }
       },
       onSkipFx: () => this.skipEventIntro(),
     });
@@ -886,7 +911,7 @@ export class GameScreen implements ScreenHandle {
         if (busy) this.destArrow.hidden = true;
         this.updateHud();
         if (!busy) {
-          if (!this.flushPendingPhaseEnd()) {
+          if (!this.flushPendingEventChoice() && !this.flushPendingPhaseEnd()) {
             this.updateAutoDialogs();
             this.advanceBulkBuy();
           }
@@ -902,6 +927,7 @@ export class GameScreen implements ScreenHandle {
         this.cancelRoulette();
         this.resolveHandoff();
         this.pendingPhaseEnd = null;
+        this.pendingEventChoice = null;
         this.map?.cancelAnimations(false);
         this.stopStepsCounter();
         this.transientMsgPending = false;
@@ -937,6 +963,7 @@ export class GameScreen implements ScreenHandle {
     this.destroyed = true;
     this.resolveHandoff();
     this.pendingPhaseEnd = null;
+    this.pendingEventChoice = null;
     this.fxPlayer.destroy();
     this.timer.destroy();
     this.dice.destroy();
@@ -1321,9 +1348,10 @@ export class GameScreen implements ScreenHandle {
         this.updatePrimary(this.state, actor);
         this.updateTimer(this.state, actor);
         if (this.eventPanel.isOpen) {
-          this.eventPanel.setState(this.state, false, {
+          this.eventPanel.setState(this.state, this.eventChoiceReady(this.state), {
             fxPlaying: true,
             isMine: this.isActorMine(this.state),
+            earlyChoice: this.session.mode !== 'online',
           });
         }
       }
@@ -1431,9 +1459,10 @@ export class GameScreen implements ScreenHandle {
     this.updatePrimary(state, actor);
     this.updateTimer(state, actor);
     if (this.eventPanel.isOpen) {
-      this.eventPanel.setState(state, this.interactiveNow(), {
+      this.eventPanel.setState(state, this.eventChoiceReady(state), {
         fxPlaying: this.fxBusy,
         isMine: this.isActorMine(state),
+        earlyChoice: this.session.mode !== 'online',
       });
     }
     const hand = privateSeat !== null ? state.players[privateSeat]?.cards.length ?? 0 : 0;
@@ -1656,6 +1685,8 @@ export class GameScreen implements ScreenHandle {
       this.moveOptionsCache = [];
       this.moveOptionsKey = '';
       this.moveOnlyCities = false;
+      this.moveQuickFilter = 'all';
+      this.moveNearRank.clear();
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
       this.recommendedMoveNodeId = null;
@@ -1674,6 +1705,7 @@ export class GameScreen implements ScreenHandle {
     if (freshOptions) {
       this.moveOptionsKey = key;
       this.moveOnlyCities = false;
+      this.moveQuickFilter = 'all';
       this.moveRemain.clear();
       this.moveRemainTarget = 'destination';
       this.moveChipInfoCache.clear();
@@ -1702,7 +1734,14 @@ export class GameScreen implements ScreenHandle {
           return a.index - b.index;
         });
       }
-      this.moveOptionsCache = ranked.map((entry) => entry.option);
+      const sortedOptions = ranked.map((entry) => entry.option);
+      this.moveNearRank.clear();
+      sortedOptions.forEach((option, rank) => this.moveNearRank.set(option.nodeId, rank));
+      // The reachable errand city is pinned to the top so it survives a 100+ candidate list.
+      this.moveOptionsCache = pinErrandFirst(sortedOptions, (option) => {
+        const city = cityOfNode(option.nodeId);
+        return city !== undefined && state.errand?.cityId === city.id;
+      });
       const onSelect = (nodeId: string | null): void => this.selectMoveOption(nodeId, true);
       this.map?.setMoveOptions(this.moveOptionsCache, {
         numbers: this.moveOptionsCache.map((_, index) => index + 1),
@@ -1745,10 +1784,36 @@ export class GameScreen implements ScreenHandle {
     if (this.moveOnlyCities && cityOptionsCount === 0) this.moveOnlyCities = false;
 
     const actorNode = actor !== null ? state.players[actor]?.nodeId : undefined;
+    const errandCityId = state.errand?.cityId ?? null;
     const scroller = h('div', { class: `move-chip-scroll ${many ? 'is-two-row' : ''}`.trim() });
-    const visibleEntries = this.moveOptionsCache
-      .map((option, index) => ({ option, index }))
-      .filter(({ option }) => !this.moveOnlyCities || nodesById.get(option.nodeId)?.kind === 'city');
+    const allEntries: MoveFilterEntry[] = this.moveOptionsCache.map((option) => {
+      const node = nodesById.get(option.nodeId);
+      const kind = node?.kind ?? 'blue';
+      const city = cityOfNode(option.nodeId);
+      const info = city ? this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city) : null;
+      return {
+        nodeId: option.nodeId,
+        kind,
+        cityId: city?.id ?? null,
+        affordable: info !== null && info.cheapest !== null && info.affordable,
+      };
+    });
+    const filterCounts = countMoveFilters(allEntries, errandCityId);
+    const entryByNode = new Map(allEntries.map((entry) => [entry.nodeId, entry]));
+    const pickEntries = (filter: MoveQuickFilter) =>
+      this.moveOptionsCache
+        .map((option, index) => ({ option, index }))
+        .filter(({ option }) => {
+          if (this.moveOnlyCities && nodesById.get(option.nodeId)?.kind !== 'city') return false;
+          const entry = entryByNode.get(option.nodeId);
+          return entry !== undefined && matchesMoveFilter(filter, entry, errandCityId);
+        });
+    let visibleEntries = pickEntries(this.moveQuickFilter);
+    if (visibleEntries.length === 0 && this.moveQuickFilter !== 'all') {
+      // Never trap the player in an empty tray: drop the filter and show the full list.
+      this.moveQuickFilter = 'all';
+      visibleEntries = pickEntries('all');
+    }
 
     visibleEntries.forEach(({ option, index }) => {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
@@ -1763,17 +1828,24 @@ export class GameScreen implements ScreenHandle {
       const remainLabel = remainTarget === 'exit' ? '出口' : '目的地';
       const remainText = remain === null ? `${remainLabel}まで —` : `${remainLabel}まで あと${remain}マス`;
       const recommended = option.nodeId === this.recommendedMoveNodeId;
-      const topNear = many && !recommended && index < 3;
+      const nearRank = this.moveNearRank.get(option.nodeId) ?? index;
+      const topNear = many && !recommended && nearRank < 3;
       const selected = this.moveSelection === option.nodeId;
       const city = cityOfNode(option.nodeId);
       const isErrandCity = city !== undefined && state.errand?.cityId === city.id;
       const chipInfo = city
         ? this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city)
         : null;
-      const priceLabel = chipInfo ? moveChipPriceLabel(chipInfo) : null;
+      // カード売り場は在庫が着地するまで分からないので、その年の最安カード価格を出す。
+      const shopInfo = nodeKind === 'shop' ? shopCardPriceInfo(GAME_DATA, state, moverId) : null;
+      const priceLabel = chipInfo ? moveChipPriceLabel(chipInfo) : shopInfo ? shopCardPriceLabel(shopInfo) : null;
       const ownerNames = chipInfo ? chipInfo.otherOwnerIds.map((id) => this.playerName(id)) : [];
       const priceClass = !chipInfo
-        ? ''
+        ? shopInfo
+          ? shopInfo.affordable
+            ? 'is-ok'
+            : 'is-over'
+          : ''
         : chipInfo.cheapest === null
           ? 'is-sold-out'
           : chipInfo.affordable
@@ -1787,6 +1859,7 @@ export class GameScreen implements ScreenHandle {
         {
           class: `move-chip ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''} ${topNear ? 'is-top-near' : ''}`.trim(),
           dataset: { nodeId: option.nodeId, kind: nodeKind },
+          title: priceLabel ? `${fullAriaName}・${priceLabel}` : fullAriaName,
           attrs: {
             type: 'button',
             'aria-label': `${index + 1}: ${fullAriaName}${isErrandCity ? '（寄り道の依頼の街）' : ''} を選ぶ。${remainText}${priceLabel ? `。${priceLabel}` : ''}${ownerNames.length > 0 ? `。${ownerNames.join('・')}が所有` : ''}`,
@@ -1903,9 +1976,42 @@ export class GameScreen implements ScreenHandle {
             },
           })
         : null;
+    const quickFilterBtns = many
+      ? MOVE_QUICK_FILTERS.map((filter) => {
+          const count = filterCounts[filter.id];
+          const active = this.moveQuickFilter === filter.id;
+          return h('button', {
+            class: `move-filter-btn move-quick-filter ${active ? 'is-active' : ''}`.trim(),
+            text: count > 0 ? `${filter.label} ${count}` : filter.label,
+            dataset: { filter: filter.id },
+            attrs: {
+              type: 'button',
+              'aria-pressed': String(active),
+              disabled: count === 0,
+              title:
+                filter.id === 'affordable'
+                  ? 'いま買える物件がある駅だけ'
+                  : filter.id === 'blue-card'
+                    ? '青マス・黄マス・カード売り場だけ'
+                    : '寄り道の依頼都市',
+            },
+            on: {
+              click: (event) => {
+                event.stopPropagation();
+                this.moveQuickFilter = active ? 'all' : filter.id;
+                if (this.state) this.renderMoveOptions(this.state, actorOf(this.state));
+              },
+            },
+          });
+        })
+      : [];
     const targetName = this.moveRemainTarget === 'exit' ? '出口' : '目的地';
+    const filterNote =
+      this.moveQuickFilter === 'all'
+        ? ''
+        : ` ・ ${MOVE_QUICK_FILTERS.find((filter) => filter.id === this.moveQuickFilter)?.label ?? ''}のみ`;
     const promptText = many
-      ? `${targetName}に近い順（${visibleEntries.length}${this.moveOnlyCities ? `駅 / 全${options.length}` : 'か所'}）`
+      ? `${targetName}に近い順（${visibleEntries.length}${this.moveOnlyCities ? `駅 / 全${options.length}` : 'か所'}${filterNote}）`
       : `光っているマスから行き先をえらぼう（${options.length}か所）`;
     this.moveOptionsHost.replaceChildren(
       h(
@@ -1918,6 +2024,13 @@ export class GameScreen implements ScreenHandle {
         }),
         jumpTopBtn,
         cityFilterBtn,
+        quickFilterBtns.length > 0
+          ? h(
+              'div',
+              { class: 'move-quick-filters', attrs: { role: 'group', 'aria-label': '候補の絞り込み' } },
+              ...quickFilterBtns,
+            )
+          : null,
         prev,
         next,
       ),
@@ -2281,9 +2394,10 @@ export class GameScreen implements ScreenHandle {
         if (!this.eventPanel.isOpen) {
           this.openEventPanel(event.id, state);
         } else {
-          this.eventPanel.setState(state, canAct, {
+          this.eventPanel.setState(state, this.eventChoiceReady(state), {
             fxPlaying: this.fxBusy,
             isMine: this.isActorMine(state),
+            earlyChoice: this.session.mode !== 'online',
           });
         }
       }
@@ -2430,6 +2544,39 @@ export class GameScreen implements ScreenHandle {
     this.pendingPhaseEnd = null;
     this.sendAction({ t: pending });
     return true;
+  }
+
+  /**
+   * Solo/local events accept a choice while the intro lines are still playing. The click skips
+   * the remaining lines; the action itself waits here until the fx queue is idle, because
+   * `sendAction` refuses to interleave a new action with unfinished presentation.
+   */
+  private flushPendingEventChoice(): boolean {
+    const pending = this.pendingEventChoice;
+    if (pending === null) return false;
+    const state = this.state;
+    if (!state || state.phase.t !== 'event') {
+      this.pendingEventChoice = null;
+      return false;
+    }
+    if (!this.interactiveNow()) return true;
+    this.pendingEventChoice = null;
+    this.eventPanel.markChosen();
+    this.sendAction({ t: 'choose', index: pending });
+    return true;
+  }
+
+  /** True when the event's choices may be pressed right now (local/solo allows an early pick). */
+  private eventChoiceReady(state: PublicState): boolean {
+    if (this.interactiveNow()) return true;
+    return (
+      !this.destroyed &&
+      this.fxBusy &&
+      this.session.mode !== 'online' &&
+      state.phase.t === 'event' &&
+      this.isActorMine(state) &&
+      !this.actionPending
+    );
   }
 
   private skipEventIntro(): void {
@@ -2911,10 +3058,16 @@ export class GameScreen implements ScreenHandle {
     this.renderHud();
   }
 
-  /** Camera pans made by fx must not strand the player away from the active token. */
-  private panAndReturn(nodeId: string, zoom: number, ms: number, holdMs: number): void {
-    this.map?.focusNode(nodeId, { zoom, ms });
-    this.scheduleReturnToActor(ms + holdMs);
+  /**
+   * Camera pans made by fx must not strand the player away from the active token.
+   * Both the tween and the hold scale with the presentation speed, so an 8x cut-in does not
+   * keep the camera parked on a city for longer than several whole updates.
+   */
+  private panAndReturn(nodeId: string, zoom: number, ms: number, holdMs: number, speed = 1): void {
+    const rate = Math.max(1, speed);
+    const tweenMs = Math.max(120, Math.round(ms / rate));
+    this.map?.focusNode(nodeId, { zoom, ms: tweenMs });
+    this.scheduleReturnToActor(tweenMs + Math.round(holdMs / rate));
   }
 
   private scheduleReturnToActor(delayMs: number): void {
@@ -2970,6 +3123,7 @@ export class GameScreen implements ScreenHandle {
 
   private openMapScreen(realm: MapViewId = 'world'): void {
     if (this.mapScreenOpen || this.destroyed || !this.state) return;
+    resetHorizontalScroll();
     this.createMapScreen();
     if (!this.mapScreen) return;
     this.cancelReturnToActor();
@@ -3624,7 +3778,11 @@ export class GameScreen implements ScreenHandle {
       });
       if (!autoAdvance) control.setManualWait(true);
       try {
-        await shown;
+        if (autoAdvance) {
+          await control.bound(shown, voiceBudgetMs(0, narrationText, voicePlaybackRate(speed)) + 2500);
+        } else {
+          await shown;
+        }
       } finally {
         if (!autoAdvance) control.setManualWait(false);
       }
@@ -3635,7 +3793,7 @@ export class GameScreen implements ScreenHandle {
         this.rouletteName.replaceChildren(rubyName(city.nameJa, city.nameKana));
         this.rouletteCountry.textContent = city.countryJa;
       }
-      if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600);
+      if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600, control.speed);
       this.lastDestinationBannerAt = Date.now();
       await announceDestination();
 
@@ -3690,9 +3848,10 @@ export class GameScreen implements ScreenHandle {
     control.onSkip(() => finish(true));
     const spinMs = Math.max(160, Math.round(1050 / control.speed));
     this.rouletteTimer = window.setTimeout(() => finish(false), spinMs);
-    await promise;
+    // The spin timer is speed-scaled; bound the await so a lost timer cannot hold the queue.
+    await control.bound(promise, FX_MS.destination + 1000);
     this.lastDestinationBannerAt = Date.now();
-    if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600);
+    if (this.playerRealm === 'world') this.panAndReturn(cityNodeId(cityId), 0.8, 700, 1600, control.speed);
     if (control.skipped || this.destroyed) {
       this.rouletteOverlay.hidden = true;
       this.rouletteOverlay.classList.remove('is-result');
@@ -4027,9 +4186,10 @@ export class GameScreen implements ScreenHandle {
     const playerName = displayPlayerName(currentPlayer);
     this.eventPanel.show(event, state, playerName);
     requestAnimationFrame(() => this.updateMapSafeArea());
-    this.eventPanel.setState(state, this.interactiveNow(), {
+    this.eventPanel.setState(state, this.eventChoiceReady(state), {
       fxPlaying: this.fxBusy,
       isMine: this.isActorMine(state),
+      earlyChoice: this.session.mode !== 'online',
     });
     this.activeEventBgm = bgmForEvent(event);
     this.setBgm(this.activeEventBgm);
@@ -4101,9 +4261,8 @@ export class GameScreen implements ScreenHandle {
       }
       case 'dice': {
         Audio.sfx('dice_roll');
-        // Cancel() from a resync resolves this show; the extra race also bounds a lost rAF.
+        // Cancel() from a resync resolves this show; `bound` also covers a lost rAF and skip.
         const ms = FX_MS.dice / control.speed;
-        const diceMs = ms + 6000;
         if (fx.values.length > 1) {
           const vehicle = vehicleForDice(fx.values.length);
           this.showGameBanner(`${vehicle.emoji} ${vehicle.label}で出発！`);
@@ -4113,7 +4272,7 @@ export class GameScreen implements ScreenHandle {
           cancelled = true;
           this.dice.skip();
         });
-        await raceWithTimeout(this.dice.show(fx.values, ms), diceMs);
+        await control.bound(this.dice.show(fx.values, ms), FX_MS.dice + 6000);
         if (!cancelled && !control.skipped && !this.destroyed) Audio.sfx('dice_land');
         return;
       }
@@ -4122,7 +4281,9 @@ export class GameScreen implements ScreenHandle {
         control.onSkip(() => this.map?.cancelAnimations(true));
         const move = this.map?.animateMove(fx.playerId, fx.path, FX_MS.moveStep / control.speed, { dice: fx.dice ?? 1 });
         this.startStepsCounter();
-        await move;
+        // `animateMove` resolves from the render loop, which stalls when a frame is dropped or
+        // the tab is hidden; the bound keeps one lost frame from wedging the whole turn.
+        await control.bound(move, FX_MS.moveStep * Math.max(1, fx.path.length) + 1500);
         this.stopStepsCounter();
         return;
       }
@@ -4143,7 +4304,7 @@ export class GameScreen implements ScreenHandle {
           this.showGameBanner('🧞 魔法のじゅうたんで移動！');
         }
         control.onSkip(() => this.map?.cancelAnimations(true));
-        await this.map?.warp(fx.playerId, fx.nodeId, via, control.speed);
+        await control.bound(this.map?.warp(fx.playerId, fx.nodeId, via, control.speed), FX_MS.warp + 1200);
         return;
       }
       case 'cash': {
@@ -4266,7 +4427,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.celebrate(fx.playerId, 'goal');
         this.map?.setMood(fx.playerId, 'joy', 6000);
         this.confetti(22);
-        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 600, 1300);
+        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 600, 1300, control.speed);
         this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
         this.app.toasts.show(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り！ +${formatOku(fx.bonus)}`, 'good', 3400);
         this.addLog(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り`);
@@ -4284,7 +4445,7 @@ export class GameScreen implements ScreenHandle {
         const requester = charsById.get(fx.requester);
         const cityName = city?.nameJa ?? fx.cityId;
         Audio.sfx('event');
-        this.panAndReturn(cityNodeId(fx.cityId), 0.85, 500, 1600);
+        this.panAndReturn(cityNodeId(fx.cityId), 0.85, 500, 1600, control.speed);
         this.addLog(`📜 寄り道の依頼：${fx.title}（${cityName}・${formatOku(fx.bonus)}）`);
         this.errandCutin?.close();
         const seat = actorOf(pending) ?? pending.players.length - 1;
@@ -4300,7 +4461,7 @@ export class GameScreen implements ScreenHandle {
             steps: Number.isFinite(steps) ? steps : null,
             bonus: fx.bonus,
             narration: errandNarration(fx.requester),
-            durationMs: Math.max(900, FX_MS.errand / control.speed),
+            durationMs: Math.max(320, Math.round(FX_MS.errand / control.speed)),
           });
           control.onSkip(() => {
             this.errandCutin?.close();
@@ -4322,7 +4483,7 @@ export class GameScreen implements ScreenHandle {
         this.portraitMotion('jump');
         this.map?.celebrate(fx.playerId, 'goal');
         this.map?.setMood(fx.playerId, 'joy', 6000);
-        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 550, 1300);
+        this.panAndReturn(cityNodeId(fx.cityId), 1.1, 550, 1300, control.speed);
         this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#7ff0d4');
         this.showCoinFlow(fx.playerId, fx.bonus);
         this.confetti(20);
@@ -4426,7 +4587,7 @@ export class GameScreen implements ScreenHandle {
         const icon = up ? (fx.kind === 'bubble' ? '📈' : '✨') : fx.kind === 'blockade' ? '🚧' : '💥';
         Audio.sfx(up ? 'event' : 'bad');
         this.showGameBanner(`${icon} ${name}に${fx.label}（${up ? '▲' : '▼'}×${fx.mult.toFixed(2)}・${fx.years}年）`);
-        this.panAndReturn(cityNodeId(fx.cityId), 1.35, 620, 1700);
+        this.panAndReturn(cityNodeId(fx.cityId), 1.35, 620, 1700, control.speed);
         this.map?.cityModBurst(fx.cityId);
         this.map?.floatText(
           cityNodeId(fx.cityId),
@@ -4467,16 +4628,23 @@ export class GameScreen implements ScreenHandle {
       case 'final_year': {
         Audio.sfx('goal_fanfare');
         this.finalYearBanner?.close();
-        this.finalYearBanner = showFinalYearBanner({
+        // The banner is full-screen: it must close with the fx budget, not on its own 3.2s clock,
+        // and a tap / a queued update must be able to dismiss it (backlog compression).
+        const banner = showFinalYearBanner({
           host: document.body,
           title: pending.config.years <= 1 ? '最終盤' : '最終年',
           year: fx.year,
           rules: fx.rules,
           narration: finalYearNarration(pending),
+          durationMs: Math.max(650, Math.round(FINAL_YEAR_BANNER_MS / control.speed)),
+          rate: control.speed,
         });
+        this.finalYearBanner = banner;
+        control.onSkip(() => banner.close());
         this.app.toasts.show('🔥 最終年！目的地ボーナス×2', 'good', 4200);
         this.addLog(`🔥 最終年（第 ${fx.year} 年）: ${fx.rules.join(' / ')}`);
         await control.wait(FX_MS.final_year);
+        banner.close();
         return;
       }
       case 'buyout': {
@@ -4493,7 +4661,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.shake(fx.brokeMonopoly ? 0.7 : 0.4);
         if (ref) {
           const nodeId = cityNodeId(ref.city.id);
-          this.panAndReturn(nodeId, 1.05, 500, 1300);
+          this.panAndReturn(nodeId, 1.05, 500, 1300, control.speed);
           this.map?.floatText(nodeId, `買収 ${formatOkuShort(fx.amount)}`, '#ffd23f');
         }
         this.showGameBanner(`🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の物件を買収！`);
@@ -4610,7 +4778,13 @@ export class GameScreen implements ScreenHandle {
     });
     if (!autoAdvance) control.setManualWait(true);
     try {
-      await shown;
+      // Auto-advance is timer-driven and speed-scaled, so a bound is safe; manual advance
+      // intentionally waits for the reader and pauses the watchdog instead.
+      if (autoAdvance) {
+        await control.bound(shown, voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500);
+      } else {
+        await shown;
+      }
     } finally {
       if (!autoAdvance) control.setManualWait(false);
     }

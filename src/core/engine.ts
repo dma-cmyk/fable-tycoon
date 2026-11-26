@@ -22,6 +22,7 @@ import type {
 } from './types';
 export type { PublicState, StateView };
 import { nextRandom, pickOne, randInt, weightedPick } from './rng';
+import { formatOku } from './formatMoney';
 import {
   getGraph,
   isPortOrAdjacentSea,
@@ -63,13 +64,14 @@ import {
 import { tickCityMods } from './cityMods';
 import { beginSkill, canUseSkill, fireSkill } from './skills';
 import {
+  applyPiperConfiscationDeal,
   applyPiperDeal,
   assignPiperToFarthest,
   runPiperMonthStart,
   runPiperTurnStart,
   transferPiper,
 } from './piper';
-import { PIPER_DEAL_EVENT_ID } from './piperLines';
+import { PIPER_CONFISCATE_EVENT_ID, PIPER_DEAL_EVENT_ID } from './piperLines';
 import {
   applyBuyout,
   checkBuyout,
@@ -91,6 +93,7 @@ import {
 } from './realm';
 import { sayCharacterLine, sayTurnLine } from './speech';
 import { cpuDecide as decideCpu } from './cpu';
+import { filterWarpTargets, stepsAfterWarp } from './warpRules';
 
 export const ALLOWED_YEARS = [1, 3, 5, 10, 20] as const;
 
@@ -439,7 +442,7 @@ function useCard(data: GameData, state: GameState, fx: Fx[], cardId: string): vo
         fx.push({ t: 'cash', playerId: other.id, delta: -amount, reason: '関税' });
         fx.push({ t: 'cash', playerId: player.id, delta: amount, reason: '関税' });
       }
-      fx.push({ t: 'toast', text: `関税カードで ${gained} 億円を徴収した。` });
+      fx.push({ t: 'toast', text: `関税カードで ${formatOku(gained)}を徴収した。` });
       resolveRoll(data, state, fx, 1);
       return;
     }
@@ -464,7 +467,7 @@ function useCard(data: GameData, state: GameState, fx: Fx[], cardId: string): vo
         }
         player.cash += debt;
         fx.push({ t: 'cash', playerId: player.id, delta: debt, reason: '肩代わり' });
-        fx.push({ t: 'toast', text: `借金 ${debt} 億円を全員で等分に肩代わりした。` });
+        fx.push({ t: 'toast', text: `借金 ${formatOku(debt)}を全員で等分に肩代わりした。` });
       }
       resolveRoll(data, state, fx, 1);
       return;
@@ -522,14 +525,26 @@ function cardTargetOptions(data: GameData, state: GameState, cardId: string): st
       }
       return options.sort();
     }
-    case 'pegasus':
-      return data.cities
+    case 'pegasus': {
+      const airports = data.cities
         .filter((c) => c.realm === undefined && c.airport)
         .map((c) => nodeForCity(data, c.id))
         .filter((n): n is string => n !== null)
         .sort();
+      const allowed = filterWarpTargets(data, state, airports);
+      if (allowed.length > 0) return allowed;
+      // どの空港も目的地の近くという異常時でも、カードを不発にしない（いちばん遠い空港へ）。
+      return airports
+        .slice()
+        .sort(
+          (a, b) =>
+            stepsAfterWarp(data, state, b) - stepsAfterWarp(data, state, a) || a.localeCompare(b),
+        )
+        .slice(0, 1);
+    }
     case 'rocket': {
-      const options = worldCityNodeIds(data);
+      // 目的地の目の前へは降りられない（最後の数マスは歩いて競う）。
+      const options = filterWarpTargets(data, state, worldCityNodeIds(data));
       if (realmEntryNodeId(data, 'space')) options.push('r:space');
       return options.sort();
     }
@@ -858,9 +873,25 @@ function exitPortal(data: GameData, state: GameState, fx: Fx[], player: PlayerSt
       .map((c) => nodeForCity(data, c.id))
       .filter((id): id is string => id !== null)
       .sort();
-    if (airports.length > 0) {
-      state.phase = { t: 'card_target', cardId: 'portal', options: airports };
+    const allowed = filterWarpTargets(data, state, airports);
+    if (allowed.length > 0) {
+      state.phase = { t: 'card_target', cardId: 'portal', options: allowed };
       fx.push({ t: 'toast', text: '再突入する空港都市を選ぼう。' });
+      return;
+    }
+    // どの空港も目的地に近すぎるなら、いちばん遠い空港へ強制帰還（行き場を失わせない）。
+    const fallback = airports
+      .slice()
+      .sort(
+        (a, b) =>
+          stepsAfterWarp(data, state, b) - stepsAfterWarp(data, state, a) || a.localeCompare(b),
+      )[0];
+    if (fallback) {
+      player.nodeId = fallback;
+      player.prevNodeId = null;
+      fx.push({ t: 'warp', playerId: player.id, nodeId: fallback, via: 'realm' });
+      fx.push({ t: 'toast', text: `${info.nameJa} から地上へ戻った。` });
+      processLanding(data, state, fx);
       return;
     }
   }
@@ -869,19 +900,21 @@ function exitPortal(data: GameData, state: GameState, fx: Fx[], player: PlayerSt
   if (info.exit === 'near_destination') {
     const destNode = nodeForCity(data, state.destination);
     if (destNode) {
-      const inRange = worlds.filter((id) => {
+      const allowed = filterWarpTargets(data, state, worlds);
+      const pool = allowed.length > 0 ? allowed : worlds;
+      const inRange = pool.filter((id) => {
         const d = shortestDistance(data, destNode, id);
         return d >= 5 && d <= 10;
       });
-      const pool =
+      const candidates =
         inRange.length > 0
           ? inRange
-          : worlds.slice().sort((a, b) => {
+          : pool.slice().sort((a, b) => {
               const da = shortestDistance(data, destNode, a);
               const db = shortestDistance(data, destNode, b);
               return da !== db ? da - db : a.localeCompare(b);
             });
-      target = pickOne(state, pool);
+      target = pickOne(state, candidates);
     }
   } else {
     target = randomWorldCityNodeId(data, state);
@@ -919,6 +952,17 @@ function onEventChoice(data: GameData, state: GameState, fx: Fx[], action: Actio
       advanceTurn(data, state, fx);
       return;
     }
+    state.phase = { t: 'turn_start' };
+    return;
+  }
+  // 物件没収の示談（差し出す / 示談金）。どちらを選んでも手番は続く。
+  if (phase.eventId === PIPER_CONFISCATE_EVENT_ID) {
+    if (!Number.isInteger(action.index) || action.index < 0 || action.index > 1) {
+      illegal('invalid piper confiscation choice');
+    }
+    applyPiperConfiscationDeal(data, state, fx, action.index);
+    fx.push({ t: 'event_close' });
+    state.activeEventId = null;
     state.phase = { t: 'turn_start' };
     return;
   }
@@ -1076,7 +1120,7 @@ function onCardTarget(data: GameData, state: GameState, fx: Fx[], action: Action
       const ref = findProperty(data, propertyId);
       const mono = ref ? monopolises(data, state, player.id, ref.cityId) : false;
       fx.push({ t: 'buy', playerId: player.id, propertyId, monopoly: mono });
-      fx.push({ t: 'toast', text: `${owner.name} から ${ref?.property.name ?? propertyId} を ${cost} 億で強制買収した。` });
+      fx.push({ t: 'toast', text: `${owner.name} から ${ref?.property.name ?? propertyId} を ${formatOku(cost)}で強制買収した。` });
       resolveRoll(data, state, fx, 1);
       return;
     }
@@ -1147,7 +1191,7 @@ function onShop(data: GameData, state: GameState, fx: Fx[], action: Action): voi
     player.cards.push(action.cardId);
     fx.push({ t: 'cash', playerId: player.id, delta: -price, reason: 'カード購入' });
     fx.push({ t: 'card_get', playerId: player.id, cardId: action.cardId });
-    fx.push({ t: 'toast', text: `${action.cardId} を ${price} 億で購入した。` });
+    fx.push({ t: 'toast', text: `${action.cardId} を ${formatOku(price)}で購入した。` });
     return;
   }
   if (action.t === 'sell_card') {
@@ -1156,7 +1200,7 @@ function onShop(data: GameData, state: GameState, fx: Fx[], action: Action): voi
     removeCard(player.cards, action.cardId);
     player.cash += amount;
     fx.push({ t: 'cash', playerId: player.id, delta: amount, reason: 'カード売却' });
-    fx.push({ t: 'toast', text: `${action.cardId} を ${amount} 億で売却した。` });
+    fx.push({ t: 'toast', text: `${action.cardId} を ${formatOku(amount)}で売却した。` });
     return;
   }
   illegal(`action ${action.t} is not legal in a shop`);
@@ -1332,7 +1376,7 @@ function beginTurn(data: GameData, state: GameState, fx: Fx[]): void {
     advanceTurn(data, state, fx);
     return;
   }
-  if (player.cash < 0 && ownedProperties(data, state, player.id).length > 0) {
+  if (state.phase.t === 'turn_start' && player.cash < 0 && ownedProperties(data, state, player.id).length > 0) {
     state.phase = { t: 'sell' };
     fx.push({ t: 'toast', text: '取り立てで資金不足になった。物件を売却しよう。' });
     return;

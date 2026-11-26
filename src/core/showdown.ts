@@ -14,6 +14,7 @@ import {
   sellPrice,
 } from './economy';
 import { sayCharacterLine } from './speech';
+import { formatOku } from './formatMoney';
 import { NARRATION } from '../audio/narration';
 
 /** 下剋上カードの id（cards.json / cards.ts と一致させる）。 */
@@ -195,7 +196,7 @@ export function playUnderdogCard(
     }
   }
 
-  fx.push({ t: 'toast', text: `下剋上の豆が育ち、${leader.name} から ${Math.round(taken)} 億円を奪い取った！` });
+  fx.push({ t: 'toast', text: `下剋上の豆が育ち、${leader.name} から ${formatOku(taken)}を奪い取った！` });
   fx.push({ t: 'say', speaker: 'narrator', text: NARRATION.underdog });
   sayCharacterLine(data, state, leader.id, 'piper_hit', fx);
   return true;
@@ -313,7 +314,7 @@ export function applyBuyout(
   sayCharacterLine(data, state, owner.id, 'piper_hit', fx);
   fx.push({
     t: 'toast',
-    text: `${player.name} が ${owner.name} の ${ref?.property.name ?? quote.propertyId} を ${Math.round(quote.price)} 億で買収！`,
+    text: `${player.name} が ${owner.name} の ${ref?.property.name ?? quote.propertyId} を ${formatOku(quote.price)}で買収！`,
   });
   if (quote.brokeMonopoly) {
     fx.push({ t: 'say', speaker: 'narrator', text: NARRATION.monopolyBreak });

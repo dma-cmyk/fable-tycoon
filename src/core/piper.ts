@@ -23,9 +23,12 @@ import {
   yearScale,
 } from './economy';
 import { nodeForCity } from './graph';
+import { formatOku } from './formatMoney';
 import { sayCharacterLine } from './speech';
 import { effectiveDistance, realmEntryNodeId } from './realm';
 import {
+  PIPER_CONFISCATE_EVENT_ID,
+  PIPER_CONFISCATE_NARRATION,
   PIPER_DEAL_EVENT_ID,
   PIPER_DEAL_NARRATION,
   PIPER_DISASTERS,
@@ -36,6 +39,7 @@ import {
   type PiperDisasterKind,
   type PiperGiftKind,
 } from './piperLines';
+import { piperSeizePlan, type PiperSeizePlan } from './piperSeize';
 
 /** 憑かれた手番数。ここに達するとその姿以上へ強制エスカレートする。 */
 export const PIPER_LEVEL_TURNS: readonly number[] = [8, 16];
@@ -305,35 +309,29 @@ function runMischief(
   const kind = randInt(state, 0, 4);
 
   if (kind === 0) {
-    // 純資産の 3〜6%（Lv2 は 2 倍）を現金で取り立てる。
-    const pct = randInt(state, 3, 6);
-    const demand = demandFromNetWorth(data, state, playerId, (pct / 100) * (level === 2 ? 2 : 1)) * scale;
-    const { paid } = takeWealth(data, state, fx, player, demand);
-    fx.push({ t: 'cash', playerId, delta: -paid, reason: '取り立て' });
-    sayCharacterLine(data, state, playerId, 'piper_hit', fx);
-    fx.push({
-      t: 'toast',
-      text: `${form.nameJa}が純資産の${pct}%相当を持っていった。足りない分は物件が売られた。`,
-    });
+    runCashMischief(data, state, fx, player, level, scale);
   } else if (kind === 1) {
-    const owned = ownedProperties(data, state, playerId);
-    const count = Math.min(level === 2 ? 2 : 1, owned.length);
-    if (count === 0) {
-      fx.push({ t: 'toast', text: `${form.nameJa}は没収する物件がなく、渋々帰った。` });
-    } else {
-      for (const ref of shuffled(state, owned).slice(0, count)) {
-        const value = currentPrice(data, state, ref.property.id);
-        const proceeds = Math.max(0, value) * 0.2;
-        delete state.owner[ref.property.id];
-        player.cash += proceeds;
-        fx.push({ t: 'sell', playerId, propertyId: ref.property.id, amount: proceeds });
-        fx.push({ t: 'cash', playerId, delta: -(value - proceeds), reason: '取り立て' });
+    // 没収は純資産の 12%（ブラックは 20%）まで。上限内に物件がなければ現金の取り立てへ。
+    const plan = piperSeizePlan(data, state, player, level);
+    if (plan.propertyIds.length === 0) {
+      runCashMischief(data, state, fx, player, level, scale);
+    } else if (player.isCpu) {
+      if (
+        piperConfiscateCpuChoice(data, state, player) === 1 &&
+        payConfiscationDeal(data, state, fx, player, plan.propertyIds, plan.dealCost)
+      ) {
+        sayCharacterLine(data, state, playerId, 'piper_hit', fx);
+        fx.push({
+          t: 'toast',
+          text: `${player.name} は示談金 ${formatOku(plan.dealCost)}を払って物件を守った。`,
+        });
+      } else {
+        seizeProperties(data, state, fx, player, plan.propertyIds, form.nameJa);
       }
-      sayCharacterLine(data, state, playerId, 'piper_hit', fx);
-      fx.push({
-        t: 'toast',
-        text: `${form.nameJa}が物件${count}件を二束三文で没収した。`,
-      });
+    } else {
+      // 人間には「物件を差し出す / 示談金を払う」の 2 択を出す。
+      openPiperConfiscation(data, state, fx, playerId, form.nameJa, plan);
+      return 'continue';
     }
   } else if (kind === 2) {
     const count = Math.min(piperDiscardCount(state), player.cards.length);
@@ -354,7 +352,7 @@ function runMischief(
     sayCharacterLine(data, state, playerId, 'piper_hit', fx);
     fx.push({
       t: 'toast',
-      text: `${form.nameJa}に「金運ブレスレット」を${Math.round(cost)}億で買わされた。`,
+      text: `${form.nameJa}に「金運ブレスレット」を${formatOku(cost)}で買わされた。`,
     });
   } else if (!player.isCpu) {
     // 人間には「休む」か「示談金を払って動く」の 2 択を出す（操作の余地のない待ち時間にしない）。
@@ -371,6 +369,171 @@ function runMischief(
     fx.push({ t: 'toast', text: `${player.name} は借金を抱えた。` });
   }
   return 'continue';
+}
+
+/** 純資産の 3〜6%（Lv2 は 2 倍）を現金で取り立てる。物件没収の代替にも使う。 */
+function runCashMischief(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  player: PlayerState,
+  level: 1 | 2,
+  scale: number,
+): void {
+  const form = PIPER_FORMS[level - 1];
+  const pct = randInt(state, 3, 6);
+  const demand =
+    demandFromNetWorth(data, state, player.id, (pct / 100) * (level === 2 ? 2 : 1)) * scale;
+  const { paid } = takeWealth(data, state, fx, player, demand);
+  fx.push({ t: 'cash', playerId: player.id, delta: -paid, reason: '取り立て' });
+  sayCharacterLine(data, state, player.id, 'piper_hit', fx);
+  fx.push({
+    t: 'toast',
+    text: `${form.nameJa}が純資産の${pct}%相当を持っていった。足りない分は物件が売られた。`,
+  });
+}
+
+/** 上限内の物件を二束三文（2 割）で没収する。 */
+function seizeProperties(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  player: PlayerState,
+  propertyIds: readonly string[],
+  formName: string,
+): void {
+  let count = 0;
+  for (const propertyId of propertyIds) {
+    if (state.owner[propertyId] !== player.id) continue;
+    const value = Math.max(0, currentPrice(data, state, propertyId));
+    const proceeds = value * 0.2;
+    delete state.owner[propertyId];
+    player.cash += proceeds;
+    fx.push({ t: 'sell', playerId: player.id, propertyId, amount: proceeds });
+    fx.push({ t: 'cash', playerId: player.id, delta: -(value - proceeds), reason: '取り立て' });
+    count += 1;
+  }
+  if (count === 0) {
+    fx.push({ t: 'toast', text: `${formName}は没収する物件を見失った。` });
+    return;
+  }
+  sayCharacterLine(data, state, player.id, 'piper_hit', fx);
+  fx.push({ t: 'toast', text: `${formName}が物件${count}件を二束三文で没収した。` });
+}
+
+/**
+ * 示談金を払って物件を守る。現金で足りなければ、守る物件以外を売って工面する。
+ * 工面できなければ何も売らずに false（呼び出し側が物件を差し出す）。
+ */
+function payConfiscationDeal(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  player: PlayerState,
+  protectedIds: readonly string[],
+  cost: number,
+): boolean {
+  const guarded = new Set(protectedIds);
+  if (player.cash < cost) {
+    const sellable = ownedProperties(data, state, player.id)
+      .filter((ref) => !guarded.has(ref.property.id))
+      .map((ref) => ({
+        id: ref.property.id,
+        price: Math.max(0, sellPrice(data, state, ref.property.id)),
+      }))
+      .filter((item) => item.price > 0)
+      .sort((a, b) => (a.price !== b.price ? a.price - b.price : a.id.localeCompare(b.id)));
+    const available = sellable.reduce((sum, item) => sum + item.price, 0);
+    if (player.cash + available < cost) return false;
+    for (const item of sellable) {
+      if (player.cash >= cost) break;
+      delete state.owner[item.id];
+      player.cash += item.price;
+      fx.push({ t: 'sell', playerId: player.id, propertyId: item.id, amount: item.price });
+    }
+  }
+  player.cash -= cost;
+  fx.push({ t: 'cash', playerId: player.id, delta: -cost, reason: '取り立て' });
+  return true;
+}
+
+/** CPU の没収示談: 現金で示談金を払えるなら守り、足りなければ物件を差し出す。 */
+export function piperConfiscateCpuChoice(
+  data: GameData,
+  state: GameState,
+  player: PlayerState,
+): number {
+  const level: 1 | 2 = state.piper.level === 2 ? 2 : 1;
+  const plan = piperSeizePlan(data, state, player, level);
+  if (plan.propertyIds.length === 0) return 0;
+  return player.cash >= plan.dealCost ? 1 : 0;
+}
+
+/** 物件 id から表示名を引く（示談のトースト用）。 */
+function propertyNameJa(data: GameData, propertyId: string): string {
+  for (const city of data.cities) {
+    for (const property of city.properties) {
+      if (property.id === propertyId) return property.name;
+    }
+  }
+  return propertyId;
+}
+
+/** 「物件を差し出す / 示談金を払う」の 2 択を、既存の event フェーズで開く。 */
+function openPiperConfiscation(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  playerId: number,
+  formName: string,
+  plan: PiperSeizePlan,
+): void {
+  state.activeEventId = PIPER_CONFISCATE_EVENT_ID;
+  state.phase = { t: 'event', eventId: PIPER_CONFISCATE_EVENT_ID };
+  fx.push({ t: 'event_open', eventId: PIPER_CONFISCATE_EVENT_ID, playerId });
+  fx.push({ t: 'say', speaker: 'narrator', text: PIPER_CONFISCATE_NARRATION });
+  const names = plan.propertyIds.map((id) => propertyNameJa(data, id)).join('・');
+  fx.push({
+    t: 'toast',
+    text: `${formName}が「${names}をよこせ。示談なら ${formatOku(plan.dealCost)}だ」と迫っている。`,
+  });
+}
+
+export type PiperConfiscationOutcome = 'surrender' | 'pay';
+
+/**
+ * 物件没収の示談を解決する（engine の onEventChoice から呼ぶ）。
+ * index 0 = 物件を差し出す、index 1 = 示談金を払って守る（足りなければ差し出す）。
+ * 対象は開いたときと同じ決定手順で引き直す（乱数を使わない）。
+ */
+export function applyPiperConfiscationDeal(
+  data: GameData,
+  state: GameState,
+  fx: Fx[],
+  choiceIndex: number,
+): PiperConfiscationOutcome {
+  const player = state.players[state.current];
+  if (!player) return 'surrender';
+  const level: 1 | 2 = state.piper.level === 2 ? 2 : 1;
+  const plan = piperSeizePlan(data, state, player, level);
+  const form = PIPER_FORMS[level - 1];
+  if (plan.propertyIds.length === 0) {
+    fx.push({ t: 'toast', text: `${form.nameJa}は没収する物件を見失った。` });
+    return 'surrender';
+  }
+  if (choiceIndex >= 1) {
+    if (payConfiscationDeal(data, state, fx, player, plan.propertyIds, plan.dealCost)) {
+      sayCharacterLine(data, state, player.id, 'piper_hit', fx);
+      fx.push({
+        t: 'toast',
+        text: `${player.name} は示談金 ${formatOku(plan.dealCost)}を払って、物件を守った。`,
+      });
+      return 'pay';
+    }
+    fx.push({ t: 'toast', text: '現金も売れる物件も足りず、示談は成立しなかった。' });
+  }
+  seizeProperties(data, state, fx, player, plan.propertyIds, form.nameJa);
+  return 'surrender';
 }
 
 /** 「1回休み」の代わりに示談金を払う 2 択を、既存の event フェーズで開く。 */
@@ -408,7 +571,7 @@ export function applyPiperDeal(
   sayCharacterLine(data, state, player.id, 'piper_hit', fx);
   fx.push({
     t: 'toast',
-    text: `${player.name} は示談金 ${Math.round(paid)} 億を払って、そのまま動く。`,
+    text: `${player.name} は示談金 ${formatOku(paid)}を払って、そのまま動く。`,
   });
   return 'pay';
 }
@@ -584,7 +747,7 @@ function runDisaster(
   fx.push({ t: 'say', speaker: 'narrator', text: def.narration });
   fx.push({
     t: 'toast',
-    text: `${def.title}！ ${player.name} は ${Math.round(outcome.amount)} 億を失った。`,
+    text: `${def.title}！ ${player.name} は ${formatOku(outcome.amount)}を失った。`,
   });
   if (player.cash < 0) {
     fx.push({ t: 'toast', text: `${player.name} は借金を抱えた。` });
@@ -644,7 +807,7 @@ function runGift(data: GameData, state: GameState, fx: Fx[], player: PlayerState
   fx.push({ t: 'say', speaker: 'narrator', text: def.narration });
   fx.push({
     t: 'toast',
-    text: `${def.title}！ ${player.name} は ${Math.round(amount)} 億を得した。`,
+    text: `${def.title}！ ${player.name} は ${formatOku(amount)}を得した。`,
   });
 }
 

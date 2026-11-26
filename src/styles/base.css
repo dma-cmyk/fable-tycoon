@@ -56,6 +56,8 @@ body,
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Fixed-viewport app: any horizontal document offset shifts the map screen and clips it. */
+  overflow-x: clip;
 }
 
 body {
@@ -66,6 +68,7 @@ body {
   background:
     radial-gradient(circle at 50% 0%, #2f7fc4 0%, #14508e 38%, #0a2347 72%, #071225 100%);
   overflow: hidden;
+  overflow-x: clip;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
@@ -146,6 +149,7 @@ textarea {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  overflow-x: clip;
 }
 
 .row {

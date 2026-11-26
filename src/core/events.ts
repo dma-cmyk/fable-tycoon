@@ -31,6 +31,7 @@ import { applyCityMod } from './cityMods';
 import { isFinalYearActive } from './showdown';
 import { transferPiper } from './piper';
 import { REALMS, randomWorldCityNodeId, realmEntryNodeId } from './realm';
+import { isWarpLandingAllowed } from './warpRules';
 import { emitDialogueLines, sayCharacterLine } from './speech';
 
 /** 最終年イベントの重みブースト（最終年は逆転ドラマを濃くする）。 */
@@ -406,7 +407,13 @@ function resolveMoveNode(
       const db = shortestDistance(data, destNode, nb);
       return da !== db ? da - db : a.id.localeCompare(b.id);
     });
-    return nodeForCity(data, sorted[0].id);
+    // 目的地の直前へは飛ばさない（ワープ禁止ルール）。近い順のまま、着地できる最初の都市へ。
+    const allowed = sorted.filter((c) => {
+      const node = nodeForCity(data, c.id);
+      return node !== null && isWarpLandingAllowed(data, state, node);
+    });
+    const picked = allowed[0] ?? sorted[0];
+    return picked ? nodeForCity(data, picked.id) : null;
   }
   const graph = getGraph(data);
   if (graph.nodes.has(to)) return to;

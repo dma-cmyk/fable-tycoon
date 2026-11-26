@@ -1,5 +1,5 @@
 import type { CityModKind, CityTarget, Effect, Who } from '../core/types';
-import { cardsById, citiesById, INDUSTRY_JA } from './format';
+import { cardsById, citiesById, formatOkuShort, INDUSTRY_JA } from './format';
 
 const WHO_JA: Record<Who, string> = {
   self: '手番',
@@ -31,7 +31,7 @@ function cityLabel(city: CityTarget): string {
 }
 
 function signedOku(amount: number): string {
-  return `${amount >= 0 ? '+' : '▲'}${Math.abs(amount)}億円`;
+  return `${amount >= 0 ? '+' : '▲'}${formatOkuShort(Math.abs(amount))}円`;
 }
 
 /** Plain-Japanese one-liners for automatically applied event effects. */

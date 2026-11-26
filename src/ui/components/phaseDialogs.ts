@@ -1,5 +1,5 @@
-import {  currentPrice, type PublicState } from '../../core/engine';
-import { shortestDistance } from '../../core/graph';
+import {  currentPrice, distance as boardDistance, type PublicState } from '../../core/engine';
+import { WARP_MIN_DEST_STEPS } from '../../core/warpRules';
 import type {CardDef, City} from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h, type ModalHandle, type ModalHost } from '../dom';
@@ -73,7 +73,8 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
         hereNodeId,
         destinationNodeId,
         errandNodeId,
-        distance: (from, to) => shortestDistance(GAME_DATA, from, to),
+        // The HUD and engine measure realms with effectiveDistance; the picker must agree.
+        distance: (from, to) => boardDistance(GAME_DATA, from, to),
       })
     : [];
   const candidateByNode = new Map(candidates.map((candidate) => [candidate.nodeId, candidate]));
@@ -82,10 +83,10 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
     infoByNode.set(target, cityMoveInfo(GAME_DATA, options.state, options.state.current, city));
   }
   const destinationSteps =
-    hereNodeId !== null ? shortestDistance(GAME_DATA, hereNodeId, destinationNodeId) : Number.NaN;
+    hereNodeId !== null ? boardDistance(GAME_DATA, hereNodeId, destinationNodeId) : Number.NaN;
   const errandSteps =
     hereNodeId !== null && errandNodeId !== null
-      ? shortestDistance(GAME_DATA, hereNodeId, errandNodeId)
+      ? boardDistance(GAME_DATA, hereNodeId, errandNodeId)
       : Number.NaN;
   const search = cityOptions.length > 6
     ? h('input', {
@@ -157,7 +158,7 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
           : null,
         h('p', {
           class: 'warp-summary-note',
-          text: '数字は着地した後の目的地までのマス数。小さいほど近い。',
+          text: `数字は着地した後の目的地までのマス数。小さいほど近い。目的地まで残り ${WARP_MIN_DEST_STEPS} マス未満の都市へは着地できない。`,
         }),
       ),
     );
@@ -270,7 +271,7 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
             button.classList.add('is-busy');
             options.onTarget(target);
           });
-    button.disabled = !options.canAct;
+    button.disabled = !options.canAct || candidate?.blocked === true;
     list.append(button);
     if (candidate) itemByNode.set(target, button);
   }
@@ -405,6 +406,9 @@ function cityTargetButton(
           : null,
         candidate.toErrand !== null
           ? h('span', { class: 'warp-tag is-errand', text: `依頼まで ${candidate.toErrand}` })
+          : null,
+        candidate.blockedReason !== null
+          ? h('span', { class: 'warp-tag is-blocked', text: candidate.blockedReason })
           : null,
       ),
     ),

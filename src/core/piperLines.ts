@@ -146,6 +146,40 @@ export const PIPER_DEAL_EVENT: GameEventDef = {
   ],
 };
 
+// ---------------------------------------------------------------- 物件没収の示談
+
+/**
+ * Lv1 / Lv2 の物件没収を「差し出す / 示談金」で選ぶイベント。
+ * 上限内の物件があるときだけ開く（エンジンの onEventChoice が id で解決する）。
+ */
+export const PIPER_CONFISCATE_EVENT_ID = 'piper_confiscate';
+
+export const PIPER_CONFISCATE_NARRATION = '取り立て屋が、物件か示談金かを迫ってきた！';
+
+export const PIPER_CONFISCATE_EVENT: GameEventDef = {
+  id: PIPER_CONFISCATE_EVENT_ID,
+  title: '取り立て屋の物件没収',
+  kind: 'fable',
+  satireNote:
+    '取り立て屋が物件を差し出すか示談金を払うかを迫る、という完全創作のやり取りです。',
+  weight: 0, // ニュースマス抽選には出ない（取り立て屋のいたずらからのみ開く）
+  lines: [],
+  choices: [
+    {
+      label: '物件を差し出す',
+      detail: '狙われた物件を失う。二束三文の手取りだけが残る。',
+      effects: [],
+      cpuWeight: 1,
+    },
+    {
+      label: '示談金を払う',
+      detail: '物件の現在価格の約6割を払って守る。現金が足りなければ他の物件を売る。',
+      effects: [],
+      cpuWeight: 1,
+    },
+  ],
+};
+
 export interface PiperVoiceLine {
   speaker: `npc:${string}`;
   text: string;
@@ -168,6 +202,7 @@ export function piperNarrationTexts(): string[] {
     ...PIPER_DISASTERS.map((disaster) => disaster.narration),
     PIPER_HELL_DISASTER.narration,
     PIPER_DEAL_NARRATION,
+    PIPER_CONFISCATE_NARRATION,
     ...PIPER_GIFTS.map((gift) => gift.narration),
   ];
 }

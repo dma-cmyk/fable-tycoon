@@ -2,7 +2,7 @@
 // 他プレイヤーが持つ物件を、所有者の色・顔つき・独占崩壊の警告つきで並べる。
 
 import type { PublicState } from '../../core/engine';
-import { propertyAnnualIncome } from '../../core/economy';
+import { annualIncome, netWorth, propertyAnnualIncome } from '../../core/economy';
 import type { City, Property } from '../../core/types';
 import { GAME_DATA } from '../../data/index';
 import { avatar, h } from '../dom';
@@ -11,6 +11,7 @@ import {
   charsById,
   citiesById,
   displayPlayerName,
+  formatDelta,
   formatOku,
   formatOkuShort,
   INDUSTRY_ICON,
@@ -64,6 +65,46 @@ function quotesFor(state: PublicState, city: City): Quote[] {
   return out.sort((a, b) => (a.monopoly === b.monopoly ? a.price - b.price : a.monopoly ? -1 : 1));
 }
 
+export interface BuyoutImpact {
+  /** 時価を超えて払う分（= 買い手の総資産の減り幅）。 */
+  premium: number;
+  buyerNet: number;
+  sellerNet: number;
+  buyerIncome: number;
+  sellerIncome: number;
+}
+
+/**
+ * 買収した場合の両者の総資産・年収の変化。資産は「現金 − 買収額 + 時価」、
+ * 年収は所有者を入れ替えた状態で決算と同じ式（独占・都市効果・業種倍率込み）で数える。
+ * Sol の指摘: 時価36億の物件を54億で買って資産が18億減ったことが、確定前に見えなかった。
+ */
+export function buyoutImpact(
+  state: PublicState,
+  propertyId: string,
+  buyerId: number,
+  sellerId: number,
+  price: number,
+  basePrice: number,
+): BuyoutImpact {
+  const after: PublicState = {
+    ...state,
+    players: state.players.map((player) => {
+      if (player.id === buyerId) return { ...player, cash: player.cash - price };
+      if (player.id === sellerId) return { ...player, cash: player.cash + price };
+      return player;
+    }),
+    owner: { ...state.owner, [propertyId]: buyerId },
+  };
+  return {
+    premium: price - basePrice,
+    buyerNet: netWorth(GAME_DATA, after, buyerId) - netWorth(GAME_DATA, state, buyerId),
+    sellerNet: netWorth(GAME_DATA, after, sellerId) - netWorth(GAME_DATA, state, sellerId),
+    buyerIncome: annualIncome(GAME_DATA, after, buyerId) - annualIncome(GAME_DATA, state, buyerId),
+    sellerIncome: annualIncome(GAME_DATA, after, sellerId) - annualIncome(GAME_DATA, state, sellerId),
+  };
+}
+
 /**
  * 買収パネルを組み立てる。他プレイヤーの物件がこの都市に無ければ null。
  * 買収ボタンは2段階（押す → 確認）にして、スマホの誤タップで大金が飛ばないようにする。
@@ -81,6 +122,18 @@ export function buildBuyoutPanel(options: BuyoutPanelOptions): HTMLElement | nul
     const owner = options.state.players[quote.ownerId];
     const color = playerColor(owner);
     const affordable = cash >= quote.price;
+    const impact = buyoutImpact(
+      options.state,
+      quote.property.id,
+      actor?.id ?? options.state.current,
+      quote.ownerId,
+      quote.price,
+      quote.basePrice,
+    );
+    const sellerName = owner ? displayPlayerName(owner) : '持ち主';
+    const impactText =
+      `あなた 総資産 ${formatDelta(impact.buyerNet)} / 年収 ${formatDelta(impact.buyerIncome)}` +
+      ` ・ ${sellerName} 総資産 ${formatDelta(impact.sellerNet)} / 年収 ${formatDelta(impact.sellerIncome)}`;
     let disabled = !options.canAct || options.boughtOut || !affordable;
     let armed = false;
     const button = h('button', { class: 'btn btn-gold buyout-button', attrs: { type: 'button' } });
@@ -105,6 +158,7 @@ export function buildBuyoutPanel(options: BuyoutPanelOptions): HTMLElement | nul
       paint();
       confirm.replaceChildren(
         h('span', { class: 'buyout-confirm-text', text: `本当に ${formatOku(quote.price)} で買収しますか？` }),
+        h('p', { class: 'buyout-confirm-impact', text: impactText }),
         h('button', {
           class: 'btn btn-red buyout-go',
           text: '買収する',
@@ -166,6 +220,37 @@ export function buildBuyoutPanel(options: BuyoutPanelOptions): HTMLElement | nul
             h('span', { class: 'buyout-price-arrow', text: '→', attrs: { 'aria-hidden': 'true' } }),
             h('span', { class: 'buyout-price-to', text: `買収 ${formatOku(quote.price)}` }),
             h('span', { class: 'buyout-price-mult', text: `（×${quote.mult}）` }),
+            h('span', { class: 'buyout-price-premium', text: `割増 +${formatOkuShort(impact.premium)}` }),
+          ),
+          h(
+            'div',
+            { class: 'buyout-impact', attrs: { role: 'group', 'aria-label': '買収後の資産と年収の変化' } },
+            h(
+              'span',
+              { class: 'buyout-impact-side' },
+              h('span', { class: 'buyout-impact-who', text: 'あなた' }),
+              h('span', {
+                class: `buyout-impact-net ${impact.buyerNet < 0 ? 'is-down' : 'is-up'}`,
+                text: `総資産 ${formatDelta(impact.buyerNet)}`,
+              }),
+              h('span', {
+                class: `buyout-impact-income ${impact.buyerIncome < 0 ? 'is-down' : 'is-up'}`,
+                text: `年収 ${formatDelta(impact.buyerIncome)}`,
+              }),
+            ),
+            h(
+              'span',
+              { class: 'buyout-impact-side' },
+              h('span', { class: 'buyout-impact-who', text: sellerName }),
+              h('span', {
+                class: `buyout-impact-net ${impact.sellerNet < 0 ? 'is-down' : 'is-up'}`,
+                text: `総資産 ${formatDelta(impact.sellerNet)}`,
+              }),
+              h('span', {
+                class: `buyout-impact-income ${impact.sellerIncome < 0 ? 'is-down' : 'is-up'}`,
+                text: `年収 ${formatDelta(impact.sellerIncome)}`,
+              }),
+            ),
           ),
           quote.monopoly
             ? h(

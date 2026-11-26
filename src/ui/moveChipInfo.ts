@@ -8,7 +8,8 @@
 
 import type { GameData, City, MoveOption } from '../core/types';
 import type { StateView } from '../core/engine';
-import { purchasePrice } from '../core/economy';
+import { purchasePrice, yearScale } from '../core/economy';
+import { formatOkuShort } from './format';
 
 export interface CityMoveInfo {
   /** Cheapest property nobody owns yet, at the price this player would pay. */
@@ -124,6 +125,39 @@ export function biasedMoveRecommendation(input: MoveRecommendationInput): string
 /** Compact chip copy for the destination distance / price line. */
 export function moveChipPriceLabel(info: CityMoveInfo): string {
   if (info.cheapest === null) return '空きなし';
-  const price = `${Math.round(info.cheapest)}億`;
+  const price = formatOkuShort(info.cheapest);
   return info.affordable ? `${price} 買える` : `${price} 予算外`;
+}
+
+export interface ShopPriceInfo {
+  /** Cheapest card the shop can draw at this year's scale (null when the deck is empty). */
+  cheapest: number | null;
+  affordable: boolean;
+}
+
+/**
+ * The shelf is drawn only when the player lands, so the move chip quotes the cheapest card the
+ * shop can possibly stock at the current year scale (`shopPrice` = price × yearScale).
+ */
+export function shopCardPriceInfo(
+  data: GameData,
+  state: StateView,
+  playerId: number,
+): ShopPriceInfo {
+  const scale = yearScale(state);
+  let cheapest: number | null = null;
+  for (const card of data.cards) {
+    const price = Math.round((card.price || 30) * scale);
+    if (cheapest === null || price < cheapest) cheapest = price;
+  }
+  return {
+    cheapest,
+    affordable: cheapest !== null && (state.players[playerId]?.cash ?? 0) >= cheapest,
+  };
+}
+
+/** `最安 17億 予算外` / `最安 17億 買える` for the card-shop square. */
+export function shopCardPriceLabel(info: ShopPriceInfo): string {
+  if (info.cheapest === null) return 'カードなし';
+  return `最安 ${formatOkuShort(info.cheapest)}${info.affordable ? ' 買える' : ' 予算外'}`;
 }

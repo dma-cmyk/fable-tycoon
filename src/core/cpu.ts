@@ -5,7 +5,8 @@
 
 import type { Action, Effect, GameData, GameState, MoveOption, PlayerState } from './types';
 import { nodeForCity } from './graph';
-import { effectiveDistance } from './realm';
+import { effectiveDistance, worldCityNodeIds } from './realm';
+import { filterWarpTargets } from './warpRules';
 import {
   annualIncome,
   characterPerk,
@@ -21,7 +22,8 @@ import {
 import { handLimitFor } from './cards';
 import { peekCityTarget } from './cityMods';
 import { cpuSkillAction } from './skills';
-import { PIPER_DEAL_EVENT_ID } from './piperLines';
+import { PIPER_CONFISCATE_EVENT_ID, PIPER_DEAL_EVENT_ID } from './piperLines';
+import { piperConfiscateCpuChoice } from './piper';
 import { piperDealCpuChoice, piperMoveBias } from './piperCpu';
 import { errandMoveBias } from './errand';
 import {
@@ -69,6 +71,9 @@ export function cpuDecide(data: GameData, state: GameState): Action {
       const eventId = state.phase.eventId;
       if (eventId === PIPER_DEAL_EVENT_ID) {
         return { t: 'choose', index: piperDealCpuChoice(data, state, player) };
+      }
+      if (eventId === PIPER_CONFISCATE_EVENT_ID) {
+        return { t: 'choose', index: piperConfiscateCpuChoice(data, state, player) };
       }
       const event = data.events.find((e) => e.id === eventId);
       if (!event?.choices || event.choices.length === 0) return { t: 'choose', index: 0 };
@@ -155,18 +160,27 @@ function chooseCard(data: GameData, state: GameState, player: PlayerState): Acti
 
   const destNode = nodeForCity(data, state.destination);
   const currentDistance = destNode ? effectiveDistance(data, player.nodeId, destNode) : 0;
-  if (hand.has('rocket') && currentDistance > 20) return { t: 'use_card', cardId: 'rocket' };
+  if (hand.has('rocket') && currentDistance > 20 && destNode) {
+    // 目的地の直前には降りられないので、実際に近づける都市があるか確かめる。
+    const rocketTargets = filterWarpTargets(data, state, worldCityNodeIds(data));
+    const bestRocket = rocketTargets.reduce(
+      (best, node) => Math.min(best, effectiveDistance(data, node, destNode)),
+      currentDistance,
+    );
+    if (bestRocket + 4 < currentDistance) return { t: 'use_card', cardId: 'rocket' };
+  }
   if (currentDistance > 30) {
     if (hand.has('express3')) return { t: 'use_card', cardId: 'express3' };
     if (hand.has('express2')) return { t: 'use_card', cardId: 'express2' };
   }
 
   if (hand.has('pegasus') && destNode) {
-    const airports = data.cities.filter((c) => c.realm === undefined && c.airport);
+    const airports = data.cities
+      .filter((c) => c.realm === undefined && c.airport)
+      .map((c) => nodeForCity(data, c.id))
+      .filter((node): node is string => node !== null);
     let best = currentDistance;
-    for (const city of airports) {
-      const node = nodeForCity(data, city.id);
-      if (!node) continue;
+    for (const node of filterWarpTargets(data, state, airports)) {
       best = Math.min(best, effectiveDistance(data, node, destNode));
     }
     if (best + 4 < currentDistance) return { t: 'use_card', cardId: 'pegasus' };

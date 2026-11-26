@@ -17,6 +17,7 @@ import {
 } from '../net/online-session';
 import type { Session } from '../net/session-types';
 import { h, ModalHost, ToastHost } from './dom';
+import { resetHorizontalScroll, watchHorizontalScroll } from './scrollGuard';
 import { effectiveFxSpeed } from './settings';
 import { applyMotionPreference } from './motion';
 import { TitleScreen } from './screens/title';
@@ -49,6 +50,9 @@ export class App {
     this.toasts = new ToastHost();
     root.append(this.screenHost, this.modal.el, this.toasts.el);
     applyMotionPreference();
+    watchHorizontalScroll();
+    // Overlays focus their first control; snap back if that focus scrolled the page sideways.
+    this.modal.onChange(() => resetHorizontalScroll());
     this.installGlobalHandlers();
   }
 

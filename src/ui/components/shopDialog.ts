@@ -51,10 +51,12 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
     const stockHost = h('div', { class: 'shop-stock' });
     const stock = state.phase.t === 'shop' ? state.phase.stock : [];
     const stockCount = stock.length;
+    const stockPrices: number[] = [];
     stock.forEach((cardId, index) => {
       const card = cardsById.get(cardId);
       if (!card) return;
       const price = priceOf(card);
+      stockPrices.push(price);
       const canBuy = canAct && player.cash >= price;
       stockHost.append(
         h(
@@ -84,6 +86,20 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
     });
     if (stockCount === 0) {
       stockHost.append(h('p', { class: 'shop-empty', text: '棚は空っぽだ。また来たまえ。' }));
+    } else if (stockPrices.length > 0 && !stockPrices.some((price) => player.cash >= price)) {
+      // Sol: 「13億円で最安17億円にも届かず、店を閉じるだけの一手」になった。
+      const cheapest = Math.min(...stockPrices);
+      stockHost.append(
+        h(
+          'p',
+          { class: 'shop-none-affordable', attrs: { role: 'status' } },
+          h('strong', { class: 'shop-none-affordable-title', text: '買えるカードなし' }),
+          h('span', {
+            class: 'shop-none-affordable-detail',
+            text: `最安 ${formatOku(cheapest)} ・ 所持金 ${formatOku(player.cash)}（カードを売ると現金にできる）`,
+          }),
+        ),
+      );
     }
 
     const handCounts = new Map<string, number>();
@@ -122,10 +138,14 @@ export function openShopDialog(options: ShopDialogOptions): ShopHandle {
       }
     }
 
+    const cheapestStock = stockPrices.length > 0 ? Math.min(...stockPrices) : null;
+    const canAffordAny = cheapestStock !== null && player.cash >= cheapestStock;
     const speech = canAct
-      ? stockCount > 0
-        ? `残り${stockCount}枚の在庫だ。買うも売るも、金次第。気に入ったら札束を置いていきな。`
-        : '棚は売り切れだ。手持ちカードを売るか、また来たまえ。'
+      ? stockCount === 0
+        ? '棚は売り切れだ。手持ちカードを売るか、また来たまえ。'
+        : canAffordAny
+          ? `残り${stockCount}枚の在庫だ。買うも売るも、金次第。気に入ったら札束を置いていきな。`
+          : `買えるカードなし。最安は ${formatOku(cheapestStock ?? 0)} だ。手持ちを売るか、金をためて来たまえ。`
       : `${player.name} が品定め中だ。ゆっくり待とう。`;
 
     scroll.replaceChildren(

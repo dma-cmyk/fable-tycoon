@@ -1,6 +1,7 @@
 import type { PublicState } from '../core/engine';
 import type {Fx} from '../core/types';
 import { FX_MS } from '../net/session-types';
+import { voiceBudgetMs, voicePlaybackRate } from '../audio/voiceBudget';
 import type { UiSettings } from './settings';
 import { CpuTurnPacer, MAX_PACED_SPEED } from './cpuPacing';
 
@@ -58,6 +59,12 @@ export function estimateFxDurationMs(fx: Fx): number {
 export interface PlaybackControl {
   /** Waits `ms` scaled by the current presentation speed. Resolves early when the user skips. */
   wait(ms: number): Promise<void>;
+  /**
+   * Awaits a presentation promise (a camera tween, an image/voice, a modal close) with a bound:
+   * resolves on settle, on skip, or after `ms` scaled by the current speed, whichever is first.
+   * `ms` is the nominal 1x budget of that await.
+   */
+  bound(promise: Promise<unknown> | null | undefined, ms: number): Promise<void>;
   /** Waits until the user taps / presses skip (used by 台詞自動送りオフ). */
   waitManual(): Promise<void>;
   /** Pauses/resumes the watchdog while intentionally waiting on manual user advance. */
@@ -88,6 +95,82 @@ interface ActiveWait {
   timer: ReturnType<typeof globalThis.setTimeout>;
 }
 
+/** One fx's wall time inside an update, measured by FxPlayer (QA / `?debug=fx`). */
+export interface FxStepStat {
+  /** fx kind. */
+  t: string;
+  /** Wall time the handler held the queue. */
+  ms: number;
+  /** Speed-scaled nominal budget for this single fx. */
+  budgetMs: number;
+}
+
+/** One adopted update's playback cost, measured by FxPlayer (QA / `?debug=fx`). */
+export interface FxPlaybackStat {
+  seq: number;
+  gen: number | undefined;
+  /** Per-fx wall times in play order. */
+  fx: FxStepStat[];
+  /** Sum of the nominal 1x durations of the update's fx. */
+  estMs: number;
+  /** Budget the update was given at the current speed (estMs / speed). */
+  scaledMs: number;
+  /** Wall time from starting the update to adopting its state. */
+  wallMs: number;
+  year: number;
+  month: number;
+  phase: string;
+}
+
+/** Playback stats kept for QA; old entries are dropped so a long game cannot grow memory. */
+const MAX_PLAYBACK_STATS = 300;
+
+/**
+ * Minimum wall clock for the slow-update net. A real browser needs at least one frame (and
+ * sometimes a long one) per fx, so a bound near zero would cut every presentation at 8x.
+ */
+const SLOW_UPDATE_FLOOR_MS = 2500;
+
+/** Presentational beats that hold the whole screen and must give way first when the client is behind. */
+const CUTIN_FX: Readonly<Record<string, true>> = {
+  destination: true,
+  errand: true,
+  errand_done: true,
+  goal: true,
+  piper_roulette: true,
+  piper_disaster: true,
+  piper_gift: true,
+  skill: true,
+  final_year: true,
+  city_mod: true,
+  buyout: true,
+};
+
+/** True when the fx is a full-screen beat that can be cut short without losing information. */
+export function isCutinFx(fx: Fx): boolean {
+  return CUTIN_FX[fx.t] === true;
+}
+
+/**
+ * Wall clock one update may take before the player gives up on it and adopts the newest state.
+ * Three times its speed-scaled budget, never below {@link SLOW_UPDATE_FLOOR_MS}. Voice lines are
+ * added unscaled because playback is capped at 1.2x, so 2x/4x must not cut a spoken line.
+ */
+export function slowUpdateBudgetMs(fx: readonly Fx[], speed: number): number {
+  const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
+  let estimatedMs = 0;
+  let voiceMs = 0;
+  for (const item of fx) {
+    const nominal = estimateFxDurationMs(item);
+    estimatedMs += nominal;
+    if (item.t === 'say' && item.text && rate < 4) {
+      // The message window waits for the (bounded) voice at 1x/2x; it does not at 4x/8x.
+      voiceMs += voiceBudgetMs(0, item.text, voicePlaybackRate(rate));
+    }
+  }
+  return Math.max(SLOW_UPDATE_FLOOR_MS, Math.round((estimatedMs * 3) / rate)) + Math.round(voiceMs);
+}
+
 export class FxPlayer {
   private queue: FxUpdate[] = [];
   private running = false;
@@ -99,13 +182,36 @@ export class FxPlayer {
   private destroyed = false;
   private epoch = 0;
   private watchdogTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private slowTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private watchdogPaused = false;
-  private activeUpdate: { update: FxUpdate; epoch: number; budgetMs: number } | null = null;
+  private activeUpdate: { update: FxUpdate; epoch: number; budgetMs: number; slowMs: number } | null = null;
+  /** The fx currently holding the queue, when it is a full-screen cut-in that a backlog may cut. */
+  private activeCutin: Fx | null = null;
   /** CPU routine fx are painted at `fxSpeed × CPU_ROUTINE_BOOST`. */
   private readonly pacer = new CpuTurnPacer();
   private activeBoost = 1;
+  private stats: FxPlaybackStat[] = [];
+  private slowCount = 0;
+  private updateStartedAt = 0;
+  /** Wall clock by which the head update should be done; later waits are clamped to it. */
+  private updateDeadlineAt = 0;
 
   constructor(private readonly host: FxPlayerHost) {}
+
+  /** QA seam: the last {@link MAX_PLAYBACK_STATS} adopted updates, oldest first. */
+  get playbackStats(): readonly FxPlaybackStat[] {
+    return this.stats;
+  }
+
+  /** QA seam: how many updates tripped the slow-update net. */
+  get slowUpdates(): number {
+    return this.slowCount;
+  }
+
+  /** QA seam: the speed multiplier the player is using right now. */
+  get currentSpeed(): number {
+    return this.speedFactor();
+  }
 
   get busy(): boolean {
     return this.running || this.queue.length > 0;
@@ -126,9 +232,26 @@ export class FxPlayer {
       this.activeUpdate &&
       this.activeUpdate.epoch === this.epoch
     ) {
-      this.armWatchdog(this.activeUpdate.update, this.activeUpdate.epoch, this.activeUpdate.budgetMs);
+      const active = this.activeUpdate;
+      this.armWatchdog(active.update, active.epoch, active.budgetMs, active.slowMs);
     }
+    // A full-screen cut-in must not keep the human waiting on new state that is already here:
+    // two newer updates than the one being played means the room moved on, so it ends now.
+    // (Same threshold as the backlog compression below, so both decisions agree.)
+    if (this.running && this.queue.length > 2) this.cutActiveCutin();
     void this.pump();
+  }
+
+  /**
+   * Ends the current full-screen cut-in early (backlog). The fx handler's own `onSkip` cleanup
+   * closes its DOM and its bounded wait resolves, so the pump continues with the next fx.
+   */
+  private cutActiveCutin(): void {
+    if (!this.activeCutin) return;
+    this.activeCutin = null;
+    this.skipRequested = true;
+    this.runSkipCallbacks();
+    this.finishActive();
   }
 
   /**
@@ -146,6 +269,9 @@ export class FxPlayer {
     this.finishActive();
     this.pacer.reset();
     this.activeBoost = 1;
+    this.activeCutin = null;
+    this.updateDeadlineAt = 0;
+    this.updateStartedAt = 0;
     this.skipRequested = false;
     this.skipUpdateRequested = false;
     this.running = false;
@@ -233,39 +359,60 @@ export class FxPlayer {
       globalThis.clearTimeout(this.watchdogTimer);
       this.watchdogTimer = null;
     }
+    if (this.slowTimer !== null) {
+      globalThis.clearTimeout(this.slowTimer);
+      this.slowTimer = null;
+    }
   }
 
-  private armWatchdog(update: FxUpdate, epoch: number, budgetMs: number): void {
-    this.activeUpdate = { update, epoch, budgetMs };
+  /**
+   * Arms the two give-up timers for the head update:
+   *  - `slowTimer` at 3x the speed-scaled budget (`[fx] slow update`): the client is merely behind.
+   *  - `watchdogTimer` at the nominal emergency budget: a presentation promise never settled.
+   * Both call {@link forceEnd}, which clears the other, so they can never fire twice.
+   */
+  private armWatchdog(update: FxUpdate, epoch: number, budgetMs: number, slowMs: number): void {
+    this.activeUpdate = { update, epoch, budgetMs, slowMs };
     this.clearWatchdog();
     if (this.watchdogPaused || this.destroyed) return;
+    this.slowTimer = globalThis.setTimeout(() => {
+      this.slowTimer = null;
+      this.forceEnd(update, epoch, `[fx] slow update seq=${update.seq} played past 3x its ${slowMs}ms budget; adopting the newest state`, true);
+    }, Math.max(1, slowMs));
     this.watchdogTimer = globalThis.setTimeout(() => {
       this.watchdogTimer = null;
-      if (this.epoch !== epoch || this.destroyed) return;
-      // Apply the NEWEST queued update's authoritative state (not the stalled head), otherwise
-      // dropping later queued updates leaves the UI stuck on an old CPU turn while the room has
-      // already advanced to the human player's turn.
-      const latest = this.queue[this.queue.length - 1] ?? update;
-      console.warn(`[fx] update seq=${update.seq} exceeded ${budgetMs}ms; skipping to its end state`);
-      this.epoch += 1; // make the in-flight pump stop before applying anything else
-      this.activeUpdate = null;
-      this.watchdogPaused = false;
-      this.running = false;
-      this.queue = [];
-      this.skipRequested = false;
-      this.skipUpdateRequested = false;
-      this.runSkipCallbacks();
-      this.finishActive();
-      try {
-        this.host.onWatchdog?.(latest);
-      } catch {
-        /* presentation cleanup must not prevent unlocking the UI */
-      }
-      this.host.setBusy(false);
-      this.host.setSkippable(false);
-      this.host.onQueueChange(0);
-      this.applyForcedEnd(latest);
-    }, budgetMs);
+      this.forceEnd(update, epoch, `[fx] update seq=${update.seq} exceeded ${budgetMs}ms; skipping to its end state`);
+    }, Math.max(1, budgetMs));
+  }
+
+  /** Applies the newest queued state and unlocks the UI. Shared by the slow net and the watchdog. */
+  private forceEnd(update: FxUpdate, epoch: number, warning: string, slow = false): void {
+    if (this.epoch !== epoch || this.destroyed) return;
+    // Apply the NEWEST queued update's authoritative state (not the stalled head), otherwise
+    // dropping later queued updates leaves the UI stuck on an old CPU turn while the room has
+    // already advanced to the human player's turn.
+    const latest = this.queue[this.queue.length - 1] ?? update;
+    if (slow) this.slowCount += 1;
+    console.warn(warning);
+    this.epoch += 1; // make the in-flight pump stop before applying anything else
+    this.slowTimer = null;
+    this.activeUpdate = null;
+    this.watchdogPaused = false;
+    this.running = false;
+    this.queue = [];
+    this.skipRequested = false;
+    this.skipUpdateRequested = false;
+    this.runSkipCallbacks();
+    this.finishActive();
+    try {
+      this.host.onWatchdog?.(latest);
+    } catch {
+      /* presentation cleanup must not prevent unlocking the UI */
+    }
+    this.host.setBusy(false);
+    this.host.setSkippable(false);
+    this.host.onQueueChange(0);
+    this.applyForcedEnd(latest);
   }
 
   private setManualWait(waiting: boolean): void {
@@ -274,8 +421,27 @@ export class FxPlayer {
     if (waiting) {
       this.clearWatchdog();
     } else if (this.activeUpdate && this.activeUpdate.epoch === this.epoch && !this.destroyed) {
-      this.armWatchdog(this.activeUpdate.update, this.activeUpdate.epoch, this.activeUpdate.budgetMs);
+      const active = this.activeUpdate;
+      this.armWatchdog(active.update, active.epoch, active.budgetMs, active.slowMs);
     }
+  }
+
+  /** QA: one row per adopted update so a slow cut-in can be identified after the fact. */
+  private recordStat(update: FxUpdate, estimatedMs: number, speed: number, steps: FxStepStat[]): void {
+    const wallMs = this.updateStartedAt > 0 ? performance.now() - this.updateStartedAt : 0;
+    this.updateStartedAt = 0;
+    this.stats.push({
+      seq: update.seq,
+      gen: update.gen,
+      fx: steps,
+      estMs: estimatedMs,
+      scaledMs: estimatedMs / Math.max(1, speed),
+      wallMs,
+      year: update.state.year ?? 0,
+      month: update.state.month ?? 0,
+      phase: update.state.phase?.t ?? 'unknown',
+    });
+    if (this.stats.length > MAX_PLAYBACK_STATS) this.stats.splice(0, this.stats.length - MAX_PLAYBACK_STATS);
   }
 
   private speedFactor(): number {
@@ -290,6 +456,23 @@ export class FxPlayer {
   private controlFor(epoch: number): PlaybackControl {
     const player = this;
     const stale = () => player.destroyed || player.epoch !== epoch;
+    const sleepScaled = (ms: number): Promise<void> => {
+      if (stale() || ms <= 0) return Promise.resolve();
+      const scaled = Math.max(40, Math.round(ms / player.speedFactor()));
+      // A busy main thread stretches every timer. Once the update is past its (3x) budget, stop
+      // spending wall clock on presentation: waits collapse to the frame minimum so the queue
+      // catches up instead of drifting further behind the room.
+      const remaining = player.updateDeadlineAt - performance.now();
+      const bounded = remaining > 0 ? Math.min(scaled, Math.max(40, Math.round(remaining))) : 40;
+      const { promise, resolve } = Promise.withResolvers<void>();
+      player.finishActive();
+      const timer = globalThis.setTimeout(() => {
+        if (player.active?.resolve === resolve) player.active = null;
+        resolve();
+      }, bounded);
+      player.active = { resolve, timer };
+      return promise;
+    };
     return {
       get speed() {
         return player.speedFactor();
@@ -303,17 +486,13 @@ export class FxPlayer {
       get skipped() {
         return player.skipRequested || stale();
       },
-      wait(ms: number) {
-        if (stale() || ms <= 0) return Promise.resolve();
-        const scaled = Math.max(40, Math.round(ms / player.speedFactor()));
-        const { promise, resolve } = Promise.withResolvers<void>();
-        player.finishActive();
-        const timer = globalThis.setTimeout(() => {
-          if (player.active?.resolve === resolve) player.active = null;
-          resolve();
-        }, scaled);
-        player.active = { resolve, timer };
-        return promise;
+      wait: sleepScaled,
+      bound(promise: Promise<unknown> | null | undefined, ms: number) {
+        const timed = sleepScaled(ms);
+        if (!promise) return timed;
+        // Settling late must never leak an unhandled rejection; the wait is already bounded.
+        void promise.catch(() => undefined);
+        return Promise.race([promise.then(() => undefined).catch(() => undefined), timed]);
       },
       waitManual() {
         if (stale() || player.skipRequested) return Promise.resolve();
@@ -348,24 +527,36 @@ export class FxPlayer {
         const update = this.queue[0];
         const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
         const watchdogMs = estimatedMs * 2 + 8000;
+        const playbackSpeed = this.speedFactor();
+        const slowMs = slowUpdateBudgetMs(update.fx, playbackSpeed);
+        this.updateStartedAt = performance.now();
+        // Waits shrink once the update has used its own scaled budget, so a slow frame does not
+        // compound into the next fx. The 3x slow net stays as the give-up bound above.
+        this.updateDeadlineAt = this.updateStartedAt + Math.max(600, Math.round(estimatedMs / Math.max(1, playbackSpeed)));
         this.watchdogPaused = false;
         this.skipUpdateRequested = false;
-        this.armWatchdog(update, epoch, watchdogMs);
+        this.armWatchdog(update, epoch, watchdogMs, slowMs);
+        const steps: FxStepStat[] = [];
         for (const fx of update.fx) {
           if (this.destroyed || this.epoch !== epoch || this.skipUpdateRequested) break;
           this.skipCallbacks.clear();
           this.skipRequested = false;
           // CPU routine bookkeeping plays faster; `turn` fx also update the paced actor.
           this.activeBoost = this.pacer.speedFor(fx, update.state);
+          this.activeCutin = isCutinFx(fx) ? fx : null;
           this.host.setSkippable(true);
+          const stepStart = performance.now();
+          const budgetMs = estimateFxDurationMs(fx) / Math.max(1, playbackSpeed);
           try {
             await this.host.handleFx(fx, update.state, this.controlFor(epoch));
           } catch {
             // A presentation handler must not wedge the game. Continue to the next fx.
           } finally {
             if (this.epoch === epoch) this.setManualWait(false);
+            steps.push({ t: fx.t, ms: performance.now() - stepStart, budgetMs });
           }
         }
+        this.activeCutin = null;
         this.activeBoost = 1;
         if (this.epoch !== epoch) return;
         this.skipUpdateRequested = false;
@@ -386,6 +577,7 @@ export class FxPlayer {
           } catch {
             // A state paint failure must never leave FxPlayer permanently wedged in busy=true.
           }
+          this.recordStat(update, estimatedMs, playbackSpeed, steps);
         }
       }
     } finally {

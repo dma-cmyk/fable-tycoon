@@ -308,6 +308,69 @@
   font-weight: 800;
 }
 
+.buyout-price-premium {
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: #ffe8c8;
+  border: 1px solid #e9b96a;
+  color: #7a4a00;
+  font-size: 10.5px;
+}
+
+/* 確定前に両者の総資産・年収がどう動くかを見せる（Sol の指摘）。 */
+.buyout-impact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: #f4f7ff;
+  border: 1px solid #c6d4ee;
+}
+
+.buyout-impact-side {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.buyout-impact-who {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #22304b;
+}
+
+.buyout-impact-net,
+.buyout-impact-income {
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.buyout-impact-net.is-down,
+.buyout-impact-income.is-down {
+  color: #a52a12;
+}
+
+.buyout-impact-net.is-up,
+.buyout-impact-income.is-up {
+  color: #0d6b3f;
+}
+
+.buyout-confirm-impact {
+  flex: 1 1 100%;
+  margin: 0;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6d2a1a;
+  line-height: 1.4;
+}
+
 .buyout-warning {
   display: flex;
   align-items: center;

@@ -9,6 +9,7 @@ import { readMute, uiSettings, writeMute, type MuteFlags } from '../settings';
 import { ChatPanel, type ChatSeatInfo } from '../components/chatPanel';
 import { EmotePalette } from '../components/emotePalette';
 import { openCharacterPicker } from '../components/charPicker';
+import { assignDistinctIds, pickRandom } from '../randomPick';
 import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { openPlayerMenu } from '../components/playerMenu';
 import { perkInfo } from '../perks';
@@ -330,6 +331,7 @@ export class LobbyScreen implements ScreenHandle {
       ),
     );
 
+    const cpuSeats = lobby.seats.filter((seat) => seat.kind === 'cpu');
     const seatsPanel = h(
       'section',
       { class: 'lobby-seats-panel panel' },
@@ -337,10 +339,22 @@ export class LobbyScreen implements ScreenHandle {
         'div',
         { class: 'lobby-panel-head' },
         h('h2', { class: 'section-title', text: 'プレイヤー席' }),
-        h('span', {
-          class: 'badge',
-          text: `${humans.length} 人 + CPU ${occupied.length - humans.length} / 全 ${occupied.length} 人`,
-        }),
+        h(
+          'div',
+          { class: 'lobby-panel-actions' },
+          h('span', {
+            class: 'badge',
+            text: `${humans.length} 人 + CPU ${occupied.length - humans.length} / 全 ${occupied.length} 人`,
+          }),
+          isHost && cpuSeats.length > 0
+            ? h('button', {
+                class: 'btn btn-ghost btn-small lobby-random-cpus',
+                text: '🎲 CPUをランダムに',
+                attrs: { type: 'button' },
+                on: { click: () => this.randomizeAllCpus() },
+              })
+            : null,
+        ),
       ),
       h('div', { class: 'lobby-seats' }, ...lobby.seats.map((seat) => this.seatCard(seat, isHost))),
     );
@@ -511,6 +525,12 @@ export class LobbyScreen implements ScreenHandle {
               }),
             ),
             h('button', {
+              class: 'btn btn-ghost btn-small lobby-cpu-random',
+              text: '🎲 ランダム',
+              attrs: { type: 'button', 'aria-label': `${seat.name} のキャラクターをランダムに選ぶ` },
+              on: { click: () => this.randomizeCpuSeat(seat.index) },
+            }),
+            h('button', {
               class: 'btn btn-ghost btn-small',
               text: '空きに戻す',
               attrs: { type: 'button' },
@@ -605,10 +625,7 @@ export class LobbyScreen implements ScreenHandle {
     const lobby = this.lobby;
     const seat = this.mySeat !== null ? lobby?.seats[this.mySeat] : undefined;
     if (!lobby || !seat) return;
-    const exclude = new Set<string>();
-    for (const other of lobby.seats) {
-      if (other.index !== seat.index && other.characterId) exclude.add(other.characterId);
-    }
+    const exclude = this.excludeForSeat(seat.index);
     openCharacterPicker({
       modal: this.options.modal,
       title: 'あなたのキャラクター',
@@ -616,6 +633,42 @@ export class LobbyScreen implements ScreenHandle {
       exclude,
       current: seat.characterId,
       onPick: (characterId) => this.options.session.send({ t: 'pick_character', characterId }),
+    });
+  }
+
+  /** Ids every other occupied seat already owns. */
+  private excludeForSeat(index: number): Set<string> {
+    const exclude = new Set<string>();
+    for (const other of this.lobby?.seats ?? []) {
+      if (other.index !== index && other.characterId) exclude.add(other.characterId);
+    }
+    return exclude;
+  }
+
+  /** Host-only: reroll one CPU seat through the normal host-authoritative pick message. */
+  private randomizeCpuSeat(index: number): void {
+    const seat = this.lobby?.seats[index];
+    if (!seat || seat.kind !== 'cpu') return;
+    const exclude = this.excludeForSeat(index);
+    const picked = pickRandom([...charsById.keys()].filter((id) => !exclude.has(id)));
+    if (!picked) return;
+    this.options.session.send({ t: 'pick_character', characterId: picked, seat: index });
+  }
+
+  /** Host-only: give every CPU seat a distinct character in one tap. */
+  private randomizeAllCpus(): void {
+    const lobby = this.lobby;
+    if (!lobby) return;
+    const used = new Set<string>();
+    for (const seat of lobby.seats) {
+      if (seat.kind !== 'open' && seat.characterId) used.add(seat.characterId);
+    }
+    const cpuSeats = lobby.seats.filter((seat) => seat.kind === 'cpu');
+    if (cpuSeats.length === 0) return;
+    const picked = assignDistinctIds([...charsById.keys()], cpuSeats.length, used);
+    cpuSeats.forEach((seat, order) => {
+      const characterId = picked[order];
+      if (characterId) this.options.session.send({ t: 'pick_character', characterId, seat: seat.index });
     });
   }
 

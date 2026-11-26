@@ -19,6 +19,11 @@ export interface EventPanelStateMeta {
   fxPlaying?: boolean;
   /** True when the current event belongs to a human seat controlled by this client. */
   isMine?: boolean;
+  /**
+   * Local/solo: choices stay clickable while the intro lines play; clicking skips the rest and
+   * sends the choice. Online keeps the host-timed intro lock.
+   */
+  earlyChoice?: boolean;
 }
 
 export class EventPanel {
@@ -44,6 +49,7 @@ export class EventPanel {
   private canAct = false;
   private fxPlaying = false;
   private isMine = false;
+  private earlyChoice = false;
   private chosen = false;
   private open = false;
   private readonly choicesSkipBtn: HTMLButtonElement;
@@ -179,6 +185,7 @@ export class EventPanel {
     if (meta) {
       if (meta.fxPlaying !== undefined) this.fxPlaying = meta.fxPlaying;
       if (meta.isMine !== undefined) this.isMine = meta.isMine;
+      if (meta.earlyChoice !== undefined) this.earlyChoice = meta.earlyChoice;
     }
     this.refreshChoices();
   }
@@ -212,14 +219,20 @@ export class EventPanel {
     }
     const phaseActive = state.phase.t === 'event';
     const waitingFx = this.fxPlaying && !this.chosen;
-    const enabled = phaseActive && this.canAct && !this.chosen && !waitingFx;
+    const enabled = phaseActive && this.canAct && !this.chosen && (!waitingFx || this.earlyChoice);
     const actor = state.players[state.current];
-    this.choiceArea.classList.toggle('is-fx-waiting', waitingFx || !phaseActive);
+    // Solo/local early pick keeps the choices bright while the intro plays.
+    this.choiceArea.classList.toggle('is-fx-waiting', (waitingFx && !this.earlyChoice) || !phaseActive);
     for (let index = 0; index < choices.length; index++) {
       const choice = choices[index];
       this.choicesHost.append(this.choiceButton(choice, index, enabled));
     }
-    if (waitingFx && (this.isMine || !phaseActive)) {
+    if (waitingFx && this.earlyChoice && this.canAct) {
+      this.choicesBanner.hidden = false;
+      this.choicesNote.hidden = false;
+      this.choicesNote.textContent = '台詞の途中でも選べます（選ぶと残りを飛ばす）';
+      this.choicesSkipBtn.hidden = true;
+    } else if (waitingFx && (this.isMine || !phaseActive)) {
       this.choicesBanner.hidden = false;
       this.choicesNote.hidden = false;
       this.choicesNote.textContent = '演出のあとで選べます';

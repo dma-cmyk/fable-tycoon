@@ -27,7 +27,10 @@ interface TreeStamp {
   lon?: number;
 }
 
-const CACHE_PAD = 0.85; // extra world margin on each side of the viewport
+// Extra world margin on each side of the viewport. Left as-is: changing it rescales the
+// raster, which shifts every coastline by a fraction of a pixel, and the rebuild it feeds
+// now only runs on a pan past the margin.
+const CACHE_PAD = 0.85;
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -290,7 +293,15 @@ export class LandLayer {
       }
       return;
     }
+    // Clip instead of cropping the source rect: the sampling map stays identical to a
+    // whole-raster blit (so pixels are unchanged), while the rasteriser can skip the
+    // off-screen part of the cache instead of resampling ~7 viewports per frame.
+    target.save();
+    target.beginPath();
+    target.rect(0, 0, cam.vw, cam.vh);
+    target.clip();
     target.drawImage(this.canvas, screenX, screenY, drawW, drawH);
+    target.restore();
   }
 
   private rebuild(
