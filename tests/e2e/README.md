@@ -60,6 +60,10 @@ Everything is written under `.tmp/e2e/`:
   (DOM + net snapshot + screenshot when a skippable cutscene exceeds 45 s).
   Full `[debug:net]` console streams and bot action logs are written per client
   to `<label>-net-<client>.json`; they are not embedded in `report.json`.
+  `fxSlowWarnings`/`fxSlowLog` count the client's `[fx] slow update ...` safety
+  net (3x the speed-scaled budget), `targetCancels` counts warp pickers closed
+  because every candidate was disabled, and `canvasStats` samples the play-map
+  canvas (size + unique colours) at midgame so a blank/failed render is visible.
 
 ## Environment
 

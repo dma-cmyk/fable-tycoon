@@ -345,6 +345,12 @@ function attachErrorCollectors(client) {
       client.fxSkipLog = client.fxSkipLog || [];
       if (client.fxSkipLog.length < 40) client.fxSkipLog.push({ atMs: nowMs(), text: message.text().slice(0, 200) });
     }
+    if (/\[fx\] slow update/i.test(consoleText)) {
+      client.fxSlowWarnings = (client.fxSlowWarnings || 0) + 1;
+      report.fxSlowWarnings = (report.fxSlowWarnings || 0) + 1;
+      client.fxSlowLog = client.fxSlowLog || [];
+      if (client.fxSlowLog.length < 60) client.fxSlowLog.push({ atMs: nowMs(), text: consoleText.slice(0, 240) });
+    }
     if (message.type() === 'error') {
       const entry = {
         client: client.id,
@@ -982,6 +988,44 @@ async function stallProbe(client, busyFor) {
   client.stallEvidence = { atMs: nowMs(), busyFor, diagnostics, net };
   log(`${client.id}: cutscene stuck for ${Math.round(busyFor / 1000)}s — captured stall evidence`);
   await withTimeout(screenshot(client, `stall-${client.id}`, { optional: true }), 8000, null);
+}
+
+/** Rough paint check: a blank/failed map canvas has very few unique colours. */
+async function canvasStats(client, selector) {
+  const page = client.page;
+  if (!page || page.isClosed()) return null;
+  const stats = await withTimeout(
+    page
+      .evaluate((sel) => {
+        const canvas = document.querySelector(sel);
+        if (!canvas) return { error: 'missing' };
+        try {
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return { error: 'no 2d context', w: canvas.width, h: canvas.height };
+          const w = canvas.width;
+          const h = canvas.height;
+          if (!w || !h) return { error: 'zero-size', w, h };
+          const data = ctx.getImageData(0, 0, w, h).data;
+          const colors = new Set();
+          for (let i = 0; i < data.length; i += 4 * 101) {
+            colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+          }
+          return {
+            w,
+            h,
+            cssW: canvas.clientWidth,
+            cssH: canvas.clientHeight,
+            uniqueColors: colors.size,
+          };
+        } catch (error) {
+          return { error: String(error?.message || error), w: canvas.width, h: canvas.height };
+        }
+      }, selector)
+      .catch((error) => ({ error: String(error?.message || error) })),
+    5000,
+    { error: 'probe timeout' },
+  );
+  return stats;
 }
 
 async function pageDiagnostics(client) {
@@ -1697,15 +1741,37 @@ async function actOnce(client) {
     return false;
   }
 
-  // Card / skill target dialog (both use .target-dialog).
+  // Card / skill / warp target dialog (all use .target-dialog).
   if (await isVisible(page.locator('.target-dialog'))) {
     const target = page.locator('.target-item:not([disabled])').first();
     if (await isVisible(target) && (await target.isEnabled().catch(() => false))) {
+      client.targetNoChoiceSince = 0;
       await press(client, target);
       return 'target';
     }
+    // Rockets can still offer the "宇宙へ" option when every city is blocked
+    // (no landing within 4 steps of the destination).
+    const space = page.locator('.target-space:not([disabled])').first();
+    if (await isVisible(space) && (await space.isEnabled().catch(() => false))) {
+      client.targetNoChoiceSince = 0;
+      await press(client, space);
+      return 'target_space';
+    }
+    // No selectable item at all: cancel after a short grace so the turn cannot
+    // wedge on an empty/fully-disabled picker.
+    client.targetNoChoiceSince = client.targetNoChoiceSince || Date.now();
+    if (Date.now() - client.targetNoChoiceSince > 2500) {
+      const cancel = page.locator('.target-footer .btn-ghost:not([disabled])').first();
+      if (await isVisible(cancel) && (await cancel.isEnabled().catch(() => false))) {
+        client.targetCancels = (client.targetCancels || 0) + 1;
+        client.targetNoChoiceSince = 0;
+        await press(client, cancel);
+        return 'target_cancel';
+      }
+    }
     return false;
   }
+  client.targetNoChoiceSince = 0;
 
   // Discard overflow.
   if (await isVisible(page.locator('.discard-dialog'))) {
@@ -2275,6 +2341,7 @@ async function main() {
       await recoverClient(client).catch((error) => log(`${client.id} recovery before screenshot failed: ${error.message}`));
     }
     if (client.page && !client.page.isClosed()) {
+      client.canvasStats = await canvasStats(client, '.map-canvas');
       await screenshot(client, `midgame-${client.id}`, { optional: true });
     }
   }
@@ -2302,6 +2369,7 @@ async function main() {
       result.steps.push('opened');
       result.tabs = await probeClient.page.locator('.map-screen-tab').count();
       result.layers = await probeClient.page.locator('.map-screen-layer').count();
+      result.mapCanvas = await canvasStats(probeClient, '.map-screen-canvas');
       await screenshot(probeClient, `map-screen-${probeClient.id}`, { optional: true });
       await domClick(probeClient.page.locator('.map-screen-close').first());
       await waitFor(
@@ -2754,6 +2822,10 @@ try {
     brokerUnique: client.brokerUnique || [],
     fxSkipWarnings: client.fxSkipWarnings || 0,
     fxSkipLog: client.fxSkipLog || [],
+    fxSlowWarnings: client.fxSlowWarnings || 0,
+    fxSlowLog: client.fxSlowLog || [],
+    targetCancels: client.targetCancels || 0,
+    canvasStats: client.canvasStats ?? null,
     webrtcFailures: client.webrtcFailures || 0,
   }));
   report.brokers = Object.fromEntries(

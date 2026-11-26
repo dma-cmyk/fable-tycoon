@@ -116,10 +116,6 @@ export class LandLayer {
   private readonly boxes: PolyBox[];
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  /** Holds the previous raster while a pan shifts it; allocated on first patch. */
-  private scratch: HTMLCanvasElement | null = null;
-  /** Zoom the cached raster was rendered at; the blit rescales within a tolerance. */
-  private rasterZoom = 0;
   /** Coastline path in world units, built once and reused under a transform. */
   private worldPath: Path2D | null = null;
   private key = '';
@@ -192,10 +188,6 @@ export class LandLayer {
   /** Release all offscreen canvases. */
   destroy(): void {
     releaseCanvas(this.canvas);
-    if (this.scratch) {
-      releaseCanvas(this.scratch);
-      this.scratch = null;
-    }
     if (this.fadeCanvas) releaseCanvas(this.fadeCanvas);
     this.fadeCanvas = null;
     this.fadeMeta = null;
@@ -267,17 +259,10 @@ export class LandLayer {
     const requestedScale = bucketZoom * dpr;
     const raster = fitRaster(wWorld, hWorld, requestedScale, this.budget);
     const scale = raster.scale;
-    // Content identity only: the zoom bucket is deliberately NOT part of it. The cached
-    // raster keeps being blitted (the blit already rescales by cam.zoom / rasterZoom)
-    // until the zoom drifts far enough to show, so ordinary zoom tweening stops
-    // rebuilding the board. 0.22 in log2 ≈ ±16%.
-    const key = `${dpr.toFixed(3)}:${withTrees ? 1 : 0}:${revision}:${season}`;
-    // While a zoom tween is running the raster is simply rescaled by the blit; only a
-    // settled view that drifted past the tolerance pays for a rebuild.
-    const zoomOff =
-      this.rasterZoom > 0
-      && !cam.isTweening()
-      && Math.abs(Math.log2(cam.zoom / this.rasterZoom)) > 0.3;
+    // Geometry-exact key. Rendering the raster at a different zoom bucket and rescaling it
+    // in the blit is visually a different picture from a rebuild at the current zoom, so
+    // (visual correctness first) any change of bucket, scale or raster extent rebuilds.
+    const key = `${bucket}:${dpr.toFixed(3)}:${scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
 
     const marginX = wWorld >= MAP_W - 0.5 ? Infinity : (wWorld - visW) / 2;
     const marginY = hWorld >= MAP_H - 0.5 ? Infinity : (hWorld - visH) / 2;
@@ -285,20 +270,11 @@ export class LandLayer {
     const dy = Math.abs(cam.y - this.centerY);
     const needs =
       key !== this.key ||
-      zoomOff ||
       dx > marginX * 0.8 ||
       dy > marginY * 0.8;
 
     if (needs) {
-      // Same content, similar zoom, camera panning inside the cache: shift the existing
-      // pixels by whole device pixels and repaint only the strips that scrolled in.
-      const patched = key === this.key
-        && !zoomOff
-        && this.canvas.width > 1
-        && this.scrollPatch(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt);
-      if (!patched) {
-        this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
-      }
+      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
     }
 
     const screenX = cam.vw / 2 + wrapDx(cam.x, this.ox + this.wWorld / 2) * cam.zoom - (this.wWorld * cam.zoom) / 2;
@@ -355,7 +331,6 @@ export class LandLayer {
     this.wWorld = wWorld;
     this.hWorld = hWorld;
     this.centerX = cam.x;
-    this.rasterZoom = cam.zoom;
     this.key = key || `${bucket}:${dpr.toFixed(3)}:${fit.scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
 
     if (wWorld >= MAP_W - 0.5) {
@@ -373,7 +348,6 @@ export class LandLayer {
 
     this.paintRaster(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt);
   }
-
 
   /** Allocate (or keep) the backing store for the current geometry and clear it. */
   private prepareCanvas(wPx: number, hPx: number, requestedPxW: number, requestedPxH: number): void {
@@ -537,78 +511,6 @@ export class LandLayer {
       }
     }
     return path;
-  }
-
-  /**
-   * Re-centre the cached raster on the camera without repainting it: shift the existing
-   * pixels by whole device pixels and repaint only the strips that scrolled into view.
-   *
-   * Panning at a fixed zoom used to rebuild the whole board (~300 ms) every time the
-   * camera crossed the cache margin. Whole-pixel shifts keep already-painted pixels
-   * bit-identical, so the result matches a full rebuild except for the new strips.
-   */
-  private scrollPatch(
-    cam: Camera,
-    dpr: number,
-    season: Season,
-    withTrees: boolean,
-    paintStatic: LayerPainter | undefined,
-    treeAvoid: ((x: number, y: number) => boolean) | undefined,
-    geoAt: ((x: number, y: number) => { lat: number; lon: number }) | undefined,
-  ): boolean {
-    if (this.wWorld >= MAP_W - 0.5 || this.hWorld >= MAP_H - 0.5) return false;
-    const wPx = this.canvas.width;
-    const hPx = this.canvas.height;
-    if (wPx < 2 || hPx < 2) return false;
-    const targetOx = cam.x - this.wWorld / 2;
-    const targetOy = Math.min(MAP_H - this.hWorld, Math.max(0, cam.y - this.hWorld / 2));
-    let sdx = Math.round((targetOx - this.ox) * this.scale);
-    let sdy = Math.round((targetOy - this.oy) * this.scale);
-    // Re-centre in bounded steps: one patch repaints only the strips it exposes, so a
-    // smaller step keeps every patch frame short. The next frames step again until the
-    // raster is centred (the cache margin is far larger than one step).
-    const maxStepX = Math.max(24, Math.round(wPx * 0.05));
-    const maxStepY = Math.max(24, Math.round(hPx * 0.05));
-    sdx = Math.max(-maxStepX, Math.min(maxStepX, sdx));
-    sdy = Math.max(-maxStepY, Math.min(maxStepY, sdy));
-    if (sdx === 0 && sdy === 0) {
-      this.centerX = cam.x;
-      this.centerY = this.oy + this.hWorld / 2;
-      return true;
-    }
-    // A shift that leaves no overlap is a jump, not a pan: rebuild instead.
-    if (Math.abs(sdx) >= wPx || Math.abs(sdy) >= hPx) return false;
-    const scratch = this.scratch ?? (this.scratch = document.createElement('canvas'));
-    if (scratch.width !== wPx || scratch.height !== hPx) {
-      releaseCanvas(scratch);
-      scratch.width = wPx;
-      scratch.height = hPx;
-    }
-    const sctx = scratch.getContext('2d');
-    if (!sctx) return false;
-    const ctx = this.ctx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.clearRect(0, 0, wPx, hPx);
-    sctx.drawImage(this.canvas, 0, 0);
-    ctx.clearRect(0, 0, wPx, hPx);
-    ctx.drawImage(scratch, sdx, sdy);
-    this.ox += sdx / this.scale;
-    this.oy += sdy / this.scale;
-    this.centerX = cam.x;
-    this.centerY = this.oy + this.hWorld / 2;
-    // Strips exposed by the shift: the vertical one first, then the horizontal remainder.
-    const strips: Array<[number, number, number, number]> = [];
-    if (sdx > 0) strips.push([0, 0, sdx, hPx]);
-    else if (sdx < 0) strips.push([wPx + sdx, 0, -sdx, hPx]);
-    const x0 = sdx > 0 ? sdx : 0;
-    const x1 = sdx < 0 ? wPx + sdx : wPx;
-    if (sdy > 0) strips.push([x0, 0, Math.max(1, x1 - x0), sdy]);
-    else if (sdy < 0) strips.push([x0, hPx + sdy, Math.max(1, x1 - x0), -sdy]);
-    for (const strip of strips) {
-      this.paintRaster(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt, strip);
-    }
-    return true;
   }
 
   private drawSnow(ctx: CanvasRenderingContext2D, path: Path2D, season: Season): void {
