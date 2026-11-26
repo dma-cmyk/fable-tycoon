@@ -95,6 +95,9 @@ async function freezeBoard(page) {
     map.celebrate = () => {};
     map.shake = () => {};
     map.setMood = () => {};
+    // The game keeps advancing months while the scripted camera ride runs; a season flip
+    // mid-run changes every land pixel and is not what this harness is comparing.
+    map.setMonth = () => {};
     map.labelFade = new map.labelFade.constructor(0, 0);
     map.requestRender = () => {};
     map.scheduleAmbient = () => {};
@@ -171,10 +174,13 @@ async function captureLayer(page) {
     const cam = map.camera;
     return {
       raw: btoa(binary),
+      png: composed.toDataURL('image/png'),
       width: composed.width,
       height: composed.height,
       camera: { x: cam.x, y: cam.y, zoom: cam.zoom },
       geom: { ox: L.ox, oy: L.oy, scale: L.scale, key: L.key },
+      content: { revision: map.staticRevision, season: map.season, view: map.view, overview: map.isOverview(), dpr: map.dpr },
+      stats: L.getFrameStats(),
     };
   });
 }
@@ -288,6 +294,9 @@ const FIXED_NOW = 1_700_000_000_000;
 async function captureAtCamera(page) {
   const diff = await page.evaluate((fixedNow) => {
     const map = globalThis.__fableGame.map;
+    // Pin the baked content for both captures of a comparison.
+    map.season = 'spring';
+    map.month = 4;
     // Label alpha is a time-latched fade: a camera that wandered through occluded
     // regions carries latch state that has nothing to do with the raster under test.
     // Reset it so both captures start from the same label state.
@@ -535,6 +544,16 @@ async function runView(browserName, viewName) {
     result.diffAgain = diffRaw(before.layer.raw, again.layer.raw);
     result.frameDiffAgain = diffRaw(before.frame.raw, again.frame.raw);
     result.diff = diffRaw(before.layer.raw, after.layer.raw);
+    if (args.get('dump') === '1') {
+      const dir = path.join(OUT, LABEL);
+      await mkdir(dir, { recursive: true });
+      for (const [tag, shot] of [['before', before.layer], ['after', after.layer]]) {
+        await writeFile(
+          path.join(dir, `${browserName}-${viewName}-wander-${tag}.png`),
+          Buffer.from(String(shot.png).split(',')[1], 'base64'),
+        );
+      }
+    }
     result.frameDiff = diffRaw(before.frame.raw, after.frame.raw);
     result.frameDiffBounds = diffBounds(
       Buffer.from(before.frame.raw, 'base64'),

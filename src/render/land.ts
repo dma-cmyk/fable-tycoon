@@ -53,6 +53,10 @@ const DEFAULT_FRAME_BUDGET_MS = 8;
  * pixels this far from the canvas edge makes tiles exactly equal to a full paint.
  */
 const EDGE_BLEED = 8;
+/** Device width of the whole-world placeholder raster built once per season. */
+const THUMB_DEV = 1024;
+/** Per-frame rasterisation budget for a frame that has nothing exact on screen yet. */
+const JUMP_BUDGET_MS = 24;
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -171,6 +175,8 @@ interface TileRect {
   devW: number;
   devH: number;
   dist: number;
+  /** Inside the viewport (the one-tile margin ring is not). */
+  visible: boolean;
 }
 
 interface PaintContent {
@@ -254,17 +260,17 @@ export class LandLayer {
   /** Composed frame for the last draw (viewport size in device px). */
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  /** Previous composed frame, kept only while tiles are missing (placeholder). */
-  private backCanvas: HTMLCanvasElement | null = null;
-  private backCtx: CanvasRenderingContext2D | null = null;
-  private backGeom: FrameGeometry | null = null;
+  /** Whole-world low-resolution land raster, the last-resort placeholder. */
+  private thumbCanvas: HTMLCanvasElement | null = null;
+  private thumbFamily = '';
+  private lastSeason: Season = 'spring';
 
   private groups = new Map<string, TileGroup>();
   private cachedArea = 0;
   private seq = 0;
   private frameBudgetMs = DEFAULT_FRAME_BUDGET_MS;
   private composeKey = '';
-  private lastGroupKey = '';
+  private currentGroupKey = '';
   private lastFrame: FrameGeometry | null = null;
   private lastGroup: TileGroup | null = null;
   private everComposed = false;
@@ -322,6 +328,9 @@ export class LandLayer {
     // Building the deterministic tree field takes a moment; do it behind the
     // loading screen instead of on the first mid/near zoom.
     this.trees = this.buildTrees();
+    // Same for the whole-world placeholder: build it now so a later camera jump never has
+    // to wait for it.
+    this.ensureThumb(this.lastSeason);
   }
 
   /** Drop the composed frame; tiles stay cached (they are keyed by content). */
@@ -354,12 +363,6 @@ export class LandLayer {
     this.budget = budget;
     this.clearTiles();
     if (this.canvas.width || this.canvas.height) releaseCanvas(this.canvas);
-    if (this.backCanvas) {
-      releaseCanvas(this.backCanvas);
-      this.backCanvas = null;
-      this.backCtx = null;
-      this.backGeom = null;
-    }
     if (this.referenceCanvas) {
       releaseCanvas(this.referenceCanvas);
       this.referenceCanvas = null;
@@ -376,12 +379,11 @@ export class LandLayer {
   destroy(): void {
     this.clearTiles();
     releaseCanvas(this.canvas);
-    if (this.backCanvas) releaseCanvas(this.backCanvas);
     if (this.referenceCanvas) releaseCanvas(this.referenceCanvas);
     if (this.fadeCanvas) releaseCanvas(this.fadeCanvas);
-    this.backCanvas = null;
-    this.backCtx = null;
-    this.backGeom = null;
+    if (this.thumbCanvas) releaseCanvas(this.thumbCanvas);
+    this.thumbCanvas = null;
+    this.thumbFamily = '';
     this.referenceCanvas = null;
     this.fadeCanvas = null;
     this.fadeMeta = null;
@@ -393,6 +395,8 @@ export class LandLayer {
     this.terrainLo = lo;
     this.clearTiles();
     this.composeKey = '';
+    // The thumbnail bakes the texture, so it has to be rebuilt with the new one.
+    this.thumbFamily = '';
     const img = full ?? lo;
     if (img && img.naturalWidth > 0) {
       const c = document.createElement('canvas');
@@ -450,17 +454,26 @@ export class LandLayer {
     if (options.budgetMs !== undefined) this.frameBudgetMs = Math.max(0, options.budgetMs);
     const frame = this.frameGeometry(cam, dpr, revision, season, overview, wrap);
     const content: PaintContent = { season, overview, withTrees: frame.withTrees, paintStatic, treeAvoid, geoAt };
+    if (season !== this.lastSeason) {
+      this.lastSeason = season;
+      this.ensureThumb(season);
+    }
     const groupKey = `${frame.bucket}:${dpr.toFixed(3)}:${frame.scale}:${frame.family}:${revision}`;
     const group = this.ensureGroup(groupKey, frame, dpr);
+    this.currentGroupKey = groupKey;
+    this.evict();
     const visible = this.listTiles(frame, 0);
     const paintList = this.listTiles(frame, 1);
 
     // Rasterise missing tiles inside the per-frame budget. The first composition of a
     // session paints synchronously: there is no earlier frame to fall back on.
     const cold = !this.everComposed;
+    const exactAtStart = this.countExact(group, visible);
     const started = performance.now();
     let painted = 0;
-    const budget = this.frameBudgetMs;
+    // After a warp / long follow jump the whole viewport is missing: give that frame a
+    // larger slice so the screen resolves in two or three frames instead of ten.
+    const budget = exactAtStart === 0 ? Math.max(this.frameBudgetMs, JUMP_BUDGET_MS) : this.frameBudgetMs;
     for (const entry of paintList) {
       if (this.tileFor(group, entry.ix, entry.iy) !== undefined) continue;
       if (budget < 0) break;
@@ -469,10 +482,8 @@ export class LandLayer {
       painted += 1;
     }
     const paintMs = performance.now() - started;
-    if (painted > 0) this.evict();
 
-    let exact = 0;
-    for (const entry of visible) if (this.tileFor(group, entry.ix, entry.iy) !== undefined) exact += 1;
+    const exact = this.countExact(group, visible);
     const pending = visible.length - exact;
 
     // Tiles go straight to the screen at integer device positions: no intermediate
@@ -483,15 +494,12 @@ export class LandLayer {
     this.everComposed = true;
     this.lastFrame = frame;
     this.lastGroup = group;
-    this.lastGroupKey = groupKey;
 
     const m = target.getTransform();
     target.save();
     target.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
     this.drawTiles(target, frame, group, visible);
     target.restore();
-    // While tiles are missing, keep a snapshot for the next frame's placeholder.
-    if (pending > 0) this.keepBackFrame(frame, group, visible);
 
     this.key = groupKey;
     this.ox = frame.originX / frame.scale;
@@ -626,6 +634,7 @@ export class LandLayer {
         if (!wrap && (ux < 0 || ux >= nx)) continue;
         const ix = ((ux % nx) + nx) % nx;
         const devX = ux * TILE_DEV - originX;
+        const visible = margin === 0 || (devX + TILE_DEV > 0 && devX < devW && devY + th > 0 && devY < devH);
         out.push({
           ux,
           ix,
@@ -635,11 +644,13 @@ export class LandLayer {
           devW: TILE_DEV,
           devH: th,
           dist: Math.hypot(devX + TILE_DEV / 2 - cx, devY + th / 2 - cy),
+          visible,
         });
       }
     }
-    // Nearest-first: a cold bucket fills what the player is looking at before the halo.
-    out.sort((a, b) => a.dist - b.dist);
+    // On-screen first, then centre-out: after a jump the player must see the viewport
+    // resolve before the prefetch ring, and the middle of the screen before its corners.
+    out.sort((a, b) => (a.visible === b.visible ? a.dist - b.dist : a.visible ? -1 : 1));
     return out;
   }
 
@@ -661,6 +672,12 @@ export class LandLayer {
     }
     group.used = ++this.seq;
     return group;
+  }
+
+  private countExact(group: TileGroup, visible: TileRect[]): number {
+    let exact = 0;
+    for (const entry of visible) if (this.tileFor(group, entry.ix, entry.iy) !== undefined) exact += 1;
+    return exact;
   }
 
   private tileFor(group: TileGroup, ix: number, iy: number): Tile | undefined {
@@ -711,30 +728,34 @@ export class LandLayer {
   }
 
   /** LRU trim down to the tile budget, then drop empty and long-unused groups. */
+  /**
+   * Keep the cache inside its budget. Whole stale buckets go first, then the least recently
+   * used tiles. The group being drawn is never touched: dropping one of its tiles mid-frame
+   * would leave a placeholder on screen for a tile that was just rasterised (and on a long
+   * camera ride that turned into a repaint loop).
+   */
   private evict(): void {
     const cap = Math.max(TILE_DEV * TILE_DEV * 4, this.budget.maxArea * TILE_AREA_RATIO);
-    if (this.cachedArea > cap) {
-      const all: Array<{ group: TileGroup; id: string; tile: Tile }> = [];
-      for (const group of this.groups.values()) {
-        for (const [id, tile] of group.tiles) all.push({ group, id, tile });
-      }
-      all.sort((a, b) => a.tile.used - b.tile.used);
-      for (const entry of all) {
-        if (this.cachedArea <= cap) break;
-        if (entry.group.key === this.lastGroupKey && entry.tile.used > this.seq - 4) continue;
-        entry.group.tiles.delete(entry.id);
-        this.cachedArea -= entry.tile.devW * entry.tile.devH;
-        releaseCanvas(entry.tile.canvas);
-      }
+    const stale = [...this.groups.values()]
+      .filter((group) => group.key !== this.currentGroupKey)
+      .sort((a, b) => a.used - b.used);
+    for (const group of stale) {
+      if (this.cachedArea <= cap * 0.8 && this.groups.size <= 4) break;
+      this.dropGroup(group);
     }
-    if (this.groups.size > 8) {
-      const stale = [...this.groups.values()]
-        .filter((group) => group.key !== this.lastGroupKey)
-        .sort((a, b) => a.used - b.used);
-      for (const group of stale) {
-        if (this.groups.size <= 8) break;
-        this.dropGroup(group);
-      }
+    if (this.cachedArea <= cap) return;
+    const current = this.groups.get(this.currentGroupKey);
+    const all: Array<{ group: TileGroup; id: string; tile: Tile }> = [];
+    for (const group of this.groups.values()) {
+      if (group === current) continue;
+      for (const [id, tile] of group.tiles) all.push({ group, id, tile });
+    }
+    all.sort((a, b) => a.tile.used - b.tile.used);
+    for (const entry of all) {
+      if (this.cachedArea <= cap) break;
+      entry.group.tiles.delete(entry.id);
+      this.cachedArea -= entry.tile.devW * entry.tile.devH;
+      releaseCanvas(entry.tile.canvas);
     }
   }
 
@@ -803,21 +824,25 @@ export class LandLayer {
         if (fa !== fb) return fa - fb;
         return Math.abs(a.bucket - frame.bucket) - Math.abs(b.bucket - frame.bucket);
       });
+    // A placeholder must never leave a hole: every missing tile is first flooded with the
+    // same vertical sea gradient the ocean backdrop uses, then covered by (a rough) world
+    // thumbnail and finally by the closest bucket's tiles. Nothing is ever cleared, so the
+    // ocean backdrop underneath can never be erased to black.
+    const sea = ctx.createLinearGradient(0, off, 0, off + frame.devH);
+    sea.addColorStop(0, '#7fe0ff');
+    sea.addColorStop(0.35, '#59c8f4');
+    sea.addColorStop(0.72, '#2fa5e6');
+    sea.addColorStop(1, '#2289ce');
+    const thumb = this.ensureThumb();
     for (const entry of missing) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
       ctx.clip();
-      const area = entry.devW * entry.devH;
-      let filled = 0;
-      for (const source of sources) {
-        filled += this.blitFromGroup(ctx, source, frame, entry, off);
-        if (filled >= area - 1) break;
-      }
-      if (filled < area - 1 && this.backCanvas && this.backGeom) {
-        ctx.clearRect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
-        this.blitFromFrame(ctx, this.backCanvas, this.backGeom, frame, entry, off);
-      }
+      ctx.fillStyle = sea;
+      ctx.fillRect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
+      if (thumb) this.blitThumb(ctx, thumb, frame, entry, off);
+      for (const source of sources) this.blitFromGroup(ctx, source, frame, entry, off);
       ctx.restore();
     }
   }
@@ -852,22 +877,18 @@ export class LandLayer {
     return this.canvas;
   }
 
-  /**
-   * Blit the parts of one bucket's tiles that overlap a missing rect, clipped by the caller.
-   * Returns the covered device area so the composer can tell a full cover from a partial one.
-   */
+  /** Blit the parts of one bucket's tiles that overlap a missing rect, clipped by the caller. */
   private blitFromGroup(
     ctx: CanvasRenderingContext2D,
     source: TileGroup,
     frame: FrameGeometry,
     entry: TileRect,
     off: number,
-  ): number {
+  ): void {
     const wx0 = (entry.ux * TILE_DEV) / frame.scale;
     const wy0 = (entry.iy * TILE_DEV) / frame.scale;
     const wx1 = wx0 + TILE_DEV / frame.scale;
     const wy1 = wy0 + (entry.devH / frame.scale);
-    let area = 0;
     for (const tile of source.tiles.values()) {
       const sx0 = (tile.ix * TILE_DEV) / source.scale;
       const sy0 = (tile.iy * TILE_DEV) / source.scale;
@@ -890,16 +911,63 @@ export class LandLayer {
         (ax1 - ax0) * frame.scale,
         (ay1 - ay0) * frame.scale,
       );
-      area += (ax1 - ax0) * (ay1 - ay0) * frame.scale * frame.scale;
     }
-    return Math.min(area, TILE_DEV * entry.devH);
   }
 
-  /** Blit the previous composed frame over a missing rect. */
-  private blitFromFrame(
+  /**
+   * One low-resolution land raster for the whole world, built once per season. It is the
+   * last-resort placeholder: after a warp or a big follow jump there may be no cached tile
+   * of any bucket for the new area, and a coarse world map beats a hole.
+   */
+  private ensureThumb(season: Season = this.lastSeason): HTMLCanvasElement | null {
+    if (this.thumbCanvas && this.thumbFamily === season) return this.thumbCanvas;
+    const scale = THUMB_DEV / MAP_W;
+    const w = THUMB_DEV;
+    const h = Math.max(1, Math.round(MAP_H * scale));
+    const canvas = this.thumbCanvas ?? document.createElement('canvas');
+    if (canvas.width !== w || canvas.height !== h) {
+      releaseCanvas(canvas);
+      canvas.width = w;
+      canvas.height = h;
+      noteCanvasAllocation('land-thumb', w, h, w, h, this.budget);
+    }
+    this.thumbCanvas = canvas;
+    this.thumbFamily = season;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const palette = SEASON_LAND[season] ?? SEASON_LAND.spring;
+    const path = new Path2D();
+    for (const box of this.boxes) path.addPath(box.path);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    const grad = ctx.createLinearGradient(0, 0, 0, MAP_H);
+    grad.addColorStop(0, palette.top);
+    grad.addColorStop(0.45, palette.mid);
+    grad.addColorStop(1, palette.bottom);
+    ctx.fillStyle = grad;
+    ctx.fill(path, 'evenodd');
+    const tex = this.terrainLo ?? this.terrain;
+    if (tex && tex.naturalWidth > 0) {
+      ctx.save();
+      ctx.clip(path, 'evenodd');
+      ctx.drawImage(tex, 0, 0, MAP_W, MAP_H);
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = palette.mid;
+      ctx.fillRect(0, 0, MAP_W, MAP_H);
+      ctx.restore();
+    }
+    ctx.strokeStyle = palette.outline;
+    ctx.lineWidth = Math.max(1, 1.2 / scale);
+    ctx.stroke(path);
+    return canvas;
+  }
+
+  /** Blit the world thumbnail over one missing tile rect (world-anchored, wrap aware). */
+  private blitThumb(
     ctx: CanvasRenderingContext2D,
-    back: HTMLCanvasElement,
-    backGeom: FrameGeometry,
+    thumb: HTMLCanvasElement,
     frame: FrameGeometry,
     entry: TileRect,
     off: number,
@@ -908,50 +976,27 @@ export class LandLayer {
     const wy0 = (entry.iy * TILE_DEV) / frame.scale;
     const ww = TILE_DEV / frame.scale;
     const wh = entry.devH / frame.scale;
-    const bx = backGeom.originX / backGeom.scale;
-    const by = backGeom.originY / backGeom.scale;
-    const bw = backGeom.devW / backGeom.scale;
-    const bh = backGeom.devH / backGeom.scale;
-    for (let k = -1; k <= 1; k += 1) {
-      const shift = frame.wrap ? k * MAP_W : 0;
-      const ax0 = Math.max(wx0, bx + shift);
-      const ax1 = Math.min(wx0 + ww, bx + bw + shift);
-      const ay0 = Math.max(wy0, by);
-      const ay1 = Math.min(wy0 + wh, by + bh);
-      if (ax1 <= ax0 || ay1 <= ay0) continue;
-      ctx.drawImage(
-        back,
-        (ax0 - shift - bx) * backGeom.scale,
-        (ay0 - by) * backGeom.scale,
-        (ax1 - ax0) * backGeom.scale,
-        (ay1 - ay0) * backGeom.scale,
-        ax0 * frame.scale - frame.originX + off,
-        ay0 * frame.scale - frame.originY + off,
-        (ax1 - ax0) * frame.scale,
-        (ay1 - ay0) * frame.scale,
-      );
-      if (!frame.wrap) break;
-    }
-  }
-
-  /** Keep a snapshot of the drawn frame for the next frame's placeholder. */
-  private keepBackFrame(frame: FrameGeometry, group: TileGroup, visible: TileRect[]): void {
-    const frameW = frame.devW + EDGE_BLEED * 2;
-    const frameH = frame.devH + EDGE_BLEED * 2;
-    if (!this.backCanvas || this.backCanvas.width !== frameW || this.backCanvas.height !== frameH) {
-      if (this.backCanvas) releaseCanvas(this.backCanvas);
-      this.backCanvas = document.createElement('canvas');
-      this.backCanvas.width = frameW;
-      this.backCanvas.height = frameH;
-      this.backCtx = this.backCanvas.getContext('2d');
-      noteCanvasAllocation('land-back', frameW, frameH, frameW, frameH, this.budget);
-    }
-    const g = this.backCtx;
-    if (!g) return;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, frameW, frameH);
-    this.composeInto(g, frame, group, visible, EDGE_BLEED);
-    this.backGeom = { ...frame };
+    // The thumbnail covers world x in [0, MAP_W]; pick the copy whose span contains the
+    // tile's centre (`floor`, not `round`: rounding picks the nearest copy of world x = 0,
+    // which is wrong for a source that spans the whole world).
+    const shift = frame.wrap ? Math.floor((wx0 + ww / 2) / MAP_W) * MAP_W : 0;
+    const ax0 = Math.max(wx0, shift);
+    const ax1 = Math.min(wx0 + ww, MAP_W + shift);
+    const ay0 = Math.max(wy0, 0);
+    const ay1 = Math.min(wy0 + wh, MAP_H);
+    if (ax1 - ax0 <= 0 || ay1 - ay0 <= 0) return;
+    const ts = THUMB_DEV / MAP_W;
+    ctx.drawImage(
+      thumb,
+      (ax0 - shift) * ts,
+      ay0 * ts,
+      (ax1 - ax0) * ts,
+      (ay1 - ay0) * ts,
+      ax0 * frame.scale - frame.originX + off,
+      ay0 * frame.scale - frame.originY + off,
+      (ax1 - ax0) * frame.scale,
+      (ay1 - ay0) * frame.scale,
+    );
   }
 
   // ---------------------------------------------------------------- painting
