@@ -483,8 +483,6 @@ export class MapView {
   private staticRevision = 0;
   /** Hash of everything baked into the static land layer; rebuilds only when it moves. */
   private staticBakedHash = 0;
-  /** Hash of the per-city ownership bars, recomputed with `ownership`. */
-  private ownershipHash = 0;
   private month = 4;
   private season: Season = seasonForMonth(4);
   private seasonTransitionStart = 0;
@@ -565,7 +563,6 @@ export class MapView {
   private readonly cityTileLoading = new Set<string>();
   /** City ids whose tile art failed to load; retrying every frame only keeps the queue hot. */
   private readonly cityTileFailed = new Set<string>();
-  private cityTileFlushTimer: number | null = null;
 
   private cityHits: Array<{ cityId: string; x: number; y: number; r: number }> = [];
   private cityLabelHits: Array<{ cityId: string; rect: Rect }> = [];
@@ -1431,23 +1428,6 @@ export class MapView {
     }
   }
 
-  private scheduleCityTileRefresh(): void {
-    if (this.destroyed || this.cityTileFlushTimer !== null) return;
-    const deadline = performance.now() + 1000;
-    const run = (): void => {
-      this.cityTileFlushTimer = null;
-      if (this.destroyed) return;
-      if (this.cityTileLoading.size > 0 && performance.now() < deadline) {
-        this.cityTileFlushTimer = window.setTimeout(run, 90);
-        return;
-      }
-      this.staticRevision += 1;
-      this.landLayer.invalidate();
-      this.requestRender();
-    };
-    this.cityTileFlushTimer = window.setTimeout(run, 45);
-  }
-
   private requestCityTile(cityId: string, small: boolean): void {
     if (this.destroyed || typeof Image === 'undefined') return;
     if (this.cityTileFailed.has(cityId)) return;
@@ -1466,10 +1446,8 @@ export class MapView {
       // the tile it had just decoded and re-request it on the next rebuild.
       const limit = small ? 256 : 96;
       this.putLru(cache, cityId, img, limit);
-      // Pedestal art is baked into the board raster, so the board must be repainted — but
-      // only once the batch has settled: repainting per arrival re-rasterises the board
-      // while the remaining images are still decoding, which starves the queue.
-      this.scheduleCityTileRefresh();
+      // New art only affects that city's pedestal, which is a per-frame pass now.
+      this.requestRender();
     };
     img.onerror = () => {
       this.cityTileLoading.delete(key);
@@ -1845,8 +1823,6 @@ export class MapView {
     document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.ambientTimer !== null) window.clearTimeout(this.ambientTimer);
     this.ambientTimer = null;
-    if (this.cityTileFlushTimer !== null) window.clearTimeout(this.cityTileFlushTimer);
-    this.cityTileFlushTimer = null;
     if (this.longPressTimer !== null) window.clearTimeout(this.longPressTimer);
     this.longPressTimer = null;
     this.cityTileFullCache.clear();
@@ -2055,16 +2031,14 @@ export class MapView {
     const mix = (value: number): void => {
       h = Math.imul(h ^ (value | 0), 16777619) >>> 0;
     };
-    // Seat colours and ownership bars are painted into the board.
-    for (const color of this.playerColors) {
-      for (let i = 0; i < color.length; i += 1) mix(color.charCodeAt(i));
-    }
-    mix(this.ownershipHash);
     mix(SEASON_INDEX[this.season]);
     mix(this.view === 'world' ? 0 : this.view === 'heaven' ? 1 : this.view === 'hell' ? 2 : 3);
-    mix(this.isOverview() ? 1 : 0);
-    // Only overview bakes the destination marker into the layer.
-    mix(this.destinationNodeId ? hashString(this.destinationNodeId) : 0);
+    const overview = this.isOverview();
+    mix(overview ? 1 : 0);
+    // Only the overview bakes the destination marker into the layer; in play view the
+    // destination is a per-frame decoration, so a new destination must not repaint the
+    // board (it changes every move).
+    if (overview) mix(this.destinationNodeId ? hashString(this.destinationNodeId) : 0);
     if (h === this.staticBakedHash) return;
     this.staticBakedHash = h;
     this.staticRevision += 1;
@@ -2073,7 +2047,6 @@ export class MapView {
 
   private rebuildOwnership(): void {
     this.ownership.clear();
-    this.ownershipHash = 0;
     if (!this.state) return;
     const playerCount = this.state.players.length;
     for (const { city } of this.cityEntries) {
@@ -2094,10 +2067,6 @@ export class MapView {
         }
       }
       this.ownership.set(city.id, { counts, total, monopoly });
-      let h = this.ownershipHash;
-      h = Math.imul(h ^ (city.id.length + total * 31 + monopoly + 7), 16777619) >>> 0;
-      for (const count of counts) h = Math.imul(h ^ (count + 1), 16777619) >>> 0;
-      this.ownershipHash = h;
     }
   }
 
@@ -2709,6 +2678,10 @@ export class MapView {
         !this.isOverview(),
       );
       this.landLayer.drawSeasonFade(ctx, cam, now);
+      // Station pedestals are NOT baked into the terrain raster: their pixels depend on
+      // ownership and on tile art that decodes asynchronously, and either used to force a
+      // full-board repaint (300 ms) on every change. Painting them per frame costs ~1.5 ms.
+      if (!this.isOverview()) this.drawCityPedestals(ctx);
       this.ambient.draw(ctx, cam, now, this.detailLevel(), (x, y) => this.landLayer.isLand(x, y));
       this.drawWorldWarpTiles(ctx, now);
       this.drawSeasonParticles(ctx, now);
@@ -3752,9 +3725,7 @@ export class MapView {
       }
     }
 
-    const radius = this.cityRadius() * dpr;
-
-    // --- city pedestals / overview dots ------------------------------------
+    // --- overview dots (station pedestals are a per-frame pass) ------------
     for (const entry of this.cityEntries) {
       const wx = centerX + wrapDx(centerX, entry.node.x);
       const [px, py] = toCanvas(wx, entry.node.y);
@@ -3769,9 +3740,23 @@ export class MapView {
         ctx.strokeStyle = '#23385c';
         ctx.lineWidth = 1.4 * dpr;
         ctx.stroke();
-      } else {
-        this.drawCityPedestalAt(ctx, px, py, radius, this.ownership.get(entry.city.id), entry.city, 1);
       }
+    }
+  }
+
+  /**
+   * Station pedestals for the world view, drawn above the cached terrain and below the
+   * ambient layer (the z-order they had when they were baked into the terrain raster).
+   */
+  private drawCityPedestals(ctx: CanvasRenderingContext2D): void {
+    const cam = this.camera;
+    const radius = this.cityRadius();
+    for (const entry of this.cityEntriesForView()) {
+      const x = cam.screenX(entry.node.x);
+      if (x < -150 || x > cam.vw + 150) continue;
+      const y = cam.screenY(entry.node.y);
+      if (y < -150 || y > cam.vh + 150) continue;
+      this.drawCityPedestalAt(ctx, x, y, radius, this.ownership.get(entry.city.id), entry.city, this.dpr);
     }
   }
 

@@ -818,6 +818,7 @@ async function updatesView(browser, view, policy) {
       rebuilds: globalThis.__rebuilds,
       invalidates: globalThis.__invalidates,
       rebuildLog: globalThis.__rebuildLog,
+      patchLog: globalThis.__patchLog,
       causes: globalThis.__causes,
       pedestal: {
         ms: Math.round(globalThis.__ped.ms * 10) / 10,
@@ -1070,7 +1071,27 @@ async function playView(browser, view, policy) {
     const map = globalThis.__fableGame.map;
     globalThis.__rebuilds = 0;
     globalThis.__rebuildLog = [];
-    globalThis.__causes = { bake: 0, tiles: 0 };
+    globalThis.__causes = { bake: 0, tiles: 0, patchOk: 0, patchFail: 0, patchSizes: [] };
+    globalThis.__patchLog = [];
+    const scroll = map.landLayer.scrollPatch?.bind(map.landLayer);
+    if (scroll) {
+      map.landLayer.scrollPatch = (...a) => {
+        const before = { ox: map.landLayer.ox, oy: map.landLayer.oy };
+        const ok = scroll(...a);
+        if (ok) globalThis.__causes.patchOk += 1;
+        else {
+          globalThis.__causes.patchFail += 1;
+          globalThis.__causes.patchSizes.push([
+            Math.round((map.camera.x - map.landLayer.wWorld / 2 - before.ox) * map.landLayer.scale),
+            Math.round((map.camera.y - map.landLayer.hWorld / 2 - before.oy) * map.landLayer.scale),
+            map.landLayer.canvas.width,
+            map.landLayer.canvas.height,
+          ]);
+        }
+        return ok;
+      };
+    }
+    globalThis.__causes2 = 0;
     const ensure = map.ensureBakedLayer.bind(map);
     map.ensureBakedLayer = () => {
       const before = map.staticRevision;
@@ -1081,13 +1102,16 @@ async function playView(browser, view, policy) {
     const rebuild = map.landLayer.rebuild.bind(map.landLayer);
     map.landLayer.rebuild = (...a) => {
       globalThis.__rebuilds += 1;
+      const before = map.landLayer.key;
+      const out = rebuild(...a);
+      // Classify AFTER the rebuild: a same-key rebuild is a pan/margin one, a changed
+      // key is a zoom bucket (or content) rebuild.
       globalThis.__rebuildLog.push({
         t: Math.round(performance.now()),
-        reason: map.landLayer.key === lastKey ? 'margin' : 'key',
+        reason: before === map.landLayer.key ? 'margin' : 'key',
         zoom: Math.round(map.camera.zoom * 1000) / 1000,
         rev: map.staticRevision,
       });
-      const out = rebuild(...a);
       lastKey = map.landLayer.key;
       return out;
     };
@@ -1161,6 +1185,7 @@ async function playView(browser, view, policy) {
       pedestalCalls: globalThis.__ped.calls,
       longTasks: globalThis.__longTasks,
       rebuildLog: globalThis.__rebuildLog,
+      patchLog: globalThis.__patchLog,
       causes: globalThis.__causes,
       frameStats: map.getFrameStats(),
     };

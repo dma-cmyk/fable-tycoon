@@ -116,6 +116,12 @@ export class LandLayer {
   private readonly boxes: PolyBox[];
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  /** Holds the previous raster while a pan shifts it; allocated on first patch. */
+  private scratch: HTMLCanvasElement | null = null;
+  /** Zoom the cached raster was rendered at; the blit rescales within a tolerance. */
+  private rasterZoom = 0;
+  /** Coastline path in world units, built once and reused under a transform. */
+  private worldPath: Path2D | null = null;
   private key = '';
   private ox = 0;
   private oy = 0;
@@ -186,6 +192,10 @@ export class LandLayer {
   /** Release all offscreen canvases. */
   destroy(): void {
     releaseCanvas(this.canvas);
+    if (this.scratch) {
+      releaseCanvas(this.scratch);
+      this.scratch = null;
+    }
     if (this.fadeCanvas) releaseCanvas(this.fadeCanvas);
     this.fadeCanvas = null;
     this.fadeMeta = null;
@@ -257,7 +267,17 @@ export class LandLayer {
     const requestedScale = bucketZoom * dpr;
     const raster = fitRaster(wWorld, hWorld, requestedScale, this.budget);
     const scale = raster.scale;
-    const key = `${bucket}:${dpr.toFixed(3)}:${scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
+    // Content identity only: the zoom bucket is deliberately NOT part of it. The cached
+    // raster keeps being blitted (the blit already rescales by cam.zoom / rasterZoom)
+    // until the zoom drifts far enough to show, so ordinary zoom tweening stops
+    // rebuilding the board. 0.22 in log2 ≈ ±16%.
+    const key = `${dpr.toFixed(3)}:${withTrees ? 1 : 0}:${revision}:${season}`;
+    // While a zoom tween is running the raster is simply rescaled by the blit; only a
+    // settled view that drifted past the tolerance pays for a rebuild.
+    const zoomOff =
+      this.rasterZoom > 0
+      && !cam.isTweening()
+      && Math.abs(Math.log2(cam.zoom / this.rasterZoom)) > 0.3;
 
     const marginX = wWorld >= MAP_W - 0.5 ? Infinity : (wWorld - visW) / 2;
     const marginY = hWorld >= MAP_H - 0.5 ? Infinity : (hWorld - visH) / 2;
@@ -265,11 +285,20 @@ export class LandLayer {
     const dy = Math.abs(cam.y - this.centerY);
     const needs =
       key !== this.key ||
+      zoomOff ||
       dx > marginX * 0.8 ||
       dy > marginY * 0.8;
 
     if (needs) {
-      this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
+      // Same content, similar zoom, camera panning inside the cache: shift the existing
+      // pixels by whole device pixels and repaint only the strips that scrolled in.
+      const patched = key === this.key
+        && !zoomOff
+        && this.canvas.width > 1
+        && this.scrollPatch(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt);
+      if (!patched) {
+        this.rebuild(cam, scale, wWorld, hWorld, withTrees, bucket, dpr, revision, season, paintStatic, treeAvoid, geoAt, key, requestedScale);
+      }
     }
 
     const screenX = cam.vw / 2 + wrapDx(cam.x, this.ox + this.wWorld / 2) * cam.zoom - (this.wWorld * cam.zoom) / 2;
@@ -321,23 +350,12 @@ export class LandLayer {
     requestedScale = scale,
   ): void {
     const fit = fitRaster(wWorld, hWorld, requestedScale, this.budget);
-    const wPx = fit.width;
-    const hPx = fit.height;
     this.scale = fit.scale;
-    if (this.canvas.width !== wPx || this.canvas.height !== hPx) {
-      // Release the previous backing store first; switching zoom buckets must
-      // not keep two large layers resident on a phone.
-      releaseCanvas(this.canvas);
-      this.canvas.width = wPx;
-      this.canvas.height = hPx;
-    } else {
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.clearRect(0, 0, wPx, hPx);
-    }
-    noteCanvasAllocation('land', wPx, hPx, Math.ceil(wWorld * requestedScale), Math.ceil(hWorld * requestedScale), this.budget);
+    this.prepareCanvas(fit.width, fit.height, Math.ceil(wWorld * requestedScale), Math.ceil(hWorld * requestedScale));
     this.wWorld = wWorld;
     this.hWorld = hWorld;
     this.centerX = cam.x;
+    this.rasterZoom = cam.zoom;
     this.key = key || `${bucket}:${dpr.toFixed(3)}:${fit.scale.toFixed(4)}:${withTrees ? 1 : 0}:${wWorld.toFixed(1)}:${hWorld.toFixed(1)}:${revision}:${season}`;
 
     if (wWorld >= MAP_W - 0.5) {
@@ -353,12 +371,55 @@ export class LandLayer {
       this.centerY = this.oy + hWorld / 2;
     }
 
+    this.paintRaster(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt);
+  }
+
+
+  /** Allocate (or keep) the backing store for the current geometry and clear it. */
+  private prepareCanvas(wPx: number, hPx: number, requestedPxW: number, requestedPxH: number): void {
+    if (this.canvas.width !== wPx || this.canvas.height !== hPx) {
+      // Release the previous backing store first; switching zoom buckets must
+      // not keep two large layers resident on a phone.
+      releaseCanvas(this.canvas);
+      this.canvas.width = wPx;
+      this.canvas.height = hPx;
+    } else {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.clearRect(0, 0, wPx, hPx);
+    }
+    noteCanvasAllocation('land', wPx, hPx, requestedPxW, requestedPxH, this.budget);
+  }
+
+  /**
+   * Paint the cached board from the current `ox/oy/scale`. `clip` (device px) limits the
+   * work to one strip; the world→canvas mapping is unchanged either way, so a strip is
+   * pixel-identical to the same region of a full paint.
+   */
+  private paintRaster(
+    cam: Camera,
+    dpr: number,
+    season: Season,
+    withTrees: boolean,
+    paintStatic: LayerPainter | undefined,
+    treeAvoid: ((x: number, y: number) => boolean) | undefined,
+    geoAt: ((x: number, y: number) => { lat: number; lon: number }) | undefined,
+    clip?: [number, number, number, number],
+  ): void {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
+    if (clip) {
+      ctx.beginPath();
+      ctx.rect(clip[0], clip[1], clip[2], clip[3]);
+      ctx.clip();
+      ctx.clearRect(clip[0], clip[1], clip[2], clip[3]);
+    }
     const toCanvas = (wx: number, wy: number): [number, number] => [
       (wx - this.ox) * this.scale,
       (wy - this.oy) * this.scale,
     ];
+    const wWorld = this.wWorld;
+    const hWorld = this.hWorld;
 
     // Horizontal wrap copies needed to cover this layer's world x range.
     const x0 = this.ox;
@@ -366,7 +427,6 @@ export class LandLayer {
     const kMin = Math.floor((x0 - MAP_W) / MAP_W);
     const kMax = Math.ceil(x1 / MAP_W);
 
-    const path = new Path2D();
     let visiblePolys = 0;
     for (let k = kMin; k <= kMax; k++) {
       const shift = k * MAP_W;
@@ -374,67 +434,71 @@ export class LandLayer {
         if (box.maxX + shift < x0 || box.minX + shift > x1) continue;
         if (box.maxY < this.oy || box.minY > this.oy + hWorld) continue;
         visiblePolys += 1;
-        for (const ring of box.rings) {
-          for (let i = 0; i < ring.length; i += 2) {
-            const [px, py] = toCanvas(ring[i] + shift, ring[i + 1]);
-            if (i === 0) path.moveTo(px, py);
-            else path.lineTo(px, py);
-          }
-          path.closePath();
-        }
       }
     }
+    // The coastline is static world geometry. Rebuilding this path costs ~20 ms and used
+    // to run for every raster; one world-space copy is drawn under the device transform.
+    const path = this.worldPath ?? (this.worldPath = this.buildWorldPath());
 
     if (visiblePolys > 0) {
       const palette = SEASON_LAND[season];
-      const grad = ctx.createLinearGradient(0, 0, 0, hPx);
-      grad.addColorStop(0, palette.top);
-      grad.addColorStop(0.45, palette.mid);
-      grad.addColorStop(1, palette.bottom);
-      // shallow-water halo just outside the coastline
-      ctx.save();
-      ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
-      ctx.lineWidth = Math.max(4, Math.min(12, 4 * cam.zoom)) * dpr;
-      ctx.lineJoin = 'round';
-      ctx.stroke(path);
-      ctx.restore();
-
-      // A flat offset silhouette is much cheaper than a blurred canvas shadow
-      // and reads as a soft coastal drop shadow at every zoom.
-      ctx.save();
-      ctx.translate(Math.max(1, 3.2 * this.scale), Math.max(1, 4.2 * this.scale));
-      ctx.fillStyle = 'rgba(3, 48, 72, 0.28)';
-      ctx.fill(path, 'evenodd');
-      ctx.restore();
-
-      ctx.fillStyle = grad;
-      ctx.fill(path, 'evenodd');
-
+      // Drawn in world units under this transform so one cached path serves every camera.
+      const haloW = (Math.max(4, Math.min(12, 4 * cam.zoom)) * dpr) / this.scale;
+      const outlineW = Math.max(2, Math.min(8, 2.1 * this.scale)) / this.scale;
+      const shadowDx = Math.max(1, 3.2 * this.scale) / this.scale;
+      const shadowDy = Math.max(1, 4.2 * this.scale) / this.scale;
       const tex = cam.zoom <= 0.22 ? this.terrainLo ?? this.terrain : this.terrain ?? this.terrainLo;
-      if (tex && tex.naturalWidth > 0) {
+      for (let k = kMin; k <= kMax; k++) {
+        const shift = k * MAP_W;
         ctx.save();
-        ctx.clip(path, 'evenodd');
-        for (let k = kMin; k <= kMax; k++) {
-          const shift = k * MAP_W;
-          ctx.drawImage(tex, (shift - this.ox) * this.scale, -this.oy * this.scale, MAP_W * this.scale, MAP_H * this.scale);
+        ctx.setTransform(this.scale, 0, 0, this.scale, -this.ox * this.scale, -this.oy * this.scale);
+        ctx.translate(shift, 0);
+        const grad = ctx.createLinearGradient(0, this.oy, 0, this.oy + hWorld);
+        grad.addColorStop(0, palette.top);
+        grad.addColorStop(0.45, palette.mid);
+        grad.addColorStop(1, palette.bottom);
+        // shallow-water halo just outside the coastline
+        ctx.save();
+        ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
+        ctx.lineWidth = haloW;
+        ctx.lineJoin = 'round';
+        ctx.stroke(path);
+        ctx.restore();
+
+        // A flat offset silhouette is much cheaper than a blurred canvas shadow
+        // and reads as a soft coastal drop shadow at every zoom.
+        ctx.save();
+        ctx.translate(shadowDx, shadowDy);
+        ctx.fillStyle = 'rgba(3, 48, 72, 0.28)';
+        ctx.fill(path, 'evenodd');
+        ctx.restore();
+
+        ctx.fillStyle = grad;
+        ctx.fill(path, 'evenodd');
+
+        if (tex && tex.naturalWidth > 0) {
+          ctx.save();
+          ctx.clip(path, 'evenodd');
+          ctx.drawImage(tex, 0, 0, MAP_W, MAP_H);
+          // Keep the concept-art saturation on top of the pale topographic texture.
+          ctx.globalCompositeOperation = 'soft-light';
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = palette.mid;
+          ctx.fillRect(this.ox, this.oy, wWorld, hWorld);
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = 1;
+          ctx.restore();
         }
-        // Keep the concept-art saturation on top of the pale topographic texture.
-        ctx.globalCompositeOperation = 'soft-light';
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = SEASON_LAND[season].mid;
-        ctx.fillRect(0, 0, wPx, hPx);
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
+
+        ctx.save();
+        ctx.strokeStyle = palette.outline;
+        ctx.lineWidth = outlineW;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.stroke(path);
+        ctx.restore();
         ctx.restore();
       }
-
-      ctx.save();
-      ctx.strokeStyle = SEASON_LAND[season].outline;
-      ctx.lineWidth = Math.max(2, Math.min(8, 2.1 * this.scale));
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.stroke(path);
-      ctx.restore();
     }
 
     if (withTrees) {
@@ -457,6 +521,94 @@ export class LandLayer {
         hWorld: this.hWorld,
       });
     }
+    ctx.restore();
+  }
+
+  /** One Path2D for the whole coastline, in world units. */
+  private buildWorldPath(): Path2D {
+    const path = new Path2D();
+    for (const box of this.boxes) {
+      for (const ring of box.rings) {
+        for (let i = 0; i < ring.length; i += 2) {
+          if (i === 0) path.moveTo(ring[i], ring[i + 1]);
+          else path.lineTo(ring[i], ring[i + 1]);
+        }
+        path.closePath();
+      }
+    }
+    return path;
+  }
+
+  /**
+   * Re-centre the cached raster on the camera without repainting it: shift the existing
+   * pixels by whole device pixels and repaint only the strips that scrolled into view.
+   *
+   * Panning at a fixed zoom used to rebuild the whole board (~300 ms) every time the
+   * camera crossed the cache margin. Whole-pixel shifts keep already-painted pixels
+   * bit-identical, so the result matches a full rebuild except for the new strips.
+   */
+  private scrollPatch(
+    cam: Camera,
+    dpr: number,
+    season: Season,
+    withTrees: boolean,
+    paintStatic: LayerPainter | undefined,
+    treeAvoid: ((x: number, y: number) => boolean) | undefined,
+    geoAt: ((x: number, y: number) => { lat: number; lon: number }) | undefined,
+  ): boolean {
+    if (this.wWorld >= MAP_W - 0.5 || this.hWorld >= MAP_H - 0.5) return false;
+    const wPx = this.canvas.width;
+    const hPx = this.canvas.height;
+    if (wPx < 2 || hPx < 2) return false;
+    const targetOx = cam.x - this.wWorld / 2;
+    const targetOy = Math.min(MAP_H - this.hWorld, Math.max(0, cam.y - this.hWorld / 2));
+    let sdx = Math.round((targetOx - this.ox) * this.scale);
+    let sdy = Math.round((targetOy - this.oy) * this.scale);
+    // Re-centre in bounded steps: one patch repaints only the strips it exposes, so a
+    // smaller step keeps every patch frame short. The next frames step again until the
+    // raster is centred (the cache margin is far larger than one step).
+    const maxStepX = Math.max(24, Math.round(wPx * 0.05));
+    const maxStepY = Math.max(24, Math.round(hPx * 0.05));
+    sdx = Math.max(-maxStepX, Math.min(maxStepX, sdx));
+    sdy = Math.max(-maxStepY, Math.min(maxStepY, sdy));
+    if (sdx === 0 && sdy === 0) {
+      this.centerX = cam.x;
+      this.centerY = this.oy + this.hWorld / 2;
+      return true;
+    }
+    // A shift that leaves no overlap is a jump, not a pan: rebuild instead.
+    if (Math.abs(sdx) >= wPx || Math.abs(sdy) >= hPx) return false;
+    const scratch = this.scratch ?? (this.scratch = document.createElement('canvas'));
+    if (scratch.width !== wPx || scratch.height !== hPx) {
+      releaseCanvas(scratch);
+      scratch.width = wPx;
+      scratch.height = hPx;
+    }
+    const sctx = scratch.getContext('2d');
+    if (!sctx) return false;
+    const ctx = this.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.clearRect(0, 0, wPx, hPx);
+    sctx.drawImage(this.canvas, 0, 0);
+    ctx.clearRect(0, 0, wPx, hPx);
+    ctx.drawImage(scratch, sdx, sdy);
+    this.ox += sdx / this.scale;
+    this.oy += sdy / this.scale;
+    this.centerX = cam.x;
+    this.centerY = this.oy + this.hWorld / 2;
+    // Strips exposed by the shift: the vertical one first, then the horizontal remainder.
+    const strips: Array<[number, number, number, number]> = [];
+    if (sdx > 0) strips.push([0, 0, sdx, hPx]);
+    else if (sdx < 0) strips.push([wPx + sdx, 0, -sdx, hPx]);
+    const x0 = sdx > 0 ? sdx : 0;
+    const x1 = sdx < 0 ? wPx + sdx : wPx;
+    if (sdy > 0) strips.push([x0, 0, Math.max(1, x1 - x0), sdy]);
+    else if (sdy < 0) strips.push([x0, hPx + sdy, Math.max(1, x1 - x0), -sdy]);
+    for (const strip of strips) {
+      this.paintRaster(cam, dpr, season, withTrees, paintStatic, treeAvoid, geoAt, strip);
+    }
+    return true;
   }
 
   private drawSnow(ctx: CanvasRenderingContext2D, path: Path2D, season: Season): void {
@@ -464,7 +616,10 @@ export class LandLayer {
     const snowY = (project(0, north ? 35 : -35)[1] - this.oy) * this.scale;
     const hPx = this.canvas.height;
     ctx.save();
+    // Clip in world space, then paint the gradient back in device space.
+    ctx.setTransform(this.scale, 0, 0, this.scale, -this.ox * this.scale, -this.oy * this.scale);
     ctx.clip(path, 'evenodd');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (north) {
       const g = ctx.createLinearGradient(0, 0, 0, Math.max(1, snowY));
       g.addColorStop(0, 'rgba(255,255,255,0.72)');
