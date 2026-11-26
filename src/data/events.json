@@ -1021,6 +1021,7 @@
   },
   {
     "id": "chip-shortage",
+    "image": "assets/events/chip-shortage.webp",
     "title": "半導体が足りない",
     "kind": "news",
     "fact": "2020年から2023年にかけて、半導体の世界的な供給不足が起きた。自動車、家電、ゲーム機など169以上の産業に影響し、価格上昇や納期の長期化、転売が広がった。",
@@ -12010,6 +12011,7 @@
   },
   {
     "id": "city-factory-closure",
+    "image": "assets/events/city-factory-closure.webp",
     "title": "工場の門が閉まる日",
     "kind": "history",
     "fact": "デトロイトは二十世紀後半に自動車工場の閉鎖と人口流出が続き、二〇一三年に連邦破産法の適用を申請した。",

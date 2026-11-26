@@ -5,6 +5,21 @@
  },
  "rows": [
   {
+   "eventId": "final-public-backlash_v2",
+   "target": "final-public-backlash",
+   "priority": 1,
+   "style": "chibi",
+   "prompt": "石畳の広場の真ん中に木のさらし台が置かれ、板の穴に首と両手を通したスーツ姿の豚の銀行家が座らされている。頭には傾いた王冠、顔は汗だくで困り顔。周りの動物の市民たちが嬉々としてトマトと紙の請求書の束を投げつけ、トマトの果汁が飛び散って豚の頬で弾けている。右側ではフクロウのキャスターが中継マイクを差し出し、赤ずきんが群衆の先頭で拳を上げて笑っている。背景に市場の屋台と風刺画の貼られた壁。",
+   "refs": [
+    "public/assets/npcs/banker_pig.webp",
+    "public/assets/events/ai.webp",
+    "public/assets/npcs/owl_anchor.webp"
+   ],
+   "sheet": "ev_90",
+   "slot": 1,
+   "status": "pending"
+  },
+  {
    "eventId": "final-bubble-burst",
    "priority": 1,
    "style": "chibi",
@@ -207,8 +222,9 @@
    ],
    "sheet": "ev_04",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/chip-shortage.webp"
+   "status": "done",
+   "output": "public/assets/events/chip-shortage.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-factory-closure",
@@ -222,8 +238,9 @@
    ],
    "sheet": "ev_04",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/city-factory-closure.webp"
+   "status": "done",
+   "output": "public/assets/events/city-factory-closure.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-gold-strike",

@@ -82,3 +82,7 @@
 {"job": "final-shareholder-suit", "generator": "agy", "secs": 170, "file": "art/agy/final-shareholder-suit.png"}
 {"job": "final-tax-haven-raid", "generator": "agy", "secs": 149, "file": "art/agy/final-tax-haven-raid.png"}
 {"job": "bank-run-2023", "generator": "agy", "secs": 210, "file": "art/agy/bank-run-2023.png"}
+{"job": "ev_04", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "chip-shortage", "generator": "agy", "secs": 205, "file": "art/agy/chip-shortage.png"}
+{"job": "city-factory-closure", "generator": "agy", "secs": 219, "file": "art/agy/city-factory-closure.png"}
+{"job": "city-gold-strike", "generator": "agy", "quota": "`image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 4h26m51s.: RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 4h26m51s.`"}
