@@ -121,6 +121,27 @@ out destinations <4 steps away (`filterWarpTargets`), so the
 is not reachable in real play; the picker instead explains the rule in its
 header and simply omits those cities.
 
+## Jump-fallback hole audit
+
+`map-jump-fallback.mjs` drives a local game through four camera jumps
+(`warp-far`, `warp-seam`, `realm-roundtrip`, `zoom-out-in`) and captures the map
+canvas at 0/100/300/1000 ms after each jump. Every capture is scored for
+**alpha-0 pixels** and **32x32 blocks that are ≥90% near-black** (missing
+terrain/ocean); the run fails if either is nonzero. It needs a dev server
+(`DEV_URL`, default `http://127.0.0.1:5299/`):
+
+```bash
+DEV_URL=http://127.0.0.1:5272/ node tests/e2e/map-jump-fallback.mjs \
+  --browser=chromium,firefox --view=pc,phone --label=run
+```
+
+Screenshots and `report.json` land in `.tmp/jump-fallback/<label>/`.
+`--verify=<png>` runs the same detector over an image to prove it can see a
+black hole. The online E2E's `canvasStats` now records the same
+`alphaZero`/`black`/`blackPct`/`blackBlocks` values for the play map at game
+start and at midgame, so `report.json` carries an automatic hole verdict next to
+the `seam` numbers.
+
 ## Environment
 
 - Browsers run **headless and muted** by default: Chromium gets

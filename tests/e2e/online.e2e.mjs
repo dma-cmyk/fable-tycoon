@@ -1132,12 +1132,35 @@ async function canvasStats(client, selector) {
             mean: Math.round(entry.mean * 10) / 10,
             highFraction: Math.round(entry.high * 1000) / 1000,
           }));
+          // Hole detector (same definition as tests/e2e/map-jump-fallback.mjs): the
+          // play canvas is opaque, so any alpha-0 pixel is a bug; a 32x32 block that is
+          // >=90% near-black is missing terrain/ocean, not text or a token.
+          let alphaZero = 0;
+          let black = 0;
+          const blackBlocksByCell = new Map();
+          const BW = 32;
+          for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+              const i = (y * w + x) * 4;
+              if (data[i + 3] < 8) alphaZero += 1;
+              if (!(data[i] < 10 && data[i + 1] < 10 && data[i + 2] < 10)) continue;
+              black += 1;
+              const key = `${Math.floor(x / BW)}:${Math.floor(y / BW)}`;
+              blackBlocksByCell.set(key, (blackBlocksByCell.get(key) || 0) + 1);
+            }
+          }
+          let blackBlocks = 0;
+          for (const n of blackBlocksByCell.values()) if (n >= BW * BW * 0.9) blackBlocks += 1;
           return {
             w,
             h,
             cssW: canvas.clientWidth,
             cssH: canvas.clientHeight,
             uniqueColors: colors.size,
+            alphaZero,
+            black,
+            blackPct: +((100 * black) / (w * h)).toFixed(3),
+            blackBlocks,
             seam: {
               sampledRows,
               meanColDiff: Math.round(meanCol * 10) / 10,
