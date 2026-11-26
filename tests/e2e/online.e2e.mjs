@@ -1010,19 +1010,77 @@ async function canvasStats(client, selector) {
           for (let i = 0; i < data.length; i += 4 * 101) {
             colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
           }
+          // Terrain continuity: a stale/patched raster shows a vertical seam where
+          // the terrain is shifted, so the colour jump between columns x-1 and x
+          // is large across most rows. Coasts/rivers raise only a few rows.
+          const stepY = Math.max(2, Math.floor(h / 180));
+          const colSum = new Float64Array(w);
+          const colHigh = new Uint32Array(w);
+          let sampledRows = 0;
+          for (let y = 0; y < h; y += stepY) {
+            sampledRows += 1;
+            const row = y * w * 4;
+            for (let x = 1; x < w; x += 1) {
+              const i = row + x * 4;
+              const diff =
+                (Math.abs(data[i] - data[i - 4]) +
+                  Math.abs(data[i + 1] - data[i - 3]) +
+                  Math.abs(data[i + 2] - data[i - 2])) /
+                3;
+              colSum[x] += diff;
+              if (diff > 45) colHigh[x] += 1;
+            }
+          }
+          let total = 0;
+          let maxDiff = 0;
+          let maxX = 1;
+          let maxHigh = 0;
+          let maxHighX = 1;
+          const scored = [];
+          for (let x = 1; x < w; x += 1) {
+            const mean = colSum[x] / Math.max(1, sampledRows);
+            const high = colHigh[x] / Math.max(1, sampledRows);
+            total += mean;
+            if (mean > maxDiff) {
+              maxDiff = mean;
+              maxX = x;
+            }
+            if (high > maxHigh) {
+              maxHigh = high;
+              maxHighX = x;
+            }
+            scored.push({ x, mean, high });
+          }
+          const meanCol = total / Math.max(1, w - 1);
+          scored.sort((a, b) => b.mean - a.mean);
+          const cssScale = canvas.clientWidth > 0 ? canvas.clientWidth / w : 1;
+          const top = scored.slice(0, 5).map((entry) => ({
+            cssX: Math.round(entry.x * cssScale * 10) / 10,
+            mean: Math.round(entry.mean * 10) / 10,
+            highFraction: Math.round(entry.high * 1000) / 1000,
+          }));
           return {
             w,
             h,
             cssW: canvas.clientWidth,
             cssH: canvas.clientHeight,
             uniqueColors: colors.size,
+            seam: {
+              sampledRows,
+              meanColDiff: Math.round(meanCol * 10) / 10,
+              maxColDiff: Math.round(maxDiff * 10) / 10,
+              maxColCssX: Math.round(maxX * cssScale * 10) / 10,
+              maxHighFraction: Math.round(maxHigh * 1000) / 1000,
+              maxHighCssX: Math.round(maxHighX * cssScale * 10) / 10,
+              top,
+            },
           };
         } catch (error) {
           return { error: String(error?.message || error), w: canvas.width, h: canvas.height };
         }
       }, selector)
       .catch((error) => ({ error: String(error?.message || error) })),
-    5000,
+    8000,
     { error: 'probe timeout' },
   );
   return stats;
@@ -2322,6 +2380,12 @@ async function main() {
   timings.gameStartAtMs = nowMs();
   phase('game_playing');
   for (const client of clients) await installFxObserver(client);
+  await sleep(900);
+  for (const client of clients) {
+    if (client.page && !client.page.isClosed()) {
+      client.canvasStatsStart = await canvasStats(client, '.map-canvas');
+    }
+  }
 
   const resultHolders = [];
   for (const client of clients) {
@@ -2826,6 +2890,7 @@ try {
     fxSlowLog: client.fxSlowLog || [],
     targetCancels: client.targetCancels || 0,
     canvasStats: client.canvasStats ?? null,
+    canvasStatsStart: client.canvasStatsStart ?? null,
     webrtcFailures: client.webrtcFailures || 0,
   }));
   report.brokers = Object.fromEntries(

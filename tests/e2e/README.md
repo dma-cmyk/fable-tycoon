@@ -62,8 +62,12 @@ Everything is written under `.tmp/e2e/`:
   to `<label>-net-<client>.json`; they are not embedded in `report.json`.
   `fxSlowWarnings`/`fxSlowLog` count the client's `[fx] slow update ...` safety
   net (3x the speed-scaled budget), `targetCancels` counts warp pickers closed
-  because every candidate was disabled, and `canvasStats` samples the play-map
-  canvas (size + unique colours) at midgame so a blank/failed render is visible.
+  because every candidate was disabled, and `canvasStats`/`canvasStatsStart`
+  sample the play-map canvas (size + unique colours) at midgame and at game
+  start so a blank/failed render is visible. `canvasStats.seam` also reports the
+  per-column colour-jump statistics (`meanColDiff`, `maxColDiff`,
+  `maxHighFraction` and the top-5 columns) to catch a shifted/patched terrain
+  raster: a stale band raises the jump across most rows at one x.
 
 ## Environment
 
