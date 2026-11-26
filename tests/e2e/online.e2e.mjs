@@ -743,6 +743,33 @@ async function installFxObserver(client) {
           }
         }
       };
+      // Event artwork evidence: the panel reuses one <img class="event-image">,
+      // so bind per element and record the image state whenever a src loads
+      // (the title is read at record time, after EventPanel.show set it).
+      const eventArt = [];
+      const artBound = new WeakSet();
+      const bindEventArt = () => {
+        const panel = document.querySelector('.event-panel.is-open');
+        if (!panel) return;
+        const image = panel.querySelector('img.event-image');
+        if (!image || artBound.has(image)) return;
+        artBound.add(image);
+        const record = () => {
+          if (eventArt.length >= 600) return;
+          eventArt.push({
+            title: (panel.querySelector('.event-title')?.textContent || '').trim(),
+            src: image.getAttribute('src') || '',
+            hidden: image.hidden,
+            complete: image.complete,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+            atMs: Math.round(performance.now()),
+          });
+        };
+        image.addEventListener('load', record);
+        image.addEventListener('error', record);
+        record();
+      };
       const shown = (selector) => {
         const el = document.querySelector(selector);
         return !!el && el.getClientRects().length > 0;
@@ -754,8 +781,9 @@ async function installFxObserver(client) {
           prev[kind] = visible;
         }
         scanToasts();
+        bindEventArt();
       };
-      win.__e2eFx = { counts, check };
+      win.__e2eFx = { counts, check, eventArt };
       new MutationObserver((mutations) => {
         for (const mutation of mutations) {
           if (mutation.type !== 'childList') continue;
@@ -783,6 +811,51 @@ async function readFxCounts(client) {
   const page = client.page;
   if (!page || page.isClosed()) return null;
   return page.evaluate(() => window.__e2eFx?.counts ?? null).catch(() => null);
+}
+
+async function readEventArt(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return [];
+  return page.evaluate(() => window.__e2eFx?.eventArt ?? []).catch(() => []);
+}
+
+// The product never registers the service worker under automation
+// (`navigator.webdriver` in src/ui/serviceWorker.ts). Record the runtime truth
+// per client so a regression (or a stale registration from a manual profile)
+// cannot silently intercept the E2E's asset requests.
+async function readServiceWorker(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return null;
+  return page
+    .evaluate(async () => {
+      const api = 'serviceWorker' in navigator;
+      const registrations = api ? await navigator.serviceWorker.getRegistrations() : [];
+      return {
+        webdriver: navigator.webdriver === true,
+        api,
+        controller: Boolean(api && navigator.serviceWorker.controller),
+        registrations: registrations.length,
+        scripts: registrations.map(
+          (registration) => (registration.active || registration.waiting || registration.installing)?.scriptURL || '',
+        ),
+        atMs: Math.round(performance.now()),
+      };
+    })
+    .catch(() => null);
+}
+
+async function sampleServiceWorker(client) {
+  const sample = await readServiceWorker(client);
+  if (!sample) return;
+  const old = client.serviceWorker;
+  client.serviceWorker = old
+    ? {
+        ...sample,
+        controller: old.controller || sample.controller,
+        registrations: Math.max(old.registrations || 0, sample.registrations || 0),
+        scripts: [...new Set([...(old.scripts || []), ...(sample.scripts || [])])],
+      }
+    : sample;
 }
 
 async function sampleModalDepth(client) {
@@ -2384,6 +2457,7 @@ async function main() {
   for (const client of clients) {
     if (client.page && !client.page.isClosed()) {
       client.canvasStatsStart = await canvasStats(client, '.map-canvas');
+      await sampleServiceWorker(client);
     }
   }
 
@@ -2406,6 +2480,7 @@ async function main() {
     }
     if (client.page && !client.page.isClosed()) {
       client.canvasStats = await canvasStats(client, '.map-canvas');
+      await sampleServiceWorker(client);
       await screenshot(client, `midgame-${client.id}`, { optional: true });
     }
   }
@@ -2857,6 +2932,27 @@ try {
     client.brokersConnected = [...text.matchAll(/connected to (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
     client.brokersFailed = [...text.matchAll(/broker failed: (wss?:\/\/[^\s]+)/g)].map((m) => m[1]);
     client.brokerUnique = [...new Set(client.brokersConnected)];
+  }
+  {
+    const byClient = {};
+    const unique = new Map();
+    for (const client of clients) {
+      const entries = await readEventArt(client);
+      byClient[client.id] = entries;
+      for (const entry of entries) {
+        if (!entry.src) continue;
+        const key = `${entry.title}|${entry.src}`;
+        const prev = unique.get(key);
+        // Keep the most-loaded sample for each title+src pair.
+        if (!prev || (entry.naturalWidth || 0) > (prev.naturalWidth || 0)) unique.set(key, entry);
+      }
+    }
+    report.eventArt = { byClient, unique: [...unique.values()] };
+    report.serviceWorker = {
+      byClient: Object.fromEntries(clients.map((client) => [client.id, client.serviceWorker || null])),
+      anyRegistered: clients.some((client) => (client.serviceWorker?.registrations || 0) > 0),
+      allWebdriver: clients.every((client) => client.serviceWorker?.webdriver === true),
+    };
   }
   report.clients = clients.map((client) => ({
     id: client.id,

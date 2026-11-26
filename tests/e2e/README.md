@@ -68,6 +68,13 @@ Everything is written under `.tmp/e2e/`:
   per-column colour-jump statistics (`meanColDiff`, `maxColDiff`,
   `maxHighFraction` and the top-5 columns) to catch a shifted/patched terrain
   raster: a stale band raises the jump across most rows at one x.
+  `serviceWorker` records, per client, `navigator.webdriver`,
+  `navigator.serviceWorker.controller` and `getRegistrations().length` (sampled
+  after game start and at midgame); automated browsers must show
+  `registrations: 0` and `controller: false`. `eventArt` records every
+  `.event-panel.is-open img.event-image` load (`title`, `src`, `hidden`,
+  `naturalWidth/Height`) with per-client lists and a deduped `unique` array, so
+  event artwork that fails to load shows up as `naturalWidth: 0`.
 
 ## Feature coverage (pegasus / rocket / piper confiscation)
 
