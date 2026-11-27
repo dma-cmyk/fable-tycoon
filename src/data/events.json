@@ -3959,6 +3959,7 @@
   },
   {
     "id": "ant-grasshopper-pension",
+    "image": "assets/events/ant-grasshopper-pension.webp",
     "title": "アリとキリギリスの年金問題",
     "kind": "fable",
     "satireNote": "完全創作。アリとキリギリスの寓話を年金・再分配の議論に重ねている。",
@@ -4542,6 +4543,7 @@
   },
   {
     "id": "season-typhoon",
+    "image": "assets/events/season-typhoon.webp",
     "title": "台風で農作物被害",
     "kind": "fable",
     "satireNote": "台風被害を題材にした完全創作。実際の災害を軽視する意図はない。",
@@ -4969,6 +4971,7 @@
   },
   {
     "id": "season-hanami",
+    "image": "assets/events/season-hanami.webp",
     "title": "桜前線と花見特需",
     "kind": "news",
     "fact": "日本では3月下旬から5月上旬にかけて桜が開花し、花見を楽しむ習慣がある。気象庁は桜の開花を観測しているが、2010年春以降は開花予想を発表しておらず、民間の気象事業者が予想を提供している。",
@@ -5102,6 +5105,7 @@
   },
   {
     "id": "season-heatwave",
+    "image": "assets/events/season-heatwave.webp",
     "title": "猛暑で電力が悲鳴",
     "kind": "news",
     "fact": "夏に気温が異常に高くなる猛暑日が増えると、冷房需要の増加で電力供給が逼迫することがある。電力会社は需給調整や節電要請を行うことがある。",
@@ -5365,6 +5369,7 @@
   },
   {
     "id": "world-angel-heaven-tour",
+    "image": "assets/events/world-angel-heaven-tour.webp",
     "title": "エンジェル投資家の天国ツアー",
     "kind": "fable",
     "satireNote": "天国のツアーは完全創作。実際の投資勧誘ではない。",
@@ -6659,6 +6664,7 @@
   },
   {
     "id": "red-sea-reroute",
+    "image": "assets/events/red-sea-reroute.webp",
     "title": "近道が封鎖された",
     "kind": "news",
     "fact": "2023年11月以降、イエメンの武装勢力による商船への攻撃で、主要な海運会社はアフリカ南端の喜望峰を回る航路に切り替えた。2024年2月前半の時点で、スエズ運河を通過するコンテナ船のトン数は8割以上減り、喜望峰経由に切り替えたコンテナ船は621隻に達した。国連貿易開発会議は、アジアと欧州を結ぶ航路で喜望峰回りはスエズ経由より4〜7割程度長くなり、運賃や保険料が上昇したと報告している。",
@@ -10355,6 +10361,7 @@
   },
   {
     "id": "bunbuku-nft-teakettle",
+    "image": "assets/events/bunbuku-nft-teakettle.webp",
     "title": "ぶんぶく茶釜の所有権、分割販売",
     "kind": "fable",
     "satireNote": "ぶんぶく茶釜で、たぬきが茶釜に化けて興行になり、正体がばれて元に戻る筋を下敷きにした完全創作。金額・確率・発行数は創作。現物と切り離された所有権の証明が転売を重ねて膨らみ、最後に現物がただの狸だったと分かる構造を風刺している。",
@@ -10443,6 +10450,7 @@
   },
   {
     "id": "alice-jam-loyalty",
+    "image": "assets/events/alice-jam-loyalty.webp",
     "title": "アリスのジャム、昨日と明日だけ",
     "kind": "fable",
     "satireNote": "鏡の国のアリスの「ジャムは昨日と明日、今日はない」という規則を、ポイント制度に置き換えた完全創作。金額・確率・有効期限は創作。貯めるほど使えない特典、期限だけが過ぎていく会員制度、窓口が昨日に閉まっている問い合わせを風刺している。",

@@ -118,3 +118,15 @@
 {"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
 {"job": "metaverse-collapse", "generator": "agy", "secs": 182, "file": "art/agy/metaverse-collapse.png"}
 {"job": "red-sea-reroute", "generator": "agy", "quota": "- エラー内容: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 2h10m29s.`"}
+{"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "red-sea-reroute", "generator": "agy", "quota": "image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 1h37m59s.: RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 1h37m59s."}
+{"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "red-sea-reroute", "generator": "agy", "quota": "- **エラー**: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 1h5m36s.`"}
+{"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "red-sea-reroute", "generator": "agy", "quota": "image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 33m24s.: RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 33m24s."}
+{"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "red-sea-reroute", "generator": "agy", "secs": 365, "file": "art/agy/red-sea-reroute.png"}
+{"job": "season-hanami", "generator": "agy", "secs": 159, "file": "art/agy/season-hanami.png"}
+{"job": "season-heatwave", "generator": "agy", "secs": 150, "file": "art/agy/season-heatwave.png"}
+{"job": "season-typhoon", "generator": "agy", "secs": 144, "file": "art/agy/season-typhoon.png"}
+{"job": "ev_06", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
