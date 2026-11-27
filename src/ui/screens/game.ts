@@ -88,7 +88,7 @@ import { openPlayerMenu, openPlayerRoster, type PlayerView } from '../components
 import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { ResultScreen } from './result';
 import { FxPlayer, type PlaybackControl } from '../fxPlayer';
-import { compactDramaMs, isRoutineCpuSay } from '../cpuPacing';
+import { compactDramaMs, cutsVoice, estimateSayVoiceMs, isRoutineCpuSay, SAY_VOICE_TAIL_MS, sayHoldMs } from '../cpuPacing';
 import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, shopCardPriceLabel, shopCardPriceInfo, type CityMoveInfo } from '../moveChipInfo';
 import {
   countMoveFilters,
@@ -101,6 +101,7 @@ import {
 import type { App } from '../app';
 import type { ScreenHandle } from './types';
 import { resetHorizontalScroll } from '../scrollGuard';
+import { coalesceHud, fitTextCached, setHidden, setText } from '../hudScheduler';
 
 export interface GameScreenOptions {
   app: App;
@@ -187,6 +188,11 @@ export class GameScreen implements ScreenHandle {
   private manualView = false;
   private playerRealm: RealmId | 'world' = 'world';
   private lastMonthShown: number | null = null;
+  /** Last destination rendered into the HUD chips, so the ruby nodes are not rebuilt. */
+  private hudDestKey = '';
+  private hudPlateDestKey = '';
+  /** Last ranking roster/order rendered, so an unchanged list is not rebuilt. */
+  private rankingSignature = '';
   private readonly lastValues = new Map<string, number>();
   private portraitBaseSrc = '';
   private portraitVariantTimer = 0;
@@ -1344,7 +1350,7 @@ export class GameScreen implements ScreenHandle {
     this.map?.setMonth(state.month);
     if (state.phase.t !== 'card_target') this.map?.clearWarpPreview();
     this.enforcePhaseDialogs(state);
-    this.renderHud();
+    coalesceHud(() => this.renderHud());
     this.updateAutoDialogs();
     this.updateBgm();
     this.syncMapScreen(state);
@@ -1385,7 +1391,9 @@ export class GameScreen implements ScreenHandle {
       }
       return;
     }
-    this.renderHud();
+    // One refresh per animation frame: at 8x several host updates land in the same frame,
+    // and each rebuild used to invalidate the whole HUD's layout.
+    coalesceHud(() => this.renderHud());
   }
 
   private isActorMine(state: PublicState): boolean {
@@ -1431,7 +1439,7 @@ export class GameScreen implements ScreenHandle {
     const displaySeat = this.displaySeat();
     const privateSeat = this.privateSeat();
 
-    this.yearChip.textContent = `${state.year}年目 ${state.month}月`;
+    setText(this.yearChip, `${state.year}年目 ${state.month}月`);
     const finalYear = isFinalYearActive(state);
     this.finalYearChip.hidden = !finalYear;
     if (finalYear) {
@@ -1440,7 +1448,7 @@ export class GameScreen implements ScreenHandle {
       if (textEl && textEl.textContent !== label) textEl.textContent = label;
       this.finalYearChip.setAttribute('aria-label', `${label}。青マスは首位以外+50%`);
     }
-    this.turnChip.textContent = `ターン ${formatTurnLabel(state.round, state.config.years)}`;
+    setText(this.turnChip, `ターン ${formatTurnLabel(state.round, state.config.years)}`);
     const focusPlayer = actor !== null ? state.players[actor] : undefined;
     const actorRealm = realmOfNode(focusPlayer?.nodeId);
     this.playerRealm = actorRealm;
@@ -1454,25 +1462,34 @@ export class GameScreen implements ScreenHandle {
     const portalId = inRealm ? portalNodeFor(actorRealm) : undefined;
     const destNode = inRealm && portalId ? portalId : cityNodeId(state.destination);
     const destination = citiesById.get(state.destination);
-    this.destText.replaceChildren(
-      inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
-    );
-    fitTextOneLine(this.destText, { minPx: 10 });
+    // Ruby nodes are re-created only when the destination actually changed: replacing the
+    // child forces a layout, and `fitTextOneLine` then reads it back in the same task.
+    const destLabel = inRealm ? '出口' : destination ? destination.nameJa : state.destination;
+    if (this.hudDestKey !== destLabel) {
+      this.hudDestKey = destLabel;
+      this.destText.replaceChildren(
+        inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
+      );
+      fitTextCached(this.destText, destLabel, 10);
+    }
     this.destChip.classList.toggle('is-realm', inRealm);
     const distanceSeat = actor ?? displaySeat ?? 0;
     const destPlayer = state.players[distanceSeat];
     const steps = destPlayer ? distance(GAME_DATA, destPlayer.nodeId, destNode) : 0;
     const distanceValue = this.destDistance.querySelector('.dest-distance-value');
-    if (distanceValue) distanceValue.textContent = Number.isFinite(steps) ? String(steps) : '—';
+    if (distanceValue) setText(distanceValue, Number.isFinite(steps) ? String(steps) : '—');
     const destFullName = inRealm ? '出口' : destination ? destination.nameJa : state.destination;
     const stepsLabel = Number.isFinite(steps) ? `あと${steps}マス` : '距離不明';
     this.destChip.title = `${destFullName}（${stepsLabel}）`;
     this.destChip.setAttribute('aria-label', `目的地 ${destFullName}、${stepsLabel}。タップでマップ表示`);
-    this.playerPlateDestName.replaceChildren(
-      inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
-    );
-    fitTextOneLine(this.playerPlateDestName, { minPx: 11 });
-    this.playerPlateDestSteps.textContent = stepsLabel;
+    if (this.hudPlateDestKey !== destLabel) {
+      this.hudPlateDestKey = destLabel;
+      this.playerPlateDestName.replaceChildren(
+        inRealm ? '出口' : destination ? rubyName(destination.nameJa, destination.nameKana) : state.destination,
+      );
+      fitTextCached(this.playerPlateDestName, destLabel, 11);
+    }
+    setText(this.playerPlateDestSteps, stepsLabel);
     this.playerPlateDest.classList.toggle('is-realm', inRealm);
     this.renderErrandChip(state, distanceSeat);
     this.updateDestArrow(state, actor, destNode);
@@ -1494,8 +1511,8 @@ export class GameScreen implements ScreenHandle {
       });
     }
     const hand = privateSeat !== null ? state.players[privateSeat]?.cards.length ?? 0 : 0;
-    this.cardBadge.textContent = String(hand);
-    this.cardBadge.hidden = hand === 0;
+    setText(this.cardBadge, String(hand));
+    setHidden(this.cardBadge, hand === 0);
     requestAnimationFrame(() => {
       this.updateMapSafeArea();
       this.syncRecenterUi();
@@ -1507,6 +1524,22 @@ export class GameScreen implements ScreenHandle {
       const diff = netWorth(GAME_DATA, state, b.id) - netWorth(GAME_DATA, state, a.id);
       return diff !== 0 ? diff : a.id - b.id;
     });
+    // Rebuilding the rows is the single biggest DOM write in the HUD (7 nodes per player)
+    // and it forces the measurement right below. When nothing visible changed — the common
+    // case while the host streams one update per month — leave the DOM exactly as it is and
+    // only let the money counters catch up.
+    const signature = order
+      .map((p) => `${p.id}:${p.characterId}:${p.isCpu ? p.cpuLevel : 'h'}:${this.seatOfPlayer(p.id)}:${this.flaggedSeats.has(this.seatOfPlayer(p.id) ?? -1) ? 1 : 0}`)
+      .join('|') + `|a${actor}` + `|m${this.myPlayerIds().join(',')}`;
+    if (this.rankingSignature === signature) {
+      for (const player of order) {
+        const row = this.rankingHost.querySelector<HTMLElement>(`.rank-row[data-seat="${player.id}"]`);
+        const moneyEl = row?.querySelector<HTMLElement>('.rank-money');
+        if (moneyEl) this.setCounter(moneyEl, `rank:${player.id}:net`, netWorth(GAME_DATA, state, player.id), formatOku);
+      }
+      return;
+    }
+    this.rankingSignature = signature;
     const oldRects = new Map<number, { x: number; y: number }>();
     const oldIndexes = new Map<number, number>();
     if (!motionReduced()) {
@@ -4359,17 +4392,29 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'buy': {
+        const monopoly = fx.monopoly;
+        const compactMonopoly = control.compact === 'monopoly';
+        this.addLog(
+          `${this.playerName(fx.playerId)} が物件を購入${monopoly ? '（独占！）' : ''}`,
+        );
+        if (compactMonopoly) {
+          // 年の 2 回目以降の CPU 独占。収益 2 倍になるのは人間の競争相手だが、
+          // 見物人にカメラも紙吹雪も要らない。バナー 1 枚 + 短い待ちだけ。
+          Audio.sfx('monopoly');
+          this.showGameBanner(`${this.playerName(fx.playerId)} が都市を独占！ 収益 2 倍`);
+          await control.wait(compactDramaMs('monopoly', effectiveTempoLevel()));
+          return;
+        }
         Audio.sfx('buy');
         this.portraitMood('joy', fx.playerId);
         this.portraitMotion('jump');
         this.map?.setMood(fx.playerId, 'joy', 6000);
-        this.map?.celebrate(fx.playerId, fx.monopoly ? 'monopoly' : 'buy');
-        if (fx.monopoly) {
+        this.map?.celebrate(fx.playerId, monopoly ? 'monopoly' : 'buy');
+        if (monopoly) {
           Audio.sfx('monopoly');
           this.showGameBanner(`${this.playerName(fx.playerId)} が都市を独占！ 収益 2 倍`);
           this.confetti(14);
         }
-        this.addLog(`${this.playerName(fx.playerId)} が物件を購入${fx.monopoly ? '（独占！）' : ''}`);
         await control.wait(FX_MS.buy);
         return;
       }
@@ -4483,6 +4528,24 @@ export class GameScreen implements ScreenHandle {
       }
       case 'goal': {
         const city = citiesById.get(fx.cityId);
+        const compact = control.compact === 'goal';
+        const place = city?.nameJa ?? fx.cityId;
+        this.addLog(
+          `🎯 ${this.playerName(fx.playerId)} が ${place} に一番乗り${compact ? '' : `！ +${formatOku(fx.bonus)}`}`,
+        );
+        if (compact) {
+          // 年の 2 回目以降の CPU ゴール。人間は見物人なので、カメラも紙吹雪も止めて
+          // 短いバナー 1 枚で「誰がどこに一番乗りしたか」だけを伝える。
+          // The banner sits below the status bar (the toast host covers it on a phone), so the
+          // one line that matters stays readable everywhere.
+          Audio.sfx('coin_gain');
+          this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
+          this.showGameBanner(
+            `🎯 ${this.playerName(fx.playerId)} が ${place} に一番乗り！ +${formatOku(fx.bonus)}`,
+          );
+          await control.wait(compactDramaMs('goal', effectiveTempoLevel()));
+          return;
+        }
         Audio.sfx('goal_fanfare');
         this.portraitMood('joy', fx.playerId);
         this.portraitMotion('jump');
@@ -4491,8 +4554,7 @@ export class GameScreen implements ScreenHandle {
         this.confetti(22);
         this.panAndReturn(cityNodeId(fx.cityId), 1.1, 600, 1300, control.speed);
         this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
-        this.app.toasts.show(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り！ +${formatOku(fx.bonus)}`, 'good', 3400);
-        this.addLog(`🎯 ${this.playerName(fx.playerId)} が ${city?.nameJa ?? fx.cityId} に一番乗り`);
+        this.app.toasts.show(`🎯 ${this.playerName(fx.playerId)} が ${place} に一番乗り！ +${formatOku(fx.bonus)}`, 'good', 3400);
         await control.wait(FX_MS.goal);
         return;
       }
@@ -4574,6 +4636,15 @@ export class GameScreen implements ScreenHandle {
       case 'piper': {
         Audio.sfx('piper');
         const piperSpeaker = `npc:piper${Math.min(3, Math.max(1, fx.level))}`;
+        const piperName = PIPER_FORMS[Math.min(3, Math.max(1, fx.level)) - 1].nameJa;
+        this.addLog(`🎺 ${fx.message}`);
+        if (control.compact === 'piper_mischief') {
+          // 年の 2 回目以降の CPU への取り立て。人間の被害ではないので、
+          // 窓を出さずログと短いバナーだけ。金額は cash 側の float で見える。
+          this.showGameBanner(`🎺 ${piperName}：${fx.message}`);
+          await control.wait(compactDramaMs('piper_mischief', effectiveTempoLevel()));
+          return;
+        }
         if (fx.holder !== null) {
           this.portraitMood('sad', fx.holder);
           this.portraitMotion('shake');
@@ -4583,23 +4654,32 @@ export class GameScreen implements ScreenHandle {
         this.transientMsgPending = true;
         void this.msgWindow.show({
           speaker: piperSpeaker,
-          name: PIPER_FORMS[Math.min(3, Math.max(1, fx.level)) - 1].nameJa,
+          name: piperName,
           text: fx.message,
           sprite: speakerSprite(piperSpeaker),
           color: '#ff8a8a',
           speed: control.speed,
         }).then(() => { this.transientMsgPending = false; });
-        this.addLog(`🎺 ${fx.message}`);
         await control.wait(FX_MS.piper);
         return;
       }
       case 'piper_roulette': {
+        this.addLog(`🎺 取り立て屋ルーレット: Lv${fx.from} → Lv${fx.to}`);
+        if (control.compact === 'piper_roulette') {
+          // 姿が変わらないルーレットの 2 回目以降。回しても結果は同じなので回さない。
+          // 憑き先だけは伝える（誰のところに居座っているかはお金に効く）。
+          Audio.sfx('roulette_tick');
+          this.showGameBanner(
+            `🎺 取り立て屋は ${PIPER_FORMS[fx.to - 1].nameJa} のまま（${this.playerName(fx.holder)}）`,
+          );
+          await control.wait(compactDramaMs('piper_roulette', effectiveTempoLevel()));
+          return;
+        }
         Audio.sfx(fx.to > fx.from ? 'roulette_stop' : 'roulette_tick');
         if (fx.to === 3) {
           this.map?.shake(0.6);
           this.portraitMood('sad', fx.holder);
         }
-        this.addLog(`🎺 取り立て屋ルーレット: Lv${fx.from} → Lv${fx.to}`);
         await this.piperShow.playRoulette(fx, control);
         return;
       }
@@ -4819,16 +4899,27 @@ export class GameScreen implements ScreenHandle {
     const introBoost = this.eventIntroBoost > 1 && fx.lineKey === undefined ? this.eventIntroBoost : 1;
     const speed = control.speed * introBoost;
     const autoAdvance = uiSettings().autoAdvance;
-    // A CPU's routine quips are scenery. Play their clip only as colour; never block the turn
-    // on it, otherwise the ×3 CPU pacing waits on 1.2x voice for every line.
-    // A compact CPU-only 固有技 drops its voice wait the same way (`control.compact`).
-    const routineCpu = isRoutineCpuSay(fx, state) || control.compact !== null;
+    // A CPU's routine quips are scenery: play the clip as colour only, never block on it.
+    // A compact beat (CPU-only 固有技, CPU-to-CPU 買収, a repeated CPU goal/monopoly/roulette/
+    // mischief) is colour the same way — the banner already carried the news.
+    const routine = isRoutineCpuSay(fx, state);
     // Voice playback rate is intentionally capped at 1.2x for intelligibility; at 4x/8x or while
-    // catching up on queued updates, do not block message advancement on 1.2x audio playback.
-    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routineCpu && introBoost === 1;
+    // catching up on queued updates, do not block advancement on 1.2x audio playback.
+    // Routine quips never play a voice, so they are the only lines exempt from the wait: a
+    // compact beat still *speaks* in 標準 (its banner is already short), it is never clipped.
+    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routine && introBoost === 1;
+    const level = effectiveTempoLevel();
+    // さくさくだけが声を切る: 11 文字/秒の読み時間で送り、クリップは次の台詞が 180 ms で
+    // フェードアウトする。標準は声を絶対に切らない（自分の声が終わるまで待ち、120 ms 後に送る）。
+    // じっくり（calm）は従来どおり。`null` は「声の終わりを待つ」の意味。
+    const clipVoice = cutsVoice(level) && autoAdvance && speed < 4 && control.backlog === 0 && introBoost === 1;
+    const holdMs = clipVoice
+      ? sayHoldMs(fx.text, { level, compact: control.compact !== null })
+      : null;
     let voiceStarted = false;
+    // Routine bookkeeping quips stay silent (they are read at 4-6x and would only pile up).
     const voicePromise =
-      muted || routineCpu || control.backlog > 0
+      muted || routine || control.backlog > 0
         ? Promise.resolve()
         : Audio.playVoice(voiceKey, fx.text, {
             rate: speed,
@@ -4836,20 +4927,25 @@ export class GameScreen implements ScreenHandle {
               voiceStarted = true;
             },
           });
-    const boundedVoice = waitForVoice
+    // 標準: wait for this line's own voice, then advance `SAY_VOICE_TAIL_MS` later. The cap is
+    // only a wedged-AudioContext safety net (never a normal tail); じっくり keeps its old budget.
+    const boundedVoice = holdMs === null && waitForVoice
       ? raceWithTimeout(
           voicePromise,
-          voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000,
+          level === 'calm'
+            ? voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000
+            : estimateSayVoiceMs(fx.text) + 4000,
         )
       : undefined;
-    // One message window for every spoken line; the event panel no longer carries a
-    // duplicate narrator card. At 1x/2x without backlog the window waits until voice finishes,
-    // while fast-forward (4x/8x) and backlog catch-up advance on the speed-scaled reading timer.
+    const voiceDone = boundedVoice ?? (holdMs !== null ? voicePromise : undefined);
     const windowLine = {
       ...this.messageLineFor(speaker, label, fx.text, state, speakerSeat),
       speed,
       autoAdvance,
-      ...(boundedVoice ? { voiceDone: boundedVoice, voiceStarted: () => voiceStarted } : {}),
+      ...(holdMs !== null ? { holdMs } : {}),
+      // 標準/さくさく の小休止は 120 ms。じっくりは従来の 220/speed のまま。
+      ...(voiceDone && holdMs === null && level !== 'calm' ? { tailMs: SAY_VOICE_TAIL_MS } : {}),
+      ...(voiceDone ? { voiceDone, voiceStarted: () => voiceStarted } : {}),
     };
     const shown = this.msgWindow.show(windowLine);
     control.onSkip(() => {
@@ -4861,7 +4957,13 @@ export class GameScreen implements ScreenHandle {
       // Auto-advance is timer-driven and speed-scaled, so a bound is safe; manual advance
       // intentionally waits for the reader and pauses the watchdog instead.
       if (autoAdvance) {
-        const budget = voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500;
+        // `holdMs` (さくさく) applies to the last page; the typewriter reveal still precedes it.
+        // 標準 waits for the voice, so its bound is the same estimate plus a safety margin.
+        const budget = holdMs !== null
+          ? holdMs + 600
+          : level === 'calm'
+            ? voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500
+            : estimateSayVoiceMs(fx.text) + 4000;
         await control.bound(shown, introBoost > 1 ? budget / introBoost : budget);
       } else {
         await shown;

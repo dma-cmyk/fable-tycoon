@@ -99,6 +99,8 @@ const volumes: Volumes = readVolumes();
 
 interface ActiveVoice {
   source: AudioBufferSourceNode;
+  /** Per-line gain: lets a superseded line duck out instead of clicking off mid-word. */
+  gain: GainNode;
   resolve: () => void;
   done: boolean;
   timer: ReturnType<typeof globalThis.setTimeout> | null;
@@ -106,6 +108,14 @@ interface ActiveVoice {
 
 let activeVoice: ActiveVoice | null = null;
 let voiceToken = 0;
+/**
+ * Fade-out of a line that is superseded before it ends, in ms.
+ *
+ * 標準/さくさく no longer waits for a voice line before showing the next beat, so a hand-over
+ * needs a rule: the outgoing line fades over this long while the incoming one starts. Two voices
+ * are never at full level together, and a fast CPU beat never ends a word with a click.
+ */
+const VOICE_HANDOVER_MS = 180;
 const voiceCache = new Map<string, AudioBuffer>();
 const voiceFailed = new Set<string>();
 
@@ -225,7 +235,10 @@ async function playVoice(voiceKey: string, text: string, options?: PlayVoiceOpti
 
   const rate = voicePlaybackRate(options?.rate);
   const token = ++voiceToken;
-  stopActiveVoice();
+  // A 標準/さくさく line may still be speaking when the next one starts (the queue no longer
+  // waits for the voice). Fade the old one out instead of cutting it, so the two never speak at
+  // full level together and the hand-over has no click.
+  stopActiveVoice(VOICE_HANDOVER_MS);
   stopActiveChatter();
   voicePending = true;
   updateBgmDuck();
@@ -564,19 +577,22 @@ function startVoice(
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.playbackRate.value = clampedRate;
-  source.connect(bus);
+  const gain = context.createGain();
+  source.connect(gain);
+  gain.connect(bus);
 
   let resolvePromise!: () => void;
   const promise = new Promise<void>((resolve) => {
     resolvePromise = resolve;
   });
-  const active: ActiveVoice = { source, resolve: resolvePromise, done: false, timer: null };
+  const active: ActiveVoice = { source, gain, resolve: resolvePromise, done: false, timer: null };
   activeVoice = active;
   updateChatterDuck();
   updateBgmDuck();
   source.onended = () => {
     try {
       source.disconnect();
+      gain.disconnect();
     } catch {
       /* already disconnected */
     }
@@ -609,14 +625,34 @@ function finishVoice(voice: ActiveVoice): void {
   voice.resolve();
 }
 
-function stopActiveVoice(): void {
+/**
+ * Stops the current line (its playVoice promise resolves). With `duckMs` the line is faded out
+ * over that long instead of cut: a new line may start on top of the tail without a click and
+ * without two voices ever speaking at full level together.
+ */
+function stopActiveVoice(duckMs = 0): void {
   const voice = activeVoice;
   if (!voice) return;
   activeVoice = null;
-  try {
-    voice.source.stop();
-  } catch {
-    /* not started or already stopped */
+  const context = ctx;
+  if (duckMs > 0 && context && context.state === 'running') {
+    try {
+      const now = context.currentTime;
+      const end = now + duckMs / 1000;
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+      voice.gain.gain.linearRampToValueAtTime(0.0001, end);
+      // `onended` still disconnects the nodes; `finishVoice` already resolved the promise.
+      voice.source.stop(end + 0.02);
+    } catch {
+      /* not started or already stopped */
+    }
+  } else {
+    try {
+      voice.source.stop();
+    } catch {
+      /* not started or already stopped */
+    }
   }
   finishVoice(voice);
 }

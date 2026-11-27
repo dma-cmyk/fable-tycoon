@@ -535,6 +535,9 @@ export class MapView {
   private labelObstacleSignature = '';
   /** Cached static label layout for the current view + zoom bucket. */
   private labelLayoutKey = '';
+  /** Bucket whose layout is queued in `labelLayoutTimer`. */
+  private labelLayoutPending = '';
+  private labelLayoutTimer: number | null = null;
   private labelLayoutRefZoom = 1;
   private labelLayoutMs = { art: 0, city: 0, total: 0 };
   private cityLabelPlan = new Map<string, CityLabelPlan>();
@@ -590,6 +593,13 @@ export class MapView {
   private miniLandSize = '';
   private readonly miniPointer = (e: PointerEvent): void => this.handleMiniTap(e);
   private readonly measureCache = new Map<string, number>();
+  /**
+   * Dedicated 2D context for `measureText`. Measuring on the live screen context forces
+   * Chromium to flush the frame's pending display list, which turned one label-layout
+   * rebuild (7-10 ms of real work) into a 40-130 ms long task whenever it landed inside
+   * `draw()`. The scratch context never has a display list to flush.
+   */
+  private measureCtx: CanvasRenderingContext2D | null = null;
   private resizeObserver: ResizeObserver;
   private budget: CanvasBudget;
 
@@ -2874,7 +2884,32 @@ export class MapView {
   private ensureLabelLayout(): void {
     const bucket = zoomBucket(this.camera.zoom);
     const key = `${this.view}|${bucket}`;
-    if (key === this.labelLayoutKey) return;
+    if (key === this.labelLayoutKey || key === this.labelLayoutPending) return;
+    // The rebuild measures every station name again (372 cities ~16-20 ms, and a cold font
+    // cache on a bucket change pushed it to 120 ms) and it used to run inside `draw()`. It
+    // is a static-board computation, so it runs in its own task instead; until it lands the
+    // previous plan keeps drawing, scaled by `cam.zoom / labelLayoutRefZoom`, which is
+    // exactly how a plan is used inside a bucket anyway.
+    if (this.labelLayoutKey) {
+      this.labelLayoutPending = key;
+      if (this.labelLayoutTimer === null) {
+        this.labelLayoutTimer = window.setTimeout(() => {
+          this.labelLayoutTimer = null;
+          const pending = this.labelLayoutPending;
+          this.labelLayoutPending = '';
+          if (!pending || pending === this.labelLayoutKey) return;
+          const current = `${this.view}|${zoomBucket(this.camera.zoom)}`;
+          this.buildLabelLayout(current === pending ? pending : current);
+          this.requestRender();
+        }, 0);
+      }
+      return;
+    }
+    this.buildLabelLayout(key);
+  }
+
+  private buildLabelLayout(key: string): void {
+    const bucket = Number(key.slice(key.lastIndexOf('|') + 1));
     this.labelLayoutKey = key;
     const started = performance.now();
     const refZoom = bucketZoom(bucket);
@@ -2882,7 +2917,6 @@ export class MapView {
     this.labelLayoutRefZoom = refZoom;
     const detail = this.detailLevel(refZoom);
     const playZoom = this.playZoom();
-    const ctx = this.ctx;
 
     // Static marker discs (stations, squares, landmark towns) are shared by
     // both passes: terrain names must not sit on a station, and station names
@@ -2944,13 +2978,13 @@ export class MapView {
       const fs = Math.min(cap, Math.max(6, base * refZoom));
       const water = kind === 'ocean' || kind === 'continent' || kind === 'sea';
       const font = `${water ? 'italic ' : ''}800 ${fs.toFixed(1)}px ${LABEL_FONT}`;
-      let width = this.measureText(ctx, text, font);
+      let width = this.measureText(text, font);
       const gap = water ? fs * 0.12 : 0;
       if (water) width += Math.max(0, Array.from(text).length - 1) * gap;
       // Furigana only once the terrain name is big enough to keep it legible.
       const kana = fs >= 14 ? labelKana(label, text) : null;
       const kanaFs = kana ? Math.max(8, fs * 0.5) : 0;
-      const kanaWidth = kana ? this.measureText(ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
+      const kanaWidth = kana ? this.measureText(kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
       const boxW = Math.max(width, kanaWidth);
       const boxH = fs * 1.15 + (kana ? kanaFs * 1.15 : 0);
       let chars: Array<{ ch: string; x: number }> | null = null;
@@ -2958,7 +2992,7 @@ export class MapView {
         chars = [];
         let cx = -width / 2;
         for (const ch of Array.from(text)) {
-          const cw = this.measureText(ctx, ch, font);
+          const cw = this.measureText(ch, font);
           chars.push({ ch, x: cx + cw / 2 });
           cx += cw + gap;
         }
@@ -3037,8 +3071,8 @@ export class MapView {
       const kana = showKana ? cityKana(entry.city) : null;
       const kanaFs = kana ? Math.max(8, fs * 0.5) : 0;
       const priorityFont = `800 ${fsPriority.toFixed(1)}px ${LABEL_FONT}`;
-      const nameWidth = this.measureText(this.ctx, text, priorityFont);
-      const kanaWidth = kana ? this.measureText(this.ctx, kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
+      const nameWidth = this.measureText(text, priorityFont);
+      const kanaWidth = kana ? this.measureText(kana, `800 ${kanaFs.toFixed(1)}px ${LABEL_FONT}`) : 0;
       // Sized for the priority tier with extra gutter when furigana sits on the top row.
       const w = Math.max(nameWidth, kanaWidth) + (kana ? 14 : 10);
       const h = fsPriority + 7 + (kana ? kanaFs + 4 : 0);
@@ -4244,7 +4278,7 @@ export class MapView {
       if (sx < board.x + 24 || sx > board.x + board.w - 24) continue;
       if (sy < board.y + 18 || sy > board.y + board.h - 24) continue;
       const label = squareInfoOf(node.kind).shortLabel;
-      const tw = this.measureText(ctx, label, font);
+      const tw = this.measureText(label, font);
       const padX = 5;
       const w = tw + padX * 2;
       const h = fs + 4.5;
@@ -4932,14 +4966,19 @@ export class MapView {
     ctx.restore();
   }
 
-  private measureText(ctx: CanvasRenderingContext2D, text: string, font: string): number {
+  private measureText(text: string, font: string): number {
     const key = `${font}|${text}`;
     const cached = this.measureCache.get(key);
     if (cached !== undefined) return cached;
-    ctx.save();
-    ctx.font = font;
-    const width = ctx.measureText(text).width;
-    ctx.restore();
+    if (!this.measureCtx) {
+      const scratch = document.createElement('canvas');
+      scratch.width = 8;
+      scratch.height = 8;
+      this.measureCtx = scratch.getContext('2d');
+      if (!this.measureCtx) return text.length * 8;
+    }
+    this.measureCtx.font = font;
+    const width = this.measureCtx.measureText(text).width;
     // Label layouts measure the same names at every zoom bucket; a larger cap
     // avoids clearing the cache (and re-measuring every name) mid-session.
     if (this.measureCache.size > 12000) this.measureCache.clear();

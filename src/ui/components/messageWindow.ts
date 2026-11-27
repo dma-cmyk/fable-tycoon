@@ -26,6 +26,14 @@ export interface MessageLine {
   voiceDone?: Promise<void>;
   /** True once voice playback actually started; when false, fall back to reading-time dwell. */
   voiceStarted?: () => boolean;
+  /**
+   * 標準/さくさく speech: the last page holds until the *bounded* voice promise settles, which the
+   * caller caps at the reading time (about 9 characters/second, floor 0.8s). No extra tail pause —
+   * the clip keeps playing behind the next beat, and the next line ducks it.
+   */
+  holdMs?: number;
+  /** 声が終わってから送るまでの小休止（1x, ms）。未指定は従来の `postVoicePauseMs(speed)`。 */
+  tailMs?: number;
 }
 
 export interface MessageWindowOptions {
@@ -292,6 +300,26 @@ export class MessageWindow {
     }
     const speed = this.currentSpeed();
     const isLastPage = this.pageIndex + 1 >= this.pages.length;
+    if (isLastPage && line.holdMs !== undefined) {
+      // 標準/さくさく: never wait for a long clip to finish. The page holds for its reading time
+      // (about 9 chars/second, floor 0.8s), and if the clip ends sooner the page advances with it —
+      // whichever comes first. A following line ducks this one, so two voices never overlap.
+      const advance = (): void => {
+        if (token !== this.lineToken) return;
+        this.timer = 0;
+        this.advance();
+      };
+      this.timer = window.setTimeout(advance, Math.max(60, Math.round(line.holdMs / speed)));
+      if (line.voiceDone) {
+        void line.voiceDone.then(() => {
+          // A missing/silent line (`voiceStarted` false) keeps the reading hold.
+          if (token !== this.lineToken || !line.voiceStarted?.()) return;
+          window.clearTimeout(this.timer);
+          this.timer = window.setTimeout(advance, postVoicePauseMs(speed));
+        });
+      }
+      return;
+    }
     if (isLastPage && line.voiceDone) {
       const readMs = scaledPageReadMs(page, speed);
       const revealedAt = performance.now();
@@ -299,7 +327,9 @@ export class MessageWindow {
         if (token !== this.lineToken) return;
         const spoke = line.voiceStarted ? line.voiceStarted() : true;
         const remaining = spoke
-          ? postVoicePauseMs(speed)
+          ? line.tailMs !== undefined
+            ? Math.max(30, Math.round(line.tailMs / speed))
+            : postVoicePauseMs(speed)
           : Math.max(40, readMs - Math.round(performance.now() - revealedAt));
         this.timer = window.setTimeout(() => {
           if (token !== this.lineToken) return;

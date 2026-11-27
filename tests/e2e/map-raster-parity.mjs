@@ -292,6 +292,11 @@ const FIXED_NOW = 1_700_000_000_000;
 
 /** Draw one deterministic frame at the current camera, then capture it. */
 async function captureAtCamera(page) {
+  // Tile rasterisation moved out of the frame (report 92): `map.draw()` no longer paints
+  // synchronously under a time budget, so a capture taken in the same tick as a camera
+  // change would photograph placeholders and compare them against the other capture. Settle
+  // first — the gate is "same camera + same content ⇒ same pixels", not "same instant".
+  await settleTiles(page);
   const diff = await page.evaluate((fixedNow) => {
     const map = globalThis.__fableGame.map;
     // Pin the baked content for both captures of a comparison.

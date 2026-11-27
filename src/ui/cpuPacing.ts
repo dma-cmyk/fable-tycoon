@@ -14,9 +14,14 @@ import type { PublicState } from '../core/engine';
 import type { Fx } from '../core/types';
 import {
   compactDramaKind,
+  compactSayBeat,
+  createDramaLedger,
   isRoutineCpuFx as coreRoutineCpuFx,
   isRoutineCpuSay as coreRoutineCpuSay,
+  paceUpdate,
   routineFxScale,
+  type CompactDramaKind,
+  type DramaLedger,
   type FxPacingContext,
   type FxTempoLevel,
 } from '../core/fxPacing';
@@ -24,10 +29,19 @@ import { effectiveTempoLevel } from './settings';
 
 export {
   BIG_SWING_RATIO,
+  COMPACT_VOICE_WAIT_MS,
   compactDramaMs,
   CPU_ROUTINE_BOOST,
+  cutsVoice,
+  estimateSayVoiceMs,
   ROUTINE_BOOST,
+  READ_CHARS_PER_SECOND,
+  SAY_MIN_HOLD_MS,
+  SAY_VOICE_TAIL_MS,
+  sayHoldMs,
   DEFAULT_TEMPO_LEVEL,
+  type CompactDramaKind,
+  type DramaRepeatKind,
   type FxTempoLevel,
 } from '../core/fxPacing';
 
@@ -91,13 +105,20 @@ export function isRoutineCpuFx({ fx, state, actor, update, level, leaderWorth }:
  */
 export class CpuTurnPacer {
   private actor: number | null = null;
-  private compact: 'skill' | 'buyout' | null = null;
+  private compact: CompactDramaKind | null = null;
+  /** Repeat counts of the current year (see `fxPacing.DramaLedger`). */
+  private readonly ledger: DramaLedger = createDramaLedger();
+  /** The update whose compact tiers are already decided, and their decision. */
+  private decidedUpdate: readonly Fx[] | null = null;
+  private decidedCompact: ReadonlyMap<Fx, CompactDramaKind | null> | null = null;
   /** Leader net worth, recomputed once per update (netWorth walks every property). */
   private worthCache: { state: PublicState; worth: number } | null = null;
 
   reset(): void {
     this.actor = null;
     this.compact = null;
+    this.decidedUpdate = null;
+    this.decidedCompact = null;
     this.worthCache = null;
   }
 
@@ -106,7 +127,7 @@ export class CpuTurnPacer {
   }
 
   /** Compact tier of the fx that `speedFor` was last called for. */
-  get compactBeat(): 'skill' | 'buyout' | null {
+  get compactBeat(): CompactDramaKind | null {
     return this.compact;
   }
 
@@ -133,25 +154,29 @@ export class CpuTurnPacer {
       }
       leaderWorth = this.worthCache.worth;
     }
+    const year = state.year ?? 0;
     const ctx: FxPacingContext = {
       actor: this.actor,
       isCpu: (playerId) => isCpuSeat(state, playerId),
       ...(update && update.length > 0 ? { update } : {}),
       level: level ?? effectiveTempoLevel(),
+      year,
+      ledger: this.ledger,
       ...(leaderWorth === undefined ? {} : { leaderWorth }),
     };
-    this.compact = compactDramaKind(fx, ctx);
-    if (this.compact === null && fx.t === 'say' && fx.playerId !== undefined && update) {
-      // A line that belongs to a compact CPU-only beat is colour: its 掛け合い does not wait.
-      const compactSkill = update.some(
-        (item) => item.t === 'skill' && item.playerId === fx.playerId && compactDramaKind(item, ctx) === 'skill',
-      );
-      const compactBuyout = update.some(
-        (item) => item.t === 'buyout' && compactDramaKind(item, ctx) === 'buyout',
-      );
-      if (compactSkill) this.compact = 'skill';
-      else if (compactBuyout) this.compact = 'buyout';
+    // The host budgets the update the same way: every compact tier is decided against the
+    // year's ledger, and only then is it advanced (see `paceUpdate`).
+    if (update && update.length > 0 && this.decidedUpdate !== update) {
+      this.decidedUpdate = update;
+      this.decidedCompact = paceUpdate(update, ctx);
     }
-    return routineFxScale(fx, ctx);
+    const decided = this.decidedCompact ? { ...ctx, compactOf: this.decidedCompact } : ctx;
+    this.compact = compactDramaKind(fx, decided);
+    if (fx.t === 'say' && this.compact === null) {
+      // A line that belongs to a compact beat (CPU-only 固有技, CPU-to-CPU 買収, a repeated CPU
+      // goal/monopoly/roulette/mischief) is colour: its 掛け合い does not wait on the voice.
+      this.compact = compactSayBeat(fx, decided);
+    }
+    return routineFxScale(fx, decided);
   }
 }

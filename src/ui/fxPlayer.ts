@@ -1,5 +1,6 @@
 import type { PublicState } from '../core/engine';
 import type {Fx} from '../core/types';
+import type { CompactDramaKind } from '../core/fxPacing';
 import { FX_MS } from '../net/session-types';
 import { voiceBudgetMs, voicePlaybackRate } from '../audio/voiceBudget';
 import type { UiSettings } from './settings';
@@ -76,7 +77,7 @@ export interface PlaybackControl {
   /** Extra multiplier applied to `speed` because the current fx is routine CPU bookkeeping. */
   readonly accel: number;
   /** Compact presentation tier of the current fx (`null` = the full beat). */
-  readonly compact: 'skill' | 'buyout' | null;
+  readonly compact: CompactDramaKind | null;
   /** Number of newer updates waiting behind the currently playing head. */
   readonly backlog: number;
 }
@@ -197,8 +198,8 @@ export class FxPlayer {
   /** CPU routine fx are painted at `fxSpeed × CPU_ROUTINE_BOOST`. */
   private readonly pacer = new CpuTurnPacer();
   private activeBoost = 1;
-  /** Compact tier of the fx being played (skills / CPU-to-CPU buyouts). */
-  private activeCompact: 'skill' | 'buyout' | null = null;
+  /** Compact tier of the fx being played (skills, buyouts, repeated drama). */
+  private activeCompact: CompactDramaKind | null = null;
   private stats: FxPlaybackStat[] = [];
   private slowCount = 0;
   private updateStartedAt = 0;

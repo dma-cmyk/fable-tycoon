@@ -24,7 +24,15 @@ import {
   ALLOWED_YEARS,
 } from '../core/engine';
 import { COMM, MAX_SEATS, PROTOCOL_VERSION } from './protocol';
-import { routineFxDuration, type FxTempoLevel } from '../core/fxPacing';
+import {
+  createDramaLedger,
+  paceUpdate,
+  routineFxDuration,
+  type CompactDramaKind,
+  type DramaLedger,
+  type FxPacingContext,
+  type FxTempoLevel,
+} from '../core/fxPacing';
 import type {
   AllowedYears,
   ChatLine,
@@ -326,6 +334,12 @@ export class RoomController {
 
   private lastFx: Fx[] = [];
   private lastBy: number | null = null;
+  /** Repeat counts of the current year, advanced once per committed update (see `fxPacing`). */
+  private readonly dramaLedger: DramaLedger = createDramaLedger();
+  /** `seq` whose fx are already counted in {@link dramaLedger}; re-arming must not count twice. */
+  private dramaLedgerSeq = -1;
+  /** Compact tiers of the update that `seq` covers, decided once (see `paceUpdate`). */
+  private updateCompact: ReadonlyMap<Fx, CompactDramaKind | null> | null = null;
   private deadline: number | null = null;
   private deadlineSeq = -1;
   private deadlineActor: number | null = null;
@@ -1452,17 +1466,31 @@ export class RoomController {
     // (`src/core/fxPacing.ts`); everything else — human fx, goals, piper, events, monopolies —
     // keeps the nominal budget. `lastBy` is the acting player of this update and `fx` is its
     // whole list, so a compact skill beat can weigh the cash rows it produced.
-    const pacing = {
+    //
+    // `armTurn` also runs on rearm (freeze, migration, snapshot restore) for the fx it already
+    // budgeted, so the update is decided once per `seq`: `paceUpdate` takes every compact tier
+    // against the year's ledger and only then advances it.
+    const year = this.state?.year ?? 0;
+    const pacing: FxPacingContext = {
       actor: this.lastBy,
       isCpu: (playerId: number | null | undefined) =>
         this.state?.players[playerId ?? -1]?.isCpu === true,
       update: fx,
       level: this.tempoLevel,
+      year,
+      ledger: this.dramaLedger,
       ...(this.state ? { leaderWorth: this.leaderWorth() } : {}),
     };
-    this.turnFxMs =
-      fx.reduce((sum, item) => sum + routineFxDuration(fxDuration(item), item, pacing), 0) *
-      this.fxScale;
+    if (this.dramaLedgerSeq !== this.seq) {
+      this.dramaLedgerSeq = this.seq;
+      this.updateCompact = paceUpdate(fx, pacing);
+    }
+    const paced: FxPacingContext = this.updateCompact
+      ? { ...pacing, compactOf: this.updateCompact }
+      : pacing;
+    let budgetMs = 0;
+    for (const item of fx) budgetMs += routineFxDuration(fxDuration(item), item, paced);
+    this.turnFxMs = budgetMs * this.fxScale;
 
     if (this.status !== 'playing' || !this.state || this.state.phase.t === 'game_over') {
       return;

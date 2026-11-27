@@ -20,12 +20,19 @@ import type { Camera } from './camera';
 import type { LandJson } from './map';
 import { detectCanvasBudget, fitCanvasSize, noteCanvasAllocation, releaseCanvas, type CanvasBudget } from './canvasBudget';
 
-interface PolyBox {
+interface Box {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
+}
+
+interface PolyBox extends Box {
   rings: number[][];
+  /** Bounding box of each ring: a ring that misses a tile cannot paint into it. */
+  ringBoxes: Box[];
+  /** Closed path per ring, so a single ring can be added without copying the polygon. */
+  ringPaths: Path2D[];
   /** World-unit path (all rings of this polygon), built once. */
   path: Path2D;
 }
@@ -44,7 +51,9 @@ interface TreeStamp {
 const TILE_DEV = 512;
 /** Tile cache size as a fraction of the canvas-area budget. */
 const TILE_AREA_RATIO = 0.5;
-/** Default incremental rasterisation budget per drawn frame. */
+/** How much rasterisation one background fill task may spend (see `fillStep`). */
+const FILL_TASK_MS = 16;
+/** Fan-out budget for the first synchronous composition of a session. */
 const DEFAULT_FRAME_BUDGET_MS = 8;
 /**
  * Device pixels painted beyond every tile / frame edge and then discarded. Chromium's clip
@@ -55,8 +64,6 @@ const DEFAULT_FRAME_BUDGET_MS = 8;
 const EDGE_BLEED = 8;
 /** Device width of the whole-world placeholder raster built once per season. */
 const THUMB_DEV = 1024;
-/** Per-frame rasterisation budget for a frame that has nothing exact on screen yet. */
-const JUMP_BUDGET_MS = 24;
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -269,6 +276,15 @@ export class LandLayer {
   private cachedArea = 0;
   private seq = 0;
   private frameBudgetMs = DEFAULT_FRAME_BUDGET_MS;
+  /** Pending `fillStep` task, if any. */
+  private fillTimer: number | null = null;
+  /** Frame/content the pending fill task paints for. */
+  private fillJob: { frame: FrameGeometry; content: PaintContent; group: TileGroup; dpr: number; withRing: boolean } | null = null;
+  /** Scratch canvas that receives a freshly painted tile so its raster runs now. */
+  private flushCanvas: HTMLCanvasElement | null = null;
+  /** Evicted tile canvases waiting for their backing store to be freed off-frame. */
+  private readonly releaseQueue: HTMLCanvasElement[] = [];
+  private releaseTimer: number | null = null;
   private composeKey = '';
   private currentGroupKey = '';
   private lastFrame: FrameGeometry | null = null;
@@ -306,7 +322,14 @@ export class LandLayer {
       let maxX = -Infinity;
       let maxY = -Infinity;
       const path = new Path2D();
+      const ringBoxes: Box[] = [];
+      const ringPaths: Path2D[] = [];
       for (const ring of rings) {
+        let rMinX = Infinity;
+        let rMinY = Infinity;
+        let rMaxX = -Infinity;
+        let rMaxY = -Infinity;
+        const ringPath = new Path2D();
         for (let i = 0; i < ring.length; i += 2) {
           const x = ring[i];
           const y = ring[i + 1];
@@ -314,12 +337,24 @@ export class LandLayer {
           if (x > maxX) maxX = x;
           if (y < minY) minY = y;
           if (y > maxY) maxY = y;
-          if (i === 0) path.moveTo(x, y);
-          else path.lineTo(x, y);
+          if (x < rMinX) rMinX = x;
+          if (x > rMaxX) rMaxX = x;
+          if (y < rMinY) rMinY = y;
+          if (y > rMaxY) rMaxY = y;
+          if (i === 0) {
+            ringPath.moveTo(x, y);
+            path.moveTo(x, y);
+          } else {
+            ringPath.lineTo(x, y);
+            path.lineTo(x, y);
+          }
         }
+        ringPath.closePath();
         path.closePath();
+        ringBoxes.push({ minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY });
+        ringPaths.push(ringPath);
       }
-      return { minX, minY, maxX, maxY, rings, path };
+      return { minX, minY, maxX, maxY, rings, ringBoxes, ringPaths, path };
     });
     this.canvas = document.createElement('canvas');
     const ctx = this.canvas.getContext('2d');
@@ -377,6 +412,19 @@ export class LandLayer {
 
   /** Release all offscreen canvases. */
   destroy(): void {
+    if (this.fillTimer !== null) {
+      window.clearTimeout(this.fillTimer);
+      this.fillTimer = null;
+    }
+    if (this.releaseTimer !== null) {
+      window.clearTimeout(this.releaseTimer);
+      this.releaseTimer = null;
+    }
+    for (const item of this.releaseQueue) releaseCanvas(item);
+    this.releaseQueue.length = 0;
+    this.fillJob = null;
+    if (this.flushCanvas) releaseCanvas(this.flushCanvas);
+    this.flushCanvas = null;
     this.clearTiles();
     releaseCanvas(this.canvas);
     if (this.referenceCanvas) releaseCanvas(this.referenceCanvas);
@@ -465,23 +513,26 @@ export class LandLayer {
     const visible = this.listTiles(frame, 0);
     const paintList = this.listTiles(frame, 1);
 
-    // Rasterise missing tiles inside the per-frame budget. The first composition of a
-    // session paints synchronously: there is no earlier frame to fall back on.
+    // Rasterise missing tiles. A 512 px tile costs 11-34 ms of rasterisation, which cannot
+    // fit in a 16 ms frame, so the work runs in its own task (`fillStep`) instead of inside
+    // this draw: the frame then only composes cached tiles, and the browser gets the thread
+    // back between tiles. `frameBudgetMs === 0` is the test hook that paints synchronously
+    // (the parity harness renders a whole frame in one call that way).
     const cold = !this.everComposed;
-    const exactAtStart = this.countExact(group, visible);
-    const started = performance.now();
     let painted = 0;
-    // After a warp / long follow jump the whole viewport is missing: give that frame a
-    // larger slice so the screen resolves in two or three frames instead of ten.
-    const budget = exactAtStart === 0 ? Math.max(this.frameBudgetMs, JUMP_BUDGET_MS) : this.frameBudgetMs;
-    for (const entry of paintList) {
-      if (this.tileFor(group, entry.ix, entry.iy) !== undefined) continue;
-      if (budget < 0) break;
-      if (!cold && painted > 0 && budget > 0 && performance.now() - started >= budget) break;
-      this.paintTile(group, frame, content, entry, dpr);
-      painted += 1;
+    let paintMs = 0;
+    if (cold || this.frameBudgetMs === 0) {
+      const started = performance.now();
+      for (const entry of paintList) {
+        if (this.tileFor(group, entry.ix, entry.iy) !== undefined) continue;
+        this.paintTile(group, frame, content, entry, dpr);
+        painted += 1;
+        this.rasteriseTile(entry, group);
+      }
+      paintMs = performance.now() - started;
+    } else if (this.frameBudgetMs > 0) {
+      this.scheduleFill(frame, content, group, dpr);
     }
-    const paintMs = performance.now() - started;
 
     const exact = this.countExact(group, visible);
     const pending = visible.length - exact;
@@ -755,17 +806,34 @@ export class LandLayer {
       if (this.cachedArea <= cap) break;
       entry.group.tiles.delete(entry.id);
       this.cachedArea -= entry.tile.devW * entry.tile.devH;
-      releaseCanvas(entry.tile.canvas);
+      this.queueRelease(entry.tile.canvas);
     }
   }
 
   private dropGroup(group: TileGroup): void {
     for (const tile of group.tiles.values()) {
       this.cachedArea -= tile.devW * tile.devH;
-      releaseCanvas(tile.canvas);
+      this.queueRelease(tile.canvas);
     }
     group.tiles.clear();
     this.groups.delete(group.key);
+  }
+
+  /**
+   * Free an evicted tile's backing store off the frame.
+   *
+   * `canvas.width = 0` hands the allocation back immediately, and a camera ride evicts a
+   * dozen tiles at once: measured 18-25 ms of `draw()` inside one bucket change. Nothing
+   * reads an evicted tile again, so the free is deferred to its own task.
+   */
+  private queueRelease(canvas: HTMLCanvasElement): void {
+    this.releaseQueue.push(canvas);
+    if (this.releaseTimer !== null) return;
+    this.releaseTimer = window.setTimeout(() => {
+      this.releaseTimer = null;
+      for (const item of this.releaseQueue) releaseCanvas(item);
+      this.releaseQueue.length = 0;
+    }, 0);
   }
 
   private clearTiles(): void {
@@ -794,60 +862,166 @@ export class LandLayer {
 
     const missing: TileRect[] = [];
     for (const entry of visible) {
-      const tile = this.tileFor(group, entry.ix, entry.iy);
-      if (tile) {
-        // Copy the tile's inner rect so the destination's own edge never affects it.
-        ctx.drawImage(
-          tile.canvas,
-          EDGE_BLEED,
-          EDGE_BLEED,
-          entry.devW,
-          entry.devH,
-          entry.devX + off,
-          entry.devY + off,
-          entry.devW,
-          entry.devH,
-        );
-      } else {
-        missing.push(entry);
-      }
+      if (this.tileFor(group, entry.ix, entry.iy) === undefined) missing.push(entry);
     }
-    if (missing.length === 0) return;
-
-    // Placeholder sources, closest first: another bucket of the same content family, then
-    // any bucket, then the previous composed frame for anything still uncovered.
-    const sources = [...this.groups.values()]
-      .filter((g) => g.key !== group.key && g.tiles.size > 0)
-      .sort((a, b) => {
-        const fa = a.family === group.family ? 0 : 1;
-        const fb = b.family === group.family ? 0 : 1;
-        if (fa !== fb) return fa - fb;
-        return Math.abs(a.bucket - frame.bucket) - Math.abs(b.bucket - frame.bucket);
-      });
-    // A placeholder must never leave a hole: every missing tile is first flooded with the
-    // same vertical sea gradient the ocean backdrop uses, then covered by (a rough) world
-    // thumbnail and finally by the closest bucket's tiles. Nothing is ever cleared, so the
-    // ocean backdrop underneath can never be erased to black.
-    const sea = ctx.createLinearGradient(0, off, 0, off + frame.devH);
-    sea.addColorStop(0, '#7fe0ff');
-    sea.addColorStop(0.35, '#59c8f4');
-    sea.addColorStop(0.72, '#2fa5e6');
-    sea.addColorStop(1, '#2289ce');
-    const thumb = this.ensureThumb();
-    for (const entry of missing) {
+    // A placeholder must never leave a hole: the whole viewport is flooded with the same
+    // vertical sea gradient the ocean backdrop uses, then covered by the (rough) world
+    // thumbnail and the closest bucket's tiles, and only then are the exact tiles drawn on
+    // top. Doing it once per frame rather than once per missing tile matters: 12 missing
+    // tiles × 6 source buckets × ~60 tiles each was 86 ms of blits per frame on a bucket
+    // change (report 86 §5), and the exact tiles cover whatever the wash got wrong.
+    if (missing.length > 0) {
+      // One clip for the whole frame. Doing the wash per missing tile cost 86 ms; doing it
+      // unclipped repaints the full viewport on every frame that has a single tile missing,
+      // which measured worse than the mask itself. Clipped, the cost follows the missing area.
+      const holes = new Path2D();
+      for (const entry of missing) holes.rect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
-      ctx.clip();
+      ctx.clip(holes);
+      const sea = ctx.createLinearGradient(0, off, 0, off + frame.devH);
+      sea.addColorStop(0, '#7fe0ff');
+      sea.addColorStop(0.35, '#59c8f4');
+      sea.addColorStop(0.72, '#2fa5e6');
+      sea.addColorStop(1, '#2289ce');
       ctx.fillStyle = sea;
-      ctx.fillRect(entry.devX + off, entry.devY + off, entry.devW, entry.devH);
-      if (thumb) this.blitThumb(ctx, thumb, frame, entry, off);
-      for (const source of sources) this.blitFromGroup(ctx, source, frame, entry, off);
+      ctx.fillRect(off, off, frame.devW, frame.devH);
+      const thumb = this.ensureThumb();
+      if (thumb) this.blitThumb(ctx, thumb, frame, off);
+      // Only the closest other bucket is worth washing with: the thumbnail already covers
+      // everything, and stacking every cached bucket put 180 scaled blits in a frame.
+      let source: TileGroup | null = null;
+      let bestCost = Infinity;
+      for (const g of this.groups.values()) {
+        if (g.key === group.key || g.tiles.size === 0) continue;
+        const cost = (g.family === group.family ? 0 : 1000) + Math.abs(g.bucket - frame.bucket);
+        if (cost < bestCost) {
+          bestCost = cost;
+          source = g;
+        }
+      }
+      if (source) {
+        const worldDevW = MAP_W * frame.scale;
+        for (const tile of source.tiles.values()) {
+          const baseX = (tile.ix * TILE_DEV) / source.scale * frame.scale - frame.originX;
+          const devY = (tile.iy * TILE_DEV) / source.scale * frame.scale - frame.originY;
+          const devW = (tile.devW / source.scale) * frame.scale;
+          const devH = (tile.devH / source.scale) * frame.scale;
+          if (devY + devH <= 0 || devY >= frame.devH) continue;
+          // A world-anchored tile may have to appear one world copy either side.
+          for (let k = frame.wrap ? -1 : 0; k <= (frame.wrap ? 1 : 0); k += 1) {
+            const devX = baseX + k * worldDevW;
+            if (devX + devW <= 0 || devX >= frame.devW) continue;
+            ctx.drawImage(
+              tile.canvas,
+              EDGE_BLEED,
+              EDGE_BLEED,
+              tile.devW - EDGE_BLEED * 2,
+              tile.devH - EDGE_BLEED * 2,
+              devX + off,
+              devY + off,
+              devW,
+              devH,
+            );
+          }
+        }
+      }
       ctx.restore();
+    }
+
+    for (const entry of visible) {
+      const tile = this.tileFor(group, entry.ix, entry.iy);
+      if (tile) this.blitTile(ctx, entry, tile, off);
     }
   }
 
-  /** Draw the visible tiles (and placeholders) straight onto the screen. */
+  /**
+   * Copy a tile's inner rect (its own canvas edge never affects the destination).
+   */
+  private blitTile(ctx: CanvasRenderingContext2D, entry: TileRect, tile: Tile, off: number): void {
+    ctx.drawImage(
+      tile.canvas,
+      EDGE_BLEED,
+      EDGE_BLEED,
+      entry.devW,
+      entry.devH,
+      entry.devX + off,
+      entry.devY + off,
+      entry.devW,
+      entry.devH,
+    );
+  }
+
+  /**
+   * Queue a background tile fill for this frame. Coalesced: at most one task is pending,
+   * and it always paints for the most recent frame.
+   */
+  private scheduleFill(frame: FrameGeometry, content: PaintContent, group: TileGroup, dpr: number): void {
+    this.fillJob = { frame, content, group, dpr, withRing: true };
+    if (this.fillTimer !== null) return;
+    this.fillTimer = window.setTimeout(() => {
+      this.fillTimer = null;
+      this.fillStep();
+    }, 0);
+  }
+
+  /**
+   * Paint the next slice of missing tiles in its own task, then hand the thread back.
+   *
+   * Only reached from `scheduleFill`, never from `draw`: the point is that a frame never
+   * pays for a tile's rasterisation, so `map.draw` stays at the compose cost (measured
+   * 2.5 ms for 15 tiles) and the 11-34 ms tile raster lands in short separate tasks the
+   * browser can schedule around input, layout and style.
+   */
+  private fillStep(): void {
+    const job = this.fillJob;
+    this.fillJob = null;
+    if (!job) return;
+    const { frame, content, group, dpr, withRing } = job;
+    if (this.groups.get(this.currentGroupKey) !== group) return; // camera moved on
+    const started = performance.now();
+    let painted = 0;
+    let remaining = 0;
+    for (const entry of this.listTiles(frame, withRing ? 1 : 0)) {
+      if (this.tileFor(group, entry.ix, entry.iy) !== undefined) continue;
+      if (painted > 0 && performance.now() - started >= FILL_TASK_MS) {
+        remaining += 1;
+        continue;
+      }
+      this.paintTile(group, frame, content, entry, dpr);
+      painted += 1;
+      this.rasteriseTile(entry, group);
+    }
+    // The render loop only keeps asking for frames while a *visible* tile is missing, so
+    // keep going from here for the prefetch ring and for the next visible slice.
+    if (remaining > 0) this.scheduleFill(frame, content, group, dpr);
+  }
+
+  /**
+   * Force a tile's raster now, off the frame that will use it.
+   *
+   * A 2D canvas keeps a display list: `paintRegion` only records commands, and the ~10 ms
+   * of rasterisation lands on the first frame that *uses* the tile. Left until the compose
+   * step, a bucket change therefore rasterised 12 tiles inside one 130 ms task. Blitting
+   * into a scratch canvas pays the same raster but inside this task's budget instead.
+   */
+  private rasteriseTile(entry: TileRect, group: TileGroup): void {
+    const tile = this.tileFor(group, entry.ix, entry.iy);
+    if (!tile) return;
+    let scratch = this.flushCanvas;
+    if (!scratch) {
+      scratch = document.createElement('canvas');
+      this.flushCanvas = scratch;
+    }
+    if (scratch.width !== tile.devW || scratch.height !== tile.devH) {
+      scratch.width = tile.devW;
+      scratch.height = tile.devH;
+    }
+    const ctx = scratch.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(tile.canvas, 0, 0);
+  }
+
   private drawTiles(
     target: CanvasRenderingContext2D,
     frame: FrameGeometry,
@@ -875,43 +1049,6 @@ export class LandLayer {
     this.ctx.clearRect(0, 0, frameW, frameH);
     this.composeInto(this.ctx, frame, this.lastGroup, this.listTiles(frame, 0), EDGE_BLEED);
     return this.canvas;
-  }
-
-  /** Blit the parts of one bucket's tiles that overlap a missing rect, clipped by the caller. */
-  private blitFromGroup(
-    ctx: CanvasRenderingContext2D,
-    source: TileGroup,
-    frame: FrameGeometry,
-    entry: TileRect,
-    off: number,
-  ): void {
-    const wx0 = (entry.ux * TILE_DEV) / frame.scale;
-    const wy0 = (entry.iy * TILE_DEV) / frame.scale;
-    const wx1 = wx0 + TILE_DEV / frame.scale;
-    const wy1 = wy0 + (entry.devH / frame.scale);
-    for (const tile of source.tiles.values()) {
-      const sx0 = (tile.ix * TILE_DEV) / source.scale;
-      const sy0 = (tile.iy * TILE_DEV) / source.scale;
-      const sx1 = sx0 + (tile.devW / source.scale);
-      const sy1 = sy0 + (tile.devH / source.scale);
-      const shift = frame.wrap ? Math.round((wx0 - sx0) / MAP_W) * MAP_W : 0;
-      const ax0 = Math.max(wx0, sx0 + shift);
-      const ax1 = Math.min(wx1, sx1 + shift);
-      const ay0 = Math.max(wy0, sy0);
-      const ay1 = Math.min(wy1, sy1);
-      if (ax1 <= ax0 || ay1 <= ay0) continue;
-      ctx.drawImage(
-        tile.canvas,
-        (ax0 - sx0 - shift) * source.scale,
-        (ay0 - sy0) * source.scale,
-        (ax1 - ax0) * source.scale,
-        (ay1 - ay0) * source.scale,
-        ax0 * frame.scale - frame.originX + off,
-        ay0 * frame.scale - frame.originY + off,
-        (ax1 - ax0) * frame.scale,
-        (ay1 - ay0) * frame.scale,
-      );
-    }
   }
 
   /**
@@ -964,42 +1101,135 @@ export class LandLayer {
     return canvas;
   }
 
-  /** Blit the world thumbnail over one missing tile rect (world-anchored, wrap aware). */
+  /** Blit the world thumbnail over the whole viewport, once per wrap copy it touches. */
   private blitThumb(
     ctx: CanvasRenderingContext2D,
     thumb: HTMLCanvasElement,
     frame: FrameGeometry,
-    entry: TileRect,
     off: number,
   ): void {
-    const wx0 = (entry.ux * TILE_DEV) / frame.scale;
-    const wy0 = (entry.iy * TILE_DEV) / frame.scale;
-    const ww = TILE_DEV / frame.scale;
-    const wh = entry.devH / frame.scale;
-    // The thumbnail covers world x in [0, MAP_W]; pick the copy whose span contains the
-    // tile's centre (`floor`, not `round`: rounding picks the nearest copy of world x = 0,
-    // which is wrong for a source that spans the whole world).
-    const shift = frame.wrap ? Math.floor((wx0 + ww / 2) / MAP_W) * MAP_W : 0;
-    const ax0 = Math.max(wx0, shift);
-    const ax1 = Math.min(wx0 + ww, MAP_W + shift);
-    const ay0 = Math.max(wy0, 0);
-    const ay1 = Math.min(wy0 + wh, MAP_H);
-    if (ax1 - ax0 <= 0 || ay1 - ay0 <= 0) return;
-    const ts = THUMB_DEV / MAP_W;
-    ctx.drawImage(
-      thumb,
-      (ax0 - shift) * ts,
-      ay0 * ts,
-      (ax1 - ax0) * ts,
-      (ay1 - ay0) * ts,
-      ax0 * frame.scale - frame.originX + off,
-      ay0 * frame.scale - frame.originY + off,
-      (ax1 - ax0) * frame.scale,
-      (ay1 - ay0) * frame.scale,
-    );
+    const wx0 = frame.originX / frame.scale;
+    const wx1 = (frame.originX + frame.devW) / frame.scale;
+    const first = frame.wrap ? Math.floor(wx0 / MAP_W) : 0;
+    const last = frame.wrap ? Math.floor(wx1 / MAP_W) : 0;
+    const devW = MAP_W * frame.scale;
+    const devH = MAP_H * frame.scale;
+    const y0 = -frame.originY + off;
+    for (let k = first; k <= last; k += 1) {
+      ctx.drawImage(thumb, k * devW - frame.originX + off, y0, devW, devH);
+    }
   }
 
   // ---------------------------------------------------------------- painting
+
+  /**
+   * Fill and stroke geometry for one region.
+   *
+   * `fill` holds every polygon ring that can change a pixel inside the region, closed, so
+   * its even-odd fill equals what a whole-world path would paint there. `stroke` holds only
+   * the boundary runs that reach the region: stroking the world-spanning coastline for a
+   * 512 px tile made Chromium walk the entire path (measured ~7 ms of the ~18 ms tile,
+   * report 86 §5-1). A run is cut where a segment misses the region by `pad`, and the cut
+   * is extended by that segment, so the caps the cutter introduces land outside every pixel
+   * the tile keeps (`pad` is wider than the widest stroke) and the tile stays identical.
+   */
+  private regionPaths(
+    ox: number,
+    oy: number,
+    wWorld: number,
+    hWorld: number,
+    pad: number,
+    kMin: number,
+    kMax: number,
+  ): { fill: Path2D | null; stroke: Path2D | null } {
+    const x0 = ox - pad;
+    const y0 = oy - pad;
+    const x1 = ox + wWorld + pad;
+    const y1 = oy + hWorld + pad;
+    let fill: Path2D | null = null;
+    let stroke: Path2D | null = null;
+    for (let k = kMin; k <= kMax; k += 1) {
+      const shift = k * MAP_W;
+      const move = shift === 0 ? undefined : { a: 1, b: 0, c: 0, d: 1, e: shift, f: 0 };
+      for (const box of this.boxes) {
+        if (box.maxX + shift < x0 || box.minX + shift > x1) continue;
+        if (box.maxY < y0 || box.minY > y1) continue;
+        for (let r = 0; r < box.rings.length; r += 1) {
+          const rb = box.ringBoxes[r];
+          if (rb.maxX + shift < x0 || rb.minX + shift > x1) continue;
+          if (rb.maxY < y0 || rb.minY > y1) continue;
+          if (!fill) fill = new Path2D();
+          fill.addPath(box.ringPaths[r], move);
+          stroke = this.addStrokeRuns(stroke, box.rings[r], shift, x0, y0, x1, y1);
+        }
+      }
+    }
+    return { fill, stroke };
+  }
+
+  /**
+   * Append the open runs of one ring that come within `x0..x1 × y0..y1`, where the box is
+   * the region already widened by `pad`. Returns the path (allocated on the first run).
+   */
+  private addStrokeRuns(
+    path: Path2D | null,
+    ring: number[],
+    shift: number,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ): Path2D | null {
+    const count = ring.length >> 1;
+    if (count < 3) return path;
+    // The segment from vertex `s` to `s + 1`, both wrapped, expanded by nothing: a
+    // segment that misses this box cannot paint inside it.
+    const touches = (s: number): boolean => {
+      const i = (s % count) * 2;
+      const j = ((s + 1) % count) * 2;
+      const ax = ring[i] + shift;
+      const ay = ring[i + 1];
+      const bx = ring[j] + shift;
+      const by = ring[j + 1];
+      return (ax >= x0 || bx >= x0) && (ax <= x1 || bx <= x1) && (ay >= y0 || by >= y0) && (ay <= y1 || by <= y1);
+    };
+    // Start on a segment that misses, so a run never wraps past the ring's first vertex.
+    let start = -1;
+    for (let s = 0; s < count; s += 1) {
+      if (!touches(s)) {
+        start = s;
+        break;
+      }
+    }
+    let out = path;
+    if (start < 0) {
+      // The whole ring is near: keep the closed contour (joins stay as they were).
+      if (!out) out = new Path2D();
+      out.moveTo(ring[0] + shift, ring[1]);
+      for (let i = 1; i < count; i += 1) out.lineTo(ring[i * 2] + shift, ring[i * 2 + 1]);
+      out.closePath();
+      return out;
+    }
+    let open = false;
+    for (let c = 0; c < count; c += 1) {
+      const s = (start + c) % count;
+      if (!touches(s)) {
+        open = false;
+        continue;
+      }
+      if (!out) out = new Path2D();
+      const next = ((s + 1) % count) * 2;
+      if (!open) {
+        // One segment of slack on both ends puts the butt cap outside the kept pixels.
+        const prior = ((s - 1 + count) % count) * 2;
+        out.moveTo(ring[prior] + shift, ring[prior + 1]);
+        out.lineTo(ring[s * 2] + shift, ring[s * 2 + 1]);
+        open = true;
+      }
+      out.lineTo(ring[next] + shift, ring[next + 1]);
+    }
+    return out;
+  }
 
   /**
    * Paint one device rect of the world. `devX/devY` are its top-left in the world-anchored
@@ -1022,7 +1252,6 @@ export class LandLayer {
     const ox = devX / scale;
     const oy = devY / scale;
     const x1 = ox + wWorld;
-    const y1 = oy + hWorld;
     const palette = SEASON_LAND[content.season];
     const haloDev = Math.max(4, Math.min(12, 4 * zoom)) * dpr;
     const outlineDev = Math.max(2, Math.min(8, 2.1 * scale));
@@ -1030,20 +1259,9 @@ export class LandLayer {
     const pad = (haloDev + shadowDev + outlineDev + 6) / scale;
     const kMin = Math.floor((ox - MAP_W) / MAP_W);
     const kMax = Math.ceil(x1 / MAP_W);
-
-    // One even-odd path for every polygon (and wrapped copy) that can touch the region.
-    // A polygon that misses the region cannot change a pixel inside it, so this equals the
-    // old single whole-world path restricted to this rect.
-    let path: Path2D | null = null;
-    for (let k = kMin; k <= kMax; k += 1) {
-      const shift = k * MAP_W;
-      for (const box of this.boxes) {
-        if (box.maxX + shift < ox - pad || box.minX + shift > x1 + pad) continue;
-        if (box.maxY < oy - pad || box.minY > y1 + pad) continue;
-        if (!path) path = new Path2D();
-        path.addPath(box.path, { a: 1, b: 0, c: 0, d: 1, e: shift, f: 0 });
-      }
-    }
+    const geometry = this.regionPaths(ox, oy, wWorld, hWorld, pad, kMin, kMax);
+    const path = geometry.fill;
+    const strokePath = geometry.stroke;
 
     ctx.save();
     ctx.setTransform(scale, 0, 0, scale, -devX, -devY);
@@ -1052,13 +1270,15 @@ export class LandLayer {
       grad.addColorStop(0, palette.top);
       grad.addColorStop(0.45, palette.mid);
       grad.addColorStop(1, palette.bottom);
-      // shallow-water halo just outside the coastline
-      ctx.save();
-      ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
-      ctx.lineWidth = haloDev / scale;
-      ctx.lineJoin = 'round';
-      ctx.stroke(path);
-      ctx.restore();
+      if (strokePath) {
+        // shallow-water halo just outside the coastline
+        ctx.save();
+        ctx.strokeStyle = 'rgba(146, 236, 255, 0.5)';
+        ctx.lineWidth = haloDev / scale;
+        ctx.lineJoin = 'round';
+        ctx.stroke(strokePath);
+        ctx.restore();
+      }
       // A flat offset silhouette is much cheaper than a blurred canvas shadow
       // and reads as a soft coastal drop shadow at every zoom.
       ctx.save();
@@ -1077,18 +1297,20 @@ export class LandLayer {
         ctx.globalCompositeOperation = 'soft-light';
         ctx.globalAlpha = 0.5;
         ctx.fillStyle = palette.mid;
-        ctx.fillRect(-MAP_W, -MAP_H, MAP_W * 3, MAP_H * 3);
+        ctx.fillRect(ox - 2, oy - 2, wWorld + 4, hWorld + 4);
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1;
         ctx.restore();
       }
-      ctx.save();
-      ctx.strokeStyle = palette.outline;
-      ctx.lineWidth = outlineDev / scale;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.stroke(path);
-      ctx.restore();
+      if (strokePath) {
+        ctx.save();
+        ctx.strokeStyle = palette.outline;
+        ctx.lineWidth = outlineDev / scale;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.stroke(strokePath);
+        ctx.restore();
+      }
     }
     if (content.withTrees) {
       if (!this.trees) this.trees = this.buildTrees();
