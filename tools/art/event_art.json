@@ -642,8 +642,9 @@
    ],
    "sheet": "ev_10",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/oil-shock-1973.webp"
+   "status": "done",
+   "output": "public/assets/events/oil-shock-1973.webp",
+   "generator": "codex"
   },
   {
    "eventId": "panama-canal-drought",
@@ -673,8 +674,9 @@
    ],
    "sheet": "ev_10",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/plaza-accord-1985.webp"
+   "status": "done",
+   "output": "public/assets/events/plaza-accord-1985.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-snow-logistics",
@@ -688,8 +690,9 @@
    ],
    "sheet": "ev_10",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-snow-logistics.webp"
+   "status": "done",
+   "output": "public/assets/events/season-snow-logistics.webp",
+   "generator": "codex"
   },
   {
    "eventId": "south-sea-bubble",
@@ -703,8 +706,9 @@
    ],
    "sheet": "ev_10",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/south-sea-bubble.webp"
+   "status": "done",
+   "output": "public/assets/events/south-sea-bubble.webp",
+   "generator": "codex"
   },
   {
    "eventId": "three-pigs-housing",
