@@ -289,6 +289,7 @@
   },
   {
     "id": "meme-stock-squeeze",
+    "image": "assets/events/meme-stock-squeeze.webp",
     "title": "掲示板の逆襲",
     "kind": "news",
     "fact": "2021年1月、米国のゲーム販売店の株式をめぐり、個人投資家の買いが空売り筋の買い戻しを誘発する踏み上げが起きた。空売り比率は1月に浮動株の122.97%に達し、株価は一時、月初の約30倍まで上昇。一部の証券会社が買い注文を制限し、空売り筋は巨額の損失を出した。SECの報告書は、1月22日から27日にかけての上昇局面などで空売り筋の買い戻しが株価を押し上げたと指摘する一方、買い戻しは全体の買い量の一部にとどまったとしている。",
@@ -415,6 +416,7 @@
   },
   {
     "id": "crypto-exchange-collapse",
+    "image": "assets/events/crypto-exchange-collapse.webp",
     "title": "暗号資産の玉手箱",
     "kind": "news",
     "fact": "2022年11月、大手暗号資産取引所が経営破綻した。顧客資産の流用などにより約80億ドルの穴が開き、100万人超の利用者に影響が及んだと報じられた。",
@@ -4761,6 +4763,7 @@
   },
   {
     "id": "season-santa-delay",
+    "image": "assets/events/season-santa-delay.webp",
     "title": "サンタの配送遅延",
     "kind": "fable",
     "satireNote": "サンタと物流遅延を題材にした完全創作。",
@@ -7681,6 +7684,7 @@
   },
   {
     "id": "crowdstrike-global-outage",
+    "image": "assets/events/crowdstrike-global-outage.webp",
     "title": "世界が同時に再起動",
     "kind": "news",
     "fact": "2024年7月19日、米国のセキュリティ企業クラウドストライクが配信した更新プログラムの不具合により、世界で約850万台のウィンドウズ端末が起動不能になった。航空便の欠航や病院の予約停止、救急通報の障害が発生し、デルタ航空だけで4日間に4400便以上が欠航した。米国の経済調査会社は、障害による損失総額が10億ドルを超える可能性があると指摘した。",

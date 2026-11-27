@@ -832,8 +832,9 @@
    ],
    "sheet": "ev_12",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-santa-delay.webp"
+   "status": "done",
+   "output": "public/assets/events/season-santa-delay.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-summer-bonus",
@@ -999,8 +1000,9 @@
    ],
    "sheet": "ev_12",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/crowdstrike-global-outage.webp"
+   "status": "done",
+   "output": "public/assets/events/crowdstrike-global-outage.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-art-autumn",
@@ -1268,8 +1270,9 @@
    ],
    "sheet": "ev_12",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/meme-stock-squeeze.webp"
+   "status": "done",
+   "output": "public/assets/events/meme-stock-squeeze.webp",
+   "generator": "codex"
   },
   {
    "eventId": "tariff-war",
@@ -1300,8 +1303,9 @@
    ],
    "sheet": "ev_12",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/crypto-exchange-collapse.webp"
+   "status": "done",
+   "output": "public/assets/events/crypto-exchange-collapse.webp",
+   "generator": "codex"
   },
   {
    "eventId": "egg-price-spike",
