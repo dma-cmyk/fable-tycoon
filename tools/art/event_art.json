@@ -5,6 +5,21 @@
  },
  "rows": [
   {
+   "eventId": "hell-spider-thread_v2",
+   "target": "hell-spider-thread",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "地獄の市場の屋台。茶色と黄色の縞模様の脚を持つ、黒いシルクハットをかぶった丸い茶色の蜘蛛（アナンシ）が、天井から無数に垂れ下がる銀色の蜘蛛の糸をはさみで切り分けて小さな束にする。羽根付き帽子に赤と黄色の道化服の笛吹き（取り立て屋）が、その束に白紙の値札を付けて売る。アナンシは人間の顔ではなく、かわいい蜘蛛の顔で描く。",
+   "refs": [
+    "public/assets/chars/anansi.webp",
+    "public/assets/npcs/piper1.webp",
+    "public/assets/events/ai.webp"
+   ],
+   "sheet": "ev_92",
+   "slot": 2,
+   "status": "pending"
+  },
+  {
    "eventId": "hell-mermaid-voice-collateral_v2",
    "target": "hell-mermaid-voice-collateral",
    "priority": 9,
@@ -2091,8 +2106,9 @@
    ],
    "sheet": "ev_30",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/hell-rumpel-cancel-clause.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-rumpel-cancel-clause.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-spider-thread",
@@ -2106,8 +2122,9 @@
    ],
    "sheet": "ev_30",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/hell-spider-thread.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-spider-thread.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-jack-beanstalk-launch",
@@ -2122,8 +2139,9 @@
    ],
    "sheet": "ev_30",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/space-jack-beanstalk-launch.webp"
+   "status": "done",
+   "output": "public/assets/events/space-jack-beanstalk-launch.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-reentry",
@@ -2137,8 +2155,9 @@
    ],
    "sheet": "ev_30",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/space-reentry.webp"
+   "status": "done",
+   "output": "public/assets/events/space-reentry.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-sinbad-seventh-launch",

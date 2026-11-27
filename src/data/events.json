@@ -6652,6 +6652,7 @@
   },
   {
     "id": "space-reentry",
+    "image": "assets/events/space-reentry.webp",
     "title": "大気圏再突入の抽選",
     "kind": "fable",
     "realms": ["space"],
@@ -9621,6 +9622,7 @@
   },
   {
     "id": "hell-rumpel-cancel-clause",
+    "image": "assets/events/hell-rumpel-cancel-clause.webp",
     "title": "ルンペル、解約条件を告げる",
     "kind": "fable",
     "realms": ["hell"],
@@ -9895,6 +9897,7 @@
   },
   {
     "id": "space-jack-beanstalk-launch",
+    "image": "assets/events/space-jack-beanstalk-launch.webp",
     "title": "豆の木、軌道まで伸びる",
     "kind": "fable",
     "realms": ["space"],
