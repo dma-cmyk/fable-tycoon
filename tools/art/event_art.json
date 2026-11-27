@@ -1685,8 +1685,9 @@
    ],
    "sheet": "ev_25",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/space-debris.webp"
+   "status": "done",
+   "output": "public/assets/events/space-debris.webp",
+   "generator": "codex"
   },
   {
    "eventId": "too-big-to-fail",
@@ -1716,8 +1717,9 @@
    ],
    "sheet": "ev_25",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/world-space-debris-business.webp"
+   "status": "done",
+   "output": "public/assets/events/world-space-debris-business.webp",
+   "generator": "codex"
   },
   {
    "eventId": "albanian-pyramid-schemes",
@@ -1732,8 +1734,9 @@
    ],
    "sheet": "ev_25",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/albanian-pyramid-schemes.webp"
+   "status": "done",
+   "output": "public/assets/events/albanian-pyramid-schemes.webp",
+   "generator": "codex"
   },
   {
    "eventId": "darien-scheme",
@@ -1747,8 +1750,9 @@
    ],
    "sheet": "ev_25",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/darien-scheme.webp"
+   "status": "done",
+   "output": "public/assets/events/darien-scheme.webp",
+   "generator": "codex"
   },
   {
    "eventId": "mansa-musa-cairo-gold",

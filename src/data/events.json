@@ -5634,6 +5634,7 @@
   },
   {
     "id": "world-space-debris-business",
+    "image": "assets/events/world-space-debris-business.webp",
     "title": "宇宙ゴミ回収ビジネス",
     "kind": "news",
     "fact": "地球軌道上には使用済みの衛星やロケット部品などの宇宙ゴミが多数あり、運用中の宇宙機への衝突リスクとなっている。回収や除去の技術開発が進められている。",
@@ -6561,6 +6562,7 @@
   },
   {
     "id": "space-debris",
+    "image": "assets/events/space-debris.webp",
     "title": "宇宙ゴミの落とし物",
     "kind": "news",
     "realms": ["space"],
@@ -8665,6 +8667,7 @@
   },
   {
     "id": "darien-scheme",
+    "image": "assets/events/darien-scheme.webp",
     "title": "地峡に国を賭けた",
     "kind": "history",
     "fact": "1690年代、スコットランド会社はパナマ地峡にダリエン植民地を築き、太平洋と大西洋を結ぶ交易路を目指した。事業にはスコットランドで流通する資金の約20パーセントが投じられたとされ、疫病、補給の失敗、スペイン軍の包囲で1700年に放棄された。損失はスコットランド低地地方の財政を破綻させ、1707年のイングランドとの合同法の背景の一つになった。",
@@ -9227,6 +9230,7 @@
   },
   {
     "id": "albanian-pyramid-schemes",
+    "image": "assets/events/albanian-pyramid-schemes.webp",
     "title": "利子が毎月増える国",
     "kind": "history",
     "fact": "1990年代半ばのアルバニアでは、超高利回りをうたう集団投資事業が国民の資金を集めた。1997年初めに支払いが止まって相次いで破綻し、国民の損失は約12億ドルに達した。政府への抗議は暴動に発展し、2000人以上が死亡したとされる。新政権が発足し、国際機関の支援で秩序回復が図られた。",
