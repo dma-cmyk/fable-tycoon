@@ -6239,6 +6239,7 @@
   },
   {
     "id": "hell-hot-spring",
+    "image": "assets/events/hell-hot-spring.webp",
     "title": "地獄の釜ゆで温泉",
     "kind": "fable",
     "realms": ["hell"],
@@ -6282,6 +6283,7 @@
   },
   {
     "id": "hell-debt-restructure",
+    "image": "assets/events/hell-debt-restructure.webp",
     "title": "地獄の債務整理",
     "kind": "fable",
     "realms": ["hell"],
@@ -9702,6 +9704,7 @@
   },
   {
     "id": "hell-baba-yaga-cosmetics",
+    "image": "assets/events/hell-baba-yaga-cosmetics.webp",
     "title": "バーバ・ヤーガの臼、数字を挽く",
     "kind": "fable",
     "realms": ["hell"],

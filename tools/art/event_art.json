@@ -5,6 +5,21 @@
  },
  "rows": [
   {
+   "eventId": "hell-mermaid-voice-collateral_v2",
+   "target": "hell-mermaid-voice-collateral",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "地獄の質屋の店内。銀青色の長い髪にホタテ貝の髪飾り、オレンジ色の尾びれの人魚姫が、声を失って両手で口を押さえる。人魚姫の声が瓶の中の光になり、山高帽に縦縞スーツの豚の銀行家がそれを担保として棚に置く。黒い服の取り立て屋が瓶に白紙のラベルを貼る。",
+   "refs": [
+    "public/assets/chars/mermaid.webp",
+    "public/assets/npcs/banker_pig.webp",
+    "public/assets/events/ai.webp"
+   ],
+   "sheet": "ev_92",
+   "slot": 1,
+   "status": "pending"
+  },
+  {
    "eventId": "heaven-gatekeeper-tip_v2",
    "target": "heaven-gatekeeper-tip",
    "priority": 9,
@@ -2010,8 +2025,9 @@
    ],
    "sheet": "ev_29",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/hell-baba-yaga-cosmetics.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-baba-yaga-cosmetics.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-debt-restructure",
@@ -2025,8 +2041,9 @@
    ],
    "sheet": "ev_29",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/hell-debt-restructure.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-debt-restructure.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-hot-spring",
@@ -2040,8 +2057,9 @@
    ],
    "sheet": "ev_29",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/hell-hot-spring.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-hot-spring.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-mermaid-voice-collateral",
@@ -2056,8 +2074,9 @@
    ],
    "sheet": "ev_29",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/hell-mermaid-voice-collateral.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-mermaid-voice-collateral.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-rumpel-cancel-clause",
