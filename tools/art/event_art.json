@@ -2123,8 +2123,9 @@
    ],
    "sheet": "ev_33",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/cinderella-resale.webp"
+   "status": "done",
+   "output": "public/assets/events/cinderella-resale.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "golden-goose-ipo",
@@ -2138,8 +2139,9 @@
    ],
    "sheet": "ev_33",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/golden-goose-ipo.webp"
+   "status": "done",
+   "output": "public/assets/events/golden-goose-ipo.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "hamelin-temp-agency",

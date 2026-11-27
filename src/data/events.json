@@ -3642,6 +3642,7 @@
   },
   {
     "id": "golden-goose-ipo",
+    "image": "assets/events/golden-goose-ipo.webp",
     "title": "金の卵のガチョウ上場",
     "kind": "fable",
     "satireNote": "完全創作。金の卵を産むガチョウを新規上場企業に見立てた寓話。",
@@ -4051,6 +4052,7 @@
   },
   {
     "id": "cinderella-resale",
+    "image": "assets/events/cinderella-resale.webp",
     "title": "シンデレラの靴、転売禁止",
     "kind": "fable",
     "satireNote": "完全創作。ガラスの靴の限定品転売を、需要と供給の風刺として描いている。",
