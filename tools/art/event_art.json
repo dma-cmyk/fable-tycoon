@@ -15,8 +15,8 @@
     "public/assets/npcs/piper1.webp",
     "public/assets/events/ai.webp"
    ],
-   "sheet": "ev_92",
-   "slot": 2,
+   "sheet": "ev_93",
+   "slot": 1,
    "status": "pending"
   },
   {
@@ -32,7 +32,9 @@
    ],
    "sheet": "ev_92",
    "slot": 1,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/hell-mermaid-voice-collateral.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-gatekeeper-tip_v2",

@@ -393,6 +393,12 @@ def cmd_apply() -> None:
                 eid = t.split('"')[3]
                 break
         if eid not in entries:
+            # Drop a reference to event art that was removed (held back for a redo).
+            block[:] = [
+                line for line in block
+                if not (line.strip().startswith('"image": "assets/events/')
+                        and not (ROOT / "public" / line.strip().split('"')[3]).exists())
+            ]
             continue
         path = entries[eid]
         replaced = False

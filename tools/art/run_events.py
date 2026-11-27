@@ -46,10 +46,18 @@ def sheet_ready(sheet_id: str) -> bool:
 
 
 def pending_sheet(priority: set[int] | None) -> str | None:
-    """Next sheet that has at least one uncut row and no raw PNG yet."""
+    """Next full sheet (4 rows) that has an uncut row and no raw PNG yet.
+
+    A sheet with fewer rows (a _v2 redo) is left to agy: Codex draws only the given panels in a
+    corner of the 2x2 canvas, and the 2x2 cut then produces empty panels.
+    """
+    size: dict[str, int] = {}
+    for row in load()["rows"]:
+        if row.get("sheet"):
+            size[row["sheet"]] = size.get(row["sheet"], 0) + 1
     for row in pending(priority):
         sid = row.get("sheet")
-        if sid and not sheet_ready(sid):
+        if sid and size.get(sid) == 4 and not sheet_ready(sid):
             return sid
     return None
 

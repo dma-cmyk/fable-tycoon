@@ -9802,6 +9802,7 @@
   },
   {
     "id": "hell-mermaid-voice-collateral",
+    "image": "assets/events/hell-mermaid-voice-collateral.webp",
     "title": "人魚姫の声、担保に入れる",
     "kind": "fable",
     "realms": ["hell"],
