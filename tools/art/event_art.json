@@ -353,8 +353,9 @@
    ],
    "sheet": "ev_05",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/metaverse-collapse.webp"
+   "status": "done",
+   "output": "public/assets/events/metaverse-collapse.webp",
+   "generator": "agy"
   },
   {
    "eventId": "red-sea-reroute",

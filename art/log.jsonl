@@ -115,3 +115,6 @@
 {"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
 {"job": "cocoa-record-rally", "generator": "agy", "secs": 151, "file": "art/agy/cocoa-record-rally.png"}
 {"job": "metaverse-collapse", "generator": "agy", "quota": "`image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 2h45m24s.: RESOURCE_EXHAUSTED (code 429)`"}
+{"job": "ev_05", "quota": "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at 6:49 PM."}
+{"job": "metaverse-collapse", "generator": "agy", "secs": 182, "file": "art/agy/metaverse-collapse.png"}
+{"job": "red-sea-reroute", "generator": "agy", "quota": "- エラー内容: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 2h10m29s.`"}
