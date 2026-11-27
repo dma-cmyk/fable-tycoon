@@ -3752,6 +3752,7 @@
   },
   {
     "id": "hamelin-temp-agency",
+    "image": "assets/events/hamelin-temp-agency.webp",
     "title": "ハーメルン式人材派遣",
     "kind": "fable",
     "satireNote": "完全創作。ハーメルンの笛吹きを人材派遣ビジネスに見立て、労働条件の曖昧さを風刺している。",
@@ -4265,6 +4266,7 @@
   },
   {
     "id": "momotaro-resource-deal",
+    "image": "assets/events/momotaro-resource-deal.webp",
     "title": "桃太郎、鬼ヶ島の資源利権",
     "kind": "fable",
     "satireNote": "完全創作。桃太郎の鬼退治を、資源利権交渉と再分配の寓話にしている。",
@@ -10075,6 +10077,7 @@
   },
   {
     "id": "momotaro-contract-nonrenewal",
+    "image": "assets/events/momotaro-contract-nonrenewal.webp",
     "title": "桃太郎、外注をメールで終了",
     "kind": "fable",
     "satireNote": "桃太郎がきびだんごで犬・猿・雉を集めて鬼退治をする筋を、業務委託の短期契約に置き換えた完全創作。金額・契約形態は創作。目的達成の翌朝にメール一通で契約を切る雇い方と、労使関係がないことを理由に保障を外す仕組みを風刺している。",
@@ -10253,6 +10256,7 @@
   },
   {
     "id": "pinocchio-esg-disclosure",
+    "image": "assets/events/pinocchio-esg-disclosure.webp",
     "title": "ピノキオの鼻、報告書に載らない",
     "kind": "fable",
     "satireNote": "ピノキオの鼻が嘘をつくと伸びる設定を、環境報告書の数値に重ねた完全創作。排出量・金額・確率は創作。測っていないものをゼロとして開示する手法と、監査役が都合の悪い指標を隠す構図、つまり環境配慮を装う広報を風刺している。",

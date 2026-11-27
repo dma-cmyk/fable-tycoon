@@ -2154,8 +2154,9 @@
    ],
    "sheet": "ev_33",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/hamelin-temp-agency.webp"
+   "status": "done",
+   "output": "public/assets/events/hamelin-temp-agency.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "momotaro-contract-nonrenewal",
@@ -2170,8 +2171,9 @@
    ],
    "sheet": "ev_33",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/momotaro-contract-nonrenewal.webp"
+   "status": "done",
+   "output": "public/assets/events/momotaro-contract-nonrenewal.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "momotaro-resource-deal",
@@ -2185,8 +2187,9 @@
    ],
    "sheet": "ev_34",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/momotaro-resource-deal.webp"
+   "status": "done",
+   "output": "public/assets/events/momotaro-resource-deal.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "naked-emperor-ai",
@@ -2217,8 +2220,9 @@
    ],
    "sheet": "ev_34",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/pinocchio-esg-disclosure.webp"
+   "status": "done",
+   "output": "public/assets/events/pinocchio-esg-disclosure.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "puss-in-boots-personal-brand",
