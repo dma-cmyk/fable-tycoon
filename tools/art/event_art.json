@@ -320,8 +320,9 @@
    ],
    "sheet": "ev_05",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/cocoa-record-rally.webp"
+   "status": "done",
+   "output": "public/assets/events/cocoa-record-rally.webp",
+   "generator": "agy"
   },
   {
    "eventId": "gold-rush-shovels",
