@@ -86,7 +86,9 @@
    ],
    "sheet": "ev_95",
    "slot": 1,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/coffee-price-jolt.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "albanian-pyramid-schemes_v2",
@@ -102,7 +104,9 @@
    ],
    "sheet": "ev_95",
    "slot": 2,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/albanian-pyramid-schemes.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "hell-spider-thread_v2",
