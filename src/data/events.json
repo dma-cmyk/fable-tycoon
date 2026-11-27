@@ -6172,6 +6172,7 @@
   },
   {
     "id": "hell-spider-thread",
+    "image": "assets/events/hell-spider-thread.webp",
     "title": "蜘蛛の糸の転売",
     "kind": "fable",
     "realms": ["hell"],

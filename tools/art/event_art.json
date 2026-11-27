@@ -17,7 +17,9 @@
    ],
    "sheet": "ev_93",
    "slot": 1,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/hell-spider-thread.webp",
+   "generator": "agy"
   },
   {
    "eventId": "hell-mermaid-voice-collateral_v2",
@@ -2239,8 +2241,9 @@
    ],
    "sheet": "ev_32",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/world-angel-heaven-tour.webp"
+   "status": "done",
+   "output": "public/assets/events/world-angel-heaven-tour.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "alice-jam-loyalty",
@@ -2255,8 +2258,9 @@
    ],
    "sheet": "ev_32",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/alice-jam-loyalty.webp"
+   "status": "done",
+   "output": "public/assets/events/alice-jam-loyalty.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "ant-grasshopper-pension",
@@ -2270,8 +2274,9 @@
    ],
    "sheet": "ev_32",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/ant-grasshopper-pension.webp"
+   "status": "done",
+   "output": "public/assets/events/ant-grasshopper-pension.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "bunbuku-nft-teakettle",
@@ -2286,8 +2291,9 @@
    ],
    "sheet": "ev_32",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/bunbuku-nft-teakettle.webp"
+   "status": "done",
+   "output": "public/assets/events/bunbuku-nft-teakettle.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "cinderella-resale",

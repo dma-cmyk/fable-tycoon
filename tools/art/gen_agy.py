@@ -143,9 +143,18 @@ def main() -> None:
         rows = [r for r in rows if int(r["priority"]) in want]
     count = 0
     for row in rows:
+        # Re-check against the current manifest: another step (cut of a ChatGPT-web image, a
+        # hand edit) may have finished this row while earlier rows were generating.
+        current = next((r for r in load()["rows"] if r["eventId"] == row["eventId"]), None)
+        if current is None or current.get("status") == "done":
+            continue
         if run_row(row, data):
             count += 1
-            save(data)
+            # A generation takes minutes: merge only this row into a fresh copy instead of
+            # writing back the snapshot loaded at start (that clobbered concurrent edits).
+            fresh = load()
+            fresh["rows"] = [row if r["eventId"] == row["eventId"] else r for r in fresh["rows"]]
+            save(fresh)
         if limit and count >= limit:
             print(f"stopped after limit {limit}", flush=True)
             break

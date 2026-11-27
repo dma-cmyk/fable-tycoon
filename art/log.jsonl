@@ -170,3 +170,11 @@
 {"job": "ev_30", "thread": "01a21caf-052c-7e20-90df-5af02af9a9ce", "usage": {"input_tokens": 53520, "cached_input_tokens": 32128, "cache_write_input_tokens": 0, "output_tokens": 1272, "reasoning_output_tokens": 230}, "secs": 86, "file": "art/raw/ev_30.png"}
 {"job": "ev_92", "thread": "01a21cb0-59fd-78c0-bf34-62bfabb61960", "usage": {"input_tokens": 52236, "cached_input_tokens": 39808, "cache_write_input_tokens": 0, "output_tokens": 853, "reasoning_output_tokens": 147}, "secs": 57, "file": "art/raw/ev_92.png"}
 {"job": "ev_31", "thread": "01a21cb1-3e67-7291-9974-7198aa16f319", "usage": {"input_tokens": 53413, "cached_input_tokens": 46720, "cache_write_input_tokens": 0, "output_tokens": 1267, "reasoning_output_tokens": 153}, "secs": 109, "file": "art/raw/ev_31.png"}
+{"job": "ev_32", "thread": "01a21cb2-f082-7060-b657-eabe0d458348", "usage": {"input_tokens": 80131, "cached_input_tokens": 60544, "cache_write_input_tokens": 0, "output_tokens": 1359, "reasoning_output_tokens": 236}, "secs": 203, "file": "art/raw/ev_32.png"}
+{"job": "hell-spider-thread_v2", "generator": "agy", "quota": "- エラー内容: `RESOURCE_EXHAUSTED (HTTP 429): image generation quota exceeded, try again later / You have exhausted your capacity on this model. Your quota will reset after 1h30m9s.`"}
+{"job": "hell-spider-thread_v2", "generator": "agy", "quota": "`image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 58m23s.: RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 58m23s.`"}
+{"job": "hell-spider-thread_v2", "generator": "agy", "quota": "- **エラー内容**: `image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 26m35s.`"}
+{"job": "hell-spider-thread_v2", "generator": "agy", "secs": 121, "file": "art/agy/hell-spider-thread_v2.png"}
+{"job": "world-angel-heaven-tour", "generator": "agy", "secs": 154, "file": "art/agy/world-angel-heaven-tour.png"}
+{"job": "alice-jam-loyalty", "generator": "agy", "secs": 222, "file": "art/agy/alice-jam-loyalty.png"}
+{"job": "ant-grasshopper-pension", "generator": "agy", "secs": 147, "file": "art/agy/ant-grasshopper-pension.png"}
