@@ -296,7 +296,9 @@ def cmd_cut(only: list[str], force: bool = False) -> None:
         }
         for row in sheet_rows:
             dst = OUT / f"{row.get('target') or row['eventId']}.webp"
-            if dst.exists() and not force:
+            # Keep an existing panel, except that a _v2 redo replaces its target with a newer sheet.
+            redo_newer = bool(row.get("target")) and dst.exists() and dst.stat().st_mtime < src.stat().st_mtime
+            if dst.exists() and not force and not redo_newer:
                 row["status"] = "done"
                 row["output"] = str(dst.relative_to(ROOT))
                 continue

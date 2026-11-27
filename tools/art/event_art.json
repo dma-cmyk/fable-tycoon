@@ -5,6 +5,98 @@
  },
  "rows": [
   {
+   "eventId": "season-art-autumn_v2",
+   "target": "season-art-autumn",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "美術館の前で、絵画の額縁の値段が風船のように膨らんで宙に浮く。魔女のお妃が絵を一枚だけ抱えて出品し、銀行ブタが札を掲げる。キャラクターは足元まで全身を画面に収め、画面の下端まで石畳や階段を描き込む（床だけの空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/chars/evil_queen.webp",
+    "public/assets/npcs/banker_pig.webp"
+   ],
+   "sheet": "ev_94",
+   "slot": 1,
+   "status": "pending"
+  },
+  {
+   "eventId": "season-back-to-school_v2",
+   "target": "season-back-to-school",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "学用品店の前にランドセルとノートの山。グレーテルとピノキオが値段を見上げて固まり、お菓子の家の魔女がレジでにこやかに手を振る。キャラクターは足元まで全身を画面に収め、画面の下端まで店の床や商品を描き込む（床だけの空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/chars/gretel.webp",
+    "public/assets/chars/pinocchio.webp",
+    "public/assets/chars/candy_witch.webp"
+   ],
+   "sheet": "ev_94",
+   "slot": 2,
+   "status": "pending"
+  },
+  {
+   "eventId": "season-valentine-chocolate_v2",
+   "target": "season-valentine-chocolate",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "継母がチョコレートの板を金庫にしまい、その前でフクロウが相場ボードを指さす。棚にはハート型の箱が高級宝飾品のように並ぶ。キャラクターは足元まで全身を画面に収め、画面の下端まで店の床や陳列台を描き込む（床だけの空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/chars/stepmother.webp",
+    "public/assets/npcs/owl_anchor.webp"
+   ],
+   "sheet": "ev_94",
+   "slot": 3,
+   "status": "pending"
+  },
+  {
+   "eventId": "season-window-dressing_v2",
+   "target": "season-window-dressing",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "ピノキオが化粧台の鏡の前で数字を筆で塗り直そうとし、鼻が伸びて鏡を突き抜ける。銀行ブタが背後から筆を差し出す。キャラクターは足元まで全身を画面に収め、画面の下端まで部屋の床や家具を描き込む（床だけの空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/npcs/banker_pig.webp",
+    "public/assets/chars/pinocchio.webp"
+   ],
+   "sheet": "ev_94",
+   "slot": 4,
+   "status": "pending"
+  },
+  {
+   "eventId": "coffee-price-jolt_v2",
+   "target": "coffee-price-jolt",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "喫茶店のカウンターで、帽子屋が一杯のコーヒーを小さな宝石ケースに収めて掲げ、フクロウが感嘆の声を上げる。カップの湯気だけがやけに豪華。キャラクターは足元まで全身を画面に収め、画面の下端まで店内を描き込む（空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/chars/mad_hatter.webp",
+    "public/assets/npcs/owl_anchor.webp"
+   ],
+   "sheet": "ev_95",
+   "slot": 1,
+   "status": "pending"
+  },
+  {
+   "eventId": "albanian-pyramid-schemes_v2",
+   "target": "albanian-pyramid-schemes",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "町の広場で、キリギリスとアリが積み木のピラミッドを組み、銀行ブタが一番上で利子の袋を配る。下の段の動物たちは首を長くして待っている。キャラクターは足元まで全身を画面に収め、画面の下端まで広場の石畳を描き込む（空白の帯を作らない）。",
+   "refs": [
+    "public/assets/events/ai.webp",
+    "public/assets/chars/grasshopper.webp",
+    "public/assets/chars/ant.webp",
+    "public/assets/npcs/banker_pig.webp"
+   ],
+   "sheet": "ev_95",
+   "slot": 2,
+   "status": "pending"
+  },
+  {
    "eventId": "hell-spider-thread_v2",
    "target": "hell-spider-thread",
    "priority": 9,
