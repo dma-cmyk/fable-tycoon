@@ -256,8 +256,9 @@
    ],
    "sheet": "ev_04",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/city-gold-strike.webp"
+   "status": "done",
+   "output": "public/assets/events/city-gold-strike.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-olympics-boom",
@@ -271,8 +272,9 @@
    ],
    "sheet": "ev_04",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/city-olympics-boom.webp"
+   "status": "done",
+   "output": "public/assets/events/city-olympics-boom.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-port-strike",
@@ -286,8 +288,9 @@
    ],
    "sheet": "ev_02",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/city-port-strike.webp"
+   "status": "done",
+   "output": "public/assets/events/city-port-strike.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-sudden-tourist-boom",
@@ -301,8 +304,9 @@
    ],
    "sheet": "ev_05",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/city-sudden-tourist-boom.webp"
+   "status": "done",
+   "output": "public/assets/events/city-sudden-tourist-boom.webp",
+   "generator": "agy"
   },
   {
    "eventId": "cocoa-record-rally",

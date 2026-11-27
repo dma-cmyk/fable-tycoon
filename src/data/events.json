@@ -11825,6 +11825,7 @@
   },
   {
     "id": "city-olympics-boom",
+    "image": "assets/events/city-olympics-boom.webp",
     "title": "五輪の街、地価が先に走る",
     "kind": "history",
     "fact": "1964年の東京五輪に向けて、首都高速道路や東海道新幹線などの整備が進み、開催都市では地価と消費が大きく伸びた。",
@@ -11925,6 +11926,7 @@
   },
   {
     "id": "city-sudden-tourist-boom",
+    "image": "assets/events/city-sudden-tourist-boom.webp",
     "title": "写真一枚で、港町が世界の目的地に",
     "kind": "fable",
     "satireNote": "SNSのバズで観光地の需給が一夜で反転する現象を誇張した創作。実在の人物・企業とは関係ない。",
@@ -12143,6 +12145,7 @@
   },
   {
     "id": "city-gold-strike",
+    "image": "assets/events/city-gold-strike.webp",
     "title": "砂の下から金が出た",
     "kind": "history",
     "fact": "一八九〇年代、西オーストラリアで金鉱が相次いで発見され、パースなどの都市に人口と資本が集中した。",
@@ -12269,6 +12272,7 @@
   },
   {
     "id": "city-port-strike",
+    "image": "assets/events/city-port-strike.webp",
     "title": "港が止まると、棚が止まる",
     "kind": "news",
     "fact": "二〇二四年十月、米国の港湾労働者の組合が大規模なストライキを行い、東海岸とメキシコ湾岸の主要港が停止した。",
