@@ -1619,8 +1619,9 @@
    ],
    "sheet": "ev_24",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/panic-of-1907.webp"
+   "status": "done",
+   "output": "public/assets/events/panic-of-1907.webp",
+   "generator": "codex"
   },
   {
    "eventId": "price-revolution",
@@ -1635,8 +1636,9 @@
    ],
    "sheet": "ev_24",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/price-revolution.webp"
+   "status": "done",
+   "output": "public/assets/events/price-revolution.webp",
+   "generator": "codex"
   },
   {
    "eventId": "rare-earth-controls",
@@ -1651,8 +1653,9 @@
    ],
    "sheet": "ev_24",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/rare-earth-controls.webp"
+   "status": "done",
+   "output": "public/assets/events/rare-earth-controls.webp",
+   "generator": "codex"
   },
   {
    "eventId": "song-jiaozi-paper-money",
@@ -1666,8 +1669,9 @@
    ],
    "sheet": "ev_24",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/song-jiaozi-paper-money.webp"
+   "status": "done",
+   "output": "public/assets/events/song-jiaozi-paper-money.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-debris",
