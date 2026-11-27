@@ -17,7 +17,9 @@
    ],
    "sheet": "ev_91",
    "slot": 1,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/heaven-gatekeeper-tip.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-tax-audit_v2",
@@ -32,7 +34,9 @@
    ],
    "sheet": "ev_91",
    "slot": 2,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/hell-tax-audit.webp",
+   "generator": "codex"
   },
   {
    "eventId": "final-public-backlash_v2",

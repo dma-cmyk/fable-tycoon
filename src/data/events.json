@@ -5928,6 +5928,7 @@
   },
   {
     "id": "heaven-gatekeeper-tip",
+    "image": "assets/events/heaven-gatekeeper-tip.webp",
     "title": "天国の門番にチップ",
     "kind": "fable",
     "realms": ["heaven"],
@@ -6031,6 +6032,7 @@
   },
   {
     "id": "hell-tax-audit",
+    "image": "assets/events/hell-tax-audit.webp",
     "title": "閻魔の税務調査",
     "kind": "fable",
     "realms": ["hell"],
