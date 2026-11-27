@@ -1262,8 +1262,9 @@
    ],
    "sheet": "ev_19",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-tomatina.webp"
+   "status": "done",
+   "output": "public/assets/events/season-tomatina.webp",
+   "generator": "codex"
   },
   {
    "eventId": "inflation-surge",
@@ -1278,8 +1279,9 @@
    ],
    "sheet": "ev_19",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/inflation-surge.webp"
+   "status": "done",
+   "output": "public/assets/events/inflation-surge.webp",
+   "generator": "codex"
   },
   {
    "eventId": "meme-stock-squeeze",
@@ -1344,8 +1346,9 @@
    ],
    "sheet": "ev_19",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/egg-price-spike.webp"
+   "status": "done",
+   "output": "public/assets/events/egg-price-spike.webp",
+   "generator": "codex"
   },
   {
    "eventId": "gold-4000-breakout",
@@ -1375,8 +1378,9 @@
    ],
    "sheet": "ev_19",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/rate-hike-bear.webp"
+   "status": "done",
+   "output": "public/assets/events/rate-hike-bear.webp",
+   "generator": "codex"
   },
   {
    "eventId": "shrinkflation",
