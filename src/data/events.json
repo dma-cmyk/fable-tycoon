@@ -5080,6 +5080,7 @@
   },
   {
     "id": "season-rainy-mold",
+    "image": "assets/events/season-rainy-mold.webp",
     "title": "梅雨のカビと傘商戦",
     "kind": "fable",
     "satireNote": "梅雨のカビと傘商戦を誇張した完全創作。",
@@ -11421,6 +11422,7 @@
   },
   {
     "id": "season-super-bowl-ads",
+    "image": "assets/events/season-super-bowl-ads.webp",
     "title": "三十秒に八百万ドル",
     "kind": "news",
     "fact": "米国のスーパーボウルは全米でもっとも視聴者の多いテレビ中継の一つで、広告枠の価格が年々上昇している。2025年の第59回大会では、30秒の広告が平均で約800万ドルと報じられ、前年の約700万ドルから上がった。",
@@ -11519,6 +11521,7 @@
   },
   {
     "id": "season-songkran",
+    "image": "assets/events/season-songkran.webp",
     "title": "ソンクラーン、水の観光収入",
     "kind": "news",
     "fact": "タイの旧正月ソンクラーンは4月13日から15日にかけて祝われ、水をかけ合う習慣で知られる。タイの観光スポーツ省は2025年のソンクラーン期間の観光収入が265億バーツを超え、前年比8パーセント増になったと発表した。国外からの観光客は約47万人にのぼった。",
@@ -11779,6 +11782,7 @@
   },
   {
     "id": "season-singles-day",
+    "image": "assets/events/season-singles-day.webp",
     "title": "十一月十一日、独身の日",
     "kind": "news",
     "fact": "中国の11月11日は「独身の日」と呼ばれ、電子商取引各社が大規模な割引販売を行う。アリババの天猫と淘宝の2024年の販売イベントでは、流通総額が10億元を超えたブランドが45社、1億元を超えたブランドが589社にのぼった。同社はイベント全体の総流通額を公表していない。",
