@@ -544,8 +544,9 @@
    ],
    "sheet": "ev_08",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/city-water-crisis.webp"
+   "status": "done",
+   "output": "public/assets/events/city-water-crisis.webp",
+   "generator": "codex"
   },
   {
    "eventId": "crash-1929",
@@ -576,8 +577,9 @@
    ],
    "sheet": "ev_08",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/dotcom-bubble.webp"
+   "status": "done",
+   "output": "public/assets/events/dotcom-bubble.webp",
+   "generator": "codex"
   },
   {
    "eventId": "glp1-boom-denmark",
@@ -591,8 +593,9 @@
    ],
    "sheet": "ev_08",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/glp1-boom-denmark.webp"
+   "status": "done",
+   "output": "public/assets/events/glp1-boom-denmark.webp",
+   "generator": "codex"
   },
   {
    "eventId": "japan-bubble-burst",
@@ -606,8 +609,9 @@
    ],
    "sheet": "ev_08",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/japan-bubble-burst.webp"
+   "status": "done",
+   "output": "public/assets/events/japan-bubble-burst.webp",
+   "generator": "codex"
   },
   {
    "eventId": "labubu-blind-box-craze",
