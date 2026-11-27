@@ -112,7 +112,8 @@ def cmd_sheets(remake: bool = False) -> None:
             by_sheet.setdefault(row["sheet"], []).append(row)
     open_for: dict[str, str] = {}
     for sid, sheet_rows in by_sheet.items():
-        if len(sheet_rows) < 4:
+        # A sheet whose raw PNG exists is already drawn: new rows would be cut from the old panels.
+        if len(sheet_rows) < 4 and not (RAW / f"{sid}.png").exists():
             open_for[sheet_rows[0]["style"]] = sid
     pending_new = [r for r in rows if not r.get("sheet") and r.get("status") != "done"]
     pending_new.sort(key=lambda r: r["priority"])
@@ -128,6 +129,8 @@ def cmd_sheets(remake: bool = False) -> None:
         row["sheet"] = sid
         row["slot"] = slot
         by_sheet[sid].append(row)
+        if len(by_sheet[sid]) >= 4:
+            open_for.pop(style, None)
     for sid in list(by_sheet):
         if not by_sheet[sid]:
             del by_sheet[sid]
