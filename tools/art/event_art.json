@@ -913,8 +913,9 @@
    ],
    "sheet": "ev_14",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-fiscal-year-end.webp"
+   "status": "done",
+   "output": "public/assets/events/season-fiscal-year-end.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-harvest-halloween",
@@ -928,8 +929,9 @@
    ],
    "sheet": "ev_14",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/season-harvest-halloween.webp"
+   "status": "done",
+   "output": "public/assets/events/season-harvest-halloween.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-lucky-bag",
@@ -943,8 +945,9 @@
    ],
    "sheet": "ev_14",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-lucky-bag.webp"
+   "status": "done",
+   "output": "public/assets/events/season-lucky-bag.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-ramadan-eid",
@@ -959,8 +962,9 @@
    ],
    "sheet": "ev_14",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-ramadan-eid.webp"
+   "status": "done",
+   "output": "public/assets/events/season-ramadan-eid.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-valentine-chocolate",

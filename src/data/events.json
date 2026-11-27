@@ -4644,6 +4644,7 @@
   },
   {
     "id": "season-harvest-halloween",
+    "image": "assets/events/season-harvest-halloween.webp",
     "title": "豊作とハロウィン仮装経済",
     "kind": "fable",
     "satireNote": "豊作とハロウィン商戦を組み合わせた完全創作。",
@@ -4809,6 +4810,7 @@
   },
   {
     "id": "season-lucky-bag",
+    "image": "assets/events/season-lucky-bag.webp",
     "title": "福袋インフレとお年玉",
     "kind": "fable",
     "satireNote": "福袋とお年玉を題材にした完全創作。",
@@ -4940,6 +4942,7 @@
   },
   {
     "id": "season-fiscal-year-end",
+    "image": "assets/events/season-fiscal-year-end.webp",
     "title": "年度末の予算消化工事ラッシュ",
     "kind": "fable",
     "satireNote": "年度末の予算消化を題材にした完全創作。特定の自治体・企業を指すものではない。",
@@ -10760,6 +10763,7 @@
   },
   {
     "id": "season-ramadan-eid",
+    "image": "assets/events/season-ramadan-eid.webp",
     "title": "ラマダン商戦、夜の消費",
     "kind": "news",
     "fact": "ラマダン（断食月）はイスラム暦の第九月で、約29日から30日続く。日没後のイフタールやイードの贈り物に向けて、食品・衣料・電子機器の需要が増える。イスラム暦は太陽暦より約11日短いため、西暦上の時期は毎年少しずつ早まる。調査会社レッドシアは、2025年のラマダン期間にアラブ首長国連邦の小売売上高が約100億ドルに達すると推計した。",
