@@ -1491,8 +1491,9 @@
    ],
    "sheet": "ev_22",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/coffee-price-jolt.webp"
+   "status": "done",
+   "output": "public/assets/events/coffee-price-jolt.webp",
+   "generator": "codex"
   },
   {
    "eventId": "dojima-rice-futures",
@@ -1506,8 +1507,9 @@
    ],
    "sheet": "ev_22",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/dojima-rice-futures.webp"
+   "status": "done",
+   "output": "public/assets/events/dojima-rice-futures.webp",
+   "generator": "codex"
   },
   {
    "eventId": "dutch-east-india-company",
@@ -1521,8 +1523,9 @@
    ],
    "sheet": "ev_22",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/dutch-east-india-company.webp"
+   "status": "done",
+   "output": "public/assets/events/dutch-east-india-company.webp",
+   "generator": "codex"
   },
   {
    "eventId": "kuwait-souk-al-manakh",
@@ -1536,8 +1539,9 @@
    ],
    "sheet": "ev_22",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/kuwait-souk-al-manakh.webp"
+   "status": "done",
+   "output": "public/assets/events/kuwait-souk-al-manakh.webp",
+   "generator": "codex"
   },
   {
    "eventId": "mississippi-bubble",
