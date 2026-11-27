@@ -448,8 +448,9 @@
    ],
    "sheet": "ev_06",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/asian-financial-crisis-1997.webp"
+   "status": "done",
+   "output": "public/assets/events/asian-financial-crisis-1997.webp",
+   "generator": "agy"
   },
   {
    "eventId": "boeing-door-plug-crisis",
@@ -463,8 +464,9 @@
    ],
    "sheet": "ev_07",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/boeing-door-plug-crisis.webp"
+   "status": "done",
+   "output": "public/assets/events/boeing-door-plug-crisis.webp",
+   "generator": "agy"
   },
   {
    "eventId": "china-ev-price-war",
@@ -478,8 +480,9 @@
    ],
    "sheet": "ev_07",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/china-ev-price-war.webp"
+   "status": "done",
+   "output": "public/assets/events/china-ev-price-war.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-casino-resort",
@@ -493,8 +496,9 @@
    ],
    "sheet": "ev_07",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/city-casino-resort.webp"
+   "status": "done",
+   "output": "public/assets/events/city-casino-resort.webp",
+   "generator": "agy"
   },
   {
    "eventId": "city-tech-layoffs",
@@ -2071,9 +2075,8 @@
    ],
    "sheet": "ev_32",
    "slot": 1,
-   "status": "done",
-   "output": "public/assets/events/world-angel-heaven-tour.webp",
-   "generator": "chatgpt-web"
+   "status": "pending",
+   "output": "public/assets/events/world-angel-heaven-tour.webp"
   },
   {
    "eventId": "alice-jam-loyalty",
@@ -2088,9 +2091,8 @@
    ],
    "sheet": "ev_32",
    "slot": 2,
-   "status": "done",
-   "output": "public/assets/events/alice-jam-loyalty.webp",
-   "generator": "chatgpt-web"
+   "status": "pending",
+   "output": "public/assets/events/alice-jam-loyalty.webp"
   },
   {
    "eventId": "ant-grasshopper-pension",
@@ -2104,9 +2106,8 @@
    ],
    "sheet": "ev_32",
    "slot": 3,
-   "status": "done",
-   "output": "public/assets/events/ant-grasshopper-pension.webp",
-   "generator": "chatgpt-web"
+   "status": "pending",
+   "output": "public/assets/events/ant-grasshopper-pension.webp"
   },
   {
    "eventId": "bunbuku-nft-teakettle",
@@ -2121,9 +2122,8 @@
    ],
    "sheet": "ev_32",
    "slot": 4,
-   "status": "done",
-   "output": "public/assets/events/bunbuku-nft-teakettle.webp",
-   "generator": "chatgpt-web"
+   "status": "pending",
+   "output": "public/assets/events/bunbuku-nft-teakettle.webp"
   },
   {
    "eventId": "cinderella-resale",
