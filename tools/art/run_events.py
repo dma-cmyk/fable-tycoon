@@ -8,7 +8,8 @@ exists are skipped, so re-running after a quota recovery resumes exactly where i
 Sequence per iteration:
   1. Codex: generate the next 2x2 sheet (4 rows of one style) with gen_codex.py.
      On a usage limit, mark Codex exhausted for this process and fall through.
-  2. agy: generate one image for the highest-priority pending row with gen_agy.py.
+  2. agy: generate one image, preferring the row whose Codex sheet has the fewest rows left, so agy
+     finishes partly-done sheets instead of eating into full ones (a Codex sheet is 4 rows per call).
   3. Cut every new raw image, then apply finished images into src/data/events.json.
 """
 import json
@@ -90,8 +91,12 @@ def main() -> None:
                 codex_ok = False
                 print("codex unavailable -> agy", flush=True)
         # 2) agy singles
-        row = pending(prio)[0]
-        rc = run([PY, "tools/art/gen_agy.py", str(row["priority"])], env={"AGY_LIMIT": "1"})
+        rows = pending(prio)
+        left: dict[str, int] = {}
+        for r in rows:
+            left[r.get("sheet") or ""] = left.get(r.get("sheet") or "", 0) + 1
+        row = min(rows, key=lambda r: (left[r.get("sheet") or ""], rows.index(r)))
+        rc = run([PY, "tools/art/gen_agy.py", "--event", row["eventId"]], env={"AGY_LIMIT": "1"})
         if rc != 0:
             print(f"agy stopped rc={rc}; remaining {len(pending(prio))} rows", flush=True)
             run([PY, "tools/art/event_art.py", "cut"])

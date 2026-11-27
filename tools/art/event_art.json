@@ -512,8 +512,9 @@
    ],
    "sheet": "ev_02",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/city-tech-layoffs.webp"
+   "status": "done",
+   "output": "public/assets/events/city-tech-layoffs.webp",
+   "generator": "codex"
   },
   {
    "eventId": "city-volcano-tourism",

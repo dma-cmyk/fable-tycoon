@@ -134,6 +134,10 @@ def main() -> None:
     limit = int(os.environ.get("AGY_LIMIT", "0"))
     data = load()
     rows = [r for r in data["rows"] if r.get("status") != "done"]
+    if "--event" in args:
+        i = args.index("--event")
+        rows = [r for r in rows if r["eventId"] == args[i + 1]]
+        del args[i:i + 2]
     if args:
         want = {int(a) for a in args}
         rows = [r for r in rows if int(r["priority"]) in want]
