@@ -2174,8 +2174,9 @@
    ],
    "sheet": "ev_31",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/space-sinbad-seventh-launch.webp"
+   "status": "done",
+   "output": "public/assets/events/space-sinbad-seventh-launch.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-station-rent",
@@ -2189,8 +2190,9 @@
    ],
    "sheet": "ev_31",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/space-station-rent.webp"
+   "status": "done",
+   "output": "public/assets/events/space-station-rent.webp",
+   "generator": "codex"
   },
   {
    "eventId": "space-thumbelina-rideshare",
@@ -2205,8 +2207,9 @@
    ],
    "sheet": "ev_31",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/space-thumbelina-rideshare.webp"
+   "status": "done",
+   "output": "public/assets/events/space-thumbelina-rideshare.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-issun-loophole",
@@ -2220,8 +2223,9 @@
    ],
    "sheet": "ev_31",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/heaven-issun-loophole.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-issun-loophole.webp",
+   "generator": "codex"
   },
   {
    "eventId": "world-angel-heaven-tour",

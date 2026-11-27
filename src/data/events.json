@@ -6527,6 +6527,7 @@
   },
   {
     "id": "space-station-rent",
+    "image": "assets/events/space-station-rent.webp",
     "title": "宇宙ステーションの家賃",
     "kind": "fable",
     "realms": ["space"],
@@ -9527,6 +9528,7 @@
   },
   {
     "id": "heaven-issun-loophole",
+    "image": "assets/events/heaven-issun-loophole.webp",
     "title": "一寸法師、門の隙間を通る",
     "kind": "fable",
     "realms": ["heaven"],
@@ -9988,6 +9990,7 @@
   },
   {
     "id": "space-thumbelina-rideshare",
+    "image": "assets/events/space-thumbelina-rideshare.webp",
     "title": "おやゆび姫、相乗りロケット",
     "kind": "fable",
     "realms": ["space"],
@@ -10077,6 +10080,7 @@
   },
   {
     "id": "space-sinbad-seventh-launch",
+    "image": "assets/events/space-sinbad-seventh-launch.webp",
     "title": "シンドバッド、七度目の打ち上げ",
     "kind": "fable",
     "realms": ["space"],
