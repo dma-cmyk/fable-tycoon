@@ -5707,6 +5707,7 @@
   },
   {
     "id": "heaven-bureaucracy",
+    "image": "assets/events/heaven-bureaucracy.webp",
     "title": "天国の官僚主義",
     "kind": "fable",
     "realms": ["heaven"],
@@ -5766,6 +5767,7 @@
   },
   {
     "id": "heaven-real-estate-bubble",
+    "image": "assets/events/heaven-real-estate-bubble.webp",
     "title": "雲の上の不動産バブル",
     "kind": "fable",
     "realms": ["heaven"],

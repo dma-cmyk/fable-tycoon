@@ -5,6 +5,36 @@
  },
  "rows": [
   {
+   "eventId": "heaven-gatekeeper-tip_v2",
+   "target": "heaven-gatekeeper-tip",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "天国の金色の大門の前で、スーツを着たブルドッグの役人（関税おじさん）が、羽の生えた白い犬の門番にこっそり紙幣を握らせる。青いエプロンドレスの金髪の少女（アリス）が後ろで目を丸くし、門がひとりでに少しだけ開く。人間のおじさんは登場させない。",
+   "refs": [
+    "public/assets/npcs/tariff_bulldog.webp",
+    "public/assets/events/ai.webp",
+    "public/assets/chars/alice.webp"
+   ],
+   "sheet": "ev_91",
+   "slot": 1,
+   "status": "pending"
+  },
+  {
+   "eventId": "hell-tax-audit_v2",
+   "target": "hell-tax-audit",
+   "priority": 9,
+   "style": "chibi",
+   "prompt": "閻魔の法廷で、王冠と紫のマントの取り立て屋（キング）と、スーツを着たブルドッグの役人（関税おじさん）が巨大な帳簿を広げてめくる。被告のたぬきが煮立つ釜の前で冷や汗をかき、釜からは湯気。人間のおじさんは登場させない。",
+   "refs": [
+    "public/assets/npcs/piper3.webp",
+    "public/assets/npcs/tariff_bulldog.webp",
+    "public/assets/events/ai.webp"
+   ],
+   "sheet": "ev_91",
+   "slot": 2,
+   "status": "pending"
+  },
+  {
    "eventId": "final-public-backlash_v2",
    "target": "final-public-backlash",
    "priority": 1,
@@ -1830,8 +1860,9 @@
    ],
    "sheet": "ev_27",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/heaven-bureaucracy.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-bureaucracy.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-real-estate-bubble",
@@ -1845,8 +1876,9 @@
    ],
    "sheet": "ev_27",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/heaven-real-estate-bubble.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-real-estate-bubble.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-black-company",
@@ -1876,8 +1908,9 @@
    ],
    "sheet": "ev_27",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/hell-tax-audit.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-tax-audit.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-gatekeeper-tip",
@@ -1891,8 +1924,9 @@
    ],
    "sheet": "ev_27",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/heaven-gatekeeper-tip.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-gatekeeper-tip.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-kaguya-impossible-tender",
