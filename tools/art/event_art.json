@@ -17,7 +17,9 @@
    ],
    "sheet": "ev_94",
    "slot": 1,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/season-art-autumn.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-back-to-school_v2",
@@ -33,7 +35,9 @@
    ],
    "sheet": "ev_94",
    "slot": 2,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/season-back-to-school.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-valentine-chocolate_v2",
@@ -48,7 +52,9 @@
    ],
    "sheet": "ev_94",
    "slot": 3,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/season-valentine-chocolate.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-window-dressing_v2",
@@ -63,7 +69,9 @@
    ],
    "sheet": "ev_94",
    "slot": 4,
-   "status": "pending"
+   "status": "done",
+   "output": "public/assets/events/season-window-dressing.webp",
+   "generator": "codex"
   },
   {
    "eventId": "coffee-price-jolt_v2",

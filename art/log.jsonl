@@ -178,3 +178,5 @@
 {"job": "world-angel-heaven-tour", "generator": "agy", "secs": 154, "file": "art/agy/world-angel-heaven-tour.png"}
 {"job": "alice-jam-loyalty", "generator": "agy", "secs": 222, "file": "art/agy/alice-jam-loyalty.png"}
 {"job": "ant-grasshopper-pension", "generator": "agy", "secs": 147, "file": "art/agy/ant-grasshopper-pension.png"}
+{"job": "bunbuku-nft-teakettle", "generator": "agy", "quota": "image generation quota exceeded, try again later: transport error (ResourceExhausted, HTTP 429): You have exhausted your capacity on this model. Your quota will reset after 134h48m14s."}
+{"job": "ev_94", "thread": "01a21d35-7c8e-74a2-8ce0-3276fa01b02d", "usage": {"input_tokens": 53817, "cached_input_tokens": 40320, "cache_write_input_tokens": 0, "output_tokens": 1214, "reasoning_output_tokens": 111}, "secs": 95, "file": "art/raw/ev_94.png"}
