@@ -5294,6 +5294,7 @@
   },
   {
     "id": "season-bonenkai",
+    "image": "assets/events/season-bonenkai.webp",
     "title": "忘年会シーズンの予約戦争",
     "kind": "fable",
     "satireNote": "忘年会商戦を題材にした完全創作。",
@@ -10879,6 +10880,7 @@
   },
   {
     "id": "season-carnival-week",
+    "image": "assets/events/season-carnival-week.webp",
     "title": "カーニバルの羽根と請求書",
     "kind": "fable",
     "satireNote": "世界各地の謝肉祭（カーニバル）を題材にした完全創作。実在のサンバチーム・企業・人物とは関係ない。金額・効果はゲーム用。",
@@ -11354,6 +11356,7 @@
   },
   {
     "id": "season-christmas-market",
+    "image": "assets/events/season-christmas-market.webp",
     "title": "クリスマス市、屋台の経済",
     "kind": "news",
     "fact": "ドイツのクリスマスマーケットは11月中旬から12月にかけて開かれる。ドイツの興行団体による調査では、2024年は全国で約1億7000万回の来場があり、会場内の売上は約41億7000万ユーロ、来場者が会場外で使った金額は約48億8000万ユーロにのぼった。1人1日あたりの平均支出は24.50ユーロだった。",
@@ -11680,6 +11683,7 @@
   },
   {
     "id": "season-diwali-gold",
+    "image": "assets/events/season-diwali-gold.webp",
     "title": "ディワリの金、光の値段",
     "kind": "news",
     "fact": "ディワリは10月半ばから11月半ばにかけて祝われるヒンドゥー教の祭りで、初日のダンテラスには金を買う習慣がある。ワールド・ゴールド・カウンシルによると、2026年のディワリ・ダンテラス期間のインドの金需要は金額ベースで前年比15から25パーセント増え、宝飾品と地金・金貨の双方が伸びた。",

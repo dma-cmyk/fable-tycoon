@@ -1059,8 +1059,9 @@
    ],
    "sheet": "ev_16",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-bonenkai.webp"
+   "status": "done",
+   "output": "public/assets/events/season-bonenkai.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-carnival-week",
@@ -1075,8 +1076,9 @@
    ],
    "sheet": "ev_16",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/season-carnival-week.webp"
+   "status": "done",
+   "output": "public/assets/events/season-carnival-week.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-christmas-market",
@@ -1091,8 +1093,9 @@
    ],
    "sheet": "ev_16",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-christmas-market.webp"
+   "status": "done",
+   "output": "public/assets/events/season-christmas-market.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-diwali-gold",
@@ -1107,8 +1110,9 @@
    ],
    "sheet": "ev_16",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-diwali-gold.webp"
+   "status": "done",
+   "output": "public/assets/events/season-diwali-gold.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-hajj-pilgrimage",
