@@ -1362,8 +1362,9 @@
    ],
    "sheet": "ev_20",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/gold-4000-breakout.webp"
+   "status": "done",
+   "output": "public/assets/events/gold-4000-breakout.webp",
+   "generator": "codex"
   },
   {
    "eventId": "rate-hike-bear",
@@ -1424,8 +1425,9 @@
    ],
    "sheet": "ev_20",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/space-moon-land.webp"
+   "status": "done",
+   "output": "public/assets/events/space-moon-land.webp",
+   "generator": "codex"
   },
   {
    "eventId": "world-space-lottery",
@@ -1454,8 +1456,9 @@
    ],
    "sheet": "ev_20",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/bitcoin-pizza.webp"
+   "status": "done",
+   "output": "public/assets/events/bitcoin-pizza.webp",
+   "generator": "codex"
   },
   {
    "eventId": "black-monday-1987",
@@ -1833,8 +1836,9 @@
    ],
    "sheet": "ev_20",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/hell-black-company.webp"
+   "status": "done",
+   "output": "public/assets/events/hell-black-company.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-tax-audit",

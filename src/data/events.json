@@ -3189,6 +3189,7 @@
   },
   {
     "id": "bitcoin-pizza",
+    "image": "assets/events/bitcoin-pizza.webp",
     "title": "1万BTCのピザ",
     "kind": "history",
     "fact": "2010年5月22日、ある開発者が1万ビットコインと引き換えにピザ2枚を注文し、これがビットコインによる初の商業取引とされる。当時の1万BTCの価値は約41ドルだった。",
@@ -6089,6 +6090,7 @@
   },
   {
     "id": "hell-black-company",
+    "image": "assets/events/hell-black-company.webp",
     "title": "地獄のブラック企業",
     "kind": "fable",
     "realms": ["hell"],
@@ -6337,6 +6339,7 @@
   },
   {
     "id": "space-moon-land",
+    "image": "assets/events/space-moon-land.webp",
     "title": "月の土地の登記",
     "kind": "news",
     "realms": ["space"],
@@ -7382,6 +7385,7 @@
   },
   {
     "id": "gold-4000-breakout",
+    "image": "assets/events/gold-4000-breakout.webp",
     "title": "金が四千ドルの壁を抜く",
     "kind": "news",
     "fact": "金の先物価格は2025年10月7日、初めて1オンス4000ドルを超え、4004.40ドルで引けた。年始からの上昇率は約50%で、ドルの弱さや地政学的不安、米国の金融政策への懸念が背景にあった。世界金評議会によると、2025年の中央銀行による純購入量は863トンで、記録的な価格にもかかわらず2010〜2021年の年平均を大きく上回った。",
