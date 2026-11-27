@@ -10967,6 +10967,7 @@
   },
   {
     "id": "season-hajj-pilgrimage",
+    "image": "assets/events/season-hajj-pilgrimage.webp",
     "title": "巡礼の季節、百八十三万人",
     "kind": "news",
     "fact": "ハッジはイスラム教徒が生涯に一度行うことが求められるメッカへの巡礼で、イスラム暦ズルヒッジャ月の8日から12日に行われる。サウジアラビア統計局によると、2024年の巡礼者は183万3164人で、うち161万1310人が国外から訪れた。イスラム暦は太陽暦より短いため、巡礼の時期は毎年約11日ずつ早まる。",
@@ -11072,6 +11073,7 @@
   },
   {
     "id": "season-monsoon-credit",
+    "image": "assets/events/season-monsoon-credit.webp",
     "title": "モンスーンの賭け",
     "kind": "fable",
     "satireNote": "雨季の農村金融を題材にした完全創作。特定の国・地域・金融機関を指すものではなく、金額・効果はゲーム用。",
@@ -11257,6 +11259,7 @@
   },
   {
     "id": "season-oktoberfest",
+    "image": "assets/events/season-oktoberfest.webp",
     "title": "オクトーバーフェストの乾杯",
     "kind": "news",
     "fact": "ミュンヘンのオクトーバーフェストは9月半ばから10月第1日曜まで開かれる世界最大級の民衆祭で、2024年は約670万人が来場し、1リットルジョッキのビールが約700万杯消費された。会場では食事の売上が前年比約9パーセント増えた。",
@@ -11576,6 +11579,7 @@
   },
   {
     "id": "season-midsummer-night",
+    "image": "assets/events/season-midsummer-night.webp",
     "title": "白夜の請求書",
     "kind": "fable",
     "satireNote": "北欧の夏至祭という実在の習慣を下敷きにした完全創作。白夜で店が閉まらないという設定は誇張で、特定の国・企業・人物を指すものではない。金額・効果はゲーム用。",

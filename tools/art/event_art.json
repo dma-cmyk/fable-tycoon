@@ -1127,8 +1127,9 @@
    ],
    "sheet": "ev_17",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-hajj-pilgrimage.webp"
+   "status": "done",
+   "output": "public/assets/events/season-hajj-pilgrimage.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-midsummer-night",
@@ -1143,8 +1144,9 @@
    ],
    "sheet": "ev_17",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/season-midsummer-night.webp"
+   "status": "done",
+   "output": "public/assets/events/season-midsummer-night.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-monsoon-credit",
@@ -1159,8 +1161,9 @@
    ],
    "sheet": "ev_17",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-monsoon-credit.webp"
+   "status": "done",
+   "output": "public/assets/events/season-monsoon-credit.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-oktoberfest",
@@ -1175,8 +1178,9 @@
    ],
    "sheet": "ev_17",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-oktoberfest.webp"
+   "status": "done",
+   "output": "public/assets/events/season-oktoberfest.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-rainy-mold",
