@@ -1555,8 +1555,9 @@
    ],
    "sheet": "ev_23",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/mississippi-bubble.webp"
+   "status": "done",
+   "output": "public/assets/events/mississippi-bubble.webp",
+   "generator": "codex"
   },
   {
    "eventId": "negative-rates-end",
@@ -1570,8 +1571,9 @@
    ],
    "sheet": "ev_23",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/negative-rates-end.webp"
+   "status": "done",
+   "output": "public/assets/events/negative-rates-end.webp",
+   "generator": "codex"
   },
   {
    "eventId": "nixon-shock-1971",
@@ -1585,8 +1587,9 @@
    ],
    "sheet": "ev_23",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/nixon-shock-1971.webp"
+   "status": "done",
+   "output": "public/assets/events/nixon-shock-1971.webp",
+   "generator": "codex"
   },
   {
    "eventId": "olive-oil-liquid-gold",
@@ -1600,8 +1603,9 @@
    ],
    "sheet": "ev_23",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/olive-oil-liquid-gold.webp"
+   "status": "done",
+   "output": "public/assets/events/olive-oil-liquid-gold.webp",
+   "generator": "codex"
   },
   {
    "eventId": "panic-of-1907",
