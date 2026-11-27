@@ -901,6 +901,7 @@
   },
   {
     "id": "shrinkflation",
+    "image": "assets/events/shrinkflation.webp",
     "title": "小さくなった幸せ",
     "kind": "news",
     "fact": "シュリンクフレーションは、価格を据え置いたまま内容量や品質を減らす手法で、2022年以降のインフレ局面で広く使われた。包装の空隙を増やす、原材料を安価なものに変えるなどの例がある。",
@@ -2540,6 +2541,7 @@
   },
   {
     "id": "black-monday-1987",
+    "image": "assets/events/black-monday-1987.webp",
     "title": "月曜日が黒すぎる",
     "kind": "history",
     "fact": "1987年10月19日、世界の株式市場が同時に急落した。米国のダウ平均は1日で約22.6%下落し、世界の損失は約1兆7100億ドルと推定された。",
@@ -5501,6 +5503,7 @@
   },
   {
     "id": "world-space-lottery",
+    "image": "assets/events/world-space-lottery.webp",
     "title": "宇宙旅行の抽選に当選",
     "kind": "news",
     "fact": "宇宙旅行は、民間事業者による準軌道・軌道飛行や宇宙ステーション滞在として商業化が進められている。旅行者は地球の眺めや無重力を目的とする。",
@@ -6424,6 +6427,7 @@
   },
   {
     "id": "space-mars-reservation",
+    "image": "assets/events/space-mars-reservation.webp",
     "title": "火星移住の先行予約",
     "kind": "news",
     "realms": ["space"],
