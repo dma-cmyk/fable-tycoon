@@ -1940,8 +1940,9 @@
    ],
    "sheet": "ev_28",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/heaven-kaguya-impossible-tender.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-kaguya-impossible-tender.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-rating-agency",
@@ -1955,8 +1956,9 @@
    ],
    "sheet": "ev_28",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/heaven-rating-agency.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-rating-agency.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-resident-tax",
@@ -1970,8 +1972,9 @@
    ],
    "sheet": "ev_28",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/heaven-resident-tax.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-resident-tax.webp",
+   "generator": "codex"
   },
   {
    "eventId": "heaven-wukong-peach-orchard",
@@ -1986,8 +1989,9 @@
    ],
    "sheet": "ev_28",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/heaven-wukong-peach-orchard.webp"
+   "status": "done",
+   "output": "public/assets/events/heaven-wukong-peach-orchard.webp",
+   "generator": "codex"
   },
   {
    "eventId": "hell-baba-yaga-cosmetics",

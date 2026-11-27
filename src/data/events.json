@@ -5848,6 +5848,7 @@
   },
   {
     "id": "heaven-rating-agency",
+    "image": "assets/events/heaven-rating-agency.webp",
     "title": "天使の格付け会社",
     "kind": "fable",
     "realms": ["heaven"],
@@ -5994,6 +5995,7 @@
   },
   {
     "id": "heaven-resident-tax",
+    "image": "assets/events/heaven-resident-tax.webp",
     "title": "天使の住民税",
     "kind": "fable",
     "realms": ["heaven"],
@@ -9334,6 +9336,7 @@
   },
   {
     "id": "heaven-kaguya-impossible-tender",
+    "image": "assets/events/heaven-kaguya-impossible-tender.webp",
     "title": "かぐや姫の五つの難題、入札",
     "kind": "fable",
     "realms": ["heaven"],
@@ -9423,6 +9426,7 @@
   },
   {
     "id": "heaven-wukong-peach-orchard",
+    "image": "assets/events/heaven-wukong-peach-orchard.webp",
     "title": "孫悟空、桃園の管理を任される",
     "kind": "fable",
     "realms": ["heaven"],
