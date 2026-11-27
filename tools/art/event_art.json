@@ -528,8 +528,9 @@
    ],
    "sheet": "ev_07",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/city-volcano-tourism.webp"
+   "status": "done",
+   "output": "public/assets/events/city-volcano-tourism.webp",
+   "generator": "codex"
   },
   {
    "eventId": "city-water-crisis",
