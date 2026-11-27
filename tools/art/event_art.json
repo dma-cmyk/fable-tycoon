@@ -2249,8 +2249,9 @@
    ],
    "sheet": "ev_34",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/snow-white-rto-dwarfs.webp"
+   "status": "done",
+   "output": "public/assets/events/snow-white-rto-dwarfs.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "wolf-boy-forecast",
@@ -2265,8 +2266,9 @@
    ],
    "sheet": "ev_35",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/wolf-boy-forecast.webp"
+   "status": "done",
+   "output": "public/assets/events/wolf-boy-forecast.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "world-heaven-parachute",
@@ -2280,8 +2282,9 @@
    ],
    "sheet": "ev_35",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/world-heaven-parachute.webp"
+   "status": "done",
+   "output": "public/assets/events/world-heaven-parachute.webp",
+   "generator": "chatgpt-web"
   },
   {
    "eventId": "world-hell-invitation",
@@ -2295,8 +2298,9 @@
    ],
    "sheet": "ev_35",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/world-hell-invitation.webp"
+   "status": "done",
+   "output": "public/assets/events/world-hell-invitation.webp",
+   "generator": "chatgpt-web"
   }
  ],
  "notes": {

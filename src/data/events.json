@@ -3846,6 +3846,7 @@
   },
   {
     "id": "wolf-boy-forecast",
+    "image": "assets/events/wolf-boy-forecast.webp",
     "title": "オオカミ少年の決算予想",
     "kind": "fable",
     "satireNote": "完全創作。オオカミ少年を、外れても謝らない決算予想屋に見立てた寓話。",
@@ -5411,6 +5412,7 @@
   },
   {
     "id": "world-hell-invitation",
+    "image": "assets/events/world-hell-invitation.webp",
     "title": "借金地獄への招待状",
     "kind": "fable",
     "satireNote": "借金地獄は完全創作。実際の債務者を揶揄する意図はない。",
@@ -5528,6 +5530,7 @@
   },
   {
     "id": "world-heaven-parachute",
+    "image": "assets/events/world-heaven-parachute.webp",
     "title": "天下りのお誘い",
     "kind": "fable",
     "satireNote": "天下りを天国に例えた完全創作。特定の人物・団体を指すものではない。",
@@ -10531,6 +10534,7 @@
   },
   {
     "id": "snow-white-rto-dwarfs",
+    "image": "assets/events/snow-white-rto-dwarfs.webp",
     "title": "白雪姫、小人たちに出社を命じる",
     "kind": "fable",
     "satireNote": "白雪姫が七人の小人と森の家で暮らし、昼は鉱山で働く筋を下敷きにした完全創作。金額・確率・制度の内容は創作。住まいをそのまま職場として扱う出社回帰の号令と、通勤時間を労働時間に数えない運用、七人分の仕事を七人で分けても椅子が足りない環境を風刺している。",

@@ -246,16 +246,20 @@ def _save_panel(panel: Image.Image, dst: Path) -> None:
 
 
 def cmd_cut(only: list[str], force: bool = False) -> None:
-    """Cut 2x2 Codex sheets and single agy images into public/assets/events/<id>.webp."""
+    """Cut 2x2 Codex sheets and single images (agy, ChatGPT web) into public/assets/events/<id>.webp."""
     data = load()
     rows = data["rows"]
     OUT.mkdir(parents=True, exist_ok=True)
     cut = 0
 
-    # (b) agy singles: art/agy/<eventId>.png -> 800x450 webp
+    # (b) singles: art/agy/<eventId>.png (agy) or art/web/<eventId>.png (ChatGPT web, added by hand)
+    #     -> 800x450 webp
     for row in rows:
-        src = ROOT / "art/agy" / f"{row['eventId']}.png"
-        if not src.exists():
+        for single_dir, generator in (("art/agy", "agy"), ("art/web", "chatgpt-web")):
+            src = ROOT / single_dir / f"{row['eventId']}.png"
+            if src.exists():
+                break
+        else:
             continue
         dst = OUT / f"{row.get('target') or row['eventId']}.webp"
         if dst.exists() and not force and dst.stat().st_mtime >= src.stat().st_mtime:
@@ -263,8 +267,8 @@ def cmd_cut(only: list[str], force: bool = False) -> None:
         _save_panel(trim_borders(Image.open(src).convert("RGB")), dst)
         row["status"] = "done"
         row["output"] = str(dst.relative_to(ROOT))
-        row.setdefault("generator", "agy")
-        print(f"cut single {row['eventId']} <- {src.name}")
+        row.setdefault("generator", generator)
+        print(f"cut single {row['eventId']} <- {single_dir}/{src.name}")
         cut += 1
     save(data)
 
