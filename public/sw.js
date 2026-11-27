@@ -106,17 +106,25 @@ async function cacheFirst(request, cacheName) {
   return res;
 }
 
-/** Documents: cache first, refreshed in the background so the next load sees a new deploy. */
+/**
+ * Documents: network first, so a reload always picks up a new deploy (the hashed bundle it names
+ * then comes through the asset caches). The cached shell is only the offline / slow-network
+ * fallback: if the network has not answered within SHELL_TIMEOUT_MS, the cached copy is served.
+ * (Cache-first here kept players on the previous build until a second reload.)
+ */
+const SHELL_TIMEOUT_MS = 3500;
+
 async function shellRequest(request) {
   const cache = await caches.open(SHELL_CACHE);
+  const network = fetch(request).then((res) => {
+    if (res.ok) cache.put(request, res.clone()).catch(() => undefined);
+    return res;
+  });
+  const timeout = new Promise((resolve) => setTimeout(resolve, SHELL_TIMEOUT_MS, null));
+  const first = await Promise.race([network.catch(() => null), timeout]);
+  if (first) return first;
   const hit = await cache.match(request, { ignoreSearch: true });
-  if (!hit) return fetch(request);
-  fetch(request)
-    .then((res) => {
-      if (res.ok) cache.put(request, res.clone()).catch(() => undefined);
-    })
-    .catch(() => undefined);
-  return hit;
+  return hit ?? network;
 }
 
 self.addEventListener('fetch', (event) => {
