@@ -561,8 +561,9 @@
    ],
    "sheet": "ev_09",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/crash-1929.webp"
+   "status": "done",
+   "output": "public/assets/events/crash-1929.webp",
+   "generator": "codex"
   },
   {
    "eventId": "dotcom-bubble",
@@ -625,8 +626,9 @@
    ],
    "sheet": "ev_09",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/labubu-blind-box-craze.webp"
+   "status": "done",
+   "output": "public/assets/events/labubu-blind-box-craze.webp",
+   "generator": "codex"
   },
   {
    "eventId": "oil-shock-1973",
@@ -655,8 +657,9 @@
    ],
    "sheet": "ev_09",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/panama-canal-drought.webp"
+   "status": "done",
+   "output": "public/assets/events/panama-canal-drought.webp",
+   "generator": "codex"
   },
   {
    "eventId": "plaza-accord-1985",
@@ -775,8 +778,9 @@
    ],
    "sheet": "ev_09",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-black-friday.webp"
+   "status": "done",
+   "output": "public/assets/events/season-black-friday.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-gw-traffic",
