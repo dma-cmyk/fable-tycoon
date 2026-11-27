@@ -848,8 +848,9 @@
    ],
    "sheet": "ev_13",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-summer-bonus.webp"
+   "status": "done",
+   "output": "public/assets/events/season-summer-bonus.webp",
+   "generator": "codex"
   },
   {
    "eventId": "japan-rice-shock",
@@ -863,8 +864,9 @@
    ],
    "sheet": "ev_13",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/japan-rice-shock.webp"
+   "status": "done",
+   "output": "public/assets/events/japan-rice-shock.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-agm-rain",
@@ -878,8 +880,9 @@
    ],
    "sheet": "ev_13",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-agm-rain.webp"
+   "status": "done",
+   "output": "public/assets/events/season-agm-rain.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-chunyun",
@@ -894,8 +897,9 @@
    ],
    "sheet": "ev_13",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-chunyun.webp"
+   "status": "done",
+   "output": "public/assets/events/season-chunyun.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-fiscal-year-end",

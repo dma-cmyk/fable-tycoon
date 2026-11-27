@@ -4464,6 +4464,7 @@
   },
   {
     "id": "season-agm-rain",
+    "image": "assets/events/season-agm-rain.webp",
     "title": "梅雨の株主総会シーズン",
     "kind": "fable",
     "satireNote": "梅雨と株主総会を組み合わせた完全創作。実在の企業・人物とは関係ない。",
@@ -4508,6 +4509,7 @@
   },
   {
     "id": "season-summer-bonus",
+    "image": "assets/events/season-summer-bonus.webp",
     "title": "夏のボーナス商戦",
     "kind": "fable",
     "satireNote": "夏のボーナス商戦を誇張した完全創作。",
@@ -7161,6 +7163,7 @@
   },
   {
     "id": "japan-rice-shock",
+    "image": "assets/events/japan-rice-shock.webp",
     "title": "米の棚が空っぽ",
     "kind": "news",
     "fact": "2024年夏、日本の米は記録的な低在庫に加え、台風や地震への警戒による買いだめ、訪日客の増加で品薄となった。農林水産省は2025年2月、備蓄米21万トンの放出を発表した。制度開始以来、不作以外の理由で備蓄米を放出するのは初めてだった。5キロ袋の小売価格は2025年1月に4051円と前年同月比77%上昇し、11月には4316円と最高値を更新した。",
@@ -10657,6 +10660,7 @@
   },
   {
     "id": "season-chunyun",
+    "image": "assets/events/season-chunyun.webp",
     "title": "春運、九十億人の帰省",
     "kind": "news",
     "fact": "中国では旧正月（春節）の前後約40日間に、帰省や旅行の移動が集中する「春運」が行われる。2024年の春運では延べ約90億人回の移動が見込まれ、うち約8割が自家用車によるものとされた。鉄道は期間中に4億8000万人の利用が想定された。",
