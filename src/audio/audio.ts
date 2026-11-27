@@ -91,7 +91,6 @@ let bgmBus: GainNode | null = null;
 let bgmDuck: GainNode | null = null;
 let sfxBus: GainNode | null = null;
 let ready = false;
-let voicePending = false;
 
 const volumes: Volumes = readVolumes();
 
@@ -107,15 +106,30 @@ interface ActiveVoice {
 }
 
 let activeVoice: ActiveVoice | null = null;
-let voiceToken = 0;
 /**
- * Fade-out of a line that is superseded before it ends, in ms.
- *
- * 標準/さくさく no longer waits for a voice line before showing the next beat, so a hand-over
- * needs a rule: the outgoing line fades over this long while the incoming one starts. Two voices
- * are never at full level together, and a fast CPU beat never ends a word with a click.
+ * Bumped whenever the pending/active voice must be dropped: an explicit skip (`stopVoice`), a
+ * snapshot resync, or a さくさく hand-over. A line queued behind the running one checks this when
+ * its turn comes and bails out instead of starting a line the player already skipped past.
+ */
+let voiceEpoch = 0;
+/** Lines that requested the voice channel and have not settled yet (queued + playing). */
+const voiceClaims = new Set<object>();
+/** Tail of the serialised voice channel: each line starts only after the previous one ended. */
+let voiceTail: Promise<void> = Promise.resolve();
+/**
+ * Fade-out of a line that is superseded before it ends, in ms. さくさく only: 標準/じっくり never
+ * cut a line, they queue behind it (see {@link playVoice}).
  */
 const VOICE_HANDOVER_MS = 180;
+/** Breath between two queued lines (ms), so a hand-over cannot butt two clips together. */
+const VOICE_QUEUE_GAP_MS = 90;
+/** Hard bound on waiting for the previous line, in case its context never advances. */
+const VOICE_QUEUE_MAX_WAIT_MS = 30_000;
+/**
+ * How many lines may wait behind the speaking one. A catch-up burst cannot stack a minute of
+ * audio: past this the line is never started at all (dropping is not cutting).
+ */
+const VOICE_MAX_QUEUE = 4;
 const voiceCache = new Map<string, AudioBuffer>();
 const voiceFailed = new Set<string>();
 
@@ -149,8 +163,20 @@ interface BgmEntry {
 
 let activeBgm: ActiveBgm | null = null;
 let bgmToken = 0;
+/**
+ * The track the app last asked for. Kept even while the AudioContext is unavailable so the first
+ * user gesture (or a context that resumes after a tab switch) can start the music on its own.
+ */
+let requestedBgm: BgmName | null = null;
 const bgmCache = new Map<BgmName, AudioBuffer>();
-const bgmFailed = new Set<BgmName>();
+/** Failed load attempts per track; cleared on success and used only for the retry backoff. */
+const bgmAttempts = new Map<BgmName, number>();
+let bgmRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+/** How many times a track that keeps failing is retried before the session gives up on it. */
+const BGM_MAX_ATTEMPTS = 4;
+/** Window in which a `bgm(null)` is treated as the outgoing screen's cleanup (see `bgm`). */
+const BGM_HANDOFF_GRACE_MS = 400;
+let lastNamedBgmAt = 0;
 /** In-flight decodes, so the title screen's repeated `bgm('title')` calls share one fetch. */
 const bgmLoading = new Map<BgmName, Promise<AudioBuffer | null>>();
 let bgmManifestPromise: Promise<Record<string, BgmEntry>> | null = null;
@@ -168,8 +194,23 @@ const sfxPlaying = new Map<SfxName, number>();
 function unlock(): void {
   if (typeof window === 'undefined') return;
   if (ctx) {
-    void ctx.resume().catch(() => undefined);
-    return;
+    if (ctx.state === 'closed') {
+      // The browser tore the graph down (iOS after a long suspension, a lost audio device).
+      // Rebuild it: the remembered BGM request and duck state are re-applied below.
+      ctx = null;
+      masterGain = null;
+      voiceBus = null;
+      chatterBus = null;
+      bgmBus = null;
+      bgmDuck = null;
+      sfxBus = null;
+      activeBgm = null;
+      ready = false;
+    } else {
+      if (ctx.state !== 'running') void ctx.resume().catch(() => undefined);
+      ensureBgmAfterResume();
+      return;
+    }
   }
   try {
     const webkit = (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -197,6 +238,14 @@ function unlock(): void {
     bgmDuck.gain.value = 1;
     sfxBus.gain.value = volumes.sfx;
 
+    const context = ctx;
+    context.onstatechange = () => {
+      if (context.state === 'running') {
+        updateBgmDuck();
+        ensureBgmAfterResume();
+      }
+    };
+
     // Must happen inside the gesture. iOS keeps the context suspended otherwise.
     void ctx.resume().catch(() => undefined);
 
@@ -209,6 +258,8 @@ function unlock(): void {
 
     ready = true;
     void loadManifest();
+    // The screen that called bgm() before this gesture must not stay silent.
+    ensureBgmAfterResume();
   } catch {
     ctx = null;
     masterGain = null;
@@ -221,32 +272,110 @@ function unlock(): void {
   }
 }
 
+/** Resumes a suspended context (tab switch, phone call) and re-applies the duck + the track. */
+function resumeAudio(): void {
+  if (!ctx) return;
+  // Safari reports `interrupted` (phone call, Siri) where Chrome reports `suspended`.
+  const state: string = ctx.state;
+  if (state === 'suspended' || state === 'interrupted') {
+    void ctx.resume().catch(() => undefined);
+  }
+  updateBgmDuck();
+  ensureBgmAfterResume();
+}
+
+/** Starts the remembered track again when the graph is running but nothing is playing. */
+function ensureBgmAfterResume(): void {
+  if (!ready || !ctx || !bgmBus) return;
+  if (requestedBgm !== null && activeBgm === null) applyBgmRequest();
+}
+
+/**
+ * A gesture is the only way to start audio on iOS/Android. The app calls {@link unlock} from its
+ * own first-gesture handler, but a context created there can still come back suspended (or be
+ * interrupted later), so the audio module keeps its own listeners: every gesture resumes, and a
+ * returning tab resumes without one.
+ */
+let lifecycleInstalled = false;
+
+function installAudioLifecycle(): void {
+  if (typeof document === 'undefined' || lifecycleInstalled) return;
+  lifecycleInstalled = true;
+  const onGesture = (): void => {
+    if (!ctx || !ready) {
+      unlock();
+      return;
+    }
+    resumeAudio();
+  };
+  for (const type of ['pointerdown', 'touchend', 'click', 'keydown'] as const) {
+    document.addEventListener(type, onGesture, { capture: true, passive: true });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeAudio();
+  });
+}
+
+installAudioLifecycle();
+
 export interface PlayVoiceOptions {
   /** Requested speed-up (fx speed); capped by voicePlaybackRate() so voices never sound chipmunked. */
   rate?: number;
   /** Called right before audio playback starts, with the expected scaled duration in ms. */
   onStart?: (durationMs: number) => void;
+  /**
+   * What to do when a line is still speaking.
+   *
+   * - `'wait'` (default): queue behind it. The running line always reaches its end, and this one
+   *   starts right after. 標準/じっくり use this: a clip is never cut except by an explicit skip.
+   * - `'fade'`: duck the running line out over {@link VOICE_HANDOVER_MS} and start immediately.
+   *   さくさく uses this, where the message window advances on reading time by design.
+   */
+  handover?: 'wait' | 'fade';
 }
 
-/** Plays the manifest voice line for (voiceKey, text); resolves on end, stop or a missing line. */
+/**
+ * Plays the manifest voice line for (voiceKey, text); resolves on end, stop or a missing line.
+ *
+ * Lines are serialised: a request while another line speaks waits its turn instead of cutting it.
+ * The only ways a line ends early are {@link stopVoice} (explicit skip, screen change, resync) and
+ * the `'fade'` hand-over of さくさく. `voiceClaims` keeps the BGM duck alive for the whole queue.
+ */
 async function playVoice(voiceKey: string, text: string, options?: PlayVoiceOptions): Promise<void> {
   // A suspended/unavailable context never reaches `onended`; do not let the caller await forever.
   if (!ready || !ctx || ctx.state !== 'running') return;
 
+  const handover = options?.handover ?? 'wait';
   const rate = voicePlaybackRate(options?.rate);
-  const token = ++voiceToken;
-  // A 標準/さくさく line may still be speaking when the next one starts (the queue no longer
-  // waits for the voice). Fade the old one out instead of cutting it, so the two never speak at
-  // full level together and the hand-over has no click.
-  stopActiveVoice(VOICE_HANDOVER_MS);
+  if (handover === 'wait' && voiceClaims.size > VOICE_MAX_QUEUE) return;
   stopActiveChatter();
-  voicePending = true;
+  if (handover === 'fade') {
+    // Supersede anything queued and fade the running line: the next beat must not wait for audio.
+    voiceEpoch += 1;
+    stopActiveVoice(VOICE_HANDOVER_MS);
+  }
+
+  const epoch = voiceEpoch;
+  const claim = {};
+  const previous = voiceTail;
+  const queuedBehind = voiceClaims.size > 0;
+  const link = Promise.withResolvers<void>();
+  voiceTail = link.promise;
+  voiceClaims.add(claim);
   updateBgmDuck();
 
   try {
+    if (handover === 'wait' && queuedBehind) {
+      // Never cut the line that is speaking: wait for it (bounded) and start after a short breath.
+      await Promise.race([previous, delay(VOICE_QUEUE_MAX_WAIT_MS)]);
+      if (epoch !== voiceEpoch || !ready || !ctx || ctx.state !== 'running') return;
+      await delay(VOICE_QUEUE_GAP_MS);
+      if (epoch !== voiceEpoch || !ready || !ctx || ctx.state !== 'running') return;
+    }
+
     const hash = voiceHash(voiceKey, text);
     const manifest = await loadManifest();
-    if (token !== voiceToken || !ready) return;
+    if (epoch !== voiceEpoch || !ready) return;
 
     const relPath = manifest[hash];
     if (typeof relPath !== 'string' || relPath.length === 0) return;
@@ -262,26 +391,34 @@ async function playVoice(voiceKey: string, text: string, options?: PlayVoiceOpti
         voiceFailed.add(hash);
         return;
       }
-      if (token !== voiceToken) return;
+      if (epoch !== voiceEpoch) return;
       rememberVoice(hash, buffer);
     }
 
-    if (token !== voiceToken || !ready) return;
+    if (epoch !== voiceEpoch || !ready || !ctx) return;
     await startVoice(buffer, rate, options?.onStart);
   } finally {
-    if (token === voiceToken) {
-      voicePending = false;
-      updateBgmDuck();
-    }
+    voiceClaims.delete(claim);
+    link.resolve();
+    updateBgmDuck();
   }
 }
 
-/** Stops the current line (its playVoice promise resolves) and prevents a pending one from starting. */
+/**
+ * Stops the current line (its playVoice promise resolves) and drops every queued one. Used by an
+ * explicit user skip, a screen change and a snapshot resync — never by an automatic hand-over.
+ */
 function stopVoice(): void {
-  voiceToken++;
-  voicePending = false;
+  voiceEpoch += 1;
   stopActiveVoice();
   updateBgmDuck();
+}
+
+/** Settles after `ms`, never rejecting. */
+function delay(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  globalThis.setTimeout(resolve, Math.max(0, ms));
+  return promise;
 }
 
 /**
@@ -290,7 +427,7 @@ function stopVoice(): void {
  * is ducked to 40% while a game voice line is speaking. Resolves on end, skip or missing line.
  */
 async function playChatter(voiceKey: string, text: string): Promise<void> {
-  if (!ready || !ctx || ctx.state !== 'running' || chatterBusy || activeVoice || voicePending) return;
+  if (!ready || !ctx || ctx.state !== 'running' || chatterBusy || voiceBusy()) return;
   chatterBusy = true;
   const hash = voiceHash(voiceKey, text);
   try {
@@ -351,95 +488,132 @@ function sfx(name: SfxName): void {
   });
 }
 
-/** Starts a looping BGM track, or fades out with null. Switching tracks crossfades over 0.8 s. */
+/**
+ * Asks for a looping BGM track, or `null` to fade the music out. Switching tracks crossfades over
+ * 0.8 s.
+ *
+ * The request is remembered even before the AudioContext exists (the first visit renders the title
+ * before any gesture), so {@link unlock} and a context that comes back from suspension can start
+ * the track the screen asked for. This is what makes music play after the first tap on iOS.
+ */
 function bgm(name: BgmName | null): void {
+  if (name !== null) {
+    if (!BGM_SET.has(name)) return;
+    lastNamedBgmAt = performance.now();
+    requestedBgm = name;
+    applyBgmRequest();
+    return;
+  }
+  // `App.showScreen` builds the new screen before it destroys the old one, so the outgoing
+  // screen's `bgm(null)` arrives right after the incoming screen's request. Honour the screen
+  // that is actually on screen: a stop this soon after a named request is the old screen's
+  // cleanup, not the new screen's wish for silence.
+  if (performance.now() - lastNamedBgmAt < BGM_HANDOFF_GRACE_MS) return;
+  requestedBgm = null;
+  applyBgmRequest();
+}
+
+/** Starts, stops or retries the audio for the last {@link bgm} request. No-op before unlock. */
+function applyBgmRequest(): void {
   if (!ready || !ctx || !bgmBus) return;
-
+  const name = requestedBgm;
   const token = ++bgmToken;
-
   if (name === null) {
     const current = activeBgm;
     activeBgm = null;
     fadeOutBgm(current);
     return;
   }
-  if (!BGM_SET.has(name)) return;
   if (activeBgm?.name === name) return;
-
   const current = activeBgm;
   activeBgm = null;
   fadeOutBgm(current);
+  void startBgm(name, token);
+}
 
-  void (async () => {
-    const entries = await loadBgmManifest();
-    const entry = entries[name];
-    let buffer = bgmCache.get(name);
-    if (!buffer) {
-      if (bgmFailed.has(name)) return;
-      const file = entry && typeof entry.file === 'string' && entry.file.length > 0
-        ? entry.file
-        : `bgm/${name}.mp3`;
-      let pending = bgmLoading.get(name);
-      if (!pending) {
-        pending = loadBuffer(`${ASSET_BASE}${file}`)
-          .then((loaded) => {
-            bgmCache.set(name, loaded);
-            return loaded;
-          })
-          .catch(() => {
-            bgmFailed.add(name);
-            return null;
-          })
-          .finally(() => bgmLoading.delete(name));
-        bgmLoading.set(name, pending);
-      }
-      buffer = (await pending) ?? undefined;
-      if (!buffer) return;
+/** Loads (or reuses) one track, then crossfades it in. Retries a failed load while still wanted. */
+async function startBgm(name: BgmName, token: number): Promise<void> {
+  const entries = await loadBgmManifest();
+  const entry = entries[name];
+  let buffer = bgmCache.get(name);
+  if (!buffer) {
+    const file = entry && typeof entry.file === 'string' && entry.file.length > 0
+      ? entry.file
+      : `bgm/${name}.mp3`;
+    let pending = bgmLoading.get(name);
+    if (!pending) {
+      pending = loadBuffer(`${ASSET_BASE}${file}`)
+        .then((loaded) => {
+          bgmCache.set(name, loaded);
+          return loaded;
+        })
+        .catch(() => {
+          // A transient failure (offline start, a service-worker hiccup) must not silence this
+          // track for the rest of the session: back off and ask again while it is still wanted.
+          scheduleBgmRetry(name, token);
+          return null;
+        })
+        .finally(() => bgmLoading.delete(name));
+      bgmLoading.set(name, pending);
     }
-    if (token !== bgmToken || !ready || !ctx || !bgmBus) return;
+    buffer = (await pending) ?? undefined;
+    if (!buffer) return;
+  }
+  if (token !== bgmToken || !ready || !ctx || !bgmBus) return;
+  bgmAttempts.delete(name);
 
-    const context = ctx;
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.loop = true;
-    const requestedStart = entry && Number.isFinite(entry.loopStart) ? entry.loopStart : 0;
-    const requestedEnd = entry && Number.isFinite(entry.loopEnd) ? entry.loopEnd : buffer.duration;
-    source.loopStart = Math.min(Math.max(requestedStart, 0), Math.max(0, buffer.duration - 0.05));
-    source.loopEnd = Math.min(
-      Math.max(requestedEnd, source.loopStart + 0.05),
-      buffer.duration,
-    );
+  const context = ctx;
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  const requestedStart = entry && Number.isFinite(entry.loopStart) ? entry.loopStart : 0;
+  const requestedEnd = entry && Number.isFinite(entry.loopEnd) ? entry.loopEnd : buffer.duration;
+  source.loopStart = Math.min(Math.max(requestedStart, 0), Math.max(0, buffer.duration - 0.05));
+  source.loopEnd = Math.min(Math.max(requestedEnd, source.loopStart + 0.05), buffer.duration);
 
-    const gain = context.createGain();
-    const now = context.currentTime;
-    gain.gain.setValueAtTime(0, now);
-    source.connect(gain);
-    gain.connect(bgmBus);
+  const gain = context.createGain();
+  const now = context.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  source.connect(gain);
+  gain.connect(bgmBus);
 
-    const track: ActiveBgm = { name, source, gain };
-    activeBgm = track;
-    gain.gain.linearRampToValueAtTime(1, now + CROSSFADE_SECONDS);
-    source.onended = () => {
-      try {
-        source.disconnect();
-        gain.disconnect();
-      } catch {
-        /* already disconnected */
-      }
-      if (activeBgm === track) activeBgm = null;
-    };
+  const track: ActiveBgm = { name, source, gain };
+  activeBgm = track;
+  gain.gain.linearRampToValueAtTime(1, now + CROSSFADE_SECONDS);
+  source.onended = () => {
     try {
-      source.start();
+      source.disconnect();
+      gain.disconnect();
     } catch {
-      activeBgm = null;
-      try {
-        source.disconnect();
-        gain.disconnect();
-      } catch {
-        /* already disconnected */
-      }
+      /* already disconnected */
     }
-  })();
+    if (activeBgm === track) activeBgm = null;
+  };
+  try {
+    source.start();
+  } catch {
+    activeBgm = null;
+    try {
+      source.disconnect();
+      gain.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+    scheduleBgmRetry(name, token);
+  }
+}
+
+/** Re-asks for a track whose load failed, with a short backoff, while it is still the request. */
+function scheduleBgmRetry(name: BgmName, token: number): void {
+  if (token !== bgmToken || requestedBgm !== name) return;
+  const attempts = (bgmAttempts.get(name) ?? 0) + 1;
+  bgmAttempts.set(name, attempts);
+  if (attempts > BGM_MAX_ATTEMPTS) return;
+  if (bgmRetryTimer !== null) globalThis.clearTimeout(bgmRetryTimer);
+  bgmRetryTimer = globalThis.setTimeout(() => {
+    bgmRetryTimer = null;
+    if (requestedBgm === name) applyBgmRequest();
+  }, Math.min(8000, 400 * 2 ** attempts));
 }
 
 function setVolume(kind: VolumeKind, value: number): void {
@@ -720,10 +894,18 @@ function updateChatterDuck(): void {
   chatterBus.gain.setTargetAtTime(activeVoice ? CHATTER_DUCKED_GAIN : 1, now, 0.05);
 }
 
-/** Ducks BGM by 8 dB while a game voice line is playing or loading. */
+/** True while any voice line is speaking or waiting for its turn on the voice channel. */
+function voiceBusy(): boolean {
+  return activeVoice !== null || voiceClaims.size > 0;
+}
+
+/**
+ * Ducks BGM by 8 dB while a game voice line is speaking or queued. Recomputed from the live claim
+ * set, so a skipped or never-started line can never leave the music stuck under the duck.
+ */
 function updateBgmDuck(): void {
   if (!ctx || !bgmDuck) return;
-  const target = activeVoice || voicePending ? BGM_DUCKED_GAIN : 1;
+  const target = voiceBusy() ? BGM_DUCKED_GAIN : 1;
   const now = ctx.currentTime;
   const gain = bgmDuck.gain;
   const current = gain.value;

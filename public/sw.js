@@ -14,7 +14,9 @@
 // harness runs four independent contexts against one preview server and must not share a
 // cache) and in Vite dev.
 
-const MEDIA_VERSION = 'v1';
+// v2: v1 could store a partial (Range) response for an mp3 under its full URL, which made
+// `decodeAudioData` fail for that track on every later visit. Bumping drops those entries.
+const MEDIA_VERSION = 'v2';
 const scopeBase = new URL(self.registration.scope).pathname;
 const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const SHELL_CACHE = `fable-shell-${VERSION}`;
@@ -93,7 +95,14 @@ async function cacheFirst(request, cacheName) {
   const hit = await cache.match(request, { ignoreSearch: true });
   if (hit) return hit;
   const res = await fetch(request);
-  if (res.ok && res.type !== 'opaque') cache.put(request, res.clone()).catch(() => undefined);
+  // Only a complete 200 is worth caching. A `Range` request answers 206 (partial) or a 200 of the
+  // whole file, and storing the 206 under this URL would replay a truncated mp3 to a later full
+  // read — decodeAudioData then fails and the track never plays again. Media is fetched whole by
+  // the game (WebAudio decode, no <audio> element), so skipping Range responses costs nothing.
+  const partial = res.status === 206 || request.headers.has('range');
+  if (res.status === 200 && res.ok && !partial && res.type !== 'opaque') {
+    cache.put(request, res.clone()).catch(() => undefined);
+  }
   return res;
 }
 

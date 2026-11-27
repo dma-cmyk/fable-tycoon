@@ -55,6 +55,10 @@ export class EventPanel {
   private open = false;
   private readonly choicesSkipBtn: HTMLButtonElement;
   private readonly choicesBanner: HTMLElement;
+  private readonly prompt: HTMLElement;
+  private readonly card: HTMLElement;
+  /** 選択肢リストを作り直すかどうかの判定用（詳細の開閉状態を保つ）。 */
+  private choiceKey = '';
 
   constructor(private readonly options: EventPanelOptions) {
     this.ribbonTitle = h('span', { class: 'event-ribbon-title', text: '世界ニュースイベント！' });
@@ -63,13 +67,15 @@ export class EventPanel {
     this.seasonBadge = h('span', { class: 'event-season-badge', attrs: { hidden: 'hidden' } });
     this.image = h('img', {
       class: 'event-image',
-      attrs: { alt: '', draggable: 'false', loading: 'lazy' },
+      attrs: { alt: '', draggable: 'false', loading: 'eager', decoding: 'async', fetchpriority: 'high' },
       on: {
+        // 失敗してもカードは畳まない: imageFallback が 2 回やり直し、最後は共通の
+        // プレースホルダに差し替える。ここで高さを変えると読み込みのたびに画面が跳ねる。
         error: () => {
-          this.image.hidden = true;
-          this.hero.classList.add('no-image');
+          this.image.classList.add('is-error');
         },
         load: () => {
+          this.image.classList.remove('is-error');
           this.image.hidden = false;
           this.hero.classList.remove('no-image');
         },
@@ -100,7 +106,8 @@ export class EventPanel {
     this.metaBody = h('div', { class: 'event-meta-body', attrs: { hidden: 'hidden' } });
     this.effectSummary = h('section', { class: 'event-effect-summary', attrs: { hidden: 'hidden' } });
     this.footnote = h('p', { class: 'event-footnote' });
-    this.choiceArea = h('div', { class: 'event-choice-area' }, this.choicesBanner, this.choicesHost);
+    this.prompt = h('p', { class: 'event-choose-prompt', text: 'どうする？' });
+    this.choiceArea = h('div', { class: 'event-choice-area' }, this.prompt, this.choicesBanner, this.choicesHost);
     this.metaToggle = h('button', {
       class: 'event-meta-toggle',
       text: '📚 元ネタ',
@@ -115,9 +122,11 @@ export class EventPanel {
       },
     });
 
-    this.el = h(
-      'aside',
-      { class: 'event-panel', attrs: { 'aria-label': '世界ニュースイベント', hidden: 'hidden' } },
+    // スマホでは「絵カード（上）」「選択肢シート（下）」の 2 枚に分ける。PC では
+    // カードを display: contents にして従来どおり 1 枚のパネルとして並べる。
+    this.card = h(
+      'div',
+      { class: 'event-card' },
       h(
         'header',
         { class: 'event-ribbon' },
@@ -134,8 +143,14 @@ export class EventPanel {
         this.byline,
         h('div', { class: 'event-meta' }, this.metaToggle, this.metaBody),
         this.effectSummary,
-        this.choiceArea,
       ),
+    );
+    this.el = h(
+      'aside',
+      { class: 'event-panel', attrs: { 'aria-label': '世界ニュースイベント', hidden: 'hidden' } },
+      this.card,
+      // 選択肢はスクロール領域の外。絵や長い説明と競合せず、常に押せる位置に残る。
+      this.choiceArea,
       this.footnote,
     );
   }
@@ -207,11 +222,13 @@ export class EventPanel {
     const state = this.state;
     if (!event || !state) return;
     const choices = event.choices ?? [];
-    this.choicesHost.replaceChildren();
     if (choices.length === 0) {
       // The effect summary card + footnote already explain auto-application; a third
       // line here only padded the panel.
       this.choiceArea.classList.remove('is-fx-waiting');
+      this.el.classList.remove('is-choosing');
+      this.choicesHost.replaceChildren();
+      this.choiceKey = '';
       this.choicesBanner.hidden = true;
       this.choicesNote.hidden = true;
       this.choicesNote.textContent = '';
@@ -224,9 +241,17 @@ export class EventPanel {
     const actor = state.players[state.current];
     // Solo/local early pick keeps the choices bright while the intro plays.
     this.choiceArea.classList.toggle('is-fx-waiting', (waitingFx && !this.earlyChoice) || !phaseActive);
-    for (let index = 0; index < choices.length; index++) {
-      const choice = choices[index];
-      this.choicesHost.append(this.choiceButton(choice, index, enabled));
+    // スマホの 2 段階表示: 導入（台詞）中は Phase A（絵カード＋台詞のみ）、
+    // 人間が選べるようになったら Phase B（メッセージウィンドウの位置に選択肢）。
+    const choosing = phaseActive && this.isMine && this.canAct && !this.chosen && !waitingFx;
+    this.el.classList.toggle('is-choosing', choosing);
+    const choiceKey = `${enabled ? 1 : 0}|${choices.length}|${event.id}|${this.chosen ? 1 : 0}`;
+    if (choiceKey !== this.choiceKey) {
+      this.choiceKey = choiceKey;
+      this.choicesHost.replaceChildren();
+      for (let index = 0; index < choices.length; index++) {
+        this.choicesHost.append(this.choiceButton(choices[index], index, enabled));
+      }
     }
     if (waitingFx && this.earlyChoice && this.canAct) {
       this.choicesBanner.hidden = false;
@@ -265,8 +290,20 @@ export class EventPanel {
     }
   }
 
-  private choiceButton(choice: EventChoice, index: number, enabled: boolean): HTMLButtonElement {
-    return h(
+  /**
+   * 1 択ぶんの行。スマホでは「番号＋見出し＋1 行要約」のコンパクト表示にし、
+   * 「詳細」で効果テキスト全文を開閉する。PC は従来どおり全文を出したまま。
+   */
+  private choiceButton(choice: EventChoice, index: number, enabled: boolean): HTMLElement {
+    const parts = splitChoiceDetail(choice.detail);
+    const summary = parts[0]?.text ?? choice.detail;
+    const full = h(
+      'span',
+      { class: 'event-choice-full' },
+      h('span', { class: 'event-choice-detail' }, ...choiceDetailParts(choice.detail)),
+      ...this.cityTargetChips(choice.effects),
+    );
+    const button = h(
       'button',
       {
         class: 'event-choice',
@@ -290,10 +327,25 @@ export class EventPanel {
         'span',
         { class: 'event-choice-main' },
         h('span', { class: 'event-choice-label', text: choice.label }),
-        h('span', { class: 'event-choice-detail' }, ...choiceDetailParts(choice.detail)),
-        ...this.cityTargetChips(choice.effects),
+        h('span', { class: 'event-choice-summary', text: summary }),
+        full,
       ),
     );
+    const more = h('button', {
+      class: 'event-choice-more',
+      text: '詳細',
+      attrs: { type: 'button', 'aria-expanded': 'false', 'aria-label': `${index + 1} の効果を詳しく見る` },
+      on: {
+        click: (event) => {
+          event.stopPropagation();
+          const open = !full.classList.contains('is-open');
+          full.classList.toggle('is-open', open);
+          more.setAttribute('aria-expanded', String(open));
+          more.textContent = open ? '閉じる' : '詳細';
+        },
+      },
+    });
+    return h('div', { class: 'event-choice-item' }, h('div', { class: 'event-choice-head' }, button, more));
   }
 
   /**
@@ -337,9 +389,14 @@ export class EventPanel {
     const stem = path ? path.split('/').pop()?.replace(/\.[a-z]+$/i, '') : event.id;
     if (!path || !stem || !EVENT_IMAGE_IDS.has(stem)) {
       this.image.hidden = true;
+      this.image.removeAttribute('src');
       this.hero.classList.add('no-image');
       return;
     }
+    // 前のイベントで失敗した印が残っていると imageFallback の再試行が効かなくなる。
+    delete this.image.dataset.imgRetry;
+    delete this.image.dataset.imgFallback;
+    this.image.classList.remove('is-error');
     this.image.hidden = false;
     this.hero.classList.remove('no-image');
     this.image.src = assetUrl(path);

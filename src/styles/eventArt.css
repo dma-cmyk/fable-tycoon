@@ -1,6 +1,13 @@
-/* イベント一枚絵の見せ方（16:9）。
-   画像は「上 2/3 に主役」で描いてあるので、cover で切り抜くときも上寄せにする。
-   PC は縦に余裕があるので帯を高くし、スマホは選択肢を押し出さない高さに抑える。 */
+/* イベント一枚絵の見せ方。
+   元絵は 800×450 の 16:9 で、人物は画面の上 2/3 に描かれている。
+
+   PC（900px 以上）: これまでどおり右パネルの 1 枚カード。絵は帯（cover 上寄せ）、
+     選択肢はパネル下端の固定ドック。
+   スマホ縦: 「絵カード（上）＋ メッセージウィンドウ/選択肢シート（下）」の 2 枚に分ける。
+     Phase A（導入の台詞中）: 上のカードだけ。台詞は下のウィンドウ。
+     Phase B（人間が選ぶ）: 選択肢が下のウィンドウの位置に出る（絵は覆わない）。
+     絵は幅いっぱいの 16:9 を contain で出し、切らない。
+   スマホ横: 左半分が絵、右半分が説明と選択肢（重ならない）。        */
 
 .event-panel .event-hero:not(.no-image) {
   height: clamp(150px, 24vh, 250px);
@@ -11,26 +18,654 @@
   object-position: 50% 26%;
 }
 
-@media (max-width: 860px) {
-  /* スマホ: 16:9 を幅いっぱいに出しつつ、選択肢が画面外へ出ない高さ。 */
-  .event-panel .event-hero:not(.no-image) {
-    height: clamp(116px, 18vh, 146px);
-    min-height: 116px;
-  }
+/* `hidden` 属性は author 側の display 指定に負けるので明示する。 */
+.event-image[hidden] {
+  display: none;
 }
 
-@media (max-width: 860px) and (max-height: 700px) {
-  .event-panel .event-hero:not(.no-image) {
-    height: 104px;
-    min-height: 104px;
-  }
+/* 失敗した画像は消す（壊れた画像アイコンを出さない）。箱は残るので高さは動かない。 */
+.event-image.is-error {
+  opacity: 0;
 }
 
-/* 極端に低い横長画面では従来どおりの帯に戻す。 */
-@media (max-height: 520px) {
+/* 選択肢ドック（パネル下端の固定領域）。絵のスクロールで押し出されず、
+   画面が低いときはドックの中だけがスクロールする。 */
+.event-panel .event-choice-area {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 62%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* PC: カードのラッパーは箱を作らず、従来どおり 1 枚のパネルとして並べる。 */
+.event-panel .event-card {
+  display: contents;
+}
+
+/* PC: 選択肢は従来どおり全文表示（要約・詳細トグルはスマホ専用）。 */
+.event-panel .event-choice-summary,
+.event-panel .event-choice-more,
+.event-panel .event-choose-prompt {
+  display: none;
+}
+
+.event-panel .event-choice-full {
+  display: block;
+}
+
+.event-choice-item {
+  display: block;
+}
+
+.event-choice-head {
+  display: block;
+}
+
+/* ---------------------------------------------------------------- スマホ縦 */
+
+@media (max-width: 899px) {
+  /* パネル自体は透明な全画面の器。中身（カード / シート）だけが背景を持つ。 */
+  .event-panel {
+    position: fixed;
+    inset: 0;
+    padding: calc(102px + var(--safe-top)) calc(6px + var(--safe-left)) calc(8px + var(--safe-bottom)) calc(6px + var(--safe-right));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: auto;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    overflow: visible;
+    pointer-events: none;
+    transform: none;
+    transition: opacity 180ms ease;
+  }
+
+  /* イベント中はコマンドバー（カード/物件/…）と大ボタンを隠して高さを空ける。 */
+  .game-screen.event-open .game-bottom-bar {
+    display: none;
+  }
+
+  /* 選択肢のない自動イベントでも器は全画面のまま（layout-fixes の is-compact を打ち消す）。 */
+  .event-panel.is-compact {
+    bottom: 0;
+    max-height: none;
+  }
+
+  /* 台詞ウィンドウが出ている間は、その高さぶん下を空けてから絵カードを置く
+     （カードが台詞ウィンドウに潜り込まない）。 */
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel {
+    padding-bottom: calc(238px + var(--safe-bottom));
+  }
+
+  /* --- 上の絵カード --- */
+  .event-panel .event-card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: 100%;
+    border: 2px solid #fff;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(20, 44, 92, 0.98), rgba(6, 18, 43, 0.98));
+    box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.22), var(--shadow-panel);
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  .event-panel .event-ribbon {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border-bottom-width: 2px;
+  }
+
+  .event-panel .event-ribbon-title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+
+  /* 種別バッジは byline と同じ情報。狭い帯では comm ボタンに場所を譲る。 */
+  .event-panel .event-kind-badge {
+    display: none;
+  }
+
+  .event-panel .event-comm {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .event-panel .event-comm .hud-comm-button,
+  .event-panel .event-comm .comm-fab {
+    min-width: 36px;
+    width: 36px;
+    min-height: 36px;
+    height: 36px;
+    padding: 1px;
+  }
+
+  .event-panel .event-comm .comm-fab-label,
+  .event-panel .event-comm .icon-btn-label {
+    display: none;
+  }
+
+  .event-panel .event-comm .icon-btn-icon {
+    font-size: 16px;
+  }
+
+  .event-panel .event-panel-scroll {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 絵: 幅いっぱいの 16:9 を contain で。縦が詰まったらカードの方が縮み、
+     絵は全体のまま小さくなる（40% 幅 = 22.5vw を下回らない）。 */
+  .event-panel .event-hero,
   .event-panel .event-hero:not(.no-image),
   .event-panel .event-hero.no-image {
-    height: 64px;
-    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    background: linear-gradient(180deg, #16305c, #0a1a36);
+  }
+
+  .event-panel .event-hero .event-image {
+    width: auto;
+    max-width: 100%;
+    height: 100%;
+    aspect-ratio: 16 / 9;
+    min-height: 22.5vw; /* = 40% 幅 (0.4 * 100vw / 1.778) */
+    object-fit: contain;
+    object-position: 50% 50%;
+    margin: 0 auto;
+    flex: 1 1 auto;
+    background: #0a1a36;
+    /* ケン・バーンズは絵を 2〜13% 拡大して端を切るので、スマホでは止める。 */
+    animation: none;
+    transform: none;
+  }
+
+  .event-panel .event-hero.no-image .event-image {
+    display: none;
+  }
+
+  .event-panel .event-hero-shade {
+    display: none;
+  }
+
+  /* タイトルは絵の下のキャプションへ（絵に重ねない・見切れない）。 */
+  .event-panel .event-title {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 6px 12px 8px;
+    font-size: 19px;
+    line-height: 1.26;
+    border-top: 2px solid rgba(255, 210, 63, 0.34);
+    background: linear-gradient(180deg, rgba(6, 18, 43, 0.35), rgba(6, 18, 43, 0.88));
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  .event-panel .event-byline {
+    margin: 5px 12px 0;
+    font-size: 10.5px;
+  }
+
+  .event-panel .event-meta {
+    margin: 5px 10px 8px;
+  }
+
+  /* 元ネタ（出典）はカード内の小さなチップ。 */
+  .event-panel .event-meta-toggle {
+    min-height: 32px;
+    padding: 3px 12px;
+    font-size: 11px;
+  }
+
+  .event-panel .event-meta-body {
+    max-height: 32vh;
+    overflow-y: auto;
+  }
+
+  /* --- 下の選択肢シート（Phase B のみ） --- */
+  .event-panel .event-choice-area {
+    display: none;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 55%;
+    margin-top: auto;
+    padding: 8px 8px 10px;
+    border: 2px solid rgba(255, 210, 63, 0.55);
+    border-radius: 16px;
+    background: rgba(5, 14, 32, 0.98);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    pointer-events: auto;
+  }
+
+  .event-panel.is-choosing .event-choice-area {
+    display: block;
+  }
+
+  .event-panel .event-choose-prompt {
+    display: block;
+    margin: 0 2px 6px;
+    color: var(--gold-pale, #ffe9b0);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  .event-panel .event-choice-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .event-panel .event-choice-item + .event-choice-item {
+    margin-top: 6px;
+  }
+
+  .event-panel .event-choice-head {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  .event-panel .event-choice {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 54px;
+    padding: 7px 9px;
+    /* 再描画のたびに opacity 0 から入り直すと「行が空」に見えるので、スマホでは止める。 */
+    animation: none;
+  }
+
+  .event-panel .event-choice-label {
+    font-size: 14px;
+  }
+
+  /* 1 行要約（全文は「詳細」で開く）。 */
+  .event-panel .event-choice-summary {
+    display: block;
+    margin-top: 1px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #6b6350;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-panel .event-choice-more {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 46px;
+    min-height: 54px;
+    border-radius: 11px;
+    border: 2px solid rgba(255, 210, 63, 0.75);
+    background: rgba(255, 210, 63, 0.14);
+    color: var(--gold-pale, #ffe9b0);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .event-panel .event-choice-full {
+    display: none;
+    margin-top: 4px;
+  }
+
+  .event-panel .event-choice-full.is-open {
+    display: block;
+  }
+
+  /* 詳細を開いたら 1 行要約は畳む（全文と重複するため）。 */
+  .event-panel .event-choice-item:has(.event-choice-full.is-open) .event-choice-summary {
+    display: none;
+  }
+
+  .event-panel .event-choice-full .event-choice-detail {
+    display: block;
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  /* スクロールできることが分かる下端のフェード。 */
+  .event-panel .event-choice-area::after {
+    content: '';
+    position: sticky;
+    bottom: -10px;
+    display: block;
+    height: 16px;
+    margin: 0 -8px -10px;
+    background: linear-gradient(0deg, rgba(5, 14, 32, 0.98), rgba(5, 14, 32, 0));
+    pointer-events: none;
+  }
+
+  .event-panel .event-choices-banner {
+    margin-bottom: 6px;
+  }
+
+  .event-panel .event-footnote {
+    display: none;
+  }
+
+  /* 「タップでスキップ」は台詞ウィンドウのすぐ上へ（重ねない・DOM 上は残す）。 */
+  .event-open .skip-hint {
+    z-index: 40;
+    bottom: calc(172px + var(--safe-bottom));
+  }
+}
+
+/* 縦に余裕のない端末では byline を省く。 */
+@media (max-width: 899px) and (max-height: 700px) {
+  .event-panel .event-byline {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- スマホ横 */
+
+@media (max-height: 520px) and (min-width: 700px) {
+  /* 全画面の 2 カラム: 左が絵、右が説明と選択肢。 */
+  .event-panel,
+  .game-screen.event-open:has(.msgwin:not([hidden])) .event-panel {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 46%) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: 6px 8px;
+    padding: calc(58px + var(--safe-top)) calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left));
+    width: auto;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    overflow: visible;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .game-screen.event-open .game-bottom-bar {
+    display: none;
+  }
+
+  .event-panel .event-card,
+  .event-panel .event-panel-scroll {
+    display: contents;
+  }
+
+  .event-panel .event-ribbon {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 4px 9px;
+    border-radius: 14px 14px 0 0;
+    pointer-events: auto;
+  }
+
+  .event-panel .event-ribbon-title {
+    font-size: 12px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-panel .event-kind-badge {
+    display: none;
+  }
+
+  .event-panel .event-comm {
+    margin-left: auto;
+  }
+
+  .event-panel .event-comm .hud-comm-button,
+  .event-panel .event-comm .comm-fab {
+    min-width: 34px;
+    width: 34px;
+    min-height: 34px;
+    height: 34px;
+    padding: 1px;
+    font-size: 10px;
+  }
+
+  .event-panel .event-comm .comm-fab-label,
+  .event-panel .event-comm .icon-btn-label {
+    display: none;
+  }
+
+  .event-panel .event-comm .icon-btn-icon {
+    font-size: 16px;
+  }
+
+  /* 左カラム: 16:9 の絵 + タイトル。 */
+  .event-panel .event-hero,
+  .event-panel .event-hero:not(.no-image),
+  .event-panel .event-hero.no-image {
+    grid-column: 1;
+    grid-row: 2 / span 3;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+    border: 2px solid #fff;
+    border-top: 0;
+    border-radius: 0 0 14px 14px;
+    background: linear-gradient(180deg, #16305c, #0a1a36);
+    pointer-events: auto;
+  }
+
+  .event-panel .event-hero .event-image {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    object-position: 50% 50%;
+    background: #0a1a36;
+    animation: none;
+    transform: none;
+  }
+
+  .event-panel .event-hero.no-image .event-image {
+    display: none;
+  }
+
+  .event-panel .event-hero-shade {
+    display: none;
+  }
+
+  .event-panel .event-title {
+    position: static;
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 5px 9px 7px;
+    font-size: 16px;
+    line-height: 1.2;
+    border-top: 1px solid rgba(255, 210, 63, 0.3);
+    background: rgba(6, 18, 43, 0.75);
+  }
+
+  /* 右カラム: 説明（byline / 元ネタ / 効果）と選択肢。 */
+  /* 右カラム全体を 1 枚のパネルに見せる（元ネタ チップが地図の上に浮かない）。 */
+  .event-panel::before {
+    content: '';
+    grid-column: 2;
+    grid-row: 1 / -1;
+    border-radius: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    background: linear-gradient(180deg, rgba(20, 44, 92, 0.97), rgba(6, 18, 43, 0.97));
+    box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.18), var(--shadow-panel);
+  }
+
+  .event-panel .event-byline,
+  .event-panel .event-meta,
+  .event-panel .event-effect-summary {
+    grid-column: 2;
+    margin: 0;
+    padding: 5px 9px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    pointer-events: auto;
+  }
+
+  .event-panel .event-byline {
+    grid-row: 1;
+    justify-self: start;
+    align-self: center;
+    max-width: 100%;
+    font-size: 10.5px;
+  }
+
+  .event-panel .event-meta {
+    grid-row: 2;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .event-panel .event-effect-summary {
+    grid-row: 3;
+    align-self: start;
+    overflow-y: auto;
+    font-size: 11px;
+  }
+
+  /* 横長では「タップでスキップ」は出さない（台詞ウィンドウの ▼ に任せる）。 */
+  .event-open .skip-hint {
+    display: none;
+  }
+
+  /* 右カラムのパネル（z 56）より手前に台詞ウィンドウを出す。 */
+  .game-screen.event-open .msgwin {
+    z-index: 60;
+  }
+
+  .event-panel .event-meta-toggle {
+    min-height: 28px;
+    padding: 2px 10px;
+    font-size: 10.5px;
+  }
+
+  .event-panel .event-meta-body {
+    max-height: 22vh;
+    overflow-y: auto;
+    font-size: 10.5px;
+  }
+
+  .event-panel .event-choice-area {
+    display: none;
+    grid-column: 2;
+    grid-row: 4;
+    align-self: end;
+    max-height: 100%;
+    padding: 6px 8px 8px;
+    border: 2px solid rgba(255, 210, 63, 0.55);
+    border-radius: 14px;
+    background: rgba(5, 14, 32, 0.98);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+
+  .event-panel.is-choosing .event-choice-area {
+    display: block;
+  }
+
+  .event-panel .event-choose-prompt {
+    display: block;
+    margin: 0 2px 5px;
+    color: var(--gold-pale, #ffe9b0);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .event-panel .event-choice-item + .event-choice-item {
+    margin-top: 5px;
+  }
+
+  .event-panel .event-choice-head {
+    display: flex;
+    gap: 5px;
+    align-items: stretch;
+  }
+
+  .event-panel .event-choice {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 8px;
+    animation: none;
+  }
+
+  .event-panel .event-choice-label {
+    font-size: 12.5px;
+  }
+
+  .event-panel .event-choice-summary {
+    display: block;
+    font-size: 10.5px;
+    line-height: 1.3;
+    color: #6b6350;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-panel .event-choice-more {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 42px;
+    min-height: 44px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 210, 63, 0.75);
+    background: rgba(255, 210, 63, 0.14);
+    color: var(--gold-pale, #ffe9b0);
+    font-size: 10.5px;
+    font-weight: 800;
+  }
+
+  .event-panel .event-choice-full {
+    display: none;
+    margin-top: 3px;
+  }
+
+  .event-panel .event-choice-full.is-open {
+    display: block;
+  }
+
+  .event-panel .event-choice-item:has(.event-choice-full.is-open) .event-choice-summary {
+    display: none;
+  }
+
+  .event-panel .event-choice-full .event-choice-detail {
+    display: block;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .event-panel .event-footnote {
+    display: none;
   }
 }

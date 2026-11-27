@@ -80,6 +80,11 @@ export interface PlaybackControl {
   readonly compact: CompactDramaKind | null;
   /** Number of newer updates waiting behind the currently playing head. */
   readonly backlog: number;
+  /**
+   * Every fx of the update being played, in order. Event pacing reads it to tell an event line
+   * from bookkeeping (see `isEventUpdate`), so a story beat is never compacted or cut.
+   */
+  readonly update: readonly Fx[];
 }
 
 export interface FxPlayerHost {
@@ -159,6 +164,23 @@ export function isCutinFx(fx: Fx): boolean {
   return CUTIN_FX[fx.t] === true;
 }
 
+/** No queued update, shared so `control.update` never allocates. */
+const NO_FX: readonly Fx[] = [];
+
+/**
+ * Wall clock one update spends on audio that cannot be sped up. Voice playback is capped at
+ * `MAX_VOICE_RATE`, so a spoken line costs about the same at 2x as at 1x; 4x/8x skips the wait.
+ */
+export function updateVoiceWaitMs(fx: readonly Fx[], speed: number): number {
+  const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
+  if (rate >= 4) return 0;
+  let voiceMs = 0;
+  for (const item of fx) {
+    if (item.t === 'say' && item.text) voiceMs += voiceBudgetMs(0, item.text, voicePlaybackRate(rate));
+  }
+  return Math.round(voiceMs);
+}
+
 /**
  * Wall clock one update may take before the player gives up on it and adopts the newest state.
  * Three times its speed-scaled budget, never below {@link SLOW_UPDATE_FLOOR_MS}. Voice lines are
@@ -167,16 +189,8 @@ export function isCutinFx(fx: Fx): boolean {
 export function slowUpdateBudgetMs(fx: readonly Fx[], speed: number): number {
   const rate = Math.max(1, Number.isFinite(speed) ? speed : 1);
   let estimatedMs = 0;
-  let voiceMs = 0;
-  for (const item of fx) {
-    const nominal = estimateFxDurationMs(item);
-    estimatedMs += nominal;
-    if (item.t === 'say' && item.text && rate < 4) {
-      // The message window waits for the (bounded) voice at 1x/2x; it does not at 4x/8x.
-      voiceMs += voiceBudgetMs(0, item.text, voicePlaybackRate(rate));
-    }
-  }
-  return Math.max(SLOW_UPDATE_FLOOR_MS, Math.round((estimatedMs * 3) / rate)) + Math.round(voiceMs);
+  for (const item of fx) estimatedMs += estimateFxDurationMs(item);
+  return Math.max(SLOW_UPDATE_FLOOR_MS, Math.round((estimatedMs * 3) / rate)) + updateVoiceWaitMs(fx, rate);
 }
 
 export class FxPlayer {
@@ -497,6 +511,9 @@ export class FxPlayer {
       get backlog() {
         return Math.max(0, player.queue.length - 1);
       },
+      get update() {
+        return player.activeUpdate?.update.fx ?? NO_FX;
+      },
       get skipped() {
         return player.skipRequested || stale();
       },
@@ -540,13 +557,19 @@ export class FxPlayer {
       while (this.queue.length > 0 && !this.destroyed && this.epoch === epoch) {
         const update = this.queue[0];
         const estimatedMs = update.fx.reduce((sum, fx) => sum + estimateFxDurationMs(fx), 0);
-        const watchdogMs = estimatedMs * 2 + 8000;
         const playbackSpeed = this.speedFactor();
+        // Spoken lines cannot be sped up with the rest of the beat: budget their real wall time
+        // into both the watchdog and the deadline, otherwise an event sequence would be declared
+        // "slow" while it is doing exactly what 標準 promises (waiting for each line's voice).
+        const voiceMs = updateVoiceWaitMs(update.fx, playbackSpeed);
+        const watchdogMs = (estimatedMs + voiceMs) * 2 + 8000;
         const slowMs = slowUpdateBudgetMs(update.fx, playbackSpeed);
         this.updateStartedAt = performance.now();
         // Waits shrink once the update has used its own scaled budget, so a slow frame does not
         // compound into the next fx. The 3x slow net stays as the give-up bound above.
-        this.updateDeadlineAt = this.updateStartedAt + Math.max(600, Math.round(estimatedMs / Math.max(1, playbackSpeed)));
+        this.updateDeadlineAt =
+          this.updateStartedAt +
+          (Math.max(600, Math.round(estimatedMs / Math.max(1, playbackSpeed))) + voiceMs);
         this.watchdogPaused = false;
         this.skipUpdateRequested = false;
         this.armWatchdog(update, epoch, watchdogMs, slowMs);

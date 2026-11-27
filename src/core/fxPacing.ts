@@ -104,6 +104,63 @@ export function estimateSayVoiceMs(text: string): number {
 }
 
 /**
+ * True when the update carries an event sequence: its opening or its closing beat.
+ *
+ * An event is the one place where the player is reading a story rather than watching
+ * bookkeeping, so nothing inside it may be compacted, sped up or cut short. Both the host (which
+ * budgets the update) and the client (which plays it) see the same fx list, so this single check
+ * keeps their pacing decisions identical.
+ */
+export function isEventUpdate(update: readonly Fx[] | undefined): boolean {
+  if (!update) return false;
+  for (const fx of update) {
+    if (fx.t === 'event_open' || fx.t === 'event_close') return true;
+  }
+  return false;
+}
+
+/** Event lines read at this pace when nothing is voiced (標準/じっくり): 6 characters/second. */
+export const EVENT_READ_CHARS_PER_SECOND = 6;
+/** Never flash an event page: the reading floor of one page. */
+export const EVENT_READ_MIN_MS = 1500;
+/** さくさく event pages stay faster, but a story line must still be readable. */
+export const BRISK_EVENT_READ_CHARS_PER_SECOND = 9;
+export const BRISK_EVENT_READ_MIN_MS = 900;
+/** Pause after an event line's voice ends before the next line (標準/じっくり). */
+export const EVENT_VOICE_TAIL_MS = 600;
+/** さくさく keeps a shorter tail — but an event voice is still never clipped. */
+export const BRISK_EVENT_VOICE_TAIL_MS = 300;
+/** A tap-wait on an event result gives up after this long (safety net, not normal pacing). */
+export const EVENT_TAP_TIMEOUT_MS = 20_000;
+
+/** Per-page reading floor of an event line (1x, ms), by 「演出の長さ」. */
+export function eventReadFloor(level: FxTempoLevel | undefined): { perCharMs: number; minMs: number } {
+  const brisk = (level ?? HOST_BUDGET_LEVEL) === 'brisk';
+  return {
+    perCharMs: Math.round(1000 / (brisk ? BRISK_EVENT_READ_CHARS_PER_SECOND : EVENT_READ_CHARS_PER_SECOND)),
+    minMs: brisk ? BRISK_EVENT_READ_MIN_MS : EVENT_READ_MIN_MS,
+  };
+}
+
+/** Pause after an event line's voice ends before the window advances (1x, ms). */
+export function eventVoiceTailMs(level: FxTempoLevel | undefined): number {
+  return (level ?? HOST_BUDGET_LEVEL) === 'brisk' ? BRISK_EVENT_VOICE_TAIL_MS : EVENT_VOICE_TAIL_MS;
+}
+
+/**
+ * Host budget of one event line: the spoken clip (estimated — the host cannot decode it) plus the
+ * reading floor and the tail. The client waits for the real clip; this keeps the room's scheduled
+ * turn honest so the host never plans a shorter beat than its clients play.
+ */
+export function eventSayBudgetMs(text: string, level: FxTempoLevel | undefined): number {
+  const floor = eventReadFloor(level);
+  const chars = [...text].length;
+  return (
+    estimateSayVoiceMs(text) + Math.max(floor.minMs, chars * floor.perCharMs) + eventVoiceTailMs(level) + SAY_REVEAL_ALLOWANCE_MS
+  );
+}
+
+/**
  * How many times each repeat kind has already played this year. The host and the client both
  * feed the same fx stream through {@link noteDramaLedger}, in the same order, so their decision
  * to compact agrees without either side knowing game data. A new year clears the counts.
@@ -299,8 +356,12 @@ export function isCompactBuyout(fx: Extract<Fx, { t: 'buyout' }>, ctx: FxPacingC
   return true;
 }
 
-/** The compact tier an fx belongs to, or null when it plays at its nominal length. */
+/**
+ * The compact tier an fx belongs to, or null when it plays at its nominal length.
+ * Nothing inside an event sequence ever compacts: the story is the content.
+ */
 export function compactDramaKind(fx: Fx, ctx: FxPacingContext): CompactDramaKind | null {
+  if (isEventUpdate(ctx.update)) return null;
   const decided = ctx.compactOf?.get(fx);
   if (decided !== undefined) return decided;
   if (fx.t === 'skill' && isCompactSkill(fx, ctx)) return 'skill';
@@ -388,6 +449,7 @@ export function compactRepeatOfUpdate(ctx: FxPacingContext): CompactDramaKind | 
  * message window still waits for the reader.
  */
 export function compactSayBeat(fx: Extract<Fx, { t: 'say' }>, ctx: FxPacingContext): CompactDramaKind | null {
+  if (isEventUpdate(ctx.update)) return null;
   if (fx.playerId !== undefined && !ctx.isCpu(fx.playerId)) return null;
   for (const item of updateOf(fx, ctx)) {
     const kind = compactDramaKind(item, ctx);
@@ -450,6 +512,7 @@ export function cutsVoice(level: FxTempoLevel | undefined): boolean {
  * lines (piper_get on someone else, event replies) keep their presentation.
  */
 export function isRoutineCpuSay(fx: Extract<Fx, { t: 'say' }>, ctx: FxPacingContext): boolean {
+  if (isEventUpdate(ctx.update)) return false;
   if (!ctx.isCpu(fx.playerId)) return false;
   if (fx.lineKey !== undefined && ROUTINE_LINE_KEYS[fx.lineKey] === true) return true;
   // 固有技の決め台詞: only the compact tier drops the voice wait. A big skill's line still lands.
@@ -474,6 +537,8 @@ export function isRoutineCpuSay(fx: Extract<Fx, { t: 'say' }>, ctx: FxPacingCont
  * The actor is required for `dice` / `move` / `toast`, which carry no playerId of their own.
  */
 export function isRoutineCpuFx(fx: Fx, ctx: FxPacingContext): boolean {
+  // イベントの一幕は CPU の雑用ではない。開幕も結果も等速で見せる。
+  if (isEventUpdate(ctx.update)) return false;
   switch (fx.t) {
     case 'turn':
       return ctx.isCpu(fx.playerId);
@@ -530,6 +595,9 @@ export const SAY_REVEAL_ALLOWANCE_MS = 280;
  *  - じっくり: unchanged (the nominal voice budget).
  */
 export function routineFxDuration(nominalMs: number, fx: Fx, ctx: FxPacingContext): number {
+  // An event line waits for its voice plus the reading floor. The host plans the same wait the
+  // client plays, so a slow, readable story never trips the client's slow-update net.
+  if (fx.t === 'say' && isEventUpdate(ctx.update)) return eventSayBudgetMs(fx.text, ctx.level);
   const kind = compactDramaKind(fx, ctx);
   if (kind !== null) return compactDramaMs(kind, ctx.level);
   const scale = routineFxScale(fx, ctx);

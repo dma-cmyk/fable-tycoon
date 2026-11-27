@@ -63,10 +63,14 @@ function retry(img: HTMLImageElement): void {
   }
   img.dataset.imgRetry = String(attempt + 1);
   img.dataset.imgPending = '';
+  // 失敗した URL を控えておく。待っている間に別の画像（次のイベント）へ差し替わったら
+  // 古い URL を書き戻さない — でないと前のイベントの絵が居座る。
+  const failedSrc = img.src;
   const url = new URL(img.src, location.href);
   url.searchParams.set('retry', String(attempt + 1));
   window.setTimeout(() => {
     if (!img.isConnected) return;
+    if (img.src !== failedSrc) return;
     img.src = url.href;
   }, RETRY_DELAYS_MS[attempt]);
 }

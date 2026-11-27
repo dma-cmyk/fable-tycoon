@@ -32,6 +32,18 @@ export interface MessageLine {
    * the clip keeps playing behind the next beat, and the next line ducks it.
    */
   holdMs?: number;
+  /**
+   * Reading floor for every page of this line (event sequences). Each page stays at least
+   * `minMs`, or `perCharMs` per character, whichever is longer; on the last page the voice (when
+   * one plays) also has to finish before the line advances. Used so a story beat can never flash
+   * past even when its clip is short.
+   */
+  readFloor?: { perCharMs: number; minMs: number };
+  /**
+   * Auto-advance after this long even when `autoAdvance` is false. The safety net under a
+   * tap-to-continue page (an event result waits for the player, not forever).
+   */
+  manualTimeoutMs?: number;
   /** 声が終わってから送るまでの小休止（1x, ms）。未指定は従来の `postVoicePauseMs(speed)`。 */
   tailMs?: number;
 }
@@ -295,11 +307,61 @@ export class MessageWindow {
     const line = this.cursor.current;
     if (!line || token !== this.lineToken) return;
     if (line.autoAdvance === false) {
-      // Manual advance mode: stay visible until the player taps or skips.
+      // Manual advance mode: stay visible until the player taps or skips. A result page that
+      // waits for a tap still gets its safety timeout, so a lost tap can never wedge the turn.
+      if (line.manualTimeoutMs !== undefined) {
+        this.timer = window.setTimeout(() => {
+          if (token !== this.lineToken) return;
+          this.timer = 0;
+          this.advance();
+        }, Math.max(1000, line.manualTimeoutMs));
+      }
       return;
     }
     const speed = this.currentSpeed();
     const isLastPage = this.pageIndex + 1 >= this.pages.length;
+    const floorMs = line.readFloor
+      ? Math.max(line.readFloor.minMs, [...page].length * line.readFloor.perCharMs)
+      : 0;
+    if (floorMs > 0 && !isLastPage) {
+      // Event page: it stays for its reading floor; the clip keeps playing into the next page.
+      this.timer = window.setTimeout(() => {
+        if (token !== this.lineToken) return;
+        this.timer = 0;
+        this.advance();
+      }, Math.max(60, Math.round(floorMs / speed)));
+      return;
+    }
+    if (floorMs > 0) {
+      // Last event page: both the reading floor and this line's own voice have to finish first,
+      // then the caller's tail (0.6 s in 標準) before advancing.
+      const floorDelay = Math.max(60, Math.round(floorMs / speed));
+      const afterVoice = (): void => {
+        if (token !== this.lineToken) return;
+        const spoke = line.voiceStarted ? line.voiceStarted() : line.voiceDone !== undefined;
+        const tail = spoke
+          ? line.tailMs !== undefined
+            ? Math.max(30, Math.round(line.tailMs / speed))
+            : postVoicePauseMs(speed)
+          : 0;
+        this.timer = window.setTimeout(() => {
+          if (token !== this.lineToken) return;
+          this.timer = 0;
+          this.advance();
+        }, tail);
+      };
+      if (line.voiceDone) {
+        const waitingSince = performance.now();
+        void line.voiceDone.then(() => {
+          if (token !== this.lineToken) return;
+          const remaining = Math.max(0, floorDelay - Math.round(performance.now() - waitingSince));
+          this.timer = window.setTimeout(afterVoice, remaining);
+        });
+      } else {
+        this.timer = window.setTimeout(afterVoice, floorDelay);
+      }
+      return;
+    }
     if (isLastPage && line.holdMs !== undefined) {
       // 標準/さくさく: never wait for a long clip to finish. The page holds for its reading time
       // (about 9 chars/second, floor 0.8s), and if the clip ends sooner the page advances with it —

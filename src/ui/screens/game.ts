@@ -88,7 +88,19 @@ import { openPlayerMenu, openPlayerRoster, type PlayerView } from '../components
 import { playEmoteVoice, resolveEmoteLines } from '../components/emotePlayback';
 import { ResultScreen } from './result';
 import { FxPlayer, type PlaybackControl } from '../fxPlayer';
-import { compactDramaMs, cutsVoice, estimateSayVoiceMs, isRoutineCpuSay, SAY_VOICE_TAIL_MS, sayHoldMs } from '../cpuPacing';
+import {
+  compactDramaMs,
+  cutsVoice,
+  estimateSayVoiceMs,
+  EVENT_TAP_TIMEOUT_MS,
+  eventReadFloor,
+  eventSayBudgetMs,
+  eventVoiceTailMs,
+  isEventUpdate,
+  isRoutineCpuSay,
+  SAY_VOICE_TAIL_MS,
+  sayHoldMs,
+} from '../cpuPacing';
 import { biasedMoveRecommendation, cityMoveInfo, moveChipPriceLabel, shopCardPriceLabel, shopCardPriceInfo, type CityMoveInfo } from '../moveChipInfo';
 import {
   countMoveFilters,
@@ -220,10 +232,11 @@ export class GameScreen implements ScreenHandle {
   private endedVoicePlayed = false;
   private transientMsgPending = false;
   /**
-   * 月替わりなど全員に等しく降りるイベント（と、CPU が引いたイベント）の導入台詞は、
-   * ひとりで/みんなで遊ぶときだけ 1.5 倍で送る。オンラインは他所のペースを乱さないよう据え置き。
+   * True once an event's result was offered as a tap-to-continue page. The first result line of
+   * the sequence waits for the player; later lines advance on their voice so one event cannot
+   * demand a tap per sentence.
    */
-  private eventIntroBoost = 1;
+  private eventResultTapped = false;
   private suppressMapTapUntil = 0;
   private pendingPhaseEnd: 'end_buy' | 'end_shop' | null = null;
   /** Local/solo: a choice clicked while the intro lines played, sent once the fx queue drains. */
@@ -4502,23 +4515,16 @@ export class GameScreen implements ScreenHandle {
       case 'event_open': {
         this.updateStatusChip(pending, actorOf(pending));
         this.openEventPanel(fx.eventId, pending);
-        const event = eventsById.get(fx.eventId);
-        // 全員に等しく降りる月替わりイベント、または CPU が引いたイベントは、この端末の
-        // 鑑賞者は 1 人だけ（ローカル/ソロ）。導入の台詞を 1.5 倍で流し、声は待たない。
-        // Use the drawer's seat: an auto-applied event has already advanced `current`.
-        const cpuActor = pending.players[fx.playerId]?.isCpu === true;
-        // 「じっくり」は今までどおり = 等速・声待ちあり。
-        this.eventIntroBoost =
-          this.session.mode !== 'online' &&
-          effectiveTempoLevel() !== 'calm' &&
-          (event?.monthly === true || cpuActor)
-            ? 1.5
-            : 1;
+        // イベントは等速・声待ちで見せる（導入だけ 1.5 倍にすると、声と文字がずれて
+        // 次の台詞に声を切られる）。結果の「タップで次へ」はイベントごとに 1 回だけ。
+        this.eventResultTapped = false;
         await control.wait(FX_MS.event_open);
         return;
       }
       case 'event_close': {
-        this.eventIntroBoost = 1;
+        // 元ネタの長い「自動適用」イベントは、閉じる前に 1 ページだけ読む時間を取る。
+        // ローカル/ソロだけ・タップで先へ・20 秒で自動続行（演出の早送り設定では出さない）。
+        await this.showEventFactPage(control);
         this.eventPanel.hide();
         this.syncEventComm();
         this.activeEventBgm = null;
@@ -4895,56 +4901,75 @@ export class GameScreen implements ScreenHandle {
         : voiceKeyOf(speaker);
     const speakerLobbySeat = speakerSeat !== null ? this.seatOfPlayer(speakerSeat) : null;
     const muted = speakerLobbySeat !== null && this.muteOf(speakerLobbySeat).voice;
-    // イベント導入の掛け合いだけ 1.5 倍（ローカル/ソロ）。声は色として流し、待たない。
-    const introBoost = this.eventIntroBoost > 1 && fx.lineKey === undefined ? this.eventIntroBoost : 1;
-    const speed = control.speed * introBoost;
+    const speed = control.speed;
     const autoAdvance = uiSettings().autoAdvance;
+    const level = effectiveTempoLevel();
+    const update = control.update;
+    // イベントの一幕（開幕・掛け合い・結果）は、コンパクト化も早送りもしない。物語そのものが
+    // 内容なので、等速・読み切り・声の終わり待ちで見せる。
+    const inEvent = isEventUpdate(update) || this.eventPanel.isOpen;
+    // 4x/8x は演出の時間が無い。声を途中で切るのではなく、そもそも鳴らさない。
+    const fastForward = speed >= 4;
     // A CPU's routine quips are scenery: play the clip as colour only, never block on it.
     // A compact beat (CPU-only 固有技, CPU-to-CPU 買収, a repeated CPU goal/monopoly/roulette/
     // mischief) is colour the same way — the banner already carried the news.
-    const routine = isRoutineCpuSay(fx, state);
-    // Voice playback rate is intentionally capped at 1.2x for intelligibility; at 4x/8x or while
-    // catching up on queued updates, do not block advancement on 1.2x audio playback.
-    // Routine quips never play a voice, so they are the only lines exempt from the wait: a
-    // compact beat still *speaks* in 標準 (its banner is already short), it is never clipped.
-    const waitForVoice = autoAdvance && speed < 4 && control.backlog === 0 && !routine && introBoost === 1;
-    const level = effectiveTempoLevel();
+    const routine = !inEvent && isRoutineCpuSay(fx, state);
+    // 標準/じっくりは声を切らない: 音声側は直前の台詞が終わるまで待ってから鳴らす。
+    // さくさくだけが 180 ms のフェードで受け渡す（読み時間で先へ進むテンポだから）。
+    const handover = cutsVoice(level) ? 'fade' : 'wait';
+    const speaks = !muted && !routine && !fastForward;
+    // Voice playback rate is capped at 1.2x for intelligibility; at 4x/8x we do not start a line
+    // at all (see `fastForward`). Routine quips never play a voice, so they are exempt.
+    const waitForVoice = speaks && autoAdvance && !fastForward && (inEvent || control.backlog === 0);
     // さくさくだけが声を切る: 11 文字/秒の読み時間で送り、クリップは次の台詞が 180 ms で
-    // フェードアウトする。標準は声を絶対に切らない（自分の声が終わるまで待ち、120 ms 後に送る）。
-    // じっくり（calm）は従来どおり。`null` は「声の終わりを待つ」の意味。
-    const clipVoice = cutsVoice(level) && autoAdvance && speed < 4 && control.backlog === 0 && introBoost === 1;
+    // フェードアウトする。イベントの台詞はさくさくでも声を切らない。
+    const clipVoice = !inEvent && cutsVoice(level) && autoAdvance && !fastForward && control.backlog === 0;
     const holdMs = clipVoice
       ? sayHoldMs(fx.text, { level, compact: control.compact !== null })
       : null;
     let voiceStarted = false;
-    // Routine bookkeeping quips stay silent (they are read at 4-6x and would only pile up).
-    const voicePromise =
-      muted || routine || control.backlog > 0
-        ? Promise.resolve()
-        : Audio.playVoice(voiceKey, fx.text, {
-            rate: speed,
-            onStart: () => {
-              voiceStarted = true;
-            },
-          });
+    const voicePromise = speaks
+      ? Audio.playVoice(voiceKey, fx.text, {
+          rate: speed,
+          handover,
+          onStart: () => {
+            voiceStarted = true;
+          },
+        })
+      : Promise.resolve();
     // 標準: wait for this line's own voice, then advance `SAY_VOICE_TAIL_MS` later. The cap is
     // only a wedged-AudioContext safety net (never a normal tail); じっくり keeps its old budget.
+    // イベントの台詞は前の台詞の声が終わるまで待たされることがあるので、その分だけ余裕を取る。
+    const voiceCapMs = inEvent
+      ? estimateSayVoiceMs(fx.text) + 15_000
+      : level === 'calm'
+        ? voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000
+        : estimateSayVoiceMs(fx.text) + 4000;
     const boundedVoice = holdMs === null && waitForVoice
-      ? raceWithTimeout(
-          voicePromise,
-          level === 'calm'
-            ? voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 3000
-            : estimateSayVoiceMs(fx.text) + 4000,
-        )
+      ? raceWithTimeout(voicePromise, voiceCapMs)
       : undefined;
     const voiceDone = boundedVoice ?? (holdMs !== null ? voicePromise : undefined);
+    // 人間が関わるイベントの結果は、自分で読んでから送る（ローカル/ソロ）。オンラインは
+    // ターンタイマーがあるのでタップ待ちにしない。
+    const manualResult =
+      inEvent &&
+      autoAdvance &&
+      !fastForward &&
+      this.session.mode !== 'online' &&
+      !this.eventResultTapped &&
+      this.eventResultTouchesHuman(update);
+    if (manualResult) this.eventResultTapped = true;
     const windowLine = {
       ...this.messageLineFor(speaker, label, fx.text, state, speakerSeat),
       speed,
-      autoAdvance,
+      autoAdvance: autoAdvance && !manualResult,
       ...(holdMs !== null ? { holdMs } : {}),
+      // イベントの台詞は 1 ページごとに読み下限（標準 6 文字/秒）を持ち、最後のページは
+      // 自分の声が終わってから 0.6 秒後に送る。
+      ...(inEvent ? { readFloor: eventReadFloor(level), tailMs: eventVoiceTailMs(level) } : {}),
+      ...(manualResult ? { manualTimeoutMs: EVENT_TAP_TIMEOUT_MS } : {}),
       // 標準/さくさく の小休止は 120 ms。じっくりは従来の 220/speed のまま。
-      ...(voiceDone && holdMs === null && level !== 'calm' ? { tailMs: SAY_VOICE_TAIL_MS } : {}),
+      ...(voiceDone && !inEvent && holdMs === null && level !== 'calm' ? { tailMs: SAY_VOICE_TAIL_MS } : {}),
       ...(voiceDone ? { voiceDone, voiceStarted: () => voiceStarted } : {}),
     };
     const shown = this.msgWindow.show(windowLine);
@@ -4952,11 +4977,19 @@ export class GameScreen implements ScreenHandle {
       Audio.stopVoice();
       this.msgWindow.skipLine();
     });
-    if (!autoAdvance) control.setManualWait(true);
+    if (!autoAdvance || manualResult) control.setManualWait(true);
     try {
       // Auto-advance is timer-driven and speed-scaled, so a bound is safe; manual advance
       // intentionally waits for the reader and pauses the watchdog instead.
-      if (autoAdvance) {
+      if (!autoAdvance) {
+        await shown;
+      } else if (manualResult) {
+        // タップ待ちの安全網だけは等速: 演出の早送り設定で読み時間を削らない。
+        await raceWithTimeout(shown, EVENT_TAP_TIMEOUT_MS + 1000);
+      } else if (inEvent) {
+        // イベントは声と読み下限が主役。速度で割らない実時間の上限だけを置く。
+        await raceWithTimeout(shown, eventSayBudgetMs(fx.text, level) + 2000);
+      } else {
         // `holdMs` (さくさく) applies to the last page; the typewriter reveal still precedes it.
         // 標準 waits for the voice, so its bound is the same estimate plus a safety margin.
         const budget = holdMs !== null
@@ -4964,13 +4997,67 @@ export class GameScreen implements ScreenHandle {
           : level === 'calm'
             ? voiceBudgetMs(0, fx.text, voicePlaybackRate(speed)) + 2500
             : estimateSayVoiceMs(fx.text) + 4000;
-        await control.bound(shown, introBoost > 1 ? budget / introBoost : budget);
-      } else {
-        await shown;
+        await control.bound(shown, budget);
       }
     } finally {
-      if (!autoAdvance) control.setManualWait(false);
+      if (!autoAdvance || manualResult) control.setManualWait(false);
     }
+  }
+
+  /**
+   * The 「元ネタ」 page of an auto-applied event with a long fact text: it holds for a tap
+   * (▼, 20 s safety) instead of flashing past on its way to `event_close`. Local/solo only —
+   * an online room keeps its turn timer and never waits on one client's reading.
+   */
+  private async showEventFactPage(control: PlaybackControl): Promise<void> {
+    if (this.session.mode === 'online' || this.destroyed) return;
+    if (control.speed >= 4 || !uiSettings().autoAdvance) return;
+    const eventId = this.eventPanel.eventId;
+    const event = eventId ? eventsById.get(eventId) : undefined;
+    const fact = event?.fact?.trim() ?? '';
+    if (!event || fact.length < 80) return;
+    if ((event.choices?.length ?? 0) > 0) return;
+    const text = fact.length > 140 ? `${fact.slice(0, 138)}…` : fact;
+    const shown = this.msgWindow.show({
+      speaker: 'narrator',
+      name: '📚 元ネタ',
+      text,
+      color: '#9fd0ff',
+      autoAdvance: false,
+      manualTimeoutMs: EVENT_TAP_TIMEOUT_MS,
+    });
+    control.setManualWait(true);
+    control.onSkip(() => this.msgWindow.skipLine());
+    try {
+      await raceWithTimeout(shown, EVENT_TAP_TIMEOUT_MS + 1000);
+    } finally {
+      control.setManualWait(false);
+    }
+  }
+
+  /**
+   * True when this update closes an event and the event actually involved a human on this
+   * client: it opened on a human's seat, or it moved a human's cash, property or cards. A
+   * CPU-only event never stops for a tap.
+   */
+  private eventResultTouchesHuman(update: readonly Fx[]): boolean {
+    const mine = this.myPlayerIds();
+    let closes = false;
+    let human = false;
+    for (const item of update) {
+      if (item.t === 'event_close') {
+        closes = true;
+      } else if (item.t === 'event_open') {
+        if (mine.includes(item.playerId)) human = true;
+      } else if (item.t === 'cash') {
+        if (item.delta !== 0 && mine.includes(item.playerId)) human = true;
+      } else if (item.t === 'buy' || item.t === 'sell' || item.t === 'card_get' || item.t === 'card_use' || item.t === 'buyout') {
+        if (mine.includes(item.playerId)) human = true;
+      } else if (item.t === 'piper' && item.holder !== null && mine.includes(item.holder)) {
+        human = true;
+      }
+    }
+    return closes && human;
   }
 
   /** Speaker portrait / name / accent for the single message window. */
