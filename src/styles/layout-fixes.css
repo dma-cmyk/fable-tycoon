@@ -4112,7 +4112,9 @@
     display: none !important;
   }
 
-  /* 1) 上（状況）：左＝手番パネル / 中央＝年月とターン / 右＝順位横並び4枚＋≡メニュー */
+  /* 1) 上（状況）：左＝手番パネル / 年月とターン / タイマー / 右＝順位横並び4枚 / ≡メニュー
+     オンラインで手番タイマーが出ても 2 行目へ折り返さないよう、5 要素を 5 列へ明示配置する。
+     順位の列だけが伸縮し、足りない分は手番パネルとチップが name 省略で吸収する。 */
   .game-screen .game-topbar {
     position: absolute;
     top: 0;
@@ -4122,13 +4124,40 @@
     min-height: 68px;
     padding: 7px 14px;
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto auto minmax(min-content, 1fr) auto;
+    grid-template-rows: auto;
     align-items: center;
     gap: 10px;
     background: linear-gradient(180deg, rgba(11, 27, 60, 0.94), rgba(8, 20, 46, 0.88));
     border-bottom: 2px solid rgba(255, 214, 96, 0.38);
     box-shadow: 0 6px 20px rgba(3, 10, 26, 0.42);
     z-index: 36;
+  }
+
+  /* タイマーが hidden でも列がずれないよう、5 要素の位置を固定する。 */
+  .game-screen .game-topbar > .player-plate {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .game-screen .game-topbar > .game-chips {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .game-screen .game-topbar > .turn-timer {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .game-screen .game-topbar > .pc-topbar-ranking {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .game-screen .game-topbar > .top-actions {
+    grid-column: 5;
+    grid-row: 1;
   }
 
   /* 左：手番パネル（顔・名前・所持金・目的地とあとNマスを 1 枚に統合、幅制限を解除） */
@@ -4272,7 +4301,7 @@
     justify-content: center;
     gap: 8px;
     flex-wrap: nowrap;
-    min-width: 0;
+    min-width: min-content;
   }
 
   .game-screen .game-topbar .game-year-chip,
@@ -4285,16 +4314,35 @@
     line-height: 1.2;
   }
 
-  .game-screen .game-topbar .turn-timer {
-    justify-self: center;
+  /* 異世界チップはスマホと同じくアイコンだけにし、最終年チップが出ている間は
+     重複する年月チップを畳んで、順位カードの幅を確保する。 */
+  .game-screen .game-topbar .realm-chip-name,
+  .game-screen .game-topbar .realm-chip-tag {
+    display: none;
   }
 
-  /* 右：順位の横並び（顔・順位・総資産の 4 枚） */
+  .game-screen .game-topbar .game-chips:has(.chip-final-year:not([hidden])) .game-year-chip {
+    display: none;
+  }
+
+  /* 手番タイマー（オンラインのみ表示）。上段では 42px に縮めて専用スロットへ置く。 */
+  .game-screen .game-topbar .turn-timer {
+    justify-self: center;
+    width: 42px;
+    height: 42px;
+    margin-top: 0;
+  }
+
+  .game-screen .game-topbar .turn-timer .timer-value {
+    font-size: 13px;
+  }
+
+  /* 右：順位の横並び（顔・順位・総資産の 4 枚）。カードは中身より狭くならない。 */
   .game-screen .pc-topbar-ranking {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    min-width: 0;
+    min-width: min-content;
   }
 
   .game-screen .pc-topbar-ranking .ranking-panel {
@@ -4324,7 +4372,7 @@
   .game-screen .pc-topbar-ranking .rank-row {
     position: relative;
     width: auto !important;
-    min-width: 102px;
+    min-width: min-content;
     max-width: 152px;
     min-height: 52px;
     padding: 5px 9px 5px 6px !important;
@@ -4404,15 +4452,40 @@
     max-width: 200px;
   }
 
-  /* 広いモニタ（1500px以上）では順位カードに名前も1行添える */
-  @media (min-width: 1500px) {
-  .game-screen .player-plate-dest-name {
-    max-width: 190px;
-  }
+  /* 広いモニタ（1875px以上。1600pxは zoom 1.25 で実効 1280px なので含めない）では
+     順位カードに名前も1行添える。タイマー分の幅を空けるため、内側の余白を少し詰める。 */
+  @media (min-width: 1875px) {
+    .game-screen .player-plate-dest-name {
+      max-width: 190px;
+    }
+
+    .game-screen .game-topbar .game-year-chip,
+    .game-screen .game-topbar .game-turn-chip {
+      font-size: 14px;
+      padding: 6px 10px;
+    }
 
     .game-screen .pc-topbar-ranking .rank-row {
       max-width: 205px;
-      padding: 5px 12px 5px 8px !important;
+      padding: 5px 5px !important;
+      gap: 4px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .ranking-panel {
+      gap: 5px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-badge {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      font-size: 12px;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-avatar {
+      width: 32px !important;
+      height: 32px !important;
+      flex: 0 0 32px !important;
     }
 
     .game-screen .pc-topbar-ranking .rank-name-line {
@@ -4434,24 +4507,44 @@
     .game-screen .pc-topbar-ranking .rank-tag {
       display: none;
     }
+
+    .game-screen .game-topbar .turn-timer {
+      width: 44px;
+      height: 44px;
+    }
+
+    .game-screen .game-topbar .turn-timer .timer-value {
+      font-size: 14px;
+    }
+
+    .game-screen .game-topbar .errand-name {
+      max-width: 96px;
+    }
   }
 
-  /* 900〜1290px で上バーが絶対に重ならないように微調整 */
-  @media (max-width: 1290px) {
+  /* 1874px 以下（1600px は zoom 1.25 で実効 1280px）は、上段 5 要素が 1 行に収まるように
+     手番パネル・チップ・順位カードの中身を詰める。1875px 以上は従来の大きさのまま。 */
+  @media (max-width: 1874px) {
     .game-screen .game-topbar {
       gap: 8px;
       padding: 6px 10px;
-      grid-template-columns: auto auto minmax(0, 1fr) auto;
     }
 
     .game-screen .game-topbar .player-plate {
-      padding: 5px 10px 5px 7px !important;
+      grid-template-columns: 34px auto auto;
+      min-height: 52px;
+      padding: 5px 9px 5px 6px !important;
       column-gap: 8px;
+    }
+
+    .game-screen .player-plate-avatar {
+      width: 34px;
+      height: 34px;
     }
 
     .game-screen .player-plate-name {
       font-size: 13.5px;
-      max-width: 92px;
+      max-width: 88px;
     }
 
     .game-screen .player-plate-cash {
@@ -4466,34 +4559,128 @@
 
     .game-screen .player-plate-dest-name {
       font-size: 14px;
-      max-width: 132px;
+      max-width: 110px;
     }
 
     .game-screen .player-plate-dest-steps {
-      font-size: 12.5px;
-      padding: 2px 7px;
+      font-size: 12px;
+      padding: 1px 6px;
+    }
+
+    .game-screen .game-topbar .game-chips {
+      gap: 5px;
     }
 
     .game-screen .game-topbar .game-year-chip,
     .game-screen .game-topbar .game-turn-chip {
-      font-size: 14px;
-      padding: 6px 10px;
+      font-size: 13.5px;
+      padding: 5px 9px;
+    }
+
+    .game-screen .game-topbar .errand-chip {
+      gap: 4px;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    /* 依頼チップは「都市名（4〜5 文字で省略）＋あとN」を残す。全文は title で読める。 */
+    .game-screen .game-topbar .errand-name {
+      max-width: 4.9em;
+    }
+
+    .game-screen .game-topbar .errand-steps {
+      font-size: 10px;
+      padding: 1px 5px;
     }
 
     .game-screen .pc-topbar-ranking .rank-row {
-      min-width: 92px;
-      padding: 4px 8px 4px 6px !important;
-      gap: 5px !important;
+      max-width: none;
+      min-height: 46px;
+      padding: 4px 7px 4px 5px !important;
+      gap: 4px !important;
+      border-radius: 13px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-badge {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 20px;
+      border-width: 1.5px;
+      font-size: 11px;
     }
 
     .game-screen .pc-topbar-ranking .rank-avatar {
-      width: 30px !important;
-      height: 30px !important;
-      flex: 0 0 30px !important;
+      width: 26px !important;
+      height: 26px !important;
+      flex: 0 0 26px !important;
     }
 
-    .game-screen .pc-topbar-ranking .rank-money-line {
-      font-size: 13.5px;
+    .game-screen .pc-topbar-ranking .rank-money {
+      font-size: 13px;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-piper {
+      font-size: 10px;
+      padding: 0 3px;
+    }
+  }
+
+  /* 実効幅が 1280px 級になる幅（1339px 以下と、1600px 以上の zoom 1.25 帯）では、
+     依頼チップの都市名と賞金を残すかわりに、手番パネルと順位カードを一段だけ小さくする。 */
+  @media (max-width: 1339px), (min-width: 1600px) and (min-height: 860px) and (max-width: 1874px) {
+    .game-screen .game-topbar .turn-timer {
+      width: 40px;
+      height: 40px;
+    }
+
+    .game-screen .game-topbar .player-plate {
+      grid-template-columns: 30px auto auto;
+    }
+
+    .game-screen .player-plate-avatar {
+      width: 30px;
+      height: 30px;
+    }
+
+    .game-screen .player-plate-dest-name {
+      max-width: 96px;
+    }
+
+    .game-screen .player-plate-dest-steps {
+      font-size: 11px;
+      padding: 1px 4px;
+    }
+
+    /* チップの文字を一段落として、目的地名が 1 行で読める幅を手番パネルへ回す。 */
+    .game-screen .game-topbar .game-year-chip,
+    .game-screen .game-topbar .game-turn-chip {
+      font-size: 12.5px;
+      padding: 4px 8px;
+    }
+
+    .game-screen .game-topbar .errand-chip {
+      font-size: 12.5px;
+    }
+
+    .game-screen .pc-topbar-ranking .ranking-panel {
+      gap: 4px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-row {
+      padding: 3px 5px 3px 4px !important;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-badge {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      font-size: 10px;
+    }
+
+    .game-screen .pc-topbar-ranking .rank-avatar {
+      width: 24px !important;
+      height: 24px !important;
+      flex: 0 0 24px !important;
     }
   }
 
