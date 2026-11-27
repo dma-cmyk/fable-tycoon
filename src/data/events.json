@@ -4607,6 +4607,7 @@
   },
   {
     "id": "season-window-dressing",
+    "image": "assets/events/season-window-dressing.webp",
     "title": "決算前の数字のお化粧",
     "kind": "fable",
     "satireNote": "決算前の会計操作を「お化粧」に例えた完全創作。実際の粉飾決算を推奨するものではない。",
@@ -4885,6 +4886,7 @@
   },
   {
     "id": "season-valentine-chocolate",
+    "image": "assets/events/season-valentine-chocolate.webp",
     "title": "バレンタインのチョコ相場",
     "kind": "news",
     "fact": "2月14日のバレンタインデーには、チョコレートを贈る習慣が広がり、百貨店や製菓会社にとって重要な商戦となっている。ロマンスや愛情を祝う商業的な行事として、世界各地で贈り物の商戦が行われている。",
@@ -5205,6 +5207,7 @@
   },
   {
     "id": "season-art-autumn",
+    "image": "assets/events/season-art-autumn.webp",
     "title": "芸術の秋、値段の秋",
     "kind": "fable",
     "satireNote": "芸術市場を題材にした完全創作。実在の作品・人物とは関係ない。",
@@ -11165,6 +11168,7 @@
   },
   {
     "id": "season-back-to-school",
+    "image": "assets/events/season-back-to-school.webp",
     "title": "新学期、学用品の値段",
     "kind": "fable",
     "satireNote": "新学期の学用品商戦という実在の季節需要を下敷きにした完全創作。具体的な統計は使っておらず、金額・効果・会話はすべてゲーム用。",

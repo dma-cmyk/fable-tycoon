@@ -978,8 +978,9 @@
    ],
    "sheet": "ev_15",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/season-valentine-chocolate.webp"
+   "status": "done",
+   "output": "public/assets/events/season-valentine-chocolate.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-window-dressing",
@@ -993,8 +994,9 @@
    ],
    "sheet": "ev_15",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/season-window-dressing.webp"
+   "status": "done",
+   "output": "public/assets/events/season-window-dressing.webp",
+   "generator": "codex"
   },
   {
    "eventId": "crowdstrike-global-outage",
@@ -1024,8 +1026,9 @@
    ],
    "sheet": "ev_15",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-art-autumn.webp"
+   "status": "done",
+   "output": "public/assets/events/season-art-autumn.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-back-to-school",
@@ -1040,8 +1043,9 @@
    ],
    "sheet": "ev_15",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-back-to-school.webp"
+   "status": "done",
+   "output": "public/assets/events/season-back-to-school.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-bonenkai",
