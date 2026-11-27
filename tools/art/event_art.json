@@ -722,8 +722,9 @@
    ],
    "sheet": "ev_11",
    "slot": 1,
-   "status": "pending",
-   "output": "public/assets/events/three-pigs-housing.webp"
+   "status": "done",
+   "output": "public/assets/events/three-pigs-housing.webp",
+   "generator": "codex"
   },
   {
    "eventId": "venice-daytripper-fee",
@@ -737,8 +738,9 @@
    ],
    "sheet": "ev_11",
    "slot": 2,
-   "status": "pending",
-   "output": "public/assets/events/venice-daytripper-fee.webp"
+   "status": "done",
+   "output": "public/assets/events/venice-daytripper-fee.webp",
+   "generator": "codex"
   },
   {
    "eventId": "weimar-hyperinflation",
@@ -798,8 +800,9 @@
    ],
    "sheet": "ev_11",
    "slot": 3,
-   "status": "pending",
-   "output": "public/assets/events/season-gw-traffic.webp"
+   "status": "done",
+   "output": "public/assets/events/season-gw-traffic.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-new-fiscal",
@@ -813,8 +816,9 @@
    ],
    "sheet": "ev_11",
    "slot": 4,
-   "status": "pending",
-   "output": "public/assets/events/season-new-fiscal.webp"
+   "status": "done",
+   "output": "public/assets/events/season-new-fiscal.webp",
+   "generator": "codex"
   },
   {
    "eventId": "season-santa-delay",

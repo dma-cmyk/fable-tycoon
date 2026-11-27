@@ -4153,6 +4153,7 @@
   },
   {
     "id": "three-pigs-housing",
+    "image": "assets/events/three-pigs-housing.webp",
     "title": "三匹の子ブタ、不動産バブル",
     "kind": "fable",
     "satireNote": "完全創作。三匹の子ブタの家づくりを、住宅バブルと建材投機に見立てている。",
@@ -4378,6 +4379,7 @@
   },
   {
     "id": "season-new-fiscal",
+    "image": "assets/events/season-new-fiscal.webp",
     "title": "新年度・入社式商戦",
     "kind": "fable",
     "satireNote": "新年度の商戦とAI新人を誇張した完全創作。実在の人物・企業とは関係ない。",
@@ -4422,6 +4424,7 @@
   },
   {
     "id": "season-gw-traffic",
+    "image": "assets/events/season-gw-traffic.webp",
     "title": "ゴールデンウィーク観光渋滞",
     "kind": "fable",
     "satireNote": "GW渋滞を題材にした完全創作。金額・効果はゲーム用。",
@@ -7574,6 +7577,7 @@
   },
   {
     "id": "venice-daytripper-fee",
+    "image": "assets/events/venice-daytripper-fee.webp",
     "title": "入市料十ユーロ",
     "kind": "news",
     "fact": "イタリアのベネチアは2024年4月25日、日帰り観光客に入市料を課す世界初の都市となった。2025年は対象日を54日に広げ、4日前までの予約なら5ユーロ、直前なら10ユーロとした。市によると2025年は72万3497人が支払い、収入は約542万ユーロと前年の2倍以上になった。最も混雑した5月2日の支払い者は2万4951人で、住民の半数を超えた。",
