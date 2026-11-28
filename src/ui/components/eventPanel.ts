@@ -81,13 +81,20 @@ export class EventPanel {
       on: {
         // 失敗してもカードは畳まない: imageFallback が 2 回やり直し、最後は共通の
         // プレースホルダに差し替える。ここで高さを変えると読み込みのたびに画面が跳ねる。
+        // 失敗した瞬間に絵を消すと「暗い空箱」になるので、読み込み中と同じプレースホルダを
+        // 出したまま再試行させる（is-loading は load でだけ外す）。
         error: () => {
+          // 遅れて届いた前のイベントのエラーは、いま出ている絵の失敗ではない。
+          if (!this.imageIsCurrent()) return;
           this.image.classList.add('is-error');
+          this.hero.classList.add('is-loading');
         },
         load: () => {
+          // 前のイベントの読み込みが遅れて完了しても、いまの絵を差し替えたりはしない。
+          if (!this.imageIsCurrent()) return;
           this.image.classList.remove('is-error');
           this.image.hidden = false;
-          this.hero.classList.remove('no-image');
+          this.hero.classList.remove('no-image', 'is-loading');
         },
       },
     });
@@ -477,13 +484,35 @@ export class EventPanel {
     return chips;
   }
 
+  /**
+   * True when the element's current URL belongs to the event that is on screen now. A retry adds
+   * `?retry=N`, and a late event's load/error must never touch the current picture.
+   */
+  private imageIsCurrent(): boolean {
+    // The shared silhouette (imageFallback's last resort) is the current picture too.
+    if (this.image.dataset.imgFallback === '1') return true;
+    const want = this.image.dataset.imgWant;
+    if (!want) return true;
+    const same = (a: string, b: string): boolean => {
+      try {
+        return new URL(a, location.href).pathname === new URL(b, location.href).pathname;
+      } catch {
+        return a === b;
+      }
+    };
+    return same(want, this.image.currentSrc || this.image.src);
+  }
+
   private renderImage(event: GameEventDef): void {
     const path = event.image;
     const stem = path ? path.split('/').pop()?.replace(/\.[a-z]+$/i, '') : event.id;
     if (!path || !stem || !EVENT_IMAGE_IDS.has(stem)) {
       this.image.hidden = true;
       this.image.removeAttribute('src');
+      delete this.image.dataset.imgWant;
+      delete this.image.dataset.imgPending;
       this.hero.classList.add('no-image');
+      this.hero.classList.remove('is-loading');
       return;
     }
     // 前のイベントで失敗した印が残っていると imageFallback の再試行が効かなくなる。
@@ -492,7 +521,14 @@ export class EventPanel {
     this.image.classList.remove('is-error');
     this.image.hidden = false;
     this.hero.classList.remove('no-image');
-    this.image.src = assetUrl(path);
+    const url = assetUrl(path);
+    // Which URL this element is waiting for. imageFallback compares it before retrying, so an
+    // aborted load from the previous event can never be counted against this one.
+    this.image.dataset.imgWant = url;
+    // 「暗い空箱」を出さない: 読み込み中は種別アイコンのプレースホルダとシマーを出す。
+    this.hero.classList.add('is-loading');
+    this.image.dataset.imgPending = '';
+    this.image.src = url;
     this.kindBadge.dataset.kind = event.kind;
   }
 

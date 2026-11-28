@@ -17,6 +17,11 @@
   height: 100%;
   touch-action: none;
   cursor: grab;
+  /* If the 2D context is lost (Android GPU eviction, iOS memory purge) the canvas draws
+     nothing and whatever sits behind it shows through. The screen behind the map is dark
+     navy, which read as "the sea went black" (report 105). Keep water behind the canvas so
+     a lost context looks like flat sea until the renderer rebuilds. */
+  background: linear-gradient(180deg, #7fe0ff 0%, #59c8f4 35%, #2fa5e6 72%, #2289ce 100%);
 }
 
 .map-canvas:active {

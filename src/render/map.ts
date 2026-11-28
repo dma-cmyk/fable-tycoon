@@ -88,6 +88,7 @@ import {
   type CanvasAllocation,
   type CanvasBudget,
 } from './canvasBudget';
+import { watchCanvasLifecycle } from './canvasLifecycle';
 
 export interface LandJson {
   w: number;
@@ -697,6 +698,10 @@ export class MapView {
     this.resizeObserver.observe(canvas);
 
     document.addEventListener('visibilitychange', this.onVisibility);
+    this.detachLifecycle = watchCanvasLifecycle(canvas, {
+      onLost: () => this.markCanvasSuspect(),
+      onResume: () => this.recoverFromCanvasLoss(),
+    });
     this.resize();
     this.attachInput();
     this.requestRender();
@@ -1783,6 +1788,11 @@ export class MapView {
       this.miniLand = c;
       this.miniLandSize = `${cssW}x${cssH}:${fit.width}x${fit.height}`;
     }
+    // A released backing store is zero-sized and `drawImage` of it throws; rebuild instead.
+    if (this.miniLand.width < 2) {
+      this.miniLandSize = '';
+      return;
+    }
     ctx.drawImage(this.miniLand, 0, 0, cssW, cssH);
     const toX = (x: number): number => (x / MAP_W) * cssW;
     const toY = (y: number): number => (y / MAP_H) * cssH;
@@ -1870,6 +1880,8 @@ export class MapView {
     this.raf = 0;
     this.resizeObserver.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
+    this.detachLifecycle?.();
+    this.detachLifecycle = null;
     if (this.ambientTimer !== null) window.clearTimeout(this.ambientTimer);
     this.ambientTimer = null;
     if (this.longPressTimer !== null) window.clearTimeout(this.longPressTimer);
@@ -2685,8 +2697,40 @@ export class MapView {
     }, wait);
   }
 
+  /** Unsubscribe from `canvasLifecycle` on destroy. */
+  private detachLifecycle: (() => void) | null = null;
+  /** True between a lost context and the rebuild that follows. */
+  private canvasSuspect = false;
+
+  /**
+   * The drawing context was lost, or the page is being frozen/backgrounded: every cached
+   * raster (ocean waves, land tiles, thumbnail, minimap, baked board) may have been purged
+   * by the GPU. Nothing is drawn from a known-bad cache; the rebuild happens on resume.
+   */
+  private markCanvasSuspect(): void {
+    this.canvasSuspect = true;
+  }
+
+  /**
+   * Report 105: the sea could stay black until a page reload on Android. Rebuild every
+   * cache the renderer owns, then redraw. Tile pixels are a pure function of the world rect
+   * and the content family, so the rebuilt frame is identical to the one that was lost.
+   */
+  private recoverFromCanvasLoss(): void {
+    this.canvasSuspect = false;
+    this.ocean.invalidate();
+    this.landLayer.invalidateAll();
+    this.miniLandSize = '';
+    this.staticBakedHash = 0;
+    this.measureCache.clear();
+    this.requestRender();
+  }
+
   private readonly onVisibility = (): void => {
     if (document.hidden) {
+      // Backgrounding is what precedes a purge on both Android and iOS; assume the caches
+      // are gone and let `recoverFromCanvasLoss` rebuild them on the way back.
+      this.canvasSuspect = true;
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = 0;
       if (this.ambientTimer !== null) {
@@ -2722,6 +2766,10 @@ export class MapView {
   private draw(now: number): void {
     const ctx = this.ctx;
     const cam = this.camera;
+    // A context that is still lost throws on the first call; skipping the frame keeps the
+    // error out of the render loop and the rebuild happens on `contextrestored`.
+    if (this.ctx.isContextLost?.()) return;
+    if (this.canvasSuspect) this.recoverFromCanvasLoss();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.cssW, this.cssH);
     if (this.view === 'world') {

@@ -203,6 +203,9 @@ export class GameScreen implements ScreenHandle {
   private bulkBuyCityId: string | null = null;
   private bulkBuyQueue: string[] = [];
   private cityPick: { cardId: string; options: Set<string> } | null = null;
+  private cityPickMarkers: HTMLElement | null = null;
+  private readonly cityPickMarkerByNode = new Map<string, HTMLElement>();
+  private cityPickRaf = 0;
   private viewRealm: MapViewId = 'world';
   private manualView = false;
   private playerRealm: RealmId | 'world' = 'world';
@@ -1002,10 +1005,16 @@ export class GameScreen implements ScreenHandle {
     document.addEventListener('fable:audio-unlocked', onUnlocked);
     this.unsubscribeFns.push(() => document.removeEventListener('fable:audio-unlocked', onUnlocked));
     this.unsubscribeFns.push(watchMotionPreference(() => this.map?.setReducedMotion(motionReduced())));
-    if (import.meta.env.DEV) {
-      // 開発時だけのテスト seams（本番ビルドでは丸ごと削除される）。UI には出さない。
-      // スクリーンショット検証が実 UI 上で取り立て屋の演出を強制再生するために使う。
+    // QA seam: dev builds always, production builds only with `?debug=game`. A built app has no
+    // HMR, so a headless probe can drive the real UI (event stages included) without the page
+    // reloading under it when another agent edits a source file.
+    const debugGame = import.meta.env.DEV || new URLSearchParams(location.search).has('debug');
+    if (debugGame) {
       (globalThis as { __fableGame?: GameScreen }).__fableGame = this;
+      // Event metadata for headless probes; the built app has no `/src/data` to fetch.
+      (globalThis as { __fableGameData?: { events: typeof GAME_DATA.events } }).__fableGameData = {
+        events: GAME_DATA.events,
+      };
     }
   }
 
@@ -1035,6 +1044,7 @@ export class GameScreen implements ScreenHandle {
     this.shop?.close();
     this.transient?.handle.close();
     this.citySheet?.close();
+    this.hideCityPickMarkers();
     this.mapScreen?.destroy();
     this.mapScreen = null;
     this.mapScreenOpen = false;
@@ -2620,9 +2630,14 @@ export class GameScreen implements ScreenHandle {
           this.cityPick = { cardId: phase.cardId, options: new Set(cityTargets) };
           this.transient?.handle.close();
           this.transient = null;
-          this.cityPickText.textContent = `${cityTargets.length} 都市から地図で選択`;
+          // PC のホバー preview が閉じ際に予約する「現在地へ戻る」が、候補への寄せを打ち消さないように。
+          this.cancelReturnToActor();
+          this.cityPickText.textContent = `金色の候補をタップ（${cityTargets.length}）`;
           this.cityPickBanner.hidden = false;
-          this.app.toasts.show('地図の光っている都市をタップしてください', 'info', 3200);
+          // 候補は目的地から 5〜10 マス。プレイヤーの現在地を映したままだと
+          // スマホでは候補が画面外で「選べない」ように見えるため、目的地周辺へ寄せる。
+          this.showCityPickMarkers(cityTargets);
+          this.focusCityPickTargets(cityTargets);
         },
       });
       this.transient = { kind: 'target', cardId: phase.cardId, handle };
@@ -4063,6 +4078,164 @@ export class GameScreen implements ScreenHandle {
   private clearCityPick(): void {
     this.cityPick = null;
     this.cityPickBanner.hidden = true;
+    this.hideCityPickMarkers();
+  }
+
+  /**
+   * 地図ピック用の候補リング。マップは canvas に描くので、候補の位置に DOM の輪を重ねる。
+   * pointer-events は無効で、タップはそのまま地図の hit 判定へ渡す。
+   */
+  private showCityPickMarkers(nodes: string[]): void {
+    this.hideCityPickMarkers();
+    const host = h('div', { class: 'city-pick-markers', attrs: { 'aria-hidden': 'true' } });
+    for (const node of nodes) {
+      const marker = h('span', { class: 'city-pick-marker', dataset: { node } });
+      marker.style.display = 'none';
+      this.cityPickMarkerByNode.set(node, marker);
+      host.append(marker);
+    }
+    this.el.append(host);
+    this.cityPickMarkers = host;
+    let last = 0;
+    const tick = (now: number): void => {
+      if (!this.cityPick || this.cityPickMarkers !== host) return;
+      if (now - last > 80) {
+        last = now;
+        this.layoutCityPickMarkers();
+      }
+      this.cityPickRaf = requestAnimationFrame(tick);
+    };
+    this.cityPickRaf = requestAnimationFrame(tick);
+  }
+
+  private layoutCityPickMarkers(): void {
+    const map = this.map;
+    const host = this.cityPickMarkers;
+    if (!map || !host) return;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const entries: { marker: HTMLElement; x: number; y: number }[] = [];
+    // リングは HUD の下に潜るとタップできない。フレーミングと同じ安全領域の外は描かない
+    // （パンして領域へ入れば再び出る）。
+    const safe = { left: 54, right: 54, top: 190, bottom: 150 };
+    const maxX = hostRect.width - safe.right;
+    const maxY = hostRect.height - safe.bottom;
+    for (const [node, marker] of this.cityPickMarkerByNode) {
+      const pos = map.screenPositionOfNode(node);
+      if (!pos || pos.visible === false) {
+        marker.style.display = 'none';
+        continue;
+      }
+      const x = canvasRect.left + pos.x - hostRect.left;
+      const y = canvasRect.top + pos.y - hostRect.top;
+      if (x < safe.left || x > maxX || y < safe.top || y > maxY) {
+        marker.style.display = 'none';
+        continue;
+      }
+      marker.style.display = '';
+      marker.style.left = `${Math.round(x)}px`;
+      marker.style.top = `${Math.round(y)}px`;
+      entries.push({ marker, x, y });
+    }
+    // 密集地ではリング同士が重なって 1 つの塊に見える。最寄り候補との画面距離から
+    // 直径を決め、重ならない大きさ（11〜32px）に縮める。
+    for (const entry of entries) {
+      let nearest = Infinity;
+      for (const other of entries) {
+        if (other === entry) continue;
+        nearest = Math.min(nearest, Math.hypot(other.x - entry.x, other.y - entry.y));
+      }
+      const size = Number.isFinite(nearest) ? Math.min(32, Math.max(11, Math.round(nearest * 0.68))) : 30;
+      entry.marker.style.width = `${size}px`;
+      entry.marker.style.height = `${size}px`;
+      entry.marker.style.margin = `${-size / 2}px 0 0 ${-size / 2}px`;
+    }
+  }
+
+  private hideCityPickMarkers(): void {
+    if (this.cityPickRaf) cancelAnimationFrame(this.cityPickRaf);
+    this.cityPickRaf = 0;
+    this.cityPickMarkers?.remove();
+    this.cityPickMarkers = null;
+    this.cityPickMarkerByNode.clear();
+  }
+
+  /**
+   * 候補は目的地から 5〜10 マスに広がる。目的地だけを映すと端の候補が画面外に残るため、
+   * 世界全体を一度収めて候補の広がりを測り、全部が入る倍率へ寄せる。
+   */
+  private focusCityPickTargets(nodes: string[]): void {
+    const map = this.map;
+    if (!map) return;
+    map.setView('world');
+    void this.frameCityPickTargets(map, nodes);
+  }
+
+  private async frameCityPickTargets(map: MapView, nodes: string[]): Promise<void> {
+    const destNode = this.state ? cityNodeId(this.state.destination) : null;
+    // 現在のズームに依存せず候補の広がりを測るため、いったん世界全体を収める。
+    await map.fitWorld(0);
+    const frame = Promise.withResolvers<void>();
+    requestAnimationFrame(() => frame.resolve());
+    await frame.promise;
+    const positions = nodes
+      .map((node) => ({ node, pos: map.screenPositionOfNode(node) }))
+      .filter((entry): entry is { node: string; pos: { x: number; y: number } } => !!entry.pos);
+    if (positions.length === 0) {
+      if (destNode) await map.focusNode(destNode, { zoom: 0.95, ms: 260 });
+      return;
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const { pos } of positions) {
+      minX = Math.min(minX, pos.x);
+      maxX = Math.max(maxX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxY = Math.max(maxY, pos.y);
+    }
+    const rect = this.canvas.getBoundingClientRect();
+    const spreadX = Math.max(48, maxX - minX);
+    const spreadY = Math.max(48, maxY - minY);
+    // 上は都市ピックのバナー、左右はランキング/ポートレート、下はコマンドバーを避けた
+    // 安全領域へ候補の bbox を収める。リングが HUD の下に潜るとタップできない。
+    const safe = { left: 54, right: 54, top: 192, bottom: 150 };
+    const availW = Math.max(120, rect.width - safe.left - safe.right);
+    const availH = Math.max(140, rect.height - safe.top - safe.bottom);
+    const fit = Math.min(availW / spreadX, availH / spreadY);
+    const cam = map.captureCameraState();
+    // 世界全体の倍率のままだと 39 個が 11px の粒になり、密集地は 1 塊に見える。
+    // 収まりきらないときは「読める最小倍率」まで寄せ、密集地の中心を安全領域へ置く。
+    const minLegible = cam.zoom * 2.2;
+    const fitZoom = cam.zoom * fit;
+    const zoom = Math.min(cam.zoom * 3.2, Math.max(fitZoom, minLegible));
+    let centerX = (minX + maxX) / 2;
+    let centerY = (minY + maxY) / 2;
+    if (fitZoom < minLegible) {
+      let densest = positions[0];
+      let densestGap = Infinity;
+      for (const a of positions) {
+        let nearest = Infinity;
+        for (const b of positions) {
+          if (a === b) continue;
+          nearest = Math.min(nearest, Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y));
+        }
+        if (nearest < densestGap) {
+          densestGap = nearest;
+          densest = a;
+        }
+      }
+      centerX = densest.pos.x;
+      centerY = densest.pos.y;
+    }
+    // 中心を「安全領域の中心」に合わせる（focusNode は画面中央に寄せるため、
+    // 上にバナー・下にコマンドバーがあると端の候補が HUD に潜る）。
+    const targetX = (safe.left + (rect.width - safe.right)) / 2;
+    const targetY = (safe.top + (rect.height - safe.bottom)) / 2;
+    const worldX = cam.x + (centerX - targetX) / cam.zoom;
+    const worldY = cam.y + (centerY - targetY) / cam.zoom;
+    map.restoreCameraState({ view: 'world', x: worldX, y: worldY, zoom });
   }
 
   private openHand(): void {

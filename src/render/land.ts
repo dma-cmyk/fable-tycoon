@@ -19,6 +19,7 @@ import { MAP_H, MAP_W, project, wrapDx } from '../core/geo';
 import type { Camera } from './camera';
 import type { LandJson } from './map';
 import { detectCanvasBudget, fitCanvasSize, noteCanvasAllocation, releaseCanvas, type CanvasBudget } from './canvasBudget';
+import { isCanvasBlank } from './canvasLifecycle';
 
 interface Box {
   minX: number;
@@ -51,6 +52,22 @@ interface TreeStamp {
 const TILE_DEV = 512;
 /** Tile cache size as a fraction of the canvas-area budget. */
 const TILE_AREA_RATIO = 0.5;
+/**
+ * Tile cache share on phones. The mobile budget is 16 MP of canvas area; at 0.5 the tile
+ * cache alone could hold 8 MP (32 MB) on top of the map canvas, the ocean raster, the
+ * thumbnail and the season crossfade. A 4 GB Android phone discards backing stores near
+ * that total (report 105), so the tile cache is capped lower there — the current group is
+ * never evicted, so this only trims the caches kept for other zoom buckets.
+ */
+const TILE_AREA_RATIO_MOBILE = 0.3;
+/**
+ * How often a cache sample is taken, in ms. A sample is one 1×1 blit plus a 1×1 read-back on
+ * the shared probe, but that read-back is a GPU sync: on the low-end phone profile it cost
+ * ~5 extra 100 ms tasks per 35 s at 1 Hz, so phones sample less often. Healing within a few
+ * seconds is still far better than "until the next zoom change".
+ */
+const PROBE_MS_DESKTOP = 1000;
+const PROBE_MS_MOBILE = 4000;
 /** How much rasterisation one background fill task may spend (see `fillStep`). */
 const FILL_TASK_MS = 16;
 /** Fan-out budget for the first synchronous composition of a session. */
@@ -64,6 +81,12 @@ const DEFAULT_FRAME_BUDGET_MS = 8;
 const EDGE_BLEED = 8;
 /** Device width of the whole-world placeholder raster built once per season. */
 const THUMB_DEV = 1024;
+/**
+ * Flat colour the sea falls back to when a cached raster turns out to be blank (a purged
+ * canvas on a phone). It is the bottom stop of the ocean gradient, so a degradation looks
+ * like slightly flatter water instead of a black hole.
+ */
+const OCEAN_FALLBACK = '#2a9ddf';
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -285,6 +308,13 @@ export class LandLayer {
   /** Evicted tile canvases waiting for their backing store to be freed off-frame. */
   private readonly releaseQueue: HTMLCanvasElement[] = [];
   private releaseTimer: number | null = null;
+  /**
+   * Tile canvases are probed one per second, round-robin, through the 1×1 probe. A discarded
+   * tile would otherwise show as sea-coloured land until the camera changed bucket; one sample
+   * a second heals it in a few seconds and costs a single 1×1 blit (no read-back on the tile).
+   */
+  private probeCursor = 0;
+  private probeAt = 0;
   private composeKey = '';
   private currentGroupKey = '';
   private lastFrame: FrameGeometry | null = null;
@@ -377,6 +407,30 @@ export class LandLayer {
   dropTiles(): void {
     this.clearTiles();
     this.composeKey = '';
+  }
+
+  /**
+   * Throw away every raster this layer owns — tiles, the world thumbnail, the season
+   * crossfade and the flush scratch — and rebuild them on the next draw.
+   *
+   * Phone GPUs and iOS discard canvas backing stores without telling anyone (report 105:
+   * the sea went black until a reload). The tile pixels are a pure function of the world
+   * rect and the content family, so a rebuild reproduces them bit for bit; the parity gate
+   * compares exactly that.
+   */
+  invalidateAll(): void {
+    this.clearTiles();
+    this.composeKey = '';
+    this.thumbFamily = '';
+    if (this.fadeCanvas) {
+      releaseCanvas(this.fadeCanvas);
+      this.fadeCanvas = null;
+      this.fadeMeta = null;
+    }
+    if (this.flushCanvas) releaseCanvas(this.flushCanvas);
+    this.flushCanvas = null;
+    this.lastFrame = null;
+    this.lastGroup = null;
   }
 
   /** Test hook: cap the per-frame rasterisation budget in ms (negative = paint nothing). */
@@ -551,6 +605,10 @@ export class LandLayer {
     target.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
     this.drawTiles(target, frame, group, visible);
     target.restore();
+    // Once a second, check one cached tile for a released backing store. Cheap (a 1×1 blit
+    // through the shared probe) and it keeps a silently lost tile from staying sea-coloured
+    // until the camera happens to change zoom bucket.
+    this.probeOneTile(group, performance.now());
 
     this.key = groupKey;
     this.ox = frame.originX / frame.scale;
@@ -732,7 +790,11 @@ export class LandLayer {
   }
 
   private tileFor(group: TileGroup, ix: number, iy: number): Tile | undefined {
-    return group.tiles.get(`${ix}:${iy}`);
+    const tile = group.tiles.get(`${ix}:${iy}`);
+    // A zero-sized canvas would make the compose's `drawImage` throw; treat it as absent so
+    // the tile is repainted (report 105: a released backing store on Android).
+    if (tile && (tile.canvas.width < 2 || tile.canvas.height < 2)) return undefined;
+    return tile;
   }
 
   /** Rasterise one tile. Pixels are a pure function of the tile rect and the group. */
@@ -760,6 +822,15 @@ export class LandLayer {
     }
     tile.used = ++this.seq;
     group.used = this.seq;
+    // A phone GPU can release a tile's backing store to zero; the canvas element survives
+    // with a new context, so give it its size back before painting into it.
+    if (tile.canvas.width !== padW || tile.canvas.height !== padH) {
+      releaseCanvas(tile.canvas);
+      tile.canvas.width = padW;
+      tile.canvas.height = padH;
+      tile.devW = padW;
+      tile.devH = padH;
+    }
     const ctx = tile.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
@@ -786,7 +857,8 @@ export class LandLayer {
    * camera ride that turned into a repaint loop).
    */
   private evict(): void {
-    const cap = Math.max(TILE_DEV * TILE_DEV * 4, this.budget.maxArea * TILE_AREA_RATIO);
+    const ratio = this.budget.profile === 'mobile' ? TILE_AREA_RATIO_MOBILE : TILE_AREA_RATIO;
+    const cap = Math.max(TILE_DEV * TILE_DEV * 4, this.budget.maxArea * ratio);
     const stale = [...this.groups.values()]
       .filter((group) => group.key !== this.currentGroupKey)
       .sort((a, b) => a.used - b.used);
@@ -902,6 +974,7 @@ export class LandLayer {
       if (source) {
         const worldDevW = MAP_W * frame.scale;
         for (const tile of source.tiles.values()) {
+          if (tile.canvas.width < 2 || tile.canvas.height < 2) continue;
           const baseX = (tile.ix * TILE_DEV) / source.scale * frame.scale - frame.originX;
           const devY = (tile.iy * TILE_DEV) / source.scale * frame.scale - frame.originY;
           const devW = (tile.devW / source.scale) * frame.scale;
@@ -994,6 +1067,39 @@ export class LandLayer {
     // The render loop only keeps asking for frames while a *visible* tile is missing, so
     // keep going from here for the prefetch ring and for the next visible slice.
     if (remaining > 0) this.scheduleFill(frame, content, group, dpr);
+  }
+
+  /**
+   * Check one cached tile per second, round-robin, for a released backing store.
+   *
+   * Runs inside the fill task, never the frame: the cost is a single 1×1 blit through the
+   * shared probe canvas plus a 1×1 read-back on that probe. A lost tile is removed from the
+   * group so the next fill repaints it, which turns "land turns sea-coloured until the next
+   * bucket change" into a couple of seconds of degradation at worst.
+   */
+  private probeOneTile(group: TileGroup, now: number): void {
+    // Phones skip this one. On the 4x-throttled SO-53C profile the per-sample GPU sync could
+    // not be separated from the run-to-run noise (18/20/26 tasks with it against 14 without),
+    // and a lost tile there only degrades to sea-coloured land until the next bucket change —
+    // the report's bug (a black sea) is covered by the ocean probe, which phones still run.
+    if (this.budget.profile === 'mobile') return;
+    if (now - this.probeAt < PROBE_MS_DESKTOP) return;
+    this.probeAt = now;
+    const tiles = [...group.tiles.values()];
+    if (tiles.length === 0) return;
+    const tile = tiles[this.probeCursor % tiles.length];
+    this.probeCursor += 1;
+    if (tile.canvas.width < 2 || tile.canvas.height < 2) {
+      group.tiles.delete(`${tile.ix}:${tile.iy}`);
+      this.cachedArea -= tile.devW * tile.devH;
+      this.queueRelease(tile.canvas);
+      return;
+    }
+    // The tile is painted edge-to-edge inside its bleed ring, so the centre is always opaque.
+    if (!isCanvasBlank(tile.canvas, (tile.devW / 2) | 0, (tile.devH / 2) | 0)) return;
+    group.tiles.delete(`${tile.ix}:${tile.iy}`);
+    this.cachedArea -= tile.devW * tile.devH;
+    this.queueRelease(tile.canvas);
   }
 
   /**
@@ -1108,6 +1214,7 @@ export class LandLayer {
     frame: FrameGeometry,
     off: number,
   ): void {
+    if (thumb.width < 2 || thumb.height < 2) return;
     const wx0 = frame.originX / frame.scale;
     const wx1 = (frame.originX + frame.devW) / frame.scale;
     const first = frame.wrap ? Math.floor(wx0 / MAP_W) : 0;
@@ -1526,9 +1633,11 @@ export class OceanBackdrop {
   private bgW = 0;
   private bgH = 0;
   private bgDpr = 0;
-  private readonly tile: HTMLCanvasElement;
+  private tile: HTMLCanvasElement;
   private readonly tileSize = 192;
   private budget: CanvasBudget = detectCanvasBudget();
+  /** Wall clock of the last integrity check (see `OceanBackdrop.suspect`). */
+  private checkedAt = 0;
 
   constructor() {
     this.tile = makeWaveTile();
@@ -1537,13 +1646,38 @@ export class OceanBackdrop {
   setBudget(budget: CanvasBudget): void {
     if (budget.profile === this.budget.profile && budget.maxArea === this.budget.maxArea && budget.maxSide === this.budget.maxSide) return;
     this.budget = budget;
-    if (this.background) {
-      releaseCanvas(this.background);
-      this.background = null;
-      this.bgW = 0;
-      this.bgH = 0;
-      this.bgDpr = 0;
-    }
+    this.invalidate();
+  }
+
+  /**
+   * Drop the cached raster and the wave tile: the next draw rebuilds both.
+   *
+   * Called when the page becomes visible again, when the canvas context was lost, and when
+   * `suspect` finds the backing store was discarded. Rebuilding is one gradient fill plus a
+   * few dozen wave blits (measured ~1 ms at phone size).
+   */
+  invalidate(): void {
+    if (this.background) releaseCanvas(this.background);
+    this.background = null;
+    this.bgW = 0;
+    this.bgH = 0;
+    this.bgDpr = 0;
+    this.tile = makeWaveTile();
+  }
+
+  /**
+   * A discarded canvas keeps its size and context, so the only way to notice is to read a
+   * pixel back. The background is opaque everywhere, so one sample is conclusive.
+   */
+  private suspect(now: number): boolean {
+    if (!this.background) return false;
+    // A canvas whose backing store was released reads back as zero-sized; `drawImage` of it
+    // throws instead of drawing nothing, so this check is not just an optimisation.
+    if (this.background.width < 2 || this.background.height < 2) return true;
+    const interval = this.budget.profile === 'mobile' ? PROBE_MS_MOBILE : PROBE_MS_DESKTOP;
+    if (now - this.checkedAt < interval) return false;
+    this.checkedAt = now;
+    return isCanvasBlank(this.background, 1, 1);
   }
 
   destroy(): void {
@@ -1556,6 +1690,17 @@ export class OceanBackdrop {
     const w = cam.vw;
     const h = cam.vh;
     const tile = this.tileSize;
+    // Never leave the sea black: the canvas is opaque and was cleared this frame, so it is
+    // black right now. If the cached raster below turns out to be blank (purged by the GPU),
+    // this flat fill is what the player sees — a sea colour, not a hole.
+    ctx.fillStyle = OCEAN_FALLBACK;
+    ctx.fillRect(0, 0, w, h);
+    if (this.background && (this.background.width < 2 || this.background.height < 2)) {
+      // Released to zero: rebuild immediately, `drawImage` of it would throw.
+      this.invalidate();
+    } else if (this.suspect(now)) {
+      this.invalidate();
+    }
     const fit = fitCanvasSize(Math.ceil((w + tile) * dpr), Math.ceil(h * dpr), this.budget);
     const bgDpr = Math.min(dpr, fit.width / (w + tile), fit.height / h);
     const cw = Math.max(1, Math.floor((w + tile) * bgDpr));
@@ -1590,6 +1735,7 @@ export class OceanBackdrop {
       this.bgDpr = bgDpr;
     }
     // One opaque blit: wave marks slide horizontally as the camera pans.
+    if (!this.background || this.background.width < w * bgDpr || this.tile.width < 2) return;
     const shift = ((((cam.x * cam.zoom * 0.22 + now * 0.006) % tile) + tile) % tile) * bgDpr;
     ctx.drawImage(this.background, shift, 0, w * bgDpr, h * bgDpr, 0, 0, w, h);
   }

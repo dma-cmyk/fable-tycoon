@@ -23,7 +23,9 @@ const FALLBACK_SVG =
 
 export const IMAGE_FALLBACK_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(FALLBACK_SVG)}`;
 
-const RETRY_DELAYS_MS = [320, 900];
+// 320 → 900 → 2500: a phone on a bad link can lose 3+ seconds before the art arrives, and the
+// silhouette must be the last resort, not the first hiccup.
+const RETRY_DELAYS_MS = [320, 900, 2500];
 const GUARDED = new WeakSet<HTMLImageElement>();
 let installed = false;
 
@@ -63,10 +65,13 @@ function retry(img: HTMLImageElement): void {
   }
   img.dataset.imgRetry = String(attempt + 1);
   img.dataset.imgPending = '';
+  img.classList.remove('is-error');
   // 失敗した URL を控えておく。待っている間に別の画像（次のイベント）へ差し替わったら
   // 古い URL を書き戻さない — でないと前のイベントの絵が居座る。
   const failedSrc = img.src;
   const url = new URL(img.src, location.href);
+  // A cache-busting query is the only way past a service worker that cached a failed/partial
+  // response for this URL, and it also re-runs a transiently failed network request.
   url.searchParams.set('retry', String(attempt + 1));
   window.setTimeout(() => {
     if (!img.isConnected) return;

@@ -17,10 +17,13 @@
 // v2: v1 could store a partial (Range) response for an mp3 under its full URL, which made
 // `decodeAudioData` fail for that track on every later visit. Bumping drops those entries.
 const MEDIA_VERSION = 'v2';
+// v2: v1 could keep an art entry that decoded to nothing (an error page or an empty body served
+// with 200), which the stage then replayed on every visit. Bumping drops those entries.
+const ART_VERSION = 'v2';
 const scopeBase = new URL(self.registration.scope).pathname;
 const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const SHELL_CACHE = `fable-shell-${VERSION}`;
-const ART_CACHE = `fable-art-${VERSION}`;
+const ART_CACHE = `fable-art-${ART_VERSION}-${VERSION}`;
 const MEDIA_CACHE = `fable-media-${MEDIA_VERSION}`;
 const KEEP = new Set([SHELL_CACHE, ART_CACHE, MEDIA_CACHE]);
 /** Never worth a round trip; the network stays authoritative. */
@@ -90,18 +93,38 @@ function cacheNameFor(pathname) {
   return null;
 }
 
+/** A retry from `imageFallback` (`?retry=N`) must not be answered by an older cached failure. */
+function isRetry(request) {
+  return new URL(request.url).searchParams.has('retry');
+}
+
+/** A response worth replaying later: complete, same-origin, and not an empty body. */
+function cacheable(request, res) {
+  if (res.status !== 200 || !res.ok || res.type === 'opaque') return false;
+  // A `Range` request answers 206 (partial) or a 200 of the whole file; storing the partial under
+  // this URL would replay a truncated mp3 to a later full read.
+  if (request.headers.has('range')) return false;
+  // An error page or an empty body can be served with 200. Replaying it makes an image decode to
+  // nothing ("the event art does not show"), so it is never kept.
+  const length = res.headers.get('content-length');
+  if (length !== null && Number(length) === 0) return false;
+  return true;
+}
+
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
-  const hit = await cache.match(request, { ignoreSearch: true });
-  if (hit) return hit;
+  const retry = isRetry(request);
+  // A retry skips the cache read: the whole point is to get past a bad entry for this URL.
+  if (!retry) {
+    const hit = await cache.match(request, { ignoreSearch: true });
+    if (hit) return hit;
+  }
   const res = await fetch(request);
-  // Only a complete 200 is worth caching. A `Range` request answers 206 (partial) or a 200 of the
-  // whole file, and storing the 206 under this URL would replay a truncated mp3 to a later full
-  // read — decodeAudioData then fails and the track never plays again. Media is fetched whole by
-  // the game (WebAudio decode, no <audio> element), so skipping Range responses costs nothing.
-  const partial = res.status === 206 || request.headers.has('range');
-  if (res.status === 200 && res.ok && !partial && res.type !== 'opaque') {
-    cache.put(request, res.clone()).catch(() => undefined);
+  if (cacheable(request, res)) {
+    // Store under the clean URL so a later `?retry=` (or any other query) hits it.
+    const clean = new URL(request.url);
+    clean.search = '';
+    cache.put(clean.href, res.clone()).catch(() => undefined);
   }
   return res;
 }

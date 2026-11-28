@@ -12,9 +12,57 @@
   display: none;
 }
 
-/* 失敗した画像は消す（壊れた画像アイコンを出さない）。箱は残るので高さは動かない。 */
+/* 失敗した画像は隠す（壊れた画像アイコンを出さない）。箱は残るので高さは動かない。
+   ただし絵を消したままにはしない: 下の is-loading プレースホルダが読み込み中と
+   再試行中を埋める（暗い空箱を見せない）。 */
 .event-image.is-error {
   opacity: 0;
+}
+
+/* 読み込み中・再試行中: 種別アイコン + シマーで「絵が来る場所」を見せる。
+   `is-loading` は eventPanel が src を張る直前に立て、load で外す。 */
+.event-panel .event-hero.is-loading {
+  background:
+    linear-gradient(100deg, rgba(255, 255, 255, 0) 22%, rgba(255, 255, 255, 0.16) 48%, rgba(255, 255, 255, 0) 74%),
+    linear-gradient(160deg, #2762ae, #102b5c);
+  background-size: 240% 100%, 100% 100%;
+  background-repeat: no-repeat, no-repeat;
+  animation: event-art-shimmer 1.35s ease-in-out infinite;
+}
+
+.event-panel .event-hero.is-loading .event-image {
+  opacity: 0;
+}
+
+.event-panel .event-hero.is-loading .event-hero-kind {
+  display: grid;
+  opacity: 0.55;
+}
+
+/* 「絵を読み込み中」を文字でも出す（暗い箱だけを見せない）。 */
+.event-panel .event-hero.is-loading::after {
+  content: '絵を読み込み中…';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.72);
+  pointer-events: none;
+}
+
+@keyframes event-art-shimmer {
+  from { background-position: 130% 0, 0 0; }
+  to { background-position: -130% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-panel .event-hero.is-loading {
+    animation: none;
+    background-image: none;
+  }
 }
 
 /* ---------------------------------------------------------------- ステージ */
@@ -187,6 +235,23 @@
 .event-panel .event-comm {
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+/* comm dock（chat / emote / まとめボタン）は狭い画面でこのリボンへ移される。移された後も
+   固定配置の名残でカードの上に浮かないよう、行内配置に固定する。 */
+.event-panel .event-comm .hud-comm {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* リボンの中に 34px のボタンを置くので、リボン側がその高さを確保する。
+   確保しないとボタンがカードの上端をはみ出して「リボンに重なった」ように見える。 */
+.event-panel .event-ribbon {
+  min-height: 44px;
 }
 
 .event-panel .event-comm .hud-comm-button,

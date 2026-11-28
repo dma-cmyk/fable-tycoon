@@ -46,12 +46,18 @@ export function assetUrl(path: string): string {
   return new URL(path, document.baseURI).href;
 }
 
+/** 800×450 event art: 147 of them decoded is ~200 MB of bitmaps on a 4 GB phone. */
+const BIG_ART_PREFIX = '/assets/events/';
+
 function loadOne(url: string, attempt = 0): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => {
-      images.set(url, img);
+      // Event art is fetched to warm the HTTP / service-worker cache, but the decoded bitmap is
+      // not retained: the stage has its own <img> and 147 decoded 800×450 frames make a
+      // low-memory phone evict everything, which showed up as blank event art.
+      if (!url.includes(BIG_ART_PREFIX)) images.set(url, img);
       rememberWarmedUrl(url);
       // Decode before the screen uses it so the first paint is never blank.
       img.decode().catch(() => undefined).then(() => resolve(img));

@@ -5815,3 +5815,218 @@
     min-height: 44px;
   }
 }
+
+/* ---------------------------------------------------------------- 都市ターゲットピッカー */
+/* リストは flex column。高さが確定すると行が min-height まで潰れて文字が重なり、
+   タップ領域も縮む。行は内容高さを保たせる（PC の max-height でも同じ）。 */
+.target-list > * {
+  flex: 0 0 auto;
+}
+
+/* PC は検索・並べ替え・地図ボタンを従来どおり縦に積む（スマホだけ 1 行にまとめる）。 */
+.warp-controls {
+  display: contents;
+}
+
+/* 地図ピック中の候補リング。canvas の上に DOM で重ね、タップは地図へ通す。 */
+.city-pick-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.city-pick-marker {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border: 2px solid #ffd84a;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 226, 128, 0.28), rgba(255, 190, 40, 0.04) 70%);
+  box-shadow: 0 0 0 2px rgba(80, 44, 0, 0.45), 0 0 10px 2px rgba(255, 205, 60, 0.5);
+  animation: city-pick-marker-pulse 1.5s ease-in-out infinite;
+}
+
+.city-pick-marker::after {
+  content: '';
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: #ffd84a;
+  opacity: 0.9;
+}
+
+@keyframes city-pick-marker-pulse {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px rgba(80, 44, 0, 0.4), 0 0 22px 8px rgba(255, 215, 80, 0.75);
+  }
+}
+
+@media (max-width: 899px) {
+  /* スマホの候補リストは自身をスクロールさせる。max-height:none のまま
+     overscroll-behavior:contain が本文への連鎖を止め、3 行目以降に指で届かなかった。 */
+  .target-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ヘッダを詰めて、短い画面でも候補 4 行（375x667 では 3 行）を見せる。 */
+  .target-modal .modal-head {
+    padding: 5px calc(10px + var(--safe-right)) 6px calc(10px + var(--safe-left));
+    padding-top: calc(5px + var(--safe-top));
+  }
+
+  .target-modal .modal-title {
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  .target-modal .modal-subtitle {
+    display: none;
+  }
+
+  .target-modal .target-copy {
+    display: none;
+  }
+
+  .target-modal .target-dialog {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    gap: 7px;
+  }
+
+  .target-modal .warp-summary {
+    gap: 2px;
+    padding: 6px 8px;
+  }
+
+  .target-modal .warp-summary-line {
+    gap: 4px;
+    font-size: 13px;
+  }
+
+  .target-modal .warp-summary-label {
+    padding: 0 5px;
+    font-size: 9px;
+  }
+
+  .target-modal .warp-summary-now {
+    font-size: 10.5px;
+  }
+
+  .target-modal .warp-summary-errand,
+  .target-modal .warp-carpet {
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 検索・並べ替え・地図ピックを 1 行にまとめる。 */
+  .target-modal .warp-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .target-modal .warp-controls .target-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 44px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .target-modal .warp-controls .warp-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .target-modal .warp-controls .warp-count {
+    display: none;
+  }
+
+  .target-modal .warp-controls .warp-sort .seg-btn {
+    min-height: 44px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .target-modal .target-map-btn {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .target-modal .target-map-label {
+    display: none;
+  }
+
+  .target-modal .target-map-icon {
+    font-size: 18px;
+  }
+
+  .target-modal .target-list {
+    flex: 1 1 auto;
+    min-height: 96px;
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .target-modal .target-footer {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+
+  .target-modal .target-footer > .muted {
+    display: none;
+  }
+
+  /* 4 マス未満ルールの長い注記は、スマホでは候補リストの高さを優先して畳む
+     （同じ内容は候補のブロック理由とカード説明に残る）。 */
+  .warp-target-modal .warp-summary-note {
+    display: none;
+  }
+
+  .city-pick-marker {
+    width: 28px;
+    height: 28px;
+    margin: -14px 0 0 -14px;
+    border-width: 2px;
+  }
+}
+
+/* 横向きの低い画面は固定ヘッダが高さを食うため、本文スクロールへ戻す。 */
+@media (max-width: 899px) and (max-height: 560px) {
+  .target-modal .modal-body {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .target-modal .target-list {
+    flex: none;
+    max-height: 46vh;
+    overscroll-behavior: auto;
+  }
+}

@@ -163,7 +163,10 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
       ),
     );
   }
-  if (search) body.append(search);
+  const controls = h('div', { class: 'warp-controls' });
+  if (search) controls.append(search);
+
+  const compactLabels = typeof window !== 'undefined' && window.matchMedia('(max-width: 899px)').matches;
 
   let sortMode: WarpSortMode = 'distance';
   const sortButtons: HTMLButtonElement[] = [];
@@ -182,15 +185,15 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
       class: 'seg warp-sort',
       attrs: { role: 'group', 'aria-label': '候補の並べ替え' },
     });
-    for (const [mode, label] of [
-      ['distance', '目的地まで近い順'],
-      ['name', '名前順'],
+    for (const [mode, label, longLabel] of [
+      ['distance', '近い順', '目的地まで近い順'],
+      ['name', '名前順', '名前順'],
     ] as const) {
       const sortButton = h('button', {
         class: 'seg-btn',
-        text: label,
+        text: compactLabels ? label : longLabel,
         dataset: { sort: mode },
-        attrs: { type: 'button', 'aria-pressed': String(mode === sortMode) },
+        attrs: { type: 'button', 'aria-label': longLabel, 'aria-pressed': String(mode === sortMode) },
         on: {
           click: () => {
             sortMode = mode;
@@ -201,7 +204,7 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
       sortButtons.push(sortButton);
       sortSeg.append(sortButton);
     }
-    body.append(
+    controls.append(
       h(
         'div',
         { class: 'warp-toolbar' },
@@ -212,19 +215,25 @@ export function openCardTargetDialog(options: CardTargetOptions): ModalHandle {
   }
 
   if (options.canAct && options.onPickOnMap && cityOptions.length > 0) {
-    body.append(
-      h('button', {
-        class: 'btn btn-ghost target-map-btn',
-        text: '📍 地図の都市をタップして選ぶ',
-        attrs: { type: 'button' },
-        on: {
-          click: () => {
-            options.onPickOnMap?.();
+    controls.append(
+      h(
+        'button',
+        {
+          class: 'btn btn-ghost target-map-btn',
+          attrs: { type: 'button', 'aria-label': '地図の都市をタップして選ぶ' },
+          on: {
+            click: () => {
+              options.onPickOnMap?.();
+            },
           },
         },
-      }),
+        h('span', { class: 'target-map-icon', text: '📍', attrs: { 'aria-hidden': 'true' } }),
+        h('span', { class: 'target-map-label', text: '地図の都市をタップして選ぶ' }),
+      ),
     );
   }
+
+  if (controls.childElementCount > 0) body.append(controls);
 
   if (rocket && options.options.includes('r:space')) {
     const button = h(

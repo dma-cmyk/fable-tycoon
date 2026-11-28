@@ -33,11 +33,15 @@ const BROWSER = args.get('browser') ?? 'chromium';
 const VIEW = args.get('view') ?? 'pc1920';
 const SECONDS = Number(args.get('seconds') ?? 35);
 const SPEED = args.get('speed') ?? '8';
+const THROTTLE = Number(args.get('throttle') ?? 0);
+const NO_PROBE = args.get('noprobe') === '1';
 
 const VIEWPORTS = {
   pc1280: { width: 1280, height: 720, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
   pc1920: { width: 1920, height: 1080, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
   phone: { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+  // SO-53C (Xperia Ace III): 360×748 CSS at DPR 2, the device from report 105.
+  so53c: { width: 360, height: 748, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -200,6 +204,8 @@ const INSTRUMENT = () => {
   out['map.drawFloatTexts'] = wrap(map, 'drawFloatTexts', 'map.drawFloatTexts');
   out['map.drawWarpPreview'] = wrap(map, 'drawWarpPreview', 'map.drawWarpPreview');
   out['land.evict'] = wrap(land, 'evict', 'land.evict');
+  out['land.probeTile'] = wrap(land, 'probeOneTile', 'land.probeTile');
+  out['ocean.suspect'] = wrap(map?.ocean, 'suspect', 'ocean.suspect');
   out['land.compose'] = wrap(land, 'composeInto', 'land.compose');
   out['map.drawWorldWarpTiles'] = wrap(map, 'drawWorldWarpTiles', 'map.drawWorldWarpTiles');
   out['map.drawSquareShortLabels'] = wrap(map, 'drawSquareShortLabels', 'map.drawSquareShortLabels');
@@ -270,6 +276,7 @@ async function main() {
         };
   const browser = await launcher.launch(launchOptions);
   const errors = [];
+  const warnings = [];
   try {
     const context = await browser.newContext({
       viewport: { width: vp.width, height: vp.height },
@@ -282,6 +289,23 @@ async function main() {
     });
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
+    // Console warnings are collected so a `willReadFrequently` read-back warning would be
+    // visible in the result instead of only in the browser log.
+    page.on('console', (message) => {
+      if (message.type() !== 'warning' && message.type() !== 'error') return;
+      const text = message.text();
+      if (/willReadFrequently|readback|read back|GPU stall|Multiple readback/i.test(text)) {
+        warnings.push(text.slice(0, 200));
+      }
+    });
+    if (THROTTLE > 0) {
+      try {
+        const cdpSession = await context.newCDPSession(page);
+        await cdpSession.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+      } catch (error) {
+        errors.push(`throttle: ${error.message}`);
+      }
+    }
     // Other slices edit shared files while this runs and Vite then reloads the page. A
     // reload destroys the game (and the instrumentation), so it is counted and the
     // measured window is thrown away and retried.
@@ -298,6 +322,14 @@ async function main() {
     await waitFor(page, () => page.evaluate(() => !!globalThis.__fableGame?.map?.state), { timeout: 60_000, label: 'map' });
     await sleep(2000);
     const wrapped = await page.evaluate(INSTRUMENT);
+    if (NO_PROBE) {
+      // A/B: keep everything else but turn the cache integrity probes off.
+      await page.evaluate(() => {
+        const map = globalThis.__fableGame.map;
+        map.ocean.suspect = () => false;
+        map.landLayer.probeOneTile = () => {};
+      });
+    }
 
     let cdp = null;
     let profileStartPageMs = 0;
@@ -476,6 +508,8 @@ async function main() {
       viewport: { width: vp.width, height: vp.height, dpr: vp.deviceScaleFactor },
       seconds: SECONDS,
       speed: SPEED,
+      throttle: THROTTLE,
+      noProbe: NO_PROBE,
       acted,
       interrupted: Boolean(run?.reloaded),
       wrapped,
@@ -495,6 +529,7 @@ async function main() {
       mutations: measured.mutations,
       jsonParse: { calls: measured.jsonParse.calls, ms: round(measured.jsonParse.ms), max: round(measured.jsonParse.max), chars: measured.jsonParse.chars },
       loafSupported: measured.loafSupported,
+      readbackWarnings: warnings,
       cdp: Boolean(profile),
       profile: profileRows,
       longTaskProfile: longTaskProfileRows,
@@ -538,6 +573,7 @@ async function main() {
     for (const [k, v] of Object.entries(result.spanStats).sort((a, b) => b[1].ms - a[1].ms)) {
       console.log(`  ${String(v.ms).padStart(8)}ms total  n=${String(v.n).padStart(6)}  p50=${String(v.p50).padStart(6)}  p95=${String(v.p95).padStart(7)}  max=${String(v.max).padStart(7)}  ${k}`);
     }
+    if (warnings.length) console.log(`[longtask] read-back warnings: ${warnings.length} (${warnings[0]})`);
     if (errors.length) console.log('[longtask] page errors:', errors.slice(0, 5).join(' | '));
     await context.close();
   } finally {
