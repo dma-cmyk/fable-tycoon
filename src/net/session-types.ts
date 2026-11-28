@@ -24,6 +24,13 @@ export interface Session {
   onConnection(listener: (s: ConnectionState) => void): () => void;
   /** The (gen, seq) of the last state actually delivered to subscribers (null before the first). */
   appliedOrder?(): { gen: number; seq: number } | null;
+  /**
+   * Tell the authoritative host the newest update `seq` this client has finished PRESENTING
+   * (all fx played and the state adopted). The host holds a human's turn timer until that
+   * seat reports the update that started its turn, so a slow device is not timed out while it
+   * is still catching up on narration. Online only; absent in local/solo.
+   */
+  reportPlayed?(seq: number): void;
   /** Ask the authoritative host for a fresh snapshot (online only). */
   requestResync?(): void;
   /** Read-only network/controller state snapshot for `?debug=net` and tests. */

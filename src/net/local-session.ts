@@ -442,7 +442,7 @@ export class LocalSession implements Session {
     if (msg.t === 'welcome' || msg.t === 'snapshot') {
       return { ...msg, gen: msg.gen ?? 1, boardVersion: BOARD_VERSION };
     }
-    if ((msg.t === 'lobby' || msg.t === 'update') && msg.gen === undefined) {
+    if ((msg.t === 'lobby' || msg.t === 'update' || msg.t === 'turn_timer') && msg.gen === undefined) {
       return { ...msg, gen: 1 };
     }
     return msg;

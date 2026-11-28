@@ -4,7 +4,7 @@
 import type { Action } from '../core/types';
 import type { ConnectionState } from './session-types';
 
-export type RoomTaskKind = 'turn' | 'cpu' | 'ack' | 'grace' | 'replace' | 'other';
+export type RoomTaskKind = 'turn' | 'cpu' | 'ack' | 'catchup' | 'grace' | 'replace' | 'other';
 
 export interface RoomTaskSnapshot {
   key: string;
@@ -94,6 +94,7 @@ export function classifyRoomTask(key: string): RoomTaskKind {
   if (key === 'turn') return 'turn';
   if (key === 'cpu') return 'cpu';
   if (key === 'ack') return 'ack';
+  if (key === 'catchup') return 'catchup';
   if (key.startsWith('grace:')) return 'grace';
   if (key.startsWith('replace:')) return 'replace';
   return 'other';

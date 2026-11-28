@@ -164,6 +164,12 @@ export class GameScreen implements ScreenHandle {
   private readonly pendingMessages: ServerMsg[] = [];
   private deadline: number | null = null;
   private latestDeadline: number | null = null;
+  /**
+   * A `turn_timer` for a decision whose state is still queued behind fx. The update was sent while
+   * the acting seat was catching up (deadline null); the real deadline arrived later, so it must
+   * override the update's payload when that state is finally adopted.
+   */
+  private pendingTurnTimer: { seq: number; deadline: number | null } | null = null;
   private lobby: LobbyView | null = null;
   private mySeat: number | null = null;
   private actionPending = false;
@@ -219,6 +225,13 @@ export class GameScreen implements ScreenHandle {
   private activeEventBgm: BgmName | null = null;
   private currentBgm: BgmName | null = null;
   private bannerTimer = 0;
+  /**
+   * Transient banners/toasts that must not be drawn over the event stage. The stage owns the
+   * screen while it is open, so a banner raised then (or already visible when it opened) is kept
+   * and shown after `eventPanel.hide()`. Presentation only: no fx order or timing changes.
+   */
+  private deferredGameBanner: string | null = null;
+  private deferredFloatTexts: { nodeId: string; text: string; color: string }[] = [];
   private handoffTimer = 0;
   private hudTimer = 0;
   private returnToActorTimer = 0;
@@ -808,7 +821,7 @@ export class GameScreen implements ScreenHandle {
         }
       },
       onSkipFx: () => this.skipEventIntro(),
-      onHide: () => this.flushPendingErrandCutin(),
+      onHide: () => this.onEventStageClosed(),
     });
 
     this.dice = new DiceOverlay();
@@ -1044,6 +1057,8 @@ export class GameScreen implements ScreenHandle {
     this.canvas.removeEventListener('pointerup', this.onMapInteract);
     this.canvas.removeEventListener('wheel', this.onMapInteract);
     window.removeEventListener('resize', this.onWindowResize);
+    // Never leave the shared toast host held after this screen goes away.
+    this.app.toasts.release();
     Audio.stopVoice();
     this.el.remove();
   }
@@ -1233,6 +1248,7 @@ export class GameScreen implements ScreenHandle {
           this.fxPlayer.dropThrough(gen, msg.seq);
           this.latestDeadline = msg.deadline;
           this.deadline = msg.deadline;
+          this.pendingTurnTimer = null;
           this.lobby = msg.lobby;
           this.syncFlaggedSeats();
           this.updateHud();
@@ -1247,6 +1263,7 @@ export class GameScreen implements ScreenHandle {
         this.syncFlaggedSeats();
         this.latestDeadline = msg.deadline;
         this.deadline = msg.deadline;
+        this.pendingTurnTimer = null;
         this.actionPending = false;
         this.clearPendingTimer();
         this.endedVoicePlayed = false;
@@ -1267,6 +1284,22 @@ export class GameScreen implements ScreenHandle {
         this.clearPendingTimer();
         this.fxPlayer.enqueue({ seq: msg.seq, fx: msg.fx, state: msg.state, deadline: msg.deadline, gen });
         this.updateHud();
+        break;
+      }
+      case 'turn_timer': {
+        // The acting seat's timer started after it caught up (or its catch-up cap fired). The
+        // update that started the turn was sent with `deadline: null`, so the real deadline is
+        // delivered separately and must win when that state is finally presented.
+        if (msg.gen !== undefined && msg.gen < this.latestGen) break;
+        if (msg.seq < this.latestSeq) break;
+        if (msg.seq <= this.appliedSeq) {
+          this.deadline = msg.deadline;
+          this.latestDeadline = msg.deadline;
+          this.pendingTurnTimer = null;
+          if (this.state) this.updateTimer(this.state, actorOf(this.state));
+        } else {
+          this.pendingTurnTimer = { seq: msg.seq, deadline: msg.deadline };
+        }
         break;
       }
       case 'lobby': {
@@ -1356,11 +1389,13 @@ export class GameScreen implements ScreenHandle {
     this.appliedWatermark = { gen, seq, state };
     const previousYear = this.state?.year;
     this.state = state;
+    const pendingTimer = this.pendingTurnTimer && this.pendingTurnTimer.seq === seq ? this.pendingTurnTimer : null;
+    if (pendingTimer) this.pendingTurnTimer = null;
     if (gen === this.latestGen && seq < this.latestSeq) {
       this.deadline = this.latestDeadline;
     } else {
-      this.deadline = deadline;
-      if (gen === this.latestGen) this.latestDeadline = deadline;
+      this.deadline = pendingTimer ? pendingTimer.deadline : deadline;
+      if (gen === this.latestGen) this.latestDeadline = this.deadline;
     }
     this.loading.hidden = true;
     this.map?.setState(state);
@@ -1388,6 +1423,10 @@ export class GameScreen implements ScreenHandle {
     } else if (this.lastMonthShown !== state.year * 100 + state.month) {
       this.showMonthFlip(state.year, state.month);
     }
+    // This update is now fully presented (every fx played, state adopted). Only online hosts care:
+    // the acting seat's turn timer waits for this report so a slow device is never timed out
+    // while it is still catching up on narration.
+    this.session.reportPlayed?.(seq);
   }
 
   private updateHud(): void {
@@ -3107,6 +3146,33 @@ export class GameScreen implements ScreenHandle {
     show();
   }
 
+  /**
+   * イベントステージが閉じた: ステージ中に抑えていたトースト・バナー・マップの浮き文字を流す。
+   * 演出の順序やタイミングは変えず、表示だけをステージの後ろへずらしている。
+   * （ゲーム画面の破棄時はトーストの保留だけ解除し、画面のないバナーは捨てる。）
+   */
+  private onEventStageClosed(): void {
+    this.flushPendingErrandCutin();
+    this.app.toasts.release();
+    if (this.destroyed) return;
+    const banner = this.deferredGameBanner;
+    this.deferredGameBanner = null;
+    if (banner) this.showGameBanner(banner);
+    const floats = this.deferredFloatTexts;
+    this.deferredFloatTexts = [];
+    for (const float of floats) this.map?.floatText(float.nodeId, float.text, float.color);
+  }
+
+  /** マップの浮き文字。ステージ中は地図が暗幕の下なので、閉じてから流す。 */
+  private floatText(nodeId: string, text: string, color: string): void {
+    if (this.eventPanel.isOpen) {
+      this.deferredFloatTexts.push({ nodeId, text, color });
+      while (this.deferredFloatTexts.length > 12) this.deferredFloatTexts.shift();
+      return;
+    }
+    this.map?.floatText(nodeId, text, color);
+  }
+
   private syncEventComm(): void {
     const narrow = window.matchMedia('(max-width: 899px)').matches;
     if (this.eventPanel.isOpen && narrow) {
@@ -4304,6 +4370,13 @@ export class GameScreen implements ScreenHandle {
     const playerName = displayPlayerName(currentPlayer);
     // ステージの上にカットインを残さない（エランドは HUD のチップに残る）。
     this.errandCutin?.close();
+    // ステージが画面を占有している間は、トースト・バナーを重ねない（閉じたら流す）。
+    this.app.toasts.hold();
+    if (this.gameBanner.classList.contains('is-visible')) {
+      const visible = this.gameBanner.textContent;
+      if (visible) this.deferredGameBanner = visible;
+      this.hideGameBanner();
+    }
     this.eventPanel.show(event, state, playerName);
     requestAnimationFrame(() => this.updateMapSafeArea());
     this.eventPanel.setState(state, this.eventChoiceReady(state), {
@@ -4433,7 +4506,7 @@ export class GameScreen implements ScreenHandle {
         // it from the cash bookkeeping looked like the bonus was paid twice (Sol playtest
         // fx-025 / fx-081). The goal popup keeps the number.
         if (player && fx.reason !== '目的地ボーナス') {
-          this.map?.floatText(player.nodeId, formatDelta(fx.delta), fx.delta >= 0 ? '#8affb0' : '#ff8a8a');
+          this.floatText(player.nodeId, formatDelta(fx.delta), fx.delta >= 0 ? '#8affb0' : '#ff8a8a');
         }
         Audio.sfx(fx.delta >= 0 ? 'coin_gain' : 'coin_loss');
         this.showCoinFlow(fx.playerId, fx.delta);
@@ -4590,7 +4663,7 @@ export class GameScreen implements ScreenHandle {
           // The banner sits below the status bar (the toast host covers it on a phone), so the
           // one line that matters stays readable everywhere.
           Audio.sfx('coin_gain');
-          this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
+          this.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
           this.showGameBanner(
             `🎯 ${this.playerName(fx.playerId)} が ${place} に一番乗り！ +${formatOku(fx.bonus)}`,
           );
@@ -4604,7 +4677,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.setMood(fx.playerId, 'joy', 6000);
         this.confetti(22);
         this.panAndReturn(cityNodeId(fx.cityId), 1.1, 600, 1300, control.speed);
-        this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
+        this.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#ffd23f');
         this.app.toasts.show(`🎯 ${this.playerName(fx.playerId)} が ${place} に一番乗り！ +${formatOku(fx.bonus)}`, 'good', 3400);
         await control.wait(FX_MS.goal);
         return;
@@ -4664,7 +4737,7 @@ export class GameScreen implements ScreenHandle {
         this.map?.celebrate(fx.playerId, 'goal');
         this.map?.setMood(fx.playerId, 'joy', 6000);
         this.panAndReturn(cityNodeId(fx.cityId), 1.1, 550, 1300, control.speed);
-        this.map?.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#7ff0d4');
+        this.floatText(cityNodeId(fx.cityId), `+${formatOkuShort(fx.bonus)}`, '#7ff0d4');
         this.showCoinFlow(fx.playerId, fx.bonus);
         this.confetti(20);
         this.app.toasts.show(
@@ -4787,7 +4860,7 @@ export class GameScreen implements ScreenHandle {
         this.showGameBanner(`${icon} ${name}に${fx.label}（${up ? '▲' : '▼'}×${fx.mult.toFixed(2)}・${fx.years}年）`);
         this.panAndReturn(cityNodeId(fx.cityId), 1.35, 620, 1700, control.speed);
         this.map?.cityModBurst(fx.cityId);
-        this.map?.floatText(
+        this.floatText(
           cityNodeId(fx.cityId),
           `×${fx.mult.toFixed(2)}`,
           up ? '#ffd23f' : '#ff8a8a',
@@ -4875,7 +4948,7 @@ export class GameScreen implements ScreenHandle {
         if (ref) {
           const nodeId = cityNodeId(ref.city.id);
           this.panAndReturn(nodeId, 1.05, 500, 1300, control.speed);
-          this.map?.floatText(nodeId, `買収 ${formatOkuShort(fx.amount)}`, '#ffd23f');
+          this.floatText(nodeId, `買収 ${formatOkuShort(fx.amount)}`, '#ffd23f');
         }
         this.showGameBanner(`🤝 ${this.playerName(fx.playerId)} が ${this.playerName(fx.fromId)} の物件を買収！`);
         this.app.toasts.show(
@@ -5202,6 +5275,11 @@ export class GameScreen implements ScreenHandle {
   }
 
   private showGameBanner(text: string | Node): void {
+    // ステージ中は絵の上にバナーを重ねない（閉じたら最新の 1 枚を流す）。
+    if (this.eventPanel.isOpen) {
+      if (typeof text === 'string') this.deferredGameBanner = text;
+      return;
+    }
     this.gameBanner.replaceChildren(text);
     this.gameBanner.hidden = false;
     this.gameBanner.classList.add('is-visible');
@@ -5494,7 +5572,9 @@ export class GameScreen implements ScreenHandle {
         if (!this.fxBusy) return;
         const target = event.target instanceof Element ? event.target : null;
         if (!target) return;
-        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab, .msgwin, .handoff-backdrop')) return;
+        // The event card and choice sheet are for reading (scrolling the sources, opening 詳細):
+        // only a tap on the dimmed backdrop around them skips the intro.
+        if (target.closest('button, a, input, textarea, select, .modal-panel, .chat-panel, .emote-palette, .comm-fab, .msgwin, .handoff-backdrop, .event-card, .event-choice-area')) return;
         event.stopPropagation();
         this.suppressMapTapUntil = performance.now() + 300;
         if (this.eventPanel.isOpen) {

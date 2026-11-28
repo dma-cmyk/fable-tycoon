@@ -87,10 +87,37 @@
   z-index: 57;
 }
 
+/* 月替わりの札も同じ上端レーンへ。ステージの絵の中央に重ねない。
+   ターンバナーと同時に出たときだけは札（z 59）が手前になるが、どちらも絵には重ならない。 */
+.game-screen.event-open .month-flip {
+  top: calc(2px + var(--safe-top));
+  z-index: 59;
+}
+
+.game-screen.event-open .month-flip .month-flip-card {
+  padding: 6px 16px;
+  min-width: 140px;
+}
+
+.game-screen.event-open .month-flip-icon {
+  font-size: 24px;
+}
+
+.game-screen.event-open .month-flip-value {
+  font-size: 20px;
+}
+
 @media (max-width: 899px) {
   .game-screen.event-open:has(.turn-banner:not([hidden])) .event-panel,
   .game-screen.event-open:has(.turn-banner:not([hidden])) .event-panel.is-compact {
     padding-top: calc(66px + var(--safe-top));
+  }
+
+  /* 月替わりの札はスマホでは上端レーンに 55px 使う。カードをその分だけ下げる
+     （ターンバナーと同じ扱い。札が消えれば元の位置に戻る）。 */
+  .game-screen.event-open:has(.month-flip:not([hidden])) .event-panel,
+  .game-screen.event-open:has(.month-flip:not([hidden])) .event-panel.is-compact {
+    padding-top: calc(64px + var(--safe-top));
   }
 }
 

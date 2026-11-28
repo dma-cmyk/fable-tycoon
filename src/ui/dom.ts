@@ -366,12 +366,47 @@ export type ToastTone = 'info' | 'good' | 'bad' | 'warn';
 
 export class ToastHost {
   readonly el: HTMLElement;
+  private held = false;
+  /** Toasts produced (or on screen) while held, replayed in order by `release`. */
+  private readonly pending: { text: string; tone: ToastTone; ms: number }[] = [];
 
   constructor() {
     this.el = h('div', { class: 'toast-host', attrs: { 'aria-live': 'polite' } });
   }
 
+  /**
+   * Presentation hold: while a full-screen stage owns the screen, toasts must not be drawn over
+   * it. Anything already visible is taken down and replayed by {@link release}; anything shown
+   * meanwhile is queued. This is presentation only — callers are unchanged.
+   */
+  hold(): void {
+    if (this.held) return;
+    this.held = true;
+    for (const node of Array.from(this.el.children)) {
+      const text = node.textContent ?? '';
+      const tone =
+        (['good', 'bad', 'warn'] as const).find((candidate) => node.classList.contains(`toast-${candidate}`)) ??
+        'info';
+      if (text) this.pending.push({ text, tone, ms: 2600 });
+      node.remove();
+    }
+    this.trimPending();
+  }
+
+  /** End a {@link hold} and replay what was queued, oldest first. */
+  release(): void {
+    if (!this.held) return;
+    this.held = false;
+    const pending = this.pending.splice(0);
+    for (const item of pending) this.show(item.text, item.tone, item.ms);
+  }
+
   show(text: string, tone: ToastTone = 'info', ms = 2600): void {
+    if (this.held) {
+      this.pending.push({ text, tone, ms });
+      this.trimPending();
+      return;
+    }
     const node = h('div', {
       class: `toast toast-${tone}`,
       role: 'status',
@@ -385,5 +420,9 @@ export class ToastHost {
       node.classList.add('toast-out');
       window.setTimeout(() => node.remove(), 220);
     }, ms);
+  }
+
+  private trimPending(): void {
+    while (this.pending.length > 8) this.pending.shift();
   }
 }

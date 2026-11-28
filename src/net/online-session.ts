@@ -230,6 +230,7 @@ function isClientMsg(value: P2PMessage): value is ClientMsg {
     case 'emote':
     case 'report':
     case 'leave':
+    case 'progress':
     case 'ping':
       return true;
     default:
@@ -260,6 +261,7 @@ function isServerMsg(value: P2PMessage): value is ServerMsg {
     case 'lobby':
     case 'snapshot':
     case 'update':
+    case 'turn_timer':
     case 'chat':
     case 'emote':
     case 'system':
@@ -654,6 +656,11 @@ export class OnlineSession implements Session {
   private appliedSeq = -1;
   private lastReceivedGen = 0;
   private lastReceivedSeq = -1;
+  /**
+   * Newest update the local UI finished PRESENTING (not merely received). Re-sent periodically to
+   * the host so a single lost packet cannot leave the host holding this seat's turn timer.
+   */
+  private playedSeq = -1;
   /** seq -> generation of the state that carried it (actions are stamped from what the UI applied). */
   private deliveredOrders = new Map<number, number>();
   private switchingAuthority = false;
@@ -931,6 +938,25 @@ export class OnlineSession implements Session {
   appliedOrder(): { gen: number; seq: number } | null {
     if (this.appliedSeq < 0) return null;
     return { gen: this.appliedGen, seq: this.appliedSeq };
+  }
+
+  /**
+   * Report the newest update the UI has finished presenting. Monotonic: a late `applyState` for an
+   * older queued update never moves the position backwards. The host uses this only to decide
+   * whether the acting human is still catching up (see `RoomController.holdForCatchUp`).
+   */
+  reportPlayed(seq: number): void {
+    if (!Number.isInteger(seq) || seq < 0 || seq <= this.playedSeq) return;
+    this.playedSeq = seq;
+    this.send({ t: 'progress', seq });
+  }
+
+  /** Re-send the last presented position (heartbeat) so a lost report cannot wedge a turn hold. */
+  private resendPlayed(): void {
+    if (this.role !== 'guest' || this.playedSeq < 0 || this.closed || this.crashed) return;
+    if (!this.hostPeerId || !this.transport) return;
+    if (this.transport.status() !== 'open' && this.transport.p2pPeers() === 0) return;
+    this.deliverToHost({ t: 'progress', seq: this.playedSeq });
   }
 
   send(msg: ClientMsg): void {
@@ -2561,7 +2587,8 @@ export class OnlineSession implements Session {
       message.t === 'welcome' ||
       message.t === 'lobby' ||
       message.t === 'snapshot' ||
-      message.t === 'update'
+      message.t === 'update' ||
+      message.t === 'turn_timer'
     ) {
       if (message.t === 'welcome' || message.t === 'snapshot') {
         return { ...message, gen: this.generation, boardVersion: BOARD_VERSION };
@@ -2797,6 +2824,9 @@ export class OnlineSession implements Session {
         this.sendHeartbeat();
       } else {
         this.broadcastPresence();
+        // Periodic re-send of the presented position: one lost progress packet must not leave
+        // the host holding this seat's turn timer until the hard cap.
+        this.resendPlayed();
       }
     }, heartbeatMs);
     this.watchdogTimer = setInterval(
@@ -3255,7 +3285,12 @@ export class OnlineSession implements Session {
 
   private record(message: ServerMsg): void {
     const gen = genOf(message);
-    if (gen !== undefined && gen > this.generation) this.generation = gen;
+    if (gen !== undefined && gen > this.generation) {
+      this.generation = gen;
+      // A new host may start from a lower seq; its numbering is a new space. The UI will adopt a
+      // fresh snapshot (fx-less) at that seq, so start reporting from scratch.
+      this.playedSeq = -1;
+    }
     if (gen !== undefined && gen > this.highestGenerationSeen) this.highestGenerationSeen = gen;
     switch (message.t) {
       case 'welcome':
@@ -3356,6 +3391,11 @@ export class OnlineSession implements Session {
         }
         if (this.role === 'host') this.resetHostStallWatch(message.seq);
         break;
+      case 'turn_timer':
+        // The acting human caught up (or the hold capped) and their timer started. Only the
+        // current decision's timer is meaningful; a delayed message for an older seq is dropped.
+        if (message.seq >= this.shadow.seq) this.shadow.deadline = message.deadline;
+        break;
       case 'error':
         if (
           message.code === 'illegal' ||
@@ -3420,7 +3460,9 @@ export class OnlineSession implements Session {
       t: 'snapshot',
       seq: newest.seq,
       state: newest.state,
-      deadline: newest.deadline,
+      // `shadow.deadline` also carries a `turn_timer` (the timer start after a catch-up hold) that
+      // arrived after this update; prefer it when it describes the same decision.
+      deadline: this.shadow.seq === newest.seq ? this.shadow.deadline : newest.deadline,
       lobby,
       gen: newest.gen ?? this.generation,
       resync: true,

@@ -100,6 +100,11 @@ export type ClientMsg =
   | { t: 'emote'; emoteId: string; target?: number } // usable any time during lobby/game, by own seat
   | { t: 'report'; seat: number; reason: Report['reason'] } // stored server-side with last chat lines
   | { t: 'leave' } // leave room permanently (seat becomes CPU in game)
+  // Playback progress: `seq` is the newest update this client has finished PRESENTING (fx played
+  // and state adopted), not merely received. The host holds a human seat's turn timer until that
+  // seat reports the update that started its turn, so a slow device never loses a turn to the
+  // clock while it catches up (hard-capped, see `CATCH_UP_CAP_MS`).
+  | { t: 'progress'; seq: number }
   | { t: 'ping'; at: number };
 
 // ---------------------------------------------------------------- server -> client
@@ -138,6 +143,9 @@ export type ServerMsg =
     }
   // incremental: apply fx animations then adopt state
   | { t: 'update'; seq: number; by: number; fx: Fx[]; state: PublicState; deadline: number | null; gen?: number }
+  // Additive: the acting seat's turn timer started (or was released) after its client caught up.
+  // Sent outside a state update because the deadline lives in wall-clock time, not in the state.
+  | { t: 'turn_timer'; seq: number; deadline: number | null; gen?: number }
   | { t: 'chat'; line: ChatLine }
   | { t: 'emote'; emote: EmoteEvent } // fire-and-forget; clients may drop if their overlay is busy
   | { t: 'system'; text: string } // 例: "赤ずきん が切断しました（CPU が代行中）"

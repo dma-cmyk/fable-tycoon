@@ -75,6 +75,11 @@ export interface RoomDeps {
   replaceMs?: number;
   yearEndAckMs?: number;
   cpuDelayMs?: number | (() => number);
+  /**
+   * Hard cap (ms) on how long a human's turn timer may be held while that seat's client catches up
+   * on earlier fx. A frozen/AFK client can therefore never stall the room forever.
+   */
+  catchUpCapMs?: number;
   /** Multiplies standard fx playback durations (tests set a small value; LocalSession binds live fxSpeed). */
   fxScale?: number | (() => number);
   /**
@@ -91,6 +96,12 @@ export const CPU_MOVE_DELAY_MS = 400;
 export const DISCONNECT_GRACE_MS = 15_000;
 export const DISCONNECT_REPLACE_MS = 120_000;
 export const YEAR_END_AUTO_ACK_MS = 6_000;
+/**
+ * Hard cap on holding a human's turn timer while its client is still presenting earlier fx.
+ * The hold exists so a slow device is never timed out mid-narration; the cap keeps a frozen or
+ * AFK client from stalling the room (after the cap the normal turn timer starts and can expire).
+ */
+export const CATCH_UP_CAP_MS = 60_000;
 export const IDLE_ROOM_MS = 30 * 60_000;
 
 /** Standard playback duration of one fx at 1x speed. Server uses the sum to pace autoplay. */
@@ -187,6 +198,14 @@ interface Seat {
   lastEmoteAt: Record<string, number>;
   recentChat: { text: string; at: number }[];
   flagged: boolean;
+  /**
+   * Newest update `seq` this seat's client reported it has finished PRESENTING. `null` = unknown
+   * (before the first report, on adoption/migration, or after a reconnect), which never holds the
+   * turn timer. Only used to gate the acting human's own turn timer (see `armTurn`).
+   */
+  playedSeq: number | null;
+  /** Host clock of the last progress report (diagnostics only). */
+  playedAt: number;
 }
 
 interface Conn {
@@ -217,6 +236,11 @@ interface SerializedRoom {
   deadlineActor: number | null;
   turnStartedAt: number;
   turnFxMs: number;
+  /** Catch-up hold (see `holdForCatchUp`): decision seq being held, wall-clock cap, and the seq
+   * whose cap already fired. Serialized so hibernation does not restart or drop a hold. */
+  turnHoldSeq?: number | null;
+  turnHoldCapAt?: number;
+  turnHoldCappedSeq?: number | null;
   playerIdBySeat: number[];
   seatByPlayerId: number[];
   reporters: Record<string, number[]>;
@@ -254,6 +278,10 @@ export interface RoomPublicSnapshot {
   deadline: number | null;
   /** Elapsed ms since the current decision started (relative; clock-skew safe across host adopt). */
   turnElapsedMs?: number;
+  /** Additive: the acting human's timer is held while its client catches up (deadline is null). */
+  turnHeld?: boolean;
+  /** Additive: remaining ms until the catch-up hold's hard cap. */
+  turnHoldRemainMs?: number;
 }
 
 const DEFAULT_SETTINGS: RoomSettings = { years: 3, turnSeconds: 30, visibility: 'private' };
@@ -320,6 +348,11 @@ export class RoomController {
     return typeof value === 'function' ? value() : (value ?? 'calm');
   }
 
+  private get catchUpCapMs(): number {
+    const value = this.deps.catchUpCapMs;
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : CATCH_UP_CAP_MS;
+  }
+
   private status: RoomStatus = 'lobby';
   private settings: RoomSettings = { ...DEFAULT_SETTINGS };
   private hostSeat: number | null = null;
@@ -345,6 +378,15 @@ export class RoomController {
   private deadlineActor: number | null = null;
   private turnStartedAt = 0;
   private turnFxMs = 0;
+  /**
+   * Catch-up hold of the acting human's turn timer. See {@link holdForCatchUp}: while the actor's
+   * client is still presenting earlier fx its timer does not run at all; it starts (with a full
+   * turn) when that seat reports playing the decision's own seq, or at the hard cap.
+   */
+  private turnHoldSeq: number | null = null;
+  private turnHoldCapAt = 0;
+  /** Decision seq whose cap already fired; that decision never holds again. */
+  private turnHoldCappedSeq: number | null = null;
 
   /** Seat index <-> engine player id. Equal when all seats are occupied contiguously. */
   private playerIdBySeat: number[] = [];
@@ -435,6 +477,18 @@ export class RoomController {
       return this.turnFxMs + this.cpuDelayMs;
     }
     if (seat.kind !== 'human') return null;
+    // While the acting seat is still catching up its timer is deliberately not running; the
+    // board may not move until the hold is released (or its cap fires), so tell the watchdog.
+    if (this.turnHoldSeq === this.seq) {
+      const remaining = Math.max(0, this.turnHoldCapAt - this.deps.now());
+      const normal =
+        this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs)
+          ? this.yearEndAckMs
+          : this.settings.turnSeconds > 0
+            ? this.settings.turnSeconds * 1000
+            : 0;
+      return Math.max(this.turnFxMs + remaining + normal, remaining + 1_000);
+    }
     const ackWait =
       this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs)
         ? this.turnFxMs + this.yearEndAckMs
@@ -455,6 +509,7 @@ export class RoomController {
     if (!seat) return true;
     if (seat.kind === 'cpu' || seat.autoplay) return this.tasks.has('cpu');
     if (seat.kind !== 'human') return true;
+    if (this.turnHoldSeq === this.seq) return this.tasks.has('catchup');
     const needsAck =
       this.state.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs);
     if (needsAck && !this.tasks.has('ack')) return false;
@@ -528,6 +583,12 @@ export class RoomController {
       lastFx: this.lastFx,
       deadline: this.deadline,
       turnElapsedMs: this.turnElapsedMs(),
+      ...(this.turnHoldSeq === this.seq
+        ? {
+            turnHeld: true,
+            turnHoldRemainMs: Math.max(0, this.turnHoldCapAt - this.deps.now()),
+          }
+        : {}),
     };
   }
 
@@ -659,6 +720,11 @@ export class RoomController {
     if (!seat) return false;
     if (seat.kind === 'human' && this.settings.turnSeconds > 0) {
       this.deadline = now;
+      // A forced expiry overrides the catch-up hold (last-resort stall watchdog only).
+      this.turnHoldSeq = null;
+      this.turnHoldCapAt = 0;
+      this.turnHoldCappedSeq = this.seq;
+      this.clearTask('catchup');
     }
     if (seat.kind === 'cpu' || seat.autoplay) {
       this.setTask('cpu', now);
@@ -745,6 +811,9 @@ export class RoomController {
         return;
       case 'report':
         this.onReport(conn, msg);
+        return;
+      case 'progress':
+        this.onProgress(conn, msg);
         return;
       case 'leave':
         this.onLeave(conn);
@@ -835,6 +904,9 @@ export class RoomController {
     seat.connId = conn.id;
     seat.disconnectedAt = null;
     seat.autoplay = false;
+    // A new connection has presented nothing yet; "unknown" never holds the turn timer.
+    seat.playedSeq = null;
+    seat.playedAt = 0;
     seat.chatBucket = initialBucket(this.deps.now(), COMM.chatBurst);
     seat.emoteBucket = initialBucket(this.deps.now(), COMM.emoteBurst);
     conn.seat = seat.index;
@@ -859,6 +931,9 @@ export class RoomController {
     seat.connId = conn.id;
     seat.disconnectedAt = null;
     seat.autoplay = false;
+    // A reconnected client starts again from its snapshot; do not treat the old position as live.
+    seat.playedSeq = null;
+    seat.playedAt = 0;
     conn.seat = seat.index;
     conn.token = seat.token ?? conn.token;
     this.clearTask(`grace:${seat.index}`);
@@ -1386,6 +1461,80 @@ export class RoomController {
     }
   }
 
+  /**
+   * The client has finished PRESENTING update `seq` (fx played, state adopted). Only the seat's own
+   * connection may report it. The report never changes game state: it only lets `armTurn` know
+   * whether the acting seat is still catching up on earlier fx, so its turn timer is not started
+   * (and later not expired) while it is still watching the narration that preceded its turn.
+   */
+  private onProgress(conn: Conn, msg: Extract<ClientMsg, { t: 'progress' }>): void {
+    const seat = this.seatOfConn(conn);
+    if (!seat) return;
+    const seq = msg.seq;
+    if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 0 || seq > this.seq) return;
+    const now = this.deps.now();
+    if (seat.playedSeq !== null && seq <= seat.playedSeq) {
+      // Heartbeat repeat of the same position (or a delayed older report): keep it as liveness
+      // only, never move the position backwards.
+      seat.playedAt = now;
+      return;
+    }
+    seat.playedSeq = seq;
+    seat.playedAt = now;
+    if (
+      this.status === 'playing' &&
+      this.turnHoldSeq !== null &&
+      this.actorSeatData()?.index === seat.index &&
+      seq >= this.turnHoldSeq
+    ) {
+      this.releaseTurnHold();
+    }
+  }
+
+  /** Start the acting human's turn timer now that its client has caught up. */
+  private releaseTurnHold(): void {
+    const now = this.deps.now();
+    this.turnHoldSeq = null;
+    this.turnHoldCapAt = 0;
+    // The client has just finished playing this decision's fx, so the full `turnSeconds` thinking
+    // time starts now. `turnStartedAt` is kept consistent with the deadline formula so a later
+    // migration can reconstruct the remaining time from `turnElapsedMs`.
+    this.turnStartedAt = now - this.turnFxMs;
+    this.deadline = null;
+    this.armTurn(this.lastFx);
+    this.broadcastTurnTimer();
+    netDebug(this.roomId, 'turn timer released (client caught up)', {
+      seq: this.seq,
+      actorSeat: this.actorSeat(),
+      deadline: this.deadline,
+    });
+  }
+
+  /** Hard cap of a catch-up hold: start the timer anyway so a frozen client cannot stall the room. */
+  private onCatchUpTimeout(): void {
+    if (this.frozen || this.status !== 'playing' || !this.state) return;
+    if (this.turnHoldSeq === null || this.turnHoldSeq !== this.seq) return;
+    const seat = this.actorSeatData();
+    if (!seat || seat.kind !== 'human') return;
+    this.turnHoldSeq = null;
+    this.turnHoldCapAt = 0;
+    this.turnHoldCappedSeq = this.seq;
+    this.turnStartedAt = this.deps.now() - this.turnFxMs;
+    this.deadline = null;
+    this.armTurn(this.lastFx);
+    this.broadcastTurnTimer();
+    netDebug(this.roomId, 'catch-up hold capped', {
+      seq: this.seq,
+      actorSeat: seat.index,
+      deadline: this.deadline,
+    });
+  }
+
+  private broadcastTurnTimer(): void {
+    if (this.status !== 'playing') return;
+    this.deps.broadcast({ t: 'turn_timer', seq: this.seq, deadline: this.deadline });
+  }
+
   private onLeave(conn: Conn): void {
     const seat = this.seatOfConn(conn);
     if (!seat) {
@@ -1453,6 +1602,7 @@ export class RoomController {
     this.clearTask('turn');
     this.clearTask('ack');
     this.clearTask('cpu');
+    this.clearTask('catchup');
     for (const seat of this.seats) this.clearTask(`grace:${seat.index}`);
     const actorNow = this.state ? actorOf(this.state) : null;
     const sameDecision = this.deadlineSeq === this.seq && this.deadlineActor === actorNow;
@@ -1460,6 +1610,10 @@ export class RoomController {
       this.deadline = null;
       this.deadlineSeq = this.seq;
       this.deadlineActor = actorNow;
+      // A new decision starts with a clean catch-up hold (the previous one cannot leak across).
+      this.turnHoldSeq = null;
+      this.turnHoldCapAt = 0;
+      this.turnHoldCappedSeq = null;
     }
     this.turnStartedAt = sameDecision ? this.turnStartedAt : this.deps.now();
     // CPU routine fx are scheduled with the same shortened duration the client plays them at
@@ -1536,6 +1690,10 @@ export class RoomController {
       // No pinned key after migration: CPU-autoplay until the owner proves key ownership.
       seat.autoplay = true;
     }
+    // A human's own turn timer must not run while its client is still presenting earlier fx
+    // (a slow phone must never lose a turn to the clock mid-narration). Only the acting seat is
+    // ever held, and only until it reports playing this decision's seq, or the hard cap fires.
+    if (this.holdForCatchUp(seat, now)) return;
     if (this.settings.turnSeconds > 0 && this.deadline === null) {
       this.deadline = baseAt + this.turnFxMs + this.settings.turnSeconds * 1000;
     }
@@ -1576,6 +1734,61 @@ export class RoomController {
       deadline: this.deadline,
       tasks: this.scheduledTasks(),
     });
+  }
+
+  /**
+   * The acting human's timer must not run while its client is still presenting earlier fx
+   * (narration it has not caught up on). Called from `armTurn` for the acting seat only:
+   *
+   *  - a seat whose client reported a `playedSeq` older than the decision's seq is held;
+   *  - the hold starts the timer at release (see `releaseTurnHold`) with a full `turnSeconds`;
+   *  - a client that never reports is released by {@link CATCH_UP_CAP_MS}, after which the normal
+   *    timer (and takeover) applies, so a frozen/AFK client can never stall the room;
+   *  - `playedSeq === null` (before the first report, after migration, on a new connection) is
+   *    "unknown", which never holds: the room's default behaviour is unchanged.
+   *
+   * Only the acting seat is ever examined, so a slow spectator never delays anybody's turn.
+   */
+  private holdForCatchUp(seat: Seat, now: number): boolean {
+    const ackWillRun =
+      this.state?.phase.t === 'year_end' && this.yearEndAckMs > 0 && Number.isFinite(this.yearEndAckMs);
+    if (this.settings.turnSeconds <= 0 && !ackWillRun) return false;
+    if (this.turnHoldSeq === this.seq) {
+      if (seat.autoplay || !seatConnected(seat)) {
+        // The seat went away (or autoplay took over) while held: never stall on the hold.
+        this.turnHoldSeq = null;
+        this.turnHoldCapAt = 0;
+        this.deadline = null;
+        this.turnStartedAt = now - this.turnFxMs;
+        return false;
+      }
+      if (now >= this.turnHoldCapAt) {
+        // The cap elapsed before the catchup task fired (e.g. a rearm on another device): start
+        // the timer now instead of holding again. This decision is capped for good.
+        this.turnHoldSeq = null;
+        this.turnHoldCapAt = 0;
+        this.turnHoldCappedSeq = this.seq;
+        this.deadline = null;
+        this.turnStartedAt = now - this.turnFxMs;
+        return false;
+      }
+    } else {
+      if (this.turnHoldCappedSeq === this.seq) return false;
+      if (seat.autoplay || !seatConnected(seat)) return false;
+      if (seat.playedSeq === null || seat.playedSeq >= this.seq) return false;
+      this.turnHoldSeq = this.seq;
+      this.turnHoldCapAt = now + this.catchUpCapMs;
+    }
+    this.deadline = null;
+    this.setTask('catchup', this.turnHoldCapAt);
+    netDebug(this.roomId, 'armTurn (catch-up hold)', {
+      seq: this.seq,
+      actorSeat: seat.index,
+      playedSeq: seat.playedSeq,
+      capInMs: this.turnHoldCapAt - now,
+      tasks: this.scheduledTasks(),
+    });
+    return true;
   }
 
   /** Net worth (億) of the current leader — the yardstick for 「大きすぎる技はフルで見せる」. */
@@ -1627,6 +1840,10 @@ export class RoomController {
     }
     if (key === 'ack') {
       this.onYearEndAck();
+      return;
+    }
+    if (key === 'catchup') {
+      this.onCatchUpTimeout();
       return;
     }
     if (key === 'cpu') {
@@ -1827,6 +2044,8 @@ export class RoomController {
       lastEmoteAt: {},
       recentChat: [],
       flagged: false,
+      playedSeq: null,
+      playedAt: 0,
     };
   }
 
@@ -1846,6 +2065,8 @@ export class RoomController {
     seat.lastEmoteAt = {};
     seat.recentChat = [];
     seat.flagged = false;
+    seat.playedSeq = null;
+    seat.playedAt = 0;
     this.reporters.delete(seat.index);
     this.clearTask(`grace:${seat.index}`);
     this.clearTask(`replace:${seat.index}`);
@@ -2093,6 +2314,9 @@ export class RoomController {
       deadlineActor: this.deadlineActor,
       turnStartedAt: this.turnStartedAt,
       turnFxMs: this.turnFxMs,
+      turnHoldSeq: this.turnHoldSeq,
+      turnHoldCapAt: this.turnHoldCapAt,
+      turnHoldCappedSeq: this.turnHoldCappedSeq,
       playerIdBySeat: this.playerIdBySeat,
       seatByPlayerId: this.seatByPlayerId,
       reporters: Object.fromEntries([...this.reporters].map(([seat, set]) => [String(seat), [...set]])),
@@ -2138,6 +2362,19 @@ export class RoomController {
     room.deadlineActor = null;
     room.turnStartedAt = now - elapsedMs;
     room.lastProgressAt = now;
+    // A turn held for catch-up has no deadline; keep holding across migration for the remaining
+    // cap instead of instantly expiring a decision that was never allowed to run its timer.
+    room.turnHoldCappedSeq = null;
+    if (snapshot.turnHeld === true) {
+      const remain = typeof snapshot.turnHoldRemainMs === 'number' && Number.isFinite(snapshot.turnHoldRemainMs)
+        ? Math.max(0, snapshot.turnHoldRemainMs)
+        : room.catchUpCapMs;
+      room.turnHoldSeq = snapshot.seq;
+      room.turnHoldCapAt = now + remain;
+    } else {
+      room.turnHoldSeq = null;
+      room.turnHoldCapAt = 0;
+    }
     if (options?.frozen) {
       room.frozen = true;
     }
@@ -2193,7 +2430,8 @@ export class RoomController {
       room.status === 'playing' &&
       room.state &&
       room.state.phase.t !== 'game_over' &&
-      room.settings.turnSeconds > 0
+      room.settings.turnSeconds > 0 &&
+      room.turnHoldSeq !== room.seq
     ) {
       const actorSeat = room.actorSeatData();
       if (actorSeat?.kind === 'human') {
@@ -2222,6 +2460,9 @@ export class RoomController {
     room.deadlineActor = parsed.deadlineActor ?? null;
     room.turnStartedAt = parsed.turnStartedAt ?? deps.now();
     room.turnFxMs = parsed.turnFxMs ?? 0;
+    room.turnHoldSeq = parsed.turnHoldSeq ?? null;
+    room.turnHoldCapAt = parsed.turnHoldCapAt ?? 0;
+    room.turnHoldCappedSeq = parsed.turnHoldCappedSeq ?? null;
     room.playerIdBySeat = parsed.playerIdBySeat ?? [];
     room.seatByPlayerId = parsed.seatByPlayerId ?? [];
     room.chat = parsed.chat ?? [];
