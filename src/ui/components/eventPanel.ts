@@ -63,6 +63,12 @@ export class EventPanel {
   private readonly card: HTMLElement;
   /** 選択肢リストを作り直すかどうかの判定用（詳細の開閉状態を保つ）。 */
   private choiceKey = '';
+  /** いま選択肢を押せるか（作り直さず disabled だけ切り替える）。 */
+  private choicesEnabled = false;
+  /** 直前の pointerdown が選択肢シートの中で起きたか（タップ復旧の条件）。 */
+  private pressStartedOnSheet = false;
+  /** 直前の pointerdown が乗っていた選択肢の番号（動いても同じ選択肢を選ぶ）。 */
+  private pressedChoiceIndex: number | null = null;
 
   constructor(private readonly options: EventPanelOptions) {
     this.ribbonTitle = h('span', { class: 'event-ribbon-title', text: '世界ニュースイベント！' });
@@ -155,7 +161,28 @@ export class EventPanel {
     );
     this.el = h(
       'aside',
-      { class: 'event-panel', attrs: { 'aria-label': '世界ニュースイベント', hidden: 'hidden' } },
+      {
+        class: 'event-panel',
+        attrs: { 'aria-label': '世界ニュースイベント', hidden: 'hidden' },
+        on: {
+          click: (event) => this.recoverChoiceTap(event),
+          // 復旧は「押し始めが選択肢シートの中」のときだけ（幕タップの誤確定を防ぐ）。
+          pointerdown: (event) => {
+            if (!event.isPrimary) return;
+            const target = event.target instanceof Element ? event.target : null;
+            this.pressStartedOnSheet = Boolean(target?.closest('.event-choice-area'));
+            // 押し始めた選択肢（番号）を覚えておく。指を離すまでにレイアウトが変わって
+            // ボタンが動いても、同じ選択肢として確定できる。
+            const choice = target?.closest<HTMLElement>('.event-choice');
+            const index = Number(choice?.dataset.choiceIndex ?? Number.NaN);
+            this.pressedChoiceIndex = Number.isFinite(index) ? index : null;
+          },
+          pointercancel: () => {
+            this.pressedChoiceIndex = null;
+            this.pressStartedOnSheet = false;
+          },
+        },
+      },
       this.card,
       // 選択肢はスクロール領域の外。絵や長い説明と競合せず、常に押せる位置に残る。
       this.choiceArea,
@@ -247,7 +274,7 @@ export class EventPanel {
       // The effect summary card + footnote already explain auto-application; a third
       // line here only padded the panel.
       this.choiceArea.classList.remove('is-fx-waiting');
-      this.el.classList.remove('is-choosing');
+      this.el.classList.remove('is-choosing', 'is-intro');
       this.choicesHost.replaceChildren();
       this.choiceKey = '';
       this.choicesBanner.hidden = true;
@@ -262,17 +289,27 @@ export class EventPanel {
     const actor = state.players[state.current];
     // Solo/local early pick keeps the choices bright while the intro plays.
     this.choiceArea.classList.toggle('is-fx-waiting', (waitingFx && !this.earlyChoice) || !phaseActive);
-    // スマホの 2 段階表示: 導入（台詞）中は Phase A（絵カード＋台詞のみ）、
-    // 人間が選べるようになったら Phase B（メッセージウィンドウの位置に選択肢）。
-    const choosing = phaseActive && this.isMine && this.canAct && !this.chosen && !waitingFx;
+    // Phase A/B。ソロ/ローカル（earlyChoice）は導入の台詞中から選択肢を出す。
+    // 台詞が終わった瞬間に指の下でシートが現れると、そのタップが失われるため
+    // （報告 102 差し戻し 1）、押せる状態＝`enabled` と同じ条件で表示する。
+    const choosing = phaseActive && this.isMine && this.canAct && !this.chosen && (!waitingFx || this.earlyChoice);
     this.el.classList.toggle('is-choosing', choosing);
-    const choiceKey = `${enabled ? 1 : 0}|${choices.length}|${event.id}|${this.chosen ? 1 : 0}`;
+    // 導入中（台詞が流れている間）はシートを圧縮して絵の高さを守る。
+    this.el.classList.toggle('is-intro', waitingFx);
+    // ボタンを作り直すのは「別のイベントになったとき」だけ。enabled の反転で
+    // replaceChildren すると、押し始めた指の下のボタンが差し替わって click が消える
+    // （オンラインで演出が終わる瞬間に特に起きやすい）。
+    this.choicesEnabled = enabled;
+    const choiceKey = `${choices.length}|${event.id}`;
     if (choiceKey !== this.choiceKey) {
       this.choiceKey = choiceKey;
       this.choicesHost.replaceChildren();
       for (let index = 0; index < choices.length; index++) {
-        this.choicesHost.append(this.choiceButton(choices[index], index, enabled));
+        this.choicesHost.append(this.choiceButton(choices[index], index));
       }
+    }
+    for (const button of this.choicesHost.querySelectorAll<HTMLButtonElement>('.event-choice')) {
+      button.disabled = !enabled;
     }
     if (waitingFx && this.earlyChoice && this.canAct) {
       this.choicesBanner.hidden = false;
@@ -315,7 +352,7 @@ export class EventPanel {
    * 1 択ぶんの行。スマホでは「番号＋見出し＋1 行要約」のコンパクト表示にし、
    * 「詳細」で効果テキスト全文を開閉する。PC は従来どおり全文を出したまま。
    */
-  private choiceButton(choice: EventChoice, index: number, enabled: boolean): HTMLElement {
+  private choiceButton(choice: EventChoice, index: number): HTMLElement {
     const parts = splitChoiceDetail(choice.detail);
     const summary = parts[0]?.text ?? choice.detail;
     const full = h(
@@ -330,17 +367,13 @@ export class EventPanel {
         class: 'event-choice',
         attrs: {
           type: 'button',
-          disabled: !enabled,
+          disabled: true,
+          'data-choice-index': String(index),
           'aria-label': `${index + 1}: ${choice.label}`,
           style: `--i:${index}`,
         },
         on: {
-          click: () => {
-            if (!enabled || this.chosen) return;
-            this.chosen = true;
-            this.refreshChoices();
-            this.options.onChoose(index);
-          },
+          click: () => this.pickChoice(index),
         },
       },
       h('span', { class: 'event-choice-num', text: String(index + 1) }),
@@ -367,6 +400,45 @@ export class EventPanel {
       },
     });
     return h('div', { class: 'event-choice-item' }, h('div', { class: 'event-choice-head' }, button, more));
+  }
+
+  /** 選択肢を確定する（クリックとタップ復旧の両方から呼ぶ）。 */
+  private pickChoice(index: number): void {
+    if (this.chosen || !this.choicesEnabled) return;
+    this.chosen = true;
+    this.refreshChoices();
+    this.options.onChoose(index);
+  }
+
+  /**
+   * タップ取りこぼしの復旧。押し始めは選択肢シートの中だったのに、指を離すまでの
+   * 間にレイアウトが変わって click がパネルへ落ちた場合に、その位置の選択肢として扱う。
+   * 押し始めがシートの外（幕）なら何もしない（演出スキップの誤確定を防ぐ）。
+   */
+  private recoverChoiceTap(event: MouseEvent): void {
+    // この click で押下情報は使い切る（次のジェスチャへ持ち越さない）。
+    const pressedIndex = this.pressedChoiceIndex;
+    const startedOnSheet = this.pressStartedOnSheet;
+    this.pressedChoiceIndex = null;
+    this.pressStartedOnSheet = false;
+    if (!this.el.classList.contains('is-choosing') || this.chosen || !this.choicesEnabled) return;
+    // 幕（シートの外）で押し始めたタップは「演出を飛ばす」意図なので確定しない。
+    if (!startedOnSheet) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('.event-choice, .event-choice-more')) return;
+    // 押し始めた選択肢が分かっているなら、離した位置がずれていてもその選択肢を選ぶ。
+    if (pressedIndex !== null) {
+      this.pickChoice(pressedIndex);
+      return;
+    }
+    if (event.clientX === 0 && event.clientY === 0) return;
+    const hit = document
+      .elementsFromPoint(event.clientX, event.clientY)
+      .find((el) => el.classList.contains('event-choice'));
+    if (!(hit instanceof HTMLButtonElement) || hit.disabled) return;
+    const index = Number(hit.dataset.choiceIndex ?? Number.NaN);
+    if (!Number.isFinite(index)) return;
+    this.pickChoice(index);
   }
 
   /**

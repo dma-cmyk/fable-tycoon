@@ -450,6 +450,15 @@
 
 /* PC で選ぶ番は、絵を縮めて選択肢シート全体を画面内に収める（スクロール不要）。 */
 @media (min-width: 900px) {
+  /* 導入中はシートを出さない（Phase A は b97d3db と同じ絵の大きさに戻す）。 */
+  .event-panel.is-intro .event-choice-area {
+    display: none;
+  }
+
+  .event-panel.is-choosing.is-intro {
+    --stage-w: min(1100px, 92vw, calc((100dvh - 386px) * 16 / 9));
+  }
+
   .event-panel.is-choosing {
     --stage-w: min(1100px, 92vw, calc((100dvh - 478px) * 16 / 9));
   }
@@ -578,9 +587,78 @@
   }
 }
 
+/* スマホ縦: 導入の台詞中も選択肢を全部見せる（ソロ）。
+   台詞ウィンドウの実高は約 110px なので、その分だけ空けてシートを自然高で置く。 */
+@media (max-width: 899px) and (min-height: 521px) {
+  .event-panel.is-intro {
+    --stage-msgwin: 112px;
+  }
+
+  .event-panel.is-intro .event-choice-area {
+    flex: 0 0 auto;
+    max-height: none;
+    padding: 6px 8px 8px;
+  }
+
+  .event-panel.is-intro .event-choice-summary {
+    display: none;
+  }
+
+  .event-panel.is-intro .event-choice {
+    min-height: 42px;
+    padding: 3px 9px;
+  }
+
+  .event-panel.is-intro .event-choice-more {
+    min-height: 42px;
+  }
+
+  .event-panel.is-intro .event-choice-item + .event-choice-item {
+    margin-top: 4px;
+  }
+
+  .event-panel.is-intro .event-choose-prompt {
+    margin-bottom: 2px;
+    font-size: 10.5px;
+  }
+
+  .event-panel.is-intro .event-choices-banner {
+    margin-bottom: 3px;
+    gap: 4px;
+  }
+
+  .event-panel.is-intro .event-choices-note {
+    margin: 0;
+    font-size: 9px;
+    line-height: 1.25;
+  }
+
+  .event-panel.is-intro .event-skip-btn {
+    min-height: 26px;
+    padding: 1px 7px;
+    font-size: 10px;
+  }
+
+  /* 導入中はリボンとタイトルも少し詰める（選択肢と絵を優先）。 */
+  .event-panel.is-intro .event-ribbon {
+    padding: 3px 10px;
+  }
+
+  .event-panel.is-intro .event-title {
+    padding: 4px 12px 2px;
+    font-size: 18px;
+  }
+}
+
 /* 縦に余裕のない端末では byline を省く。 */
 @media (max-width: 899px) and (max-height: 700px) {
   .event-panel .event-byline {
+    display: none;
+  }
+
+  /* 導入中はシートが下にあるので、元ネタのチップは台詞が終わってから出す
+     （その分を絵に回す）。 */
+  .event-panel.is-intro .event-meta {
     display: none;
   }
 }
@@ -687,6 +765,13 @@
     margin: 0;
     padding: 6px 8px 8px;
     border-radius: 14px;
+  }
+
+  /* 導入中は右カラムの台詞ウィンドウと重ならないよう、その分だけ上に置く。 */
+  .event-panel.is-intro .event-choice-area {
+    flex: 0 0 auto;
+    margin-bottom: 96px;
+    max-height: calc(100% - 96px);
   }
 
   .event-panel .event-choose-prompt {
