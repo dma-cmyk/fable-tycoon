@@ -934,6 +934,15 @@ async function sampleModalDepth(client) {
       const status = (document.querySelector('.status-chip')?.textContent || '').trim();
       const banner = (document.querySelector('.game-banner')?.textContent || '').trim();
       const eventTitle = (document.querySelector('.event-panel.is-open .event-title')?.textContent || '').trim();
+      const choicesNoteEl = document.querySelector('.event-panel.is-open .event-choices-note');
+      const choicesBannerEl = document.querySelector('.event-panel.is-open .event-choices-banner');
+      const choicesNote = (choicesNoteEl?.textContent || '').trim();
+      const choicesNoteShown =
+        !!choicesNote &&
+        !!choicesBannerEl &&
+        !choicesBannerEl.hidden &&
+        getComputedStyle(choicesBannerEl).display !== 'none' &&
+        getComputedStyle(choicesBannerEl).visibility !== 'hidden';
       const visible = (selector) => {
         const el = document.querySelector(selector);
         if (!el || el.hidden) return false;
@@ -944,6 +953,10 @@ async function sampleModalDepth(client) {
         visibleModals,
         status,
         banner,
+        primary: (document.querySelector('.dice-primary')?.textContent || '').trim(),
+        toast: [...document.querySelectorAll('.toast')].map((el) => el.textContent || '').join(' | ').slice(0, 300),
+        choicesNote,
+        choicesNoteShown,
         eventTitle,
         fx: {
           piper_roulette: visible('.piper-show-panel'),
@@ -958,6 +971,18 @@ async function sampleModalDepth(client) {
     .catch(() => null);
   if (!sample) return;
   client.modalSamples = (client.modalSamples || 0) + 1;
+  // A choice that was accepted shows a brief "選択を送信しました…" note; if it is still
+  // visible on consecutive 3 s samples the click never committed. Count the streak.
+  if (sample.choicesNoteShown && /選択を送信/.test(sample.choicesNote)) {
+    client.choiceSubmitSamples = (client.choiceSubmitSamples || 0) + 1;
+    client.choiceSubmitStreak = (client.choiceSubmitStreak || 0) + 1;
+    client.choiceSubmitMaxStreak = Math.max(client.choiceSubmitMaxStreak || 0, client.choiceSubmitStreak);
+    if (client.choiceSubmitStreak === 2) {
+      log(`${client.id}: 「${sample.choicesNote}」 persisted for 2 samples (possible uncommitted choice)`);
+    }
+  } else {
+    client.choiceSubmitStreak = 0;
+  }
   if (sample.eventTitle) {
     client.eventTitles = client.eventTitles || new Set();
     if (client.eventTitles.size < 200) client.eventTitles.add(sample.eventTitle);
@@ -1905,6 +1930,14 @@ async function actOnce(client) {
     if (!client.choiceShotTaken) {
       client.choiceShotTaken = true;
       await captureChoiceStage(client, page);
+    }
+    client.eventChoiceClicks = (client.eventChoiceClicks || 0) + 1;
+    client.eventChoiceLog = client.eventChoiceLog || [];
+    if (client.eventChoiceLog.length < 100) {
+      const title = await page
+        .evaluate(() => (document.querySelector('.event-panel.is-open .event-title')?.textContent || '').trim())
+        .catch(() => '');
+      client.eventChoiceLog.push({ atMs: nowMs(), title });
     }
     await press(client, choice);
     return 'event_choice';
@@ -3074,6 +3107,25 @@ try {
       }
     }
     report.cpuSubstitute = { byClient: cpuByClient, unique: [...cpuUnique.values()] };
+    const choiceByClient = {};
+    const retries = [];
+    for (const client of clients) {
+      const log = client.eventChoiceLog || [];
+      choiceByClient[client.id] = {
+        clicks: client.eventChoiceClicks || 0,
+        submitSamples: client.choiceSubmitSamples || 0,
+        submitMaxStreak: client.choiceSubmitMaxStreak || 0,
+        log,
+      };
+      for (let i = 1; i < log.length; i += 1) {
+        const prev = log[i - 1];
+        const cur = log[i];
+        if (cur.title && cur.title === prev.title && cur.atMs - prev.atMs < 2500) {
+          retries.push({ client: client.id, title: cur.title, gapMs: cur.atMs - prev.atMs });
+        }
+      }
+    }
+    report.choiceCommits = { byClient: choiceByClient, retries };
     report.serviceWorker = {
       byClient: Object.fromEntries(clients.map((client) => [client.id, client.serviceWorker || null])),
       anyRegistered: clients.some((client) => (client.serviceWorker?.registrations || 0) > 0),
@@ -3115,6 +3167,10 @@ try {
     canvasStatsStart: client.canvasStatsStart ?? null,
     webrtcFailures: client.webrtcFailures || 0,
     eventScreenshots: client.eventScreenshots || [],
+    eventChoiceClicks: client.eventChoiceClicks || 0,
+    choiceSubmitSamples: client.choiceSubmitSamples || 0,
+    choiceSubmitMaxStreak: client.choiceSubmitMaxStreak || 0,
+    eventChoiceLog: client.eventChoiceLog || [],
   }));
   report.brokers = Object.fromEntries(
     report.clients.map((client) => [

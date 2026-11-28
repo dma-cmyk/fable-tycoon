@@ -83,7 +83,11 @@ Everything is written under `.tmp/e2e/`:
   `choicesBelowFold`, the message-window and choice-area rects, so a squeezed
   layout is visible in `report.json`. `cpuSubstitute` collects chat lines
   containing 「代行」 per client (CPU takeover after a turn timeout), with a
-  deduped `unique` list.
+  deduped `unique` list. `choiceCommits` records the bot's event-choice clicks
+  per client (`clicks`, `log`) and flags two clicks on the same event within
+  2.5 s as `retries`; `choiceSubmitSamples`/`choiceSubmitMaxStreak` count 3 s
+  samples where 「選択を送信しました…」 stayed visible (a stuck submission would
+  keep the streak growing while the event never advances).
 
 ## Feature coverage (pegasus / rocket / piper confiscation)
 
