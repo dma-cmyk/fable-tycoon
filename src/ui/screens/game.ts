@@ -106,6 +106,7 @@ import {
   countMoveFilters,
   matchesMoveFilter,
   MOVE_QUICK_FILTERS,
+  pickShownRecommendation,
   pinErrandFirst,
   type MoveFilterEntry,
   type MoveQuickFilter,
@@ -243,6 +244,8 @@ export class GameScreen implements ScreenHandle {
   private pendingEventChoice: number | null = null;
   private handoffResolve: (() => void) | null = null;
   private errandCutin: ErrandCutinHandle | null = null;
+  /** イベントステージ中に来た寄り道カットイン（閉じてから出す）。 */
+  private pendingErrandCutin: (() => void) | null = null;
   private moveOnlyCities = false;
 
   private readonly yearChip: HTMLElement;
@@ -805,6 +808,7 @@ export class GameScreen implements ScreenHandle {
         }
       },
       onSkipFx: () => this.skipEventIntro(),
+      onHide: () => this.flushPendingErrandCutin(),
     });
 
     this.dice = new DiceOverlay();
@@ -1841,7 +1845,13 @@ export class GameScreen implements ScreenHandle {
           infoFor: (city) => this.moveChipInfoCache.get(city.id) ?? cityMoveInfo(GAME_DATA, state, moverId, city),
           errandCityId: state.errand?.cityId ?? null,
           errandBonus: state.errand?.bonus ?? 0,
-        }) ?? this.map?.getRecommendedMoveOption() ?? null;
+        }) ??
+        this.map?.getRecommendedMoveOption() ??
+        // Distance data can be missing for a beat (map still resolving the destination, an
+        // unreachable candidate set, a realm switch). The tray must still carry one
+        // recommendation: fall back to the first candidate rather than showing none.
+        this.moveOptionsCache[0]?.nodeId ??
+        null;
       // 候補が出た時点で「おすすめ」を選択済みにし、主ボタンを即有効化する（未選択の金枠で迷わせない）。
       const preferred = this.recommendedMoveNodeId ?? this.moveOptionsCache[0]?.nodeId ?? null;
       if (preferred && this.moveOptionsCache.some((option) => option.nodeId === preferred)) {
@@ -1888,6 +1898,15 @@ export class GameScreen implements ScreenHandle {
       this.moveQuickFilter = 'all';
       visibleEntries = pickEntries('all');
     }
+    // Exactly one recommendation is visible whenever the tray is open. Filters (駅のみ /
+    // 買える駅 / 青・カード / 依頼) are allowed to narrow the list, but never to make the
+    // recommendation disappear: when the pick is filtered out the tag moves to the first
+    // visible chip, and the map flag follows the same node (setRecommendedMoveOption).
+    const shownRecommendation = pickShownRecommendation(
+      this.recommendedMoveNodeId,
+      visibleEntries.map(({ option }) => option.nodeId),
+    );
+    this.map?.setRecommendedMoveOption(shownRecommendation);
 
     visibleEntries.forEach(({ option, index }) => {
       const summary = transportSummary(actorNode ? [actorNode, ...option.path] : option.path);
@@ -1901,7 +1920,7 @@ export class GameScreen implements ScreenHandle {
       const remainTarget = remain !== null ? this.moveRemainTarget : this.playerRealm === 'world' ? 'destination' : 'exit';
       const remainLabel = remainTarget === 'exit' ? '出口' : '目的地';
       const remainText = remain === null ? `${remainLabel}まで —` : `${remainLabel}まで あと${remain}マス`;
-      const recommended = option.nodeId === this.recommendedMoveNodeId;
+      const recommended = option.nodeId === shownRecommendation;
       const nearRank = this.moveNearRank.get(option.nodeId) ?? index;
       const topNear = many && !recommended && nearRank < 3;
       const selected = this.moveSelection === option.nodeId;
@@ -2122,6 +2141,23 @@ export class GameScreen implements ScreenHandle {
         name.classList.add('is-long');
         fitTextOneLine(name, { minPx: 11 });
       });
+    // The tray scrolls horizontally and every rebuild starts at scrollLeft 0, so a pick at
+    // rank 6 of a phone-sized list would open off-screen. Bring the 「おすすめ」 chip into view
+    // (this runs on every rebuild, which already discards a manual scroll position).
+    if (shownRecommendation) {
+      const recChip = [...scroller.querySelectorAll<HTMLElement>('.move-chip')].find(
+        (chip) => chip.dataset.nodeId === shownRecommendation,
+      );
+      const trayBox = scroller.getBoundingClientRect();
+      const chipBox = recChip?.getBoundingClientRect();
+      if (chipBox && trayBox.width > 0) {
+        if (chipBox.left < trayBox.left) {
+          scroller.scrollLeft += chipBox.left - trayBox.left - 4;
+        } else if (chipBox.right > trayBox.right) {
+          scroller.scrollLeft += chipBox.right - trayBox.right + 4;
+        }
+      }
+    }
     if (freshOptions) {
       // Measure the newly visible move-options tray immediately and re-frame so candidates
       // never sit behind the bottom option bar or top ranking strip on mobile viewports.
@@ -3062,6 +3098,14 @@ export class GameScreen implements ScreenHandle {
     this.syncEventComm();
     this.updateMapSafeArea();
   };
+
+  /** ステージが閉じたときに、遅らせていた寄り道カットインを流す。 */
+  private flushPendingErrandCutin(): void {
+    const show = this.pendingErrandCutin;
+    if (!show) return;
+    this.pendingErrandCutin = null;
+    show();
+  }
 
   private syncEventComm(): void {
     const narrow = window.matchMedia('(max-width: 899px)').matches;
@@ -4258,6 +4302,8 @@ export class GameScreen implements ScreenHandle {
     if (!event) return;
     const currentPlayer = state.players.find((player) => player.id === state.current);
     const playerName = displayPlayerName(currentPlayer);
+    // ステージの上にカットインを残さない（エランドは HUD のチップに残る）。
+    this.errandCutin?.close();
     this.eventPanel.show(event, state, playerName);
     requestAnimationFrame(() => this.updateMapSafeArea());
     this.eventPanel.setState(state, this.eventChoiceReady(state), {
@@ -4522,9 +4568,8 @@ export class GameScreen implements ScreenHandle {
         return;
       }
       case 'event_close': {
-        // 元ネタの長い「自動適用」イベントは、閉じる前に 1 ページだけ読む時間を取る。
-        // ローカル/ソロだけ・タップで先へ・20 秒で自動続行（演出の早送り設定では出さない）。
-        await this.showEventFactPage(control);
+        // 事実はイベント開始時にナレーターが読み上げ、字幕にも出る。閉じる前の
+        // 「元ネタ」タップ待ちページは同じ内容の二度読みになるので置かない。
         this.eventPanel.hide();
         this.syncEventComm();
         this.activeEventBgm = null;
@@ -4583,20 +4628,25 @@ export class GameScreen implements ScreenHandle {
         const nodeId = cityNodeId(fx.cityId);
         const steps = player ? distance(GAME_DATA, player.nodeId, nodeId) : Number.NaN;
         if (requester) {
-          this.errandCutin = showErrandCutin({
-            host: this.el,
-            requester,
-            title: fx.title,
-            cityName,
-            steps: Number.isFinite(steps) ? steps : null,
-            bonus: fx.bonus,
-            narration: errandNarration(fx.requester),
-            durationMs: Math.max(320, Math.round(FX_MS.errand / control.speed)),
-          });
           control.onSkip(() => {
             this.errandCutin?.close();
             Audio.stopVoice();
           });
+          // イベントステージの上にはカットインを重ねない。ステージが閉じてから出す。
+          const showCutin = (): void => {
+            this.errandCutin = showErrandCutin({
+              host: this.el,
+              requester,
+              title: fx.title,
+              cityName,
+              steps: Number.isFinite(steps) ? steps : null,
+              bonus: fx.bonus,
+              narration: errandNarration(fx.requester),
+              durationMs: Math.max(320, Math.round(FX_MS.errand / control.speed)),
+            });
+          };
+          if (this.eventPanel.isOpen) this.pendingErrandCutin = showCutin;
+          else showCutin();
         } else {
           this.showGameBanner(`📜 ${fx.title}`);
           // カットインが無いときだけ、トーストでも依頼を伝える（スマホで文字が重なるのを避ける）。
@@ -4957,6 +5007,7 @@ export class GameScreen implements ScreenHandle {
       !fastForward &&
       this.session.mode !== 'online' &&
       !this.eventResultTapped &&
+      this.isEventResultSay(fx, update) &&
       this.eventResultTouchesHuman(update);
     if (manualResult) this.eventResultTapped = true;
     const windowLine = {
@@ -5005,34 +5056,18 @@ export class GameScreen implements ScreenHandle {
   }
 
   /**
-   * The 「元ネタ」 page of an auto-applied event with a long fact text: it holds for a tap
-   * (▼, 20 s safety) instead of flashing past on its way to `event_close`. Local/solo only —
-   * an online room keeps its turn timer and never waits on one client's reading.
+   * True when this say is the last spoken line before `event_close` — the event's result beat.
+   * Only that line waits for a tap; the choice-made line and the replies before it play on their
+   * voice like the intro (the tap gate must stay on the outcome, not on the selection echo).
    */
-  private async showEventFactPage(control: PlaybackControl): Promise<void> {
-    if (this.session.mode === 'online' || this.destroyed) return;
-    if (control.speed >= 4 || !uiSettings().autoAdvance) return;
-    const eventId = this.eventPanel.eventId;
-    const event = eventId ? eventsById.get(eventId) : undefined;
-    const fact = event?.fact?.trim() ?? '';
-    if (!event || fact.length < 80) return;
-    if ((event.choices?.length ?? 0) > 0) return;
-    const text = fact.length > 140 ? `${fact.slice(0, 138)}…` : fact;
-    const shown = this.msgWindow.show({
-      speaker: 'narrator',
-      name: '📚 元ネタ',
-      text,
-      color: '#9fd0ff',
-      autoAdvance: false,
-      manualTimeoutMs: EVENT_TAP_TIMEOUT_MS,
-    });
-    control.setManualWait(true);
-    control.onSkip(() => this.msgWindow.skipLine());
-    try {
-      await raceWithTimeout(shown, EVENT_TAP_TIMEOUT_MS + 1000);
-    } finally {
-      control.setManualWait(false);
+  private isEventResultSay(fx: Fx, update: readonly Fx[] | undefined): boolean {
+    if (!update) return false;
+    let lastSay: Fx | null = null;
+    for (const item of update) {
+      if (item.t === 'event_close') break;
+      if (item.t === 'say') lastSay = item;
     }
+    return lastSay === fx;
   }
 
   /**

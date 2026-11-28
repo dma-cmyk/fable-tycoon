@@ -898,6 +898,30 @@ async function sampleModalDepth(client) {
   if (sample.eventTitle) {
     client.eventTitles = client.eventTitles || new Set();
     if (client.eventTitles.size < 200) client.eventTitles.add(sample.eventTitle);
+    // One screenshot of the real event panel per client (plus the first one whose art
+    // has actually loaded). Events are slower in final20, so the 3 s sampler can catch
+    // the panel while the bot is still reading it.
+    client.eventScreenshots = client.eventScreenshots || [];
+    const eventArtLoaded = await page
+      .evaluate(() => {
+        const image = document.querySelector('.event-panel.is-open img.event-image');
+        return !!image && !image.hidden && image.complete && image.naturalWidth > 0;
+      })
+      .catch(() => false);
+    const wantsImage = eventArtLoaded && !client.eventScreenshots.some((shot) => shot.kind === 'image');
+    const wantsFirst = client.eventScreenshots.length === 0;
+    if (wantsFirst || wantsImage) {
+      const kind = wantsImage ? 'image' : 'first';
+      const file = await screenshot(client, `event-${kind}-${client.id}`, { optional: true });
+      if (file) {
+        client.eventScreenshots.push({
+          kind,
+          title: sample.eventTitle,
+          hasArt: eventArtLoaded,
+          file: path.relative(ROOT, file),
+        });
+      }
+    }
   }
   if (sample.fx) {
     client.fxSeen = client.fxSeen || {};
@@ -3011,6 +3035,7 @@ try {
     canvasStats: client.canvasStats ?? null,
     canvasStatsStart: client.canvasStatsStart ?? null,
     webrtcFailures: client.webrtcFailures || 0,
+    eventScreenshots: client.eventScreenshots || [],
   }));
   report.brokers = Object.fromEntries(
     report.clients.map((client) => [

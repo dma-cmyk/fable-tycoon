@@ -21,6 +21,8 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const errors = [];
 const warnings = [];
+/** イベント本編の読み上げ文（gen-voice の生成対象）。0 なら events.json が無い。 */
+let speakCount = 0;
 const err = (path, message) => errors.push(`${path}: ${message}`);
 const warn = (path, message) => warnings.push(`${path}: ${message}`);
 
@@ -983,6 +985,57 @@ if (data['events.json'] !== undefined) {
       }
       if (ev.choices === undefined && ev.effects === undefined) err(p, 'must have choices or effects');
     });
+
+    // 本編の読み上げ（src/core/eventSpeech.ts）。fact があるのに読み上げ版が無い、英字や
+    // 数字が混じる、といった「声が出ない・読めない」事故をここで止める。
+    const speech = await import('../src/core/eventSpeech.ts');
+    const ASCII = /[A-Za-z0-9]/;
+    const checkSpeech = (p, text) => {
+      if (!isStr(text)) { err(p, 'must be a non-empty string'); return; }
+      if (ASCII.test(text)) err(p, `voice line must not contain latin letters or digits: "${text}"`);
+      else if ([...text].length > 90) err(p, `voice line is too long (${[...text].length} chars, max 90): "${text}"`);
+    };
+    const eventIds = new Set(events.filter(isObj).map((ev) => ev.id));
+    for (const [id, text] of Object.entries(speech.EVENT_SPEECH_TABLES.title)) {
+      if (!eventIds.has(id)) err('eventSpeech.title', `unknown event id "${id}"`);
+      checkSpeech(`eventSpeech.title.${id}`, text);
+    }
+    for (const [id, text] of Object.entries(speech.EVENT_SPEECH_TABLES.fact)) {
+      const event = events.find((ev) => isObj(ev) && ev.id === id);
+      if (!event) err('eventSpeech.fact', `unknown event id "${id}"`);
+      else if (!isStr(event.fact)) err('eventSpeech.fact', `event "${id}" has a spoken fact but no fact text`);
+      checkSpeech(`eventSpeech.fact.${id}`, text);
+    }
+    for (const label of Object.keys(speech.EVENT_SPEECH_TABLES.choice)) {
+      const used = events.some(
+        (ev) => isObj(ev) && Array.isArray(ev.choices)
+          && ev.choices.some((ch) => isObj(ch) && ch.label === label),
+      );
+      if (!used) err('eventSpeech.choice', `spoken label "${label}" is not used by any choice`);
+    }
+    for (const ev of events) {
+      if (!isObj(ev) || !isStr(ev.id)) continue;
+      if (isStr(ev.fact) && speech.EVENT_SPEECH_TABLES.fact[ev.id] === undefined) {
+        err(`eventSpeech.${ev.id}`, 'fact has no spoken version (add it to FACT_SPEECH in src/core/eventSpeech.ts)');
+      }
+      const [headline, ...rest] = speech.eventOpeningSpeech(ev);
+      checkSpeech(`eventSpeech.headline.${ev.id}`, headline);
+      if (isStr(ev.fact) !== (rest.length > 0)) {
+        err(`eventSpeech.${ev.id}`, isStr(ev.fact)
+          ? 'fact exists but the spoken opening has no fact line'
+          : 'spoken opening has a fact line but the event has no fact');
+      }
+      checkSpeech(`eventSpeech.tail.${ev.id}`, speech.eventOpeningTail(ev));
+      for (const ch of Array.isArray(ev.choices) ? ev.choices : []) {
+        if (isObj(ch) && isStr(ch.label)) {
+          checkSpeech(`eventSpeech.choiceMade.${ev.id}`, speech.choiceMadeSpeech(ch.label));
+        }
+      }
+    }
+    for (const [name, text] of Object.entries(speech.EVENT_RESULT_LINES)) {
+      checkSpeech(`EVENT_RESULT_LINES.${name}`, text);
+    }
+    speakCount = new Set(speech.allEventSpeechTexts(events)).size;
   }
 }
 
@@ -1192,4 +1245,7 @@ if (errors.length) {
   console.error(`\nvalidation failed: ${errors.length} error(s), ${warnings.length} warning(s)`);
   process.exit(1);
 }
-console.log(`validation OK: ${jsonFiles.length} data file(s), ${warnings.length} warning(s)`);
+console.log(
+  `validation OK: ${jsonFiles.length} data file(s), ${warnings.length} warning(s)` +
+    (speakCount > 0 ? `, ${speakCount} event narration line(s)` : ''),
+);

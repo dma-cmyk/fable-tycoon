@@ -522,6 +522,11 @@ export class MapView {
   private readonly bubbleTimers = new Map<number, number>();
 
   private moveOptions: MoveOption[] | null = null;
+  /**
+   * The move list's pick, pushed by the UI so the list tag and the map flag always name the
+   * same square. `null` means "no opinion" and the map falls back to the distance-first pick.
+   */
+  private recommendedOverride: string | null = null;
   private movePick: ((nodeId: string) => void) | null = null;
   private moveHooks: MoveOptionHooks | null = null;
   private optionPinHits: Array<{ nodeId: string; x: number; y: number; r: number }> = [];
@@ -1228,6 +1233,8 @@ export class MapView {
 
   setMoveOptions(options: MoveOption[] | null, onPickOrHooks: ((nodeId: string) => void) | MoveOptionHooks | null): void {
     this.moveOptions = options ? options.map((o) => ({ nodeId: o.nodeId, path: [...o.path] })) : null;
+    // A new candidate set invalidates the previous pick; the UI re-applies it right after.
+    this.recommendedOverride = null;
     if (typeof onPickOrHooks === 'function') {
       this.movePick = onPickOrHooks;
       this.moveHooks = null;
@@ -1926,8 +1933,27 @@ export class MapView {
     return this.getMoveOptionDistanceInfo(nodeId)?.hops ?? null;
   }
 
-  /** Candidate closest to the destination / nearest exit (ties: stations first). */
+  /**
+   * The move list's pick, so the list tag and the map flag cannot name different squares.
+   * `null` clears it (the map then falls back to {@link getRecommendedMoveOption}).
+   */
+  setRecommendedMoveOption(nodeId: string | null): void {
+    const next = nodeId && this.moveOptions?.some((option) => option.nodeId === nodeId) ? nodeId : null;
+    if (this.recommendedOverride === next) return;
+    this.recommendedOverride = next;
+    this.requestRender();
+  }
+
+  /** Candidate the 「おすすめ」 flag points at: the UI's pick, else the distance-first pick. */
   getRecommendedMoveOption(): string | null {
+    if (this.recommendedOverride && this.moveOptions?.some((option) => option.nodeId === this.recommendedOverride)) {
+      return this.recommendedOverride;
+    }
+    return this.distanceRecommendedMoveOption();
+  }
+
+  /** Candidate closest to the destination / nearest exit (ties: stations first). */
+  private distanceRecommendedMoveOption(): string | null {
     if (!this.moveOptions || this.moveOptions.length === 0) return null;
     const resolved = this.moveTargetDistances();
     if (!resolved) return null;
@@ -5209,6 +5235,9 @@ export class MapView {
     const board = this.freeBoardBox();
     const ringMargin = r + 11;
     const recommended = this.getRecommendedMoveOption();
+    // Exactly one gold 「おすすめ」 flag per frame: the first marker that draws it wins, and
+    // the fallback at the end of this method guarantees it is never silently dropped.
+    let recommendedTagDrawn = false;
     const pinEveryCandidate = this.moveOptions.length <= 8;
     // With a big candidate set the glow would wash the board out; thin it so
     // the lit squares read as a field of lights instead of one bright blob.
@@ -5264,18 +5293,40 @@ export class MapView {
       const wantsPin = selected || isRecommended || pinEveryCandidate;
       const pinBox = { x: x - 20, y: y - r - 50, w: 40, h: 50 + r };
       const pinFree = pinBox.y >= board.y + 2 && !pinBoxes.some((box) => rectsOverlap(pinBox, box, 2));
-      if (wantsPin && (pinFree || ((selected || isRecommended) && pinBox.y >= board.y + 2))) {
+      // The recommended and selected pins are drawn even when they overlap or sit near the
+      // board edge: drawOptionPin clamps them inside the board, and the 「おすすめ」 flag must
+      // land on the same square the move list tags.
+      if (wantsPin && (pinFree || selected || isRecommended)) {
         pinBoxes.push(pinBox);
         this.drawOptionPin(ctx, option.nodeId, x, y, r, node.kind, chip, number, selected, isRecommended, now, index);
+        if (isRecommended) recommendedTagDrawn = true;
         return;
       }
-      if (r < 9) return;
+      if (r < 9) {
+        if (isRecommended) {
+          this.drawRecommendedTag(ctx, x, y, y - r - 40 - 18 < board.y + 2);
+          recommendedTagDrawn = true;
+        }
+        return;
+      }
       // Crowded case: small number chip inside the ring, never stacked.
       const cx = x;
       const cy = y - r * 0.1;
       const chipBox = { x: cx - chipRadius, y: cy - chipRadius, w: chipRadius * 2, h: chipRadius * 2 };
-      if (pinBoxes.some((box) => rectsOverlap(chipBox, box, 1))) return;
-      if (chips.some((c) => Math.hypot(cx - c.x, cy - c.y) < c.r + chipRadius + 3)) return;
+      if (pinBoxes.some((box) => rectsOverlap(chipBox, box, 1))) {
+        if (isRecommended) {
+          this.drawRecommendedTag(ctx, x, y, false);
+          recommendedTagDrawn = true;
+        }
+        return;
+      }
+      if (chips.some((c) => Math.hypot(cx - c.x, cy - c.y) < c.r + chipRadius + 3)) {
+        if (isRecommended) {
+          this.drawRecommendedTag(ctx, x, y, false);
+          recommendedTagDrawn = true;
+        }
+        return;
+      }
       chips.push({ x: cx, y: cy, r: chipRadius });
       ctx.save();
       ctx.beginPath();
@@ -5292,6 +5343,10 @@ export class MapView {
       ctx.textBaseline = 'middle';
       ctx.fillText(String(number), cx, cy + 0.5);
       ctx.restore();
+      if (isRecommended) {
+        this.drawRecommendedTag(ctx, cx, cy - chipRadius, false);
+        recommendedTagDrawn = true;
+      }
       this.optionPinHits.push({ nodeId: option.nodeId, x: cx, y: cy, r: Math.max(14, chipRadius + 6) });
     });
 
@@ -5443,8 +5498,27 @@ export class MapView {
       ctx.textBaseline = 'middle';
       ctx.fillText(String(number), bx, by + 0.5);
       ctx.restore();
+      if (isRecommended) {
+        // Off-board candidates only get an edge badge; draw the flag here too so the
+        // recommendation is on the map even when its square is outside the usable board.
+        this.drawRecommendedTag(ctx, bx, by, by - 40 - 18 < board.y + 2);
+        recommendedTagDrawn = true;
+      }
     }
     if (hiddenOffBoard > 0) this.drawHiddenCandidateCounter(ctx, board, hiddenOffBoard);
+    if (recommended && !recommendedTagDrawn) {
+      // Last resort: the recommended square had no marker of its own (behind a HUD panel,
+      // past the badge cap, or under a deeper zoom). Anchor the flag inside the board.
+      const node = this.nodeById.get(recommended);
+      const x = node ? cam.screenX(node.x) : board.x + board.w / 2;
+      const y = node ? cam.screenY(node.y) : board.y + board.h / 2;
+      this.drawRecommendedTag(
+        ctx,
+        Math.max(board.x + 30, Math.min(board.x + board.w - 30, x)),
+        Math.max(board.y + 40, Math.min(board.y + board.h - 10, y)),
+        false,
+      );
+    }
   }
 
   /** One compact "+N" chip standing in for off-board candidates past the cap. */
@@ -5489,9 +5563,10 @@ export class MapView {
     index: number,
   ): void {
     const bob = this.reducedMotion ? 0 : Math.sin(now / 280 + index * 1.8) * 2;
-    // Keep the badge (and its おすすめ flag) inside the HUD-free board.
+    // Keep the badge (and its おすすめ flag) inside the HUD-free board. The recommended pin
+    // needs 40px more headroom so the flag sits above it instead of on top of it.
     const board = this.boardBox();
-    const pinY = Math.max(board.y + 22, y - r - 26 - bob);
+    const pinY = Math.max(board.y + (isRecommended ? 46 : 22), y - r - 26 - bob);
     const pinX = Math.max(board.x + 34, Math.min(board.x + board.w - 34, x));
     this.optionPinHits.push({ nodeId, x: pinX, y: pinY, r: 24 });
     ctx.save();
@@ -5537,13 +5612,20 @@ export class MapView {
     if (isRecommended) this.drawRecommendedTag(ctx, pinX, pinY);
   }
 
-  /** Gold 「おすすめ」 flag with a small arrow toward the destination. */
-  private drawRecommendedTag(ctx: CanvasRenderingContext2D, x: number, pinY: number): void {
+  /**
+   * Gold 「おすすめ」 flag with a small arrow toward the destination.
+   * `below` flips it under `pinY` when there is no room above (top-edge pins, edge badges),
+   * so the flag can never be clipped out of the board.
+   */
+  private drawRecommendedTag(ctx: CanvasRenderingContext2D, x: number, pinY: number, below = false): void {
     const w = 58;
     const h = 18;
     const board = this.boardBox();
     const x0 = Math.max(board.x + 2, Math.min(board.x + board.w - w - 2, x - w / 2));
-    const y0 = Math.max(board.y + 2, pinY - 16 - h - 6);
+    const placeBelow = below || pinY - 16 - h - 6 < board.y + 2;
+    const y0 = placeBelow
+      ? Math.min(board.y + board.h - h - 2, pinY + 16 + 6)
+      : Math.max(board.y + 2, pinY - 16 - h - 6);
     const cx = x0 + w / 2;
     const dest = this.moveTargetNode();
     const toward = dest
@@ -5566,8 +5648,8 @@ export class MapView {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(cx, y0 + h);
-    ctx.lineTo(x, pinY - 16);
+    ctx.moveTo(cx, placeBelow ? y0 : y0 + h);
+    ctx.lineTo(x, placeBelow ? pinY + 16 : pinY - 16);
     ctx.strokeStyle = '#ffd83d';
     ctx.lineWidth = 2;
     ctx.stroke();

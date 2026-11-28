@@ -33,6 +33,12 @@ import { transferPiper } from './piper';
 import { REALMS, randomWorldCityNodeId, realmEntryNodeId } from './realm';
 import { isWarpLandingAllowed } from './warpRules';
 import { emitDialogueLines, sayCharacterLine } from './speech';
+import {
+  GAMBLE_LOSE_TOAST,
+  GAMBLE_WIN_TOAST,
+  eventOpeningSpeech,
+  eventOpeningTail,
+} from './eventSpeech';
 
 /** 最終年イベントの重みブースト（最終年は逆転ドラマを濃くする）。 */
 export const FINAL_YEAR_WEIGHT_BOOST = 3;
@@ -120,7 +126,13 @@ export function markEventUsed(state: GameState, event: GameEventDef): void {
 /** Emits the opening dialogue, then closes the event window. */
 export function emitEventOpening(state: GameState, fx: Fx[], event: GameEventDef, actor: number): void {
   fx.push({ t: 'event_open', eventId: event.id, playerId: actor });
+  // 本編の読み上げ: 見出し → 事実の読み上げ版。掛け合いのあとに問いかけ／予告を 1 行置く。
+  // すべて say fx なので、クライアントのイベント演出（声の終わり待ち＋読み下限）に乗る。
+  for (const text of eventOpeningSpeech(event)) {
+    fx.push({ t: 'say', speaker: 'narrator', text });
+  }
   emitDialogueLines(state, fx, event.lines, actor);
+  fx.push({ t: 'say', speaker: 'narrator', text: eventOpeningTail(event) });
 }
 
 export function resolveTargets(
@@ -326,7 +338,7 @@ function applyEffect(
     }
     case 'gamble': {
       const win = nextRandom(state) < effect.chance;
-      fx.push({ t: 'toast', text: win ? '賭けに勝った！' : '賭けに負けた……' });
+      fx.push({ t: 'toast', text: win ? GAMBLE_WIN_TOAST : GAMBLE_LOSE_TOAST });
       for (const child of win ? effect.win : effect.lose) {
         applyEffect(data, state, fx, child, actor, targetId);
       }

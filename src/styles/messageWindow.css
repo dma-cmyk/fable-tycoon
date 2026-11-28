@@ -228,15 +228,7 @@
   }
 }
 
-/* An open event panel sits above the window on phones / landscape. */
-@media (max-width: 899px) {
-  .event-open .msgwin {
-    bottom: calc(150px + var(--safe-bottom));
-  }
-}
-
-/* While the event panel is open both must stay visible: dock the window to the left of the
-   panel on PC, and lift the panel above the window on phones. */
+/* イベント中は、台詞ウィンドウをステージの下部中央（読みやすい幅）へ置く。 */
 @media (min-width: 900px) {
   .game-screen:has(.game-bottom-bar.is-waiting-turn) .msgwin {
     bottom: calc(94px + var(--safe-bottom));
@@ -245,24 +237,24 @@
   .game-screen:has(.move-options:not([hidden])) .msgwin {
     bottom: calc(226px + var(--safe-bottom));
   }
-
-  .event-open .msgwin {
-    left: calc(20px + var(--safe-left));
-    right: calc(490px + var(--safe-right));
-    width: auto;
-    transform: none;
-  }
 }
 
-/* イベント中はコマンドバーを隠しているので、台詞ウィンドウを画面下端まで下ろす。
-   （イベントパネルは透明な器になり、Phase A ではこのウィンドウが透けて見える） */
+.game-screen.event-open .msgwin,
+.game-screen.event-open:has(.msgwin) .msgwin {
+  left: 50%;
+  right: auto;
+  width: min(900px, calc(100vw - 24px));
+  bottom: calc(10px + var(--safe-bottom));
+  transform: translateX(-50%);
+  /* ステージの幕（z 55 の子）より手前に出す。 */
+  z-index: 60;
+}
+
 @media (max-width: 899px) {
-  .game-screen.event-open .msgwin {
-    left: calc(6px + var(--safe-left));
-    right: calc(6px + var(--safe-right));
+  .game-screen.event-open .msgwin,
+  .game-screen.event-open:has(.msgwin) .msgwin {
+    width: calc(100vw - 12px);
     bottom: calc(8px + var(--safe-bottom));
-    width: auto;
-    transform: none;
   }
 
   .game-screen.event-open .msgwin-body {
@@ -271,9 +263,10 @@
   }
 }
 
-/* 横向き: 台詞ウィンドウは右半分（左は絵カード）。 */
+/* 横向き: 台詞ウィンドウは右半分（左は絵）。 */
 @media (max-height: 520px) and (min-width: 700px) {
-  .game-screen.event-open .msgwin {
+  .game-screen.event-open .msgwin,
+  .game-screen.event-open:has(.msgwin) .msgwin {
     left: calc(46% + 14px);
     right: calc(8px + var(--safe-right));
     bottom: calc(8px + var(--safe-bottom));

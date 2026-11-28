@@ -637,6 +637,40 @@ export const Audio = {
   getVolume,
 } as const;
 
+/** What `window.__audioDebug()` reports: enough for a headless run to assert the audio state. */
+export interface AudioDebugSnapshot {
+  context: AudioContextState | 'none';
+  requestedBgm: BgmName | null;
+  activeBgm: BgmName | null;
+  /** Envelope of the playing track (0→1 after the crossfade); null when nothing plays. */
+  bgmGain: number | null;
+  /** BGM duck node: 1 normally, 0.4 while a voice line speaks or is queued. */
+  duck: number | null;
+  voiceBusy: boolean;
+  voiceQueue: number;
+  /** Tracks whose load failed and are waiting for their next retry. */
+  bgmRetries: Partial<Record<BgmName, number>>;
+}
+
+function audioDebugSnapshot(): AudioDebugSnapshot {
+  return {
+    context: ctx ? ctx.state : 'none',
+    requestedBgm,
+    activeBgm: activeBgm?.name ?? null,
+    bgmGain: activeBgm ? activeBgm.gain.gain.value : null,
+    duck: bgmDuck ? bgmDuck.gain.value : null,
+    voiceBusy: voiceBusy(),
+    voiceQueue: voiceClaims.size,
+    bgmRetries: Object.fromEntries(bgmAttempts) as Partial<Record<BgmName, number>>,
+  };
+}
+
+// QA seam for headless runs: `?audioDebug=1` (or any dev build) exposes the live audio state,
+// so a test can assert that the first gesture actually started the requested track.
+if (import.meta.env.DEV || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('audioDebug'))) {
+  (globalThis as { __audioDebug?: () => AudioDebugSnapshot }).__audioDebug = audioDebugSnapshot;
+}
+
 /** BGM for an event panel: the event's own valid `bgm`, else the default for its kind. */
 export function bgmForEvent(ev: GameEventDef): BgmName {
   if (typeof ev.bgm === 'string' && BGM_SET.has(ev.bgm)) return ev.bgm as BgmName;

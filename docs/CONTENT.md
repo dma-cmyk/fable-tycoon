@@ -285,6 +285,10 @@ DESIGN 側の都市数合意を更新する。`id` は kebab-case ASCII で一�
 - `news` / `history` は `fact` と `sources`（1件以上）が必須。`fable` は不要。
 - `satireNote` は全イベント必須。ゲーム内「元ネタ」で表示される。
 - `lines` は必須。`choices` があれば選択後に `reply`、無ければ `effects` を即適用。
+- **イベント本編はフルボイス**。見出し・事実・選んだ選択肢・結果の固定文は
+  `src/core/eventSpeech.ts` が唯一の出典で、`fact` を持つイベントは `FACT_SPEECH` に
+  読み上げ版（1〜2 文・英字と数字なし）を必ず書く（読み込み時に `factSpeech` として付く）。
+  本文（画面の長い `fact`）は元ネタ表示のまま。`satireNote` と出典は読まない。
 - 話者は `narrator` / `npc:<id>` / `char:<id>` のみ。**`self` はイベントで禁止**
   （手番キャラの反応は `Fx say` + `lineKey` で行う）。
 - `char:`・`npc:` は実在する id のみ。`card` 効果の card id も実在する14種のみ。

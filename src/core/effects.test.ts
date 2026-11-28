@@ -205,8 +205,11 @@ describe('event selection and dialogue', () => {
     const result = step(newsData, state, 0, { t: 'move', nodeId: 's:1-0' });
     const open = result.fx.find((f) => f.t === 'event_open');
     expect(open?.t === 'event_open' ? open.eventId : '').toBe('ev-harvest-fable');
+    // 見出し＋掛け合い 2 行＋自動適用の予告＋結果の実況（計 5 行、ナレーターが 4 行）。
     const says = result.fx.filter((f) => f.t === 'say' && !f.lineKey);
-    expect(says).toHaveLength(2);
+    expect(says).toHaveLength(5);
+    expect(says[0]).toMatchObject({ speaker: 'narrator', text: '創作寓話！豊作の年に' });
+    expect(says.at(-1)).toMatchObject({ speaker: 'narrator' });
     expect(result.fx.some((f) => f.t === 'event_close')).toBe(true);
     const openIndex = result.fx.findIndex((f) => f.t === 'event_open');
     const firstSay = result.fx.findIndex((f) => f.t === 'say' && !f.lineKey);
@@ -228,8 +231,10 @@ describe('event selection and dialogue', () => {
     expect(landed.state.phase.t).toBe('event');
     const eventId = landed.state.phase.t === 'event' ? landed.state.phase.eventId : '';
     expect(eventId).toBe('ev-ai-bubble');
+    // 見出し＋掛け合い 3 行＋「どうする？」の問いかけ。
     const opened = landed.fx.filter((f) => f.t === 'say');
-    expect(opened).toHaveLength(3);
+    expect(opened).toHaveLength(5);
+    expect(opened[0]).toMatchObject({ speaker: 'narrator', text: '世界ニュース！AIバブル再来！？' });
     const chosen = step(choiceData, landed.state, 0, { t: 'choose', index: 0 });
     const reply = chosen.fx.filter((f) => f.t === 'say');
     expect(reply.length).toBeGreaterThanOrEqual(2);

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { allNarrationTexts } from '../src/audio/narration.ts';
 import { piperNarrationTexts, piperVoiceLines } from '../src/core/piperLines.ts';
+import { allEventSpeechTexts } from '../src/core/eventSpeech.ts';
 import { voiceHash } from '../src/audio/voicekey.ts';
 import { buildVoiceManifest, voiceMetaMatches } from '../src/audio/voice-manifest.ts';
 
@@ -201,6 +202,10 @@ for (const event of events) {
     for (const line of choice.reply ?? []) addDialogue(['event'], line);
   }
 }
+
+// events.json: 本編のナレーション（見出し・事実の読み上げ・選んだ選択肢・結果の実況）。
+// 文字列の出典は src/core/eventSpeech.ts の 1 か所なので、字幕と音声がずれない。
+for (const text of allEventSpeechTexts(events)) addItem(['event'], 'narrator', text, narratorVoice);
 
 // emotes.json: every character gets a line (unique emotes: owner only); hitLines: all characters
 if (Array.isArray(emotes)) {

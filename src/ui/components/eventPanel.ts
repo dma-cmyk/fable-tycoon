@@ -9,10 +9,13 @@ import { EVENT_IMAGE_IDS } from '../assetManifest';
 import { assetUrl, citiesById, KIND_ICON, KIND_JA } from '../format';
 import { eventVideoBlock } from './eventVideo';
 import { rubyName } from '../ruby';
+import { effectiveUiSettings } from '../settings';
 
 export interface EventPanelOptions {
   onChoose: (index: number) => void;
   onSkipFx?: () => void;
+  /** ステージが閉じたとき（イベント終了）。演出の出し遅れを拾うための通知。 */
+  onHide?: () => void;
 }
 
 export interface EventPanelStateMeta {
@@ -56,6 +59,7 @@ export class EventPanel {
   private readonly choicesSkipBtn: HTMLButtonElement;
   private readonly choicesBanner: HTMLElement;
   private readonly prompt: HTMLElement;
+  private readonly heroKind: HTMLElement;
   private readonly card: HTMLElement;
   /** 選択肢リストを作り直すかどうかの判定用（詳細の開閉状態を保つ）。 */
   private choiceKey = '';
@@ -83,7 +87,10 @@ export class EventPanel {
     });
     this.titleEl = h('h2', { class: 'event-title' });
     this.byline = h('p', { class: 'event-byline' });
-    this.hero = h('div', { class: 'event-hero no-image' }, this.image, h('div', { class: 'event-hero-shade' }), this.titleEl);
+    // ステージでは絵の下にタイトルを置く（絵に重ねない）。絵が無いイベントは
+    // 代わりに種別アイコンを大きく出す。
+    this.heroKind = h('div', { class: 'event-hero-kind', attrs: { 'aria-hidden': 'true' } });
+    this.hero = h('div', { class: 'event-hero no-image' }, this.image, this.heroKind, h('div', { class: 'event-hero-shade' }));
     this.choicesHost = h('div', { class: 'event-choices' });
     this.choicesNote = h('p', { class: 'event-choices-note' });
     this.choicesSkipBtn = h('button', {
@@ -140,6 +147,7 @@ export class EventPanel {
         'div',
         { class: 'event-panel-scroll scroll-y' },
         this.hero,
+        this.titleEl,
         this.byline,
         h('div', { class: 'event-meta' }, this.metaToggle, this.metaBody),
         this.effectSummary,
@@ -168,6 +176,16 @@ export class EventPanel {
     this.el.classList.add('is-open');
     this.el.closest('.game-screen')?.classList.add('event-open');
     this.titleEl.textContent = event.title;
+    this.heroKind.textContent = KIND_ICON[event.kind];
+    // さくさく（fxSpeed >= 2）ではステージの開閉を短くする。設定が読めない環境
+    // （単体テストの偽 DOM など）では既定の 250ms にしておく。
+    let stageMs = '250ms';
+    try {
+      if (effectiveUiSettings().fxSpeed >= 2) stageMs = '120ms';
+    } catch {
+      stageMs = '250ms';
+    }
+    this.el.style.setProperty('--stage-ms', stageMs);
     const monthly = event.monthly === true;
     const season = seasonOf(state.month);
     this.kindBadge.textContent = monthly ? `${season.emoji} ${state.month}月の季節イベント` : `${KIND_ICON[event.kind]} ${KIND_JA[event.kind]}`;
@@ -188,11 +206,14 @@ export class EventPanel {
   }
 
   hide(): void {
+    const wasOpen = this.open;
     this.open = false;
     this.chosen = false;
     this.el.classList.remove('is-open');
     this.el.hidden = true;
     this.el.closest('.game-screen')?.classList.remove('event-open');
+    // ステージ中に遅らせたカットイン（寄り道の依頼など）をここで流す。
+    if (wasOpen) this.options.onHide?.();
   }
 
   setState(state: PublicState, canAct: boolean, meta?: EventPanelStateMeta): void {

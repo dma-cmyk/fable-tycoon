@@ -58,6 +58,18 @@ export function pinErrandFirst<T>(options: readonly T[], isErrand: (option: T) =
   return copy;
 }
 
+/**
+ * The chip that carries the 「おすすめ」 tag.
+ *
+ * A quick filter (駅のみ / 買える駅 / 青・カード / 依頼) may hide the recommended chip. The
+ * recommendation must stay visible whenever the tray is open, so the tag moves to the first
+ * visible chip instead of disappearing. Returns null only when nothing is visible at all.
+ */
+export function pickShownRecommendation(recommendedId: string | null, visibleNodeIds: readonly string[]): string | null {
+  if (recommendedId !== null && visibleNodeIds.includes(recommendedId)) return recommendedId;
+  return visibleNodeIds[0] ?? recommendedId;
+}
+
 export function countMoveFilters(
   entries: readonly MoveFilterEntry[],
   errandCityId: string | null,

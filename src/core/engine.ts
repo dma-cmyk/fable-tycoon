@@ -92,6 +92,7 @@ import {
   worldCityNodeIds,
 } from './realm';
 import { sayCharacterLine, sayTurnLine } from './speech';
+import { choiceMadeSpeech, eventResultSpeech } from './eventSpeech';
 import { cpuDecide as decideCpu } from './cpu';
 import { filterWarpTargets, stepsAfterWarp } from './warpRules';
 
@@ -801,7 +802,9 @@ function processLanding(data: GameData, state: GameState, fx: Fx[]): void {
         state.phase = { t: 'event', eventId: event.id };
         return;
       }
-      applyEventAndFinish(data, state, fx, player.id, undefined);
+      // docs/CONTENT.md: choices が無ければ effects を即適用。undefined を渡すと
+      // 自動適用イベント（月替わり以外）が効果なしで閉じてしまう。
+      applyEventAndFinish(data, state, fx, player.id, event.effects);
       return;
     }
     case 'shop': {
@@ -972,6 +975,8 @@ function onEventChoice(data: GameData, state: GameState, fx: Fx[], action: Actio
     illegal('invalid event choice');
   }
   const choice = event.choices[action.index];
+  // 何を選んだかをナレーターが実況する（名前を出さないので CPU の選択でも同じ 1 本）。
+  fx.push({ t: 'say', speaker: 'narrator', text: choiceMadeSpeech(choice.label) });
   for (const line of choice.reply ?? []) {
     fx.push({
       t: 'say',
@@ -990,7 +995,11 @@ function applyEventAndFinish(
   actor: number,
   effects: Parameters<typeof applyEffects>[3],
 ): void {
+  const effectsBefore = fx.length;
   applyEffects(data, state, fx, effects, actor);
+  // 結果の実況。数値は画面の演出に任せ、声は「何が起きたか」の種類だけを 1 文で読む。
+  const resultSpeech = eventResultSpeech(effects, fx.slice(effectsBefore));
+  if (resultSpeech) fx.push({ t: 'say', speaker: 'narrator', text: resultSpeech });
   fx.push({ t: 'event_close' });
   state.activeEventId = null;
   finishAfterEffects(data, state, fx);

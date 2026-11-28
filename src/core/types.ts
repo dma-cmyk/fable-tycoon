@@ -234,6 +234,11 @@ export interface GameEventDef {
   bgm?: string;
   /** 事実の要約（風刺を含めない）。kind が news/history のとき必須。 */
   fact?: string;
+  /**
+   * `fact` の読み上げ版（1〜2 文）。`src/data/index.ts` が src/core/eventSpeech.ts の表から
+   * 読み込み時に付ける。fact があるイベントは必須（tools/validate-data.mjs が検査する）。
+   */
+  factSpeech?: string;
   sources?: Source[];
   /** どこが創作・誇張かの注記（ゲーム内「元ネタ」表示に使う） */
   satireNote: string;

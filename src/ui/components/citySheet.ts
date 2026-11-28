@@ -81,6 +81,39 @@ interface CityLike {
   properties: Property[];
 }
 
+let buyoutFoldSeq = 0;
+
+/**
+ * 買収パネルを「買収する（N件）」の折りたたみに包む。
+ * PC（900px 以上）は CSS でトグルを隠して常時展開、スマホは既定で閉じておく。
+ * 375x667 では買収カードが購入リストを画面外へ押し出していたため。
+ */
+function buildBuyoutFold(panel: HTMLElement, count: number, open: boolean): HTMLElement {
+  const bodyId = `buyout-fold-body-${++buyoutFoldSeq}`;
+  const caret = h('span', { class: 'buyout-fold-caret', text: '▾', attrs: { 'aria-hidden': 'true' } });
+  const body = h('div', { class: 'buyout-fold-body', attrs: { id: bodyId } }, panel);
+  const toggle = h(
+    'button',
+    {
+      class: 'buyout-fold-toggle',
+      attrs: { type: 'button', 'aria-expanded': String(open), 'aria-controls': bodyId },
+      on: {
+        click: () => {
+          const next = !fold.classList.contains('is-open');
+          fold.classList.toggle('is-open', next);
+          toggle.setAttribute('aria-expanded', String(next));
+        },
+      },
+    },
+    h('span', { class: 'buyout-fold-label', text: `買収する（${count}件）` }),
+    h('span', { class: 'buyout-fold-hint', text: '他プレイヤーの物件を買い取る' }),
+    caret,
+  );
+  const fold = h('section', { class: 'buyout-fold' }, toggle, body);
+  if (open) fold.classList.add('is-open');
+  return fold;
+}
+
 export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
   const city = citiesById.get(options.cityId);
   if (!city) {
@@ -132,6 +165,8 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
   const footer = h('div', { class: 'city-sheet-footer' });
 
   const render = (): void => {
+    // 物件を買うたびに先頭へ戻ると、スマホで 5 件目以降を買うときに毎回探し直しになる。
+    const savedScrollTop = body.querySelector('.city-sheet-scroll')?.scrollTop ?? 0;
     const landmarkAsset =
       city.landmark && LANDMARK_FILES.has(city.landmark)
         ? assetUrl(`assets/landmarks/${city.landmark}.webp`)
@@ -217,6 +252,11 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
     const sorted = [...city.properties].sort((a, b) => purchasePrice(GAME_DATA, state, state.current, a.id) - purchasePrice(GAME_DATA, state, state.current, b.id));
     for (const property of sorted) list.append(propertyRow(property));
 
+    const buyoutAvailable = city.properties.filter((property) => {
+      const owner = state.owner[property.id];
+      return owner !== undefined && owner !== state.current;
+    }).length;
+    const keepFoldOpen = body.querySelector('.buyout-fold')?.classList.contains('is-open') ?? false;
     const buyout =
       options.buyMode && state.phase.t === 'buy' && state.phase.cityId === city.id
         ? buildBuyoutPanel({
@@ -227,6 +267,7 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
             onBuyout: (propertyId) => options.onBuyout?.(propertyId),
           })
         : null;
+    const buyoutFold = buyout && buyoutAvailable > 0 ? buildBuyoutFold(buyout, buyoutAvailable, keepFoldOpen) : buyout;
 
     const tableHead = h(
       'div',
@@ -238,12 +279,13 @@ export function openCitySheet(options: CitySheetOptions): CitySheetHandle {
       h('span', { text: '収益率' }),
       h('span', { text: '所有者' }),
     );
-    const sections: HTMLElement[] = [header, monopoly, tableHead, list];
-    if (buyout) sections.push(buyout);
-    sections.push(footer);
+    const scrollArea = h('div', { class: 'city-sheet-scroll' }, tableHead, list);
+    if (buyoutFold) scrollArea.append(buyoutFold);
+    const sections: HTMLElement[] = [header, monopoly, scrollArea, footer];
     body.replaceChildren(...sections);
     previousOwners = new Map(city.properties.map((property) => [property.id, state.owner[property.id]]));
     renderFooter(actorCash);
+    if (savedScrollTop > 0) scrollArea.scrollTop = savedScrollTop;
 
     function propertyRow(property: Property): HTMLElement {
       const price = Math.round(purchasePrice(GAME_DATA, state, state.current, property.id));

@@ -75,6 +75,9 @@ Everything is written under `.tmp/e2e/`:
   `.event-panel.is-open img.event-image` load (`title`, `src`, `hidden`,
   `naturalWidth/Height`) with per-client lists and a deduped `unique` array, so
   event artwork that fails to load shows up as `naturalWidth: 0`.
+  `clients[].eventScreenshots` lists the real event-panel captures taken while
+  the panel was open (one `first` per client, plus one `image` once the art had
+  loaded); the files are `<label>-event-{first,image}-<client>.png`.
 
 ## Feature coverage (pegasus / rocket / piper confiscation)
 

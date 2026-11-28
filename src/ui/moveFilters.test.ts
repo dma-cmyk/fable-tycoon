@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countMoveFilters,
   matchesMoveFilter,
+  pickShownRecommendation,
   pinErrandFirst,
   type MoveFilterEntry,
 } from './moveFilters';
@@ -77,5 +78,21 @@ describe('errand pinning', () => {
       'a',
     ]);
     expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('the one visible recommendation', () => {
+  it('keeps the recommendation when the filter still shows it', () => {
+    expect(pickShownRecommendation('c:tokyo', ['s:1', 'c:tokyo', 's:2'])).toBe('c:tokyo');
+  });
+
+  it('moves the tag to the first visible chip when a filter hides the pick', () => {
+    expect(pickShownRecommendation('s:9', ['c:tokyo', 'c:osaka'])).toBe('c:tokyo');
+  });
+
+  it('never returns null while a chip is visible, and never invents one', () => {
+    expect(pickShownRecommendation(null, ['c:tokyo'])).toBe('c:tokyo');
+    expect(pickShownRecommendation('s:9', [])).toBe('s:9');
+    expect(pickShownRecommendation(null, [])).toBeNull();
   });
 });

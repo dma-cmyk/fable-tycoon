@@ -5563,3 +5563,255 @@
 .move-chip-price {
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- 物件購入シート (phone) */
+/* 375x667 で買収カードが購入リストを押し出し、「買う」が固定フッターに隠れていた。
+   スマホは 購入リスト → 買収（折りたたみ） の順に 1 本のスクロールへ入れ、
+   フッターは常時表示のまま外に出す。PC は display:contents で従来の flex 構成を保つ。 */
+.city-sheet-scroll {
+  display: contents;
+}
+
+.buyout-fold {
+  min-width: 0;
+}
+
+.buyout-fold-toggle {
+  display: none;
+}
+
+.buyout-fold-body {
+  display: block;
+}
+
+@media (max-width: 899px) {
+  .city-modal .modal-head {
+    padding: 5px calc(10px + var(--safe-right)) 6px calc(10px + var(--safe-left));
+    padding-top: calc(5px + var(--safe-top));
+  }
+
+  .city-modal .modal-title {
+    font-size: 17px;
+    line-height: 1.25;
+  }
+
+  .city-modal .modal-subtitle {
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+
+  .city-sheet-scroll {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
+    background: #fffdf5;
+  }
+
+  .city-sheet-scroll > .property-list {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 6px 10px 8px;
+  }
+
+  /* 都市カードは 2 行に畳む（名前行 + 国名・タグ行）。 */
+  .city-hero {
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    flex: 0 0 auto;
+  }
+
+  .city-hero-landmark.city-hero-tile {
+    width: 40px;
+    height: 40px;
+    padding: 2px;
+    border-radius: 10px;
+  }
+
+  .city-hero-text {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1px 6px;
+    min-width: 0;
+  }
+
+  .city-hero-title-row {
+    flex: 1 0 100%;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .city-heading-tile {
+    display: none;
+  }
+
+  .city-hero-name {
+    font-size: 17px;
+    line-height: 1.2;
+  }
+
+  .city-flag {
+    font-size: 14px;
+  }
+
+  .city-hero-sub {
+    margin: 0;
+    font-size: 9.5px;
+  }
+
+  .city-hero-blurb {
+    display: none;
+  }
+
+  .city-hero-tags {
+    gap: 3px;
+    margin: 0;
+  }
+
+  .city-hero-tags .badge {
+    padding: 0 5px;
+    font-size: 8.5px;
+    line-height: 1.7;
+  }
+
+  .city-monopoly-progress {
+    flex: 0 0 auto;
+    padding: 4px 10px 5px;
+  }
+
+  .city-monopoly-top {
+    font-size: 10px;
+  }
+
+  .city-monopoly-count {
+    font-size: 9.5px;
+  }
+
+  .city-monopoly-bar {
+    height: 7px;
+    margin-top: 3px;
+  }
+
+  .city-monopoly-note {
+    display: none;
+  }
+
+  /* フッターは 2 段（所持金・不足 / ボタン）に収め、常に画面下へ固定する。 */
+  .city-sheet-footer {
+    position: static;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 6px calc(10px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(10px + var(--safe-left));
+    border-top-width: 2px;
+  }
+
+  .city-footer-cash {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    gap: 4px 8px;
+    font-size: 10px;
+  }
+
+  .city-footer-cash strong {
+    font-size: 14px;
+  }
+
+  .city-footer-cash .badge {
+    font-size: 9px;
+  }
+
+  .city-bulk-summary {
+    font-size: 9.5px;
+  }
+
+  .city-end-buy {
+    flex: 1 1 auto;
+    min-height: 46px;
+    padding: 6px 14px;
+  }
+
+  /* 読み取り専用シートの「とじる」も押しやすい全幅に。 */
+  .city-sheet-footer > .btn-gold {
+    flex: 1 1 100%;
+    min-height: 46px;
+  }
+
+  .city-buy-all {
+    flex: 1 1 auto;
+    min-height: 46px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+  }
+
+  /* 買収は購入リストの下の折りたたみ。開いたときもリストは上に残る。 */
+  .buyout-fold {
+    border-top: 2px dashed #e0c48a;
+    background: #fff8e2;
+  }
+
+  .buyout-fold-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+    border: 0;
+    background: linear-gradient(180deg, #fff3c9, #ffe29a);
+    color: #7a4200;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .buyout-fold-label {
+    flex: 0 0 auto;
+  }
+
+  .buyout-fold-hint {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #8a6420;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .buyout-fold-caret {
+    flex: 0 0 auto;
+    font-size: 13px;
+    transition: transform 160ms ease;
+  }
+
+  .buyout-fold.is-open .buyout-fold-caret {
+    transform: rotate(180deg);
+  }
+
+  .buyout-fold-body {
+    display: none;
+  }
+
+  .buyout-fold.is-open .buyout-fold-body {
+    display: block;
+  }
+
+  .buyout-fold .buyout-panel {
+    margin: 6px 8px 10px;
+  }
+
+  /* カード売り場の「買う」も 44px 以上にする（物件の買うボタンと揃える）。 */
+  .shop-buy {
+    min-height: 44px;
+  }
+}
