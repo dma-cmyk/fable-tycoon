@@ -553,6 +553,49 @@ async function launchClient(spec, webkitPreload) {
   return client;
 }
 
+async function captureChoiceStage(client, page) {
+  const layout = await page
+    .evaluate(() => {
+      const panel = document.querySelector('.event-panel.is-open');
+      if (!panel) return null;
+      const rect = (el) => {
+        const r = el.getBoundingClientRect();
+        return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), bottom: Math.round(r.bottom) };
+      };
+      const enabled = [...panel.querySelectorAll('.event-choice:not([disabled])')];
+      const all = [...panel.querySelectorAll('.event-choice')];
+      if (enabled.length === 0) return null;
+      const msg = document.querySelector('.msgwin');
+      const msgVisible = !!msg && !msg.hidden && getComputedStyle(msg).display !== 'none';
+      const choiceArea = panel.querySelector('.event-choice-area');
+      const last = all.at(-1);
+      return {
+        title: (panel.querySelector('.event-title')?.textContent || '').trim(),
+        enabled: enabled.length,
+        total: all.length,
+        labels: enabled.map((el) => (el.querySelector('.event-choice-label')?.textContent || el.textContent || '').trim().slice(0, 80)),
+        viewport: { w: innerWidth, h: innerHeight },
+        messageWindow: msgVisible ? rect(msg) : null,
+        choiceArea: choiceArea ? rect(choiceArea) : null,
+        lastChoice: last ? rect(last) : null,
+        allChoicesInViewport: all.every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1;
+        }),
+        choicesBelowFold: all.filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.bottom > innerHeight + 1 || r.top < -1;
+        }).length,
+      };
+    })
+    .catch(() => null);
+  if (!layout) return;
+  const file = await screenshot(client, `event-choice-${client.id}`, { optional: true });
+  if (!file) return;
+  client.eventScreenshots = client.eventScreenshots || [];
+  client.eventScreenshots.push({ kind: 'choice', ...layout, file: path.relative(ROOT, file) });
+}
+
 async function press(client, locator) {
   const target = locator.first();
   await target.waitFor({ state: 'attached', timeout: 12_000 });
@@ -743,6 +786,19 @@ async function installFxObserver(client) {
           }
         }
       };
+      const seenChat = new WeakSet();
+      const cpuSubstitutions = [];
+      const scanChat = () => {
+        for (const el of document.querySelectorAll('.chat-line')) {
+          if (seenChat.has(el)) continue;
+          seenChat.add(el);
+          const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!text) continue;
+          if (text.includes('代行')) {
+            cpuSubstitutions.push({ text: text.slice(0, 200), atMs: Math.round(performance.now()) });
+          }
+        }
+      };
       // Event artwork evidence: the panel reuses one <img class="event-image">,
       // so bind per element and record the image state whenever a src loads
       // (the title is read at record time, after EventPanel.show set it).
@@ -781,9 +837,10 @@ async function installFxObserver(client) {
           prev[kind] = visible;
         }
         scanToasts();
+        scanChat();
         bindEventArt();
       };
-      win.__e2eFx = { counts, check, eventArt };
+      win.__e2eFx = { counts, check, eventArt, cpuSubstitutions };
       new MutationObserver((mutations) => {
         for (const mutation of mutations) {
           if (mutation.type !== 'childList') continue;
@@ -817,6 +874,12 @@ async function readEventArt(client) {
   const page = client.page;
   if (!page || page.isClosed()) return [];
   return page.evaluate(() => window.__e2eFx?.eventArt ?? []).catch(() => []);
+}
+
+async function readCpuSubstitutions(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return [];
+  return page.evaluate(() => window.__e2eFx?.cpuSubstitutions ?? []).catch(() => []);
 }
 
 // The product never registers the service worker under automation
@@ -1839,6 +1902,10 @@ async function actOnce(client) {
   // Event choices (only enabled for the actor).
   const choice = page.locator('.event-choice:not([disabled])').first();
   if (await isVisible(choice)) {
+    if (!client.choiceShotTaken) {
+      client.choiceShotTaken = true;
+      await captureChoiceStage(client, page);
+    }
     await press(client, choice);
     return 'event_choice';
   }
@@ -2995,6 +3062,18 @@ try {
       }
     }
     report.eventArt = { byClient, unique: [...unique.values()] };
+    const cpuByClient = {};
+    const cpuUnique = new Map();
+    for (const client of clients) {
+      const entries = await readCpuSubstitutions(client);
+      cpuByClient[client.id] = entries;
+      for (const entry of entries) {
+        const key = entry.text || '';
+        const prev = cpuUnique.get(key);
+        if (!prev || entry.atMs < prev.atMs) cpuUnique.set(key, entry);
+      }
+    }
+    report.cpuSubstitute = { byClient: cpuByClient, unique: [...cpuUnique.values()] };
     report.serviceWorker = {
       byClient: Object.fromEntries(clients.map((client) => [client.id, client.serviceWorker || null])),
       anyRegistered: clients.some((client) => (client.serviceWorker?.registrations || 0) > 0),

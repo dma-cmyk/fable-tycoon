@@ -76,8 +76,14 @@ Everything is written under `.tmp/e2e/`:
   `naturalWidth/Height`) with per-client lists and a deduped `unique` array, so
   event artwork that fails to load shows up as `naturalWidth: 0`.
   `clients[].eventScreenshots` lists the real event-panel captures taken while
-  the panel was open (one `first` per client, plus one `image` once the art had
-  loaded); the files are `<label>-event-{first,image}-<client>.png`.
+  the panel was open (one `first` per client, one `image` once the art had
+  loaded, and one `choice` taken just before the acting human clicks a choice);
+  the files are `<label>-event-{first,image,choice}-<client>.png`. `choice`
+  entries also record `enabled`/`total`, `allChoicesInViewport`,
+  `choicesBelowFold`, the message-window and choice-area rects, so a squeezed
+  layout is visible in `report.json`. `cpuSubstitute` collects chat lines
+  containing 「代行」 per client (CPU takeover after a turn timeout), with a
+  deduped `unique` list.
 
 ## Feature coverage (pegasus / rocket / piper confiscation)
 
