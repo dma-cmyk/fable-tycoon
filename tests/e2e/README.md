@@ -193,6 +193,13 @@ the `seam` numbers.
 - Public MQTT brokers are used exactly as in production. Transient
   WebSocket/MQTT reconnect errors are classified as benign and recorded
   separately in `report.json`.
+- Event stage screenshots wait two animation frames plus 120 ms after the
+  hero image reports `complete`, so a loaded-but-unpainted image is not
+  captured as a blank panel (seen on host Chromium, final24).
+- `errors.readbackWarnings` (console warnings mentioning `willReadFrequently`)
+  are counted separately from page/console errors. They coincide with the
+  harness's own `canvasStats` `getImageData` sampling at the mid-game capture;
+  the game's canvas probe already opts into `willReadFrequently`.
 
 ### WebKit on Arch Linux
 

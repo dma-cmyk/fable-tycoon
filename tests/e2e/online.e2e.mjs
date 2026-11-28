@@ -335,6 +335,14 @@ function attachErrorCollectors(client) {
       client.canvasLimitWarnings = (client.canvasLimitWarnings || 0) + 1;
       report.errors.canvasLimitWarnings += 1;
     }
+    if (/willReadFrequently|readback|read-back/i.test(consoleText)) {
+      client.readbackWarnings = (client.readbackWarnings || 0) + 1;
+      report.errors.readbackWarnings = (report.errors.readbackWarnings || 0) + 1;
+      client.readbackLog = client.readbackLog || [];
+      if (client.readbackLog.length < 40) {
+        client.readbackLog.push({ atMs: nowMs(), type: message.type(), text: consoleText.slice(0, 240) });
+      }
+    }
     if (/通信待ち/.test(message.text())) {
       client.commWaitSignals = (client.commWaitSignals || 0) + 1;
       report.commWaitSignals = (report.commWaitSignals || 0) + 1;
@@ -553,6 +561,16 @@ async function launchClient(spec, webkitPreload) {
   return client;
 }
 
+async function waitForNextPaint(page) {
+  // `complete` + naturalWidth>0 means decoded, not necessarily painted. Two frames
+  // plus a short settle keep the stage screenshot from catching a blank hero area
+  // on a loaded-but-not-yet-composited image (observed on the host Chromium).
+  await page
+    .evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    .catch(() => undefined);
+  await page.waitForTimeout(120).catch(() => undefined);
+}
+
 async function captureChoiceStage(client, page) {
   const layout = await page
     .evaluate(() => {
@@ -590,6 +608,7 @@ async function captureChoiceStage(client, page) {
     })
     .catch(() => null);
   if (!layout) return;
+  await waitForNextPaint(page);
   const file = await screenshot(client, `event-choice-${client.id}`, { optional: true });
   if (!file) return;
   client.eventScreenshots = client.eventScreenshots || [];
@@ -840,7 +859,22 @@ async function installFxObserver(client) {
         scanChat();
         bindEventArt();
       };
-      win.__e2eFx = { counts, check, eventArt, cpuSubstitutions };
+      const imageErrors = [];
+      document.addEventListener(
+        'error',
+        (event) => {
+          const image = event.target;
+          if (!(image instanceof HTMLImageElement) || !image.classList.contains('event-image')) return;
+          const panel = image.closest('.event-panel');
+          imageErrors.push({
+            src: image.getAttribute('src') || '',
+            title: (panel?.querySelector('.event-title')?.textContent || '').trim(),
+            atMs: Math.round(performance.now()),
+          });
+        },
+        true,
+      );
+      win.__e2eFx = { counts, check, eventArt, cpuSubstitutions, imageErrors };
       new MutationObserver((mutations) => {
         for (const mutation of mutations) {
           if (mutation.type !== 'childList') continue;
@@ -880,6 +914,12 @@ async function readCpuSubstitutions(client) {
   const page = client.page;
   if (!page || page.isClosed()) return [];
   return page.evaluate(() => window.__e2eFx?.cpuSubstitutions ?? []).catch(() => []);
+}
+
+async function readEventImageErrors(client) {
+  const page = client.page;
+  if (!page || page.isClosed()) return [];
+  return page.evaluate(() => window.__e2eFx?.imageErrors ?? []).catch(() => []);
 }
 
 // The product never registers the service worker under automation
@@ -934,6 +974,19 @@ async function sampleModalDepth(client) {
       const status = (document.querySelector('.status-chip')?.textContent || '').trim();
       const banner = (document.querySelector('.game-banner')?.textContent || '').trim();
       const eventTitle = (document.querySelector('.event-panel.is-open .event-title')?.textContent || '').trim();
+      const eventHero = document.querySelector('.event-panel.is-open .event-hero');
+      const eventImage = eventHero?.querySelector('img.event-image');
+      const eventArtState =
+        eventHero && eventImage
+          ? {
+              loading: eventHero.classList.contains('is-loading'),
+              error: eventImage.classList.contains('is-error'),
+              complete: eventImage.complete,
+              naturalWidth: eventImage.naturalWidth,
+              hidden: eventImage.hidden,
+              src: eventImage.getAttribute('src') || '',
+            }
+          : null;
       const choicesNoteEl = document.querySelector('.event-panel.is-open .event-choices-note');
       const choicesBannerEl = document.querySelector('.event-panel.is-open .event-choices-banner');
       const choicesNote = (choicesNoteEl?.textContent || '').trim();
@@ -958,6 +1011,7 @@ async function sampleModalDepth(client) {
         choicesNote,
         choicesNoteShown,
         eventTitle,
+        eventArtState,
         fx: {
           piper_roulette: visible('.piper-show-panel'),
           piper_disaster: visible('.piper-show-disaster'),
@@ -983,6 +1037,24 @@ async function sampleModalDepth(client) {
   } else {
     client.choiceSubmitStreak = 0;
   }
+  if (sample.eventTitle && sample.eventArtState) {
+    if (client.eventArtTitle !== sample.eventTitle) {
+      client.eventArtTitle = sample.eventTitle;
+      client.eventArtOpenedAt = nowMs();
+      client.eventArtSamples = client.eventArtSamples || [];
+    }
+    const elapsed = nowMs() - client.eventArtOpenedAt;
+    if (elapsed >= 3000 && sample.eventArtState.loading) {
+      client.eventArtPlaceholder3s = (client.eventArtPlaceholder3s || 0) + 1;
+      log(`${client.id}: event art placeholder still loading 3s+ after open (${sample.eventTitle})`);
+    }
+    if (sample.eventArtState.error) client.eventImageErrorSamples = (client.eventImageErrorSamples || 0) + 1;
+    if ((client.eventArtSamples || []).length < 80) {
+      client.eventArtSamples.push({ atMs: nowMs(), title: sample.eventTitle, ...sample.eventArtState });
+    }
+  } else if (!sample.eventTitle) {
+    client.eventArtTitle = null;
+  }
   if (sample.eventTitle) {
     client.eventTitles = client.eventTitles || new Set();
     if (client.eventTitles.size < 200) client.eventTitles.add(sample.eventTitle);
@@ -1000,6 +1072,7 @@ async function sampleModalDepth(client) {
     const wantsFirst = client.eventScreenshots.length === 0;
     if (wantsFirst || wantsImage) {
       const kind = wantsImage ? 'image' : 'first';
+      await waitForNextPaint(page);
       const file = await screenshot(client, `event-${kind}-${client.id}`, { optional: true });
       if (file) {
         client.eventScreenshots.push({
@@ -3126,6 +3199,19 @@ try {
       }
     }
     report.choiceCommits = { byClient: choiceByClient, retries };
+    const artByClient = {};
+    const imageErrors = [];
+    for (const client of clients) {
+      const entries = await readEventImageErrors(client);
+      artByClient[client.id] = {
+        placeholder3s: client.eventArtPlaceholder3s || 0,
+        errorSamples: client.eventImageErrorSamples || 0,
+        samples: client.eventArtSamples || [],
+        imageErrors: entries,
+      };
+      imageErrors.push(...entries.map((entry) => ({ client: client.id, ...entry })));
+    }
+    report.eventArtLoad = { byClient: artByClient, imageErrors };
     report.serviceWorker = {
       byClient: Object.fromEntries(clients.map((client) => [client.id, client.serviceWorker || null])),
       anyRegistered: clients.some((client) => (client.serviceWorker?.registrations || 0) > 0),
@@ -3171,6 +3257,11 @@ try {
     choiceSubmitSamples: client.choiceSubmitSamples || 0,
     choiceSubmitMaxStreak: client.choiceSubmitMaxStreak || 0,
     eventChoiceLog: client.eventChoiceLog || [],
+    eventArtPlaceholder3s: client.eventArtPlaceholder3s || 0,
+    eventImageErrorSamples: client.eventImageErrorSamples || 0,
+    eventArtSamples: client.eventArtSamples || [],
+    readbackWarnings: client.readbackWarnings || 0,
+    readbackLog: client.readbackLog || [],
   }));
   report.brokers = Object.fromEntries(
     report.clients.map((client) => [
